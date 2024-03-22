@@ -2,19 +2,24 @@
   "name": "placement",
   "private": true,
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "lint": "turbo lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "check": "biome check --apply-unsafe .",
+    "check:report": "biome check .",
+    "prepare": "lefthook install",
+    "publish-packages": "pnpm check:report && turbo run build && changeset version && changeset publish"
   },
   "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*",
-    "prettier": "^3.2.5",
-    "turbo": "latest"
+    "@biomejs/biome": "^1.6.2",
+    "@changesets/cli": "^2.27.1",
+    "@tsconfig/node20": "^20.1.2",
+    "lefthook": "^1.6.7",
+    "turbo": "^1.13.0",
+    "typescript": "^5.4.3",
+    "vitest": "^1.4.0"
   },
-  "packageManager": "pnpm@8.9.0",
+  "packageManager": "pnpm@8.15.4",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   }
 }
