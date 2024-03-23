@@ -1,41 +1,37 @@
-import { Frame } from './Frame'
+import { AspectRatio } from './properties/AspectRatio'
+import { Margin } from './properties/Margin'
+import { Padding } from './properties/Padding'
+import { Size } from './properties/Size'
+import { SizeConstraint } from './properties/SizeConstraint'
 
 export class Box {
-  #width: number
-  #height: number
+  #width: Size
+  #height: Size
 
-  #padding: Frame
-  #margin: Frame
+  #aspectRatio: AspectRatio
 
-  constructor(width: number, height: number) {
-    this.#width = width
-    this.#height = height
+  #minWidth: SizeConstraint
+  #maxWidth: SizeConstraint
 
-    this.#padding = new Frame(0, 0, 0, 0, false)
-    this.#margin = new Frame(0, 0, 0, 0, true)
-  }
+  #minHeight: SizeConstraint
+  #maxHeight: SizeConstraint
 
-  get width(): number {
-    return this.#width
-  }
+  #padding: Padding
+  #margin: Margin
 
-  set width(value: number) {
-    this.#width = Math.max(value, 0)
-  }
+  constructor() {
+    this.#width = new Size('auto')
+    this.#height = new Size('auto')
 
-  get height(): number {
-    return this.#height
-  }
+    this.#aspectRatio = new AspectRatio('inherit')
 
-  set height(value: number) {
-    this.#height = Math.max(value, 0)
-  }
+    this.#minWidth = new SizeConstraint('none')
+    this.#maxWidth = new SizeConstraint('none')
 
-  get padding(): Frame {
-    return this.#padding
-  }
+    this.#minHeight = new SizeConstraint('none')
+    this.#maxHeight = new SizeConstraint('none')
 
-  get margin(): Frame {
-    return this.#margin
+    this.#padding = new Padding()
+    this.#margin = new Margin()
   }
 }
