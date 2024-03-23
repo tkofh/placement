@@ -1,4 +1,4 @@
-import { Frame } from '../geometry/Frame'
+import { Frame } from './Frame'
 
 export class Box {
   #width: number

@@ -2,25 +2,14 @@ import { describe, expect, test } from 'vitest'
 import { Box } from '../src/core/Box'
 
 describe('boxes', () => {
-  test('boxes should have mutable width and height properties', () => {
-    const box = new Box(100, 100)
-    expect(box.width).toBe(100)
-    expect(box.height).toBe(100)
+  test('boxes should be sized by a width and a height', () => {
+    const box = new Box({
+      width: 100,
+      height: 100,
+    })
 
-    box.width = 200
-    box.height = 200
-
-    expect(box.width).toBe(200)
-    expect(box.height).toBe(200)
-  })
-
-  test('boxes should not allow negative width and height values', () => {
-    const box = new Box(100, 100)
-    box.width = -200
-    box.height = -200
-
-    expect(box.width).toBe(0)
-    expect(box.height).toBe(0)
+    expect(box.width.pixels).toBe(100)
+    expect(box.height.pixels).toBe(100)
   })
 
   test('boxes should have mutable padding properties', () => {

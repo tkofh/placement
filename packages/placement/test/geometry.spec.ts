@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { Frame } from '../src/geometry/Frame'
+import { Frame } from '../src/core/Frame'
 
 describe('frame', () => {
   test('should have mutable top, right, bottom, and left properties', () => {
