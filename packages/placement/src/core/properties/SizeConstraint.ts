@@ -1,19 +1,29 @@
-type SizeConstraintKeyword = 'none' | 'inherit' | 'min-content' | 'max-content'
-type SizeConstraintValue = number | SizeConstraintKeyword
+import type { Box } from '../Box'
+
 type SizeConstraintUnit = 'pixels' | 'percent'
+export type SizeConstraintValue =
+  | 'none'
+  | 'inherit'
+  | 'min-content'
+  | 'max-content'
+  | { value: number; unit: SizeConstraintUnit }
+
+type SizeConstraintDimension =
+  | 'minWidth'
+  | 'maxWidth'
+  | 'minHeight'
+  | 'maxHeight'
 
 export class SizeConstraint {
-  #value: SizeConstraintValue
-  #unit: SizeConstraintUnit | 'none'
+  #box: Box
+  #dimension: SizeConstraintDimension
 
-  constructor(keyword: SizeConstraintKeyword)
-  constructor(value: number, unit: SizeConstraintUnit)
-  constructor(
-    value: number | SizeConstraintKeyword,
-    unit?: SizeConstraintUnit,
-  ) {
-    this.#value = typeof value === 'string' ? value : value
-    this.#unit = unit ?? 'none'
+  #value: SizeConstraintValue
+
+  constructor(box: Box, dimension: SizeConstraintDimension) {
+    this.#box = box
+    this.#dimension = dimension
+    this.#value = 'none'
   }
 
   get value() {
@@ -23,19 +33,22 @@ export class SizeConstraint {
   set value(value: SizeConstraintValue) {
     if (typeof value === 'string') {
       this.#value = value
-      this.#unit = 'none'
     } else {
-      this.#value = Math.max(value, 0)
+      this.#value = { value: Math.max(value.value, 0), unit: value.unit }
     }
   }
 
-  get unit(): SizeConstraintUnit | 'none' {
-    return this.#unit
-  }
+  get pixels(): number | null {
+    let pixels = null
 
-  set unit(unit: SizeConstraintUnit) {
-    if (typeof this.#value === 'number') {
-      this.#unit = unit
+    if (typeof this.#value === 'object') {
+      const { value, unit } = this.#value
+      pixels =
+        unit === 'pixels' ? value : (value * this.#box.parent.rect.width) / 100
+    } else if (this.#value === 'inherit') {
+      pixels = this.#box.parent.dimensions[this.#dimension]
     }
+
+    return pixels
   }
 }

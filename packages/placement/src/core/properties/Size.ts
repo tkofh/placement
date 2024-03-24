@@ -1,16 +1,23 @@
-type SizeKeyword = 'auto' | 'inherit' | 'min-content' | 'max-content'
-type SizeValue = number | SizeKeyword
+import type { Box } from '../Box'
+
 type SizeUnit = 'pixels' | 'percent'
+export type SizeValue =
+  | 'auto'
+  | 'inherit'
+  | 'min-content'
+  | 'max-content'
+  | { value: number; unit: SizeUnit }
+
+type SizeDimension = 'width' | 'height'
 
 export class Size {
+  #dimension: SizeDimension
+  #box: Box
   #value: SizeValue
-  #unit: SizeUnit | 'none'
-
-  constructor(keyword: SizeKeyword)
-  constructor(value: number, unit: SizeUnit)
-  constructor(value: number | SizeKeyword, unit?: SizeUnit) {
-    this.#value = typeof value === 'string' ? value : value
-    this.#unit = unit ?? 'none'
+  constructor(box: Box, dimension: SizeDimension) {
+    this.#box = box
+    this.#dimension = dimension
+    this.#value = 'auto'
   }
 
   get value() {
@@ -20,19 +27,24 @@ export class Size {
   set value(value: SizeValue) {
     if (typeof value === 'string') {
       this.#value = value
-      this.#unit = 'none'
     } else {
-      this.#value = Math.max(value, 0)
+      this.#value = { value: Math.max(value.value, 0), unit: value.unit }
     }
   }
 
-  get unit(): SizeUnit | 'none' {
-    return this.#unit
-  }
+  get pixels(): number | null {
+    let pixels = null
 
-  set unit(unit: SizeUnit) {
-    if (typeof this.#value === 'number') {
-      this.#unit = unit
+    if (typeof this.#value === 'object') {
+      const { value, unit } = this.#value
+      pixels =
+        unit === 'pixels'
+          ? value
+          : (value * this.#box.parent.rect[this.#dimension]) / 100
+    } else if (this.#value === 'inherit') {
+      pixels = this.#box.parent.dimensions[this.#dimension]
     }
+
+    return pixels
   }
 }

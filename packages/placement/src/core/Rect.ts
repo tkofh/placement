@@ -11,3 +11,27 @@ export class Rect {
     this.height = height
   }
 }
+
+export class ReadonlyRect {
+  #rect: Rect
+
+  constructor(rect: Rect) {
+    this.#rect = rect
+  }
+
+  get x() {
+    return this.#rect.x
+  }
+
+  get y() {
+    return this.#rect.y
+  }
+
+  get width() {
+    return this.#rect.width
+  }
+
+  get height() {
+    return this.#rect.height
+  }
+}
