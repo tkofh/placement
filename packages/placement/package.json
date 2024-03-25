@@ -7,19 +7,19 @@
   "license": "MIT",
   "sideEffects": false,
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/flexbox/flexbox.cjs",
+  "module": "./dist/flexbox/flexbox.mjs",
+  "types": "./dist/flexbox/flexbox.d.ts",
   "exports": {
     ".": {
-      "require": "./dist/index.cjs",
-      "import": "./dist/index.mjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/flexbox/flexbox.cjs",
+      "import": "./dist/flexbox/flexbox.mjs",
+      "types": "./dist/flexbox/flexbox.d.ts"
     },
     "./flexbox": {
-      "require": "./dist/flexbox.cjs",
-      "import": "./dist/flexbox.mjs",
-      "types": "./dist/flexbox.d.ts"
+      "require": "./dist/flexbox/flexbox.cjs",
+      "import": "./dist/flexbox/flexbox.mjs",
+      "types": "./dist/flexbox/flexbox.d.ts"
     }
   },
   "files": ["dist"],

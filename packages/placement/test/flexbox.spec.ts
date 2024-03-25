@@ -1,153 +1,321 @@
-import { test } from 'vitest'
+import { describe, expect, test } from 'vitest'
+import { crossAxis, mainAxis } from '../src/core/flexbox'
 
-type FlexConfig = {
-  direction: 'row' | 'column' | 'row-reverse' | 'column-reverse'
-  wrap: boolean | 'reverse'
-  gap: number
-  alignMain: number
-  spaceMain: number
-  outerSpaceMain: number
-  alignItems: number
-  scaleItems: number
-  alignCross: number
-  scaleCross: number
-  spaceCross: number
-  outerSpaceCross: number
-}
+describe('main axis', () => {
+  test('justify start, no space', () => {
+    const result = mainAxis(
+      {
+        size: 100,
+        gap: 0,
+        padding: 0,
+        justify: 0,
+        space: 0,
+        spaceOuter: 0,
+      },
+      [10, 20, 30],
+    )
 
-type FlexNode = {
-  rect: { x: number; y: number; width: number; height: number }
-  dimensions: { width: number | null; height: number | null }
-  children: Array<FlexNode>
-}
-
-class Rect {
-  x = 0
-  y = 0
-  width = 0
-  height = 0
-}
-
-class Dimensions {
-  width: null | number = null
-  height: null | number = null
-}
-
-class FlexItem {
-  rect = new Rect()
-  dimensions = new Dimensions()
-  children: Array<FlexItem> = []
-}
-
-class Track {
-  layout: FlexLayout
-  nodes: Array<FlexItem> = []
-
-  constructor(layout: FlexLayout) {
-    this.layout = layout
-  }
-
-  get mainDimension() {
-    return this.layout.config.direction.startsWith('row') ? 'width' : 'height'
-  }
-
-  get size() {
-    return this.layout.dimensions[this.mainDimension]
-  }
-
-  get free() {
-    if (this.size === null) {
-      return null
-    }
-
-    let free = this.size
-    for (const node of this.nodes) {
-      free -= node.dimensions[this.mainDimension] ?? 0
-    }
-
-    return free
-  }
-
-  append(node: FlexItem) {
-    const nodeSize = node.dimensions[this.mainDimension] ?? 0
-
-    if (
-      this.nodes.length > 0 &&
-      this.free !== null &&
-      (this.free === 0 || this.free - nodeSize < 0) &&
-      this.layout.config.wrap
-    ) {
-      this.layout.tracks.push(new Track(this.layout))
-      this.layout.tracks[this.layout.tracks.length - 1].append(node)
-    } else {
-      this.nodes.push(node)
-    }
-  }
-}
-
-class FlexLayout {
-  items: Array<FlexItem>
-  dimensions: Dimensions
-  config: FlexConfig
-  tracks: Array<Track>
-
-  constructor(
-    items: Array<FlexItem>,
-    dimensions: Dimensions,
-    config: FlexConfig,
-  ) {
-    this.items = items
-    this.dimensions = dimensions
-    this.config = config
-
-    this.tracks = [new Track(this)]
-
-    for (const item of this.items) {
-      this.append(item)
-    }
-  }
-
-  append(item: FlexItem) {
-    const track = this.tracks[this.tracks.length - 1]
-    track.append(item)
-  }
-}
-
-const tree = new FlexItem()
-tree.dimensions.width = 100
-tree.dimensions.height = 100
-
-const child1 = new FlexItem()
-child1.dimensions.width = 50
-child1.dimensions.height = 25
-
-const child2 = new FlexItem()
-child2.dimensions.width = 50
-child2.dimensions.height = 25
-
-const child3 = new FlexItem()
-child3.dimensions.width = 50
-child3.dimensions.height = 25
-
-tree.children.push(child1)
-tree.children.push(child2)
-tree.children.push(child3)
-
-test('flexbox', () => {
-  const layout = new FlexLayout(tree.children, tree.dimensions, {
-    direction: 'row',
-    wrap: false,
-    gap: 0,
-    alignMain: 0,
-    spaceMain: 0,
-    outerSpaceMain: 0,
-    alignItems: 0,
-    scaleItems: 0,
-    alignCross: 0,
-    scaleCross: 0,
-    spaceCross: 0,
-    outerSpaceCross: 0,
+    expect(result).toEqual([
+      { offset: 0, size: 10 },
+      { offset: 10, size: 20 },
+      { offset: 30, size: 30 },
+    ])
   })
 
-  console.log(layout)
+  test('justify start, with space', () => {
+    const result = mainAxis(
+      {
+        size: 70,
+        gap: 0,
+        padding: 0,
+        justify: 0,
+        space: 1,
+        spaceOuter: 1,
+      },
+      [10, 10, 10],
+    )
+
+    expect(result).toEqual([
+      { offset: 10, size: 10 },
+      { offset: 30, size: 10 },
+      { offset: 50, size: 10 },
+    ])
+  })
+
+  test('justify start, with inner space only', () => {
+    const result = mainAxis(
+      {
+        size: 70,
+        gap: 0,
+        padding: 0,
+        justify: 0,
+        space: 1,
+        spaceOuter: 0,
+      },
+      [10, 10, 10],
+    )
+
+    expect(result).toEqual([
+      { offset: 0, size: 10 },
+      { offset: 30, size: 10 },
+      { offset: 60, size: 10 },
+    ])
+  })
+
+  test('justify center, no space', () => {
+    const result = mainAxis(
+      {
+        size: 100,
+        gap: 0,
+        padding: 0,
+        justify: 0.5,
+        space: 0,
+        spaceOuter: 0,
+      },
+      [10, 10, 10, 10],
+    )
+
+    expect(result).toEqual([
+      { offset: 30, size: 10 },
+      { offset: 40, size: 10 },
+      { offset: 50, size: 10 },
+      { offset: 60, size: 10 },
+    ])
+  })
+
+  test('justify end, no space', () => {
+    const result = mainAxis(
+      {
+        size: 100,
+        gap: 0,
+        padding: 0,
+        justify: 1,
+        space: 0,
+        spaceOuter: 0,
+      },
+      [10, 10],
+    )
+
+    expect(result).toEqual([
+      { offset: 80, size: 10 },
+      { offset: 90, size: 10 },
+    ])
+  })
+
+  test('one auto item', () => {
+    const result = mainAxis(
+      {
+        size: 100,
+        gap: 0,
+        padding: 0,
+        justify: 0,
+        space: 0,
+        spaceOuter: 0,
+      },
+      [10, 'auto', 10],
+    )
+
+    expect(result).toEqual([
+      { offset: 0, size: 10 },
+      { offset: 10, size: 80 },
+      { offset: 90, size: 10 },
+    ])
+  })
+
+  test('two auto items', () => {
+    const result = mainAxis(
+      {
+        size: 100,
+        gap: 0,
+        padding: 0,
+        justify: 0,
+        space: 0,
+        spaceOuter: 0,
+      },
+      ['auto', 10, 'auto'],
+    )
+    expect(result).toEqual([
+      { offset: 0, size: 45 },
+      { offset: 45, size: 10 },
+      { offset: 55, size: 45 },
+    ])
+  })
+
+  test('padding', () => {
+    const result = mainAxis(
+      {
+        size: 100,
+        gap: 0,
+        padding: 10,
+        justify: 0,
+        space: 0,
+        spaceOuter: 0,
+      },
+      [10, 10, 10],
+    )
+
+    expect(result).toEqual([
+      { offset: 10, size: 10 },
+      { offset: 20, size: 10 },
+      { offset: 30, size: 10 },
+    ])
+  })
+
+  test('gap', () => {
+    const result = mainAxis(
+      {
+        size: 100,
+        gap: 10,
+        padding: 0,
+        justify: 0,
+        space: 0,
+        spaceOuter: 0,
+      },
+      [10, 10, 10],
+    )
+
+    expect(result).toEqual([
+      { offset: 0, size: 10 },
+      { offset: 20, size: 10 },
+      { offset: 40, size: 10 },
+    ])
+  })
+})
+
+describe('cross axis', () => {
+  test('align start', () => {
+    const result = crossAxis(
+      {
+        size: 100,
+        padding: 0,
+        align: 0,
+        stretch: 0,
+      },
+      [10, 20],
+    )
+
+    expect(result).toEqual([
+      { offset: 0, size: 10 },
+      { offset: 0, size: 20 },
+    ])
+  })
+
+  test('align center', () => {
+    const result = crossAxis(
+      {
+        size: 100,
+        padding: 0,
+        align: 0.5,
+        stretch: 0,
+      },
+      [10, 20],
+    )
+
+    expect(result).toEqual([
+      { offset: 45, size: 10 },
+      { offset: 40, size: 20 },
+    ])
+  })
+
+  test('align end', () => {
+    const result = crossAxis(
+      {
+        size: 100,
+        padding: 0,
+        align: 1,
+        stretch: 0,
+      },
+      [10, 20],
+    )
+
+    expect(result).toEqual([
+      { offset: 90, size: 10 },
+      { offset: 80, size: 20 },
+    ])
+  })
+
+  test('stretch', () => {
+    const result = crossAxis(
+      {
+        size: 100,
+        padding: 0,
+        align: 0,
+        stretch: 1,
+      },
+      [10, 20],
+    )
+
+    expect(result).toEqual([
+      { offset: 0, size: 100 },
+      { offset: 0, size: 100 },
+    ])
+  })
+
+  test('padding', () => {
+    const result = crossAxis(
+      {
+        size: 100,
+        padding: 10,
+        align: 0,
+        stretch: 0,
+      },
+      [10, 20],
+    )
+
+    expect(result).toEqual([
+      { offset: 10, size: 10 },
+      { offset: 10, size: 20 },
+    ])
+  })
+
+  test('auto item', () => {
+    const result = crossAxis(
+      {
+        size: 100,
+        padding: 0,
+        align: 0,
+        stretch: 0,
+      },
+      [10, 'auto'],
+    )
+
+    expect(result).toEqual([
+      { offset: 0, size: 10 },
+      { offset: 0, size: 100 },
+    ])
+  })
+
+  test('auto with padding', () => {
+    const result = crossAxis(
+      {
+        size: 100,
+        padding: 10,
+        align: 0,
+        stretch: 0,
+      },
+      [10, 'auto'],
+    )
+
+    expect(result).toEqual([
+      { offset: 10, size: 10 },
+      { offset: 10, size: 80 },
+    ])
+  })
+
+  test('align and partial stretch', () => {
+    const result = crossAxis(
+      {
+        size: 100,
+        padding: 0,
+        align: 0.5,
+        stretch: 0.5,
+      },
+      [20, 40],
+    )
+
+    expect(result).toEqual([
+      { offset: 20, size: 60 },
+      { offset: 15, size: 70 },
+    ])
+  })
 })
