@@ -33,6 +33,7 @@
   "scripts": {
     "build": "unbuild",
     "test": "vitest",
+    "test:run": "vitest run",
     "prepublish": "bun run build"
   },
   "bugs": {

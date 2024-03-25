@@ -3,11 +3,11 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "test": "turbo run test",
+    "test": "turbo run test:run",
     "check": "biome check --apply-unsafe .",
     "check:report": "biome check .",
     "prepare": "lefthook install",
-    "publish-packages": "pnpm check:report && turbo run build && changeset version && changeset publish"
+    "publish-packages": "pnpm check:report && turbo run build test && changeset version && changeset publish"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.6.2",
