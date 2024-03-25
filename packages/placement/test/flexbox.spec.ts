@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { crossAxis, mainAxis } from '../src/core/flexbox'
+import { crossAxis, mainAxis } from '../src/flexbox/flexbox'
 
 describe('main axis', () => {
   test('justify start, no space', () => {
