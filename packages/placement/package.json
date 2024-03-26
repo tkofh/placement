@@ -7,19 +7,29 @@
   "license": "MIT",
   "sideEffects": false,
   "type": "module",
-  "main": "./dist/flexbox/flexbox.cjs",
-  "module": "./dist/flexbox/flexbox.mjs",
-  "types": "./dist/flexbox/flexbox.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "require": "./dist/flexbox/flexbox.cjs",
-      "import": "./dist/flexbox/flexbox.mjs",
-      "types": "./dist/flexbox/flexbox.d.ts"
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
     },
     "./flexbox": {
-      "require": "./dist/flexbox/flexbox.cjs",
-      "import": "./dist/flexbox/flexbox.mjs",
-      "types": "./dist/flexbox/flexbox.d.ts"
+      "require": "./dist/flexbox.cjs",
+      "import": "./dist/flexbox.mjs",
+      "types": "./dist/flexbox.d.ts"
+    },
+    "./primitives": {
+      "require": "./dist/primitives.cjs",
+      "import": "./dist/primitives.mjs",
+      "types": "./dist/primitives.d.ts"
+    },
+    "./utils": {
+      "require": "./dist/utils.cjs",
+      "import": "./dist/utils.mjs",
+      "types": "./dist/utils.d.ts"
     }
   },
   "files": ["dist"],
