@@ -267,3 +267,15 @@ describe('cross axis', () => {
     ])
   })
 })
+
+test('handles only one child', () => {
+  const result = flexbox({ width: 100, height: 100 }, {}, [
+    { width: 10, height: 10 },
+  ])
+  expect(result[0]).toEqual({ x: 0, y: 0, width: 10, height: 10 })
+})
+
+test('handles no children', () => {
+  const result = flexbox({ width: 100, height: 100 }, {}, [])
+  expect(result).toEqual([])
+})

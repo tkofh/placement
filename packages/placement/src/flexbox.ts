@@ -38,8 +38,10 @@ function mainAxis(config: MainAxisConfig, items: Array<number | 'auto'>) {
   const itemSpacing = (freeSpace / (items.length + 1)) * config.space
   const outerItemSpacing = itemSpacing * config.spaceOuter
   const innerItemSpacing =
-    itemSpacing +
-    (itemSpacing * 2 * (1 - config.spaceOuter)) / (items.length - 1)
+    items.length === 1
+      ? 0
+      : itemSpacing +
+        (itemSpacing * 2 * (1 - config.spaceOuter)) / (items.length - 1)
 
   const distributedSpace =
     outerItemSpacing * 2 + innerItemSpacing * (items.length - 1)
