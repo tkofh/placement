@@ -1,5 +1,11 @@
 # placement
 
+## 0.1.2
+
+### Patch Changes
+
+- eb95904: fix divide-by-zero issue with single child
+
 ## 0.1.1
 
 ### Patch Changes
