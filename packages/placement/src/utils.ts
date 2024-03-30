@@ -38,3 +38,9 @@ export function remap(
   const normalized = normalize(value, x1, x2)
   return lerp(normalized, y1, y2)
 }
+
+export function cleanupInput<const Input extends string | number>(
+  input: Input,
+): Input {
+  return (typeof input === 'string' ? input.replace(/\s/g, '') : input) as never
+}

@@ -16,6 +16,11 @@
       "import": "./dist/index.mjs",
       "types": "./dist/index.d.ts"
     },
+    "./dimensions": {
+      "require": "./dist/dimensions.cjs",
+      "import": "./dist/dimensions.mjs",
+      "types": "./dist/dimensions.d.ts"
+    },
     "./flexbox": {
       "require": "./dist/flexbox.cjs",
       "import": "./dist/flexbox.mjs",
@@ -25,6 +30,11 @@
       "require": "./dist/primitives.cjs",
       "import": "./dist/primitives.mjs",
       "types": "./dist/primitives.d.ts"
+    },
+    "./parse": {
+      "require": "./dist/parse.cjs",
+      "import": "./dist/parse.mjs",
+      "types": "./dist/parse.d.ts"
     },
     "./utils": {
       "require": "./dist/utils.cjs",
@@ -53,6 +63,6 @@
     "@vitest/coverage-v8": "^1.4.0",
     "@vitest/ui": "^1.4.0",
     "unbuild": "^2.0.0",
-    "vitest": "^1.3.1"
+    "vitest": "^1.4.0"
   }
 }

@@ -78,6 +78,16 @@
           }
         }
       }
+    },
+    {
+      "include": ["*.vue"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": "off"
+          }
+        }
+      }
     }
   ]
 }
