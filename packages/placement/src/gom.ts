@@ -1,141 +1,194 @@
-import {
-  type Dimensions,
-  type DimensionsInput,
-  parseDimensions,
-} from './dimensions'
-
-interface ViewportInput extends Dimensions {
-  // fit: 'contain' | 'cover' | 'fill'
+interface DimensionsLike {
+  readonly width: number
+  readonly height: number
 }
 
-interface GraphicOptions {
-  viewport: ViewportInput
-  root: DimensionsInput
+interface RectLike extends DimensionsLike {
+  readonly x: number
+  readonly y: number
 }
 
-export class Graphic {
-  #viewport: Dimensions
-  #root: GraphicNode
-  #parents: Map<GraphicNode, GraphicNode> = new Map()
+class Rect implements RectLike {
+  x: number
+  y: number
+  width: number
+  height: number
 
-  constructor(options: GraphicOptions) {
-    this.#viewport = {
-      width: options.viewport.width,
-      height: options.viewport.height,
-    }
-
-    this.#root = new GraphicNode(this, null, options.root)
+  constructor(x: number, y: number, width: number, height: number) {
+    this.x = x
+    this.y = y
+    this.width = width
+    this.height = height
   }
 
-  get viewport(): Readonly<Dimensions> {
-    return this.#viewport
-  }
-
-  resize(size: Dimensions) {
-    this.#viewport.width = size.width
-    this.#viewport.height = size.height
-  }
-
-  createNode() {
-    return new GraphicNode(this, null, {
-      width: 'auto',
-      height: 'auto',
-      aspectRatio: 'none',
-    })
+  static zero() {
+    return new Rect(0, 0, 0, 0)
   }
 }
 
-export class GraphicRootNode {
-  #graphic: Graphic
-  #children: Array<GraphicNode> = []
+// type Config = any
 
-  constructor(graphic: Graphic) {
-    this.#graphic = graphic
+// function layout(
+//   _rect: Rect,
+//   _config: Config,
+//   _naturalRects: Array<Rect>,
+//   _layoutRects: Array<Rect>,
+// ) {}
+
+// class Layout {
+//   #rect: Rect
+//   #items: Array<LayoutItem> = []
+
+//   constructor(rect: Rect) {
+//     this.#rect = rect
+//   }
+
+//   createItem(index = -1) {
+//     const item = new LayoutItem(this.#rect)
+
+//     if (index === -1) {
+//       this.#items.push(item)
+//     } else {
+//       let i = index % this.#items.length
+
+//       if (i < 0) {
+//         i += this.#items.length
+//       }
+
+//       this.#items.splice(i, 0, item)
+//     }
+//     return item
+//   }
+// }
+
+const UNITS = {
+  px: 'px',
+  percent: '%',
+} as const
+
+type Unit = (typeof UNITS)[keyof typeof UNITS]
+
+class LayoutItem {
+  #declared: Rect
+  #computed: Rect
+
+  #basis: Rect
+
+  constructor(basis: RectLike) {
+    this.#basis = basis
+    this.#declared = Rect.zero()
+    this.#computed = Rect.zero()
   }
 
-  appendChild(child: GraphicNode) {
-    this.#children.push(child)
+  get x() {
+    return this.#computed.x
+  }
+  get y() {
+    return this.#computed.y
+  }
+  get width() {
+    return this.#computed.width
+  }
+  get height() {
+    return this.#computed.height
   }
 
-  removeChild(child: GraphicNode) {
-    const index = this.#children.indexOf(child)
-    if (index === -1) {
-      throw new Error('Child not found')
+  setX(x: number, unit: Unit = 'px') {
+    if (unit === 'px') {
+      this.#declared.x = x
+    } else {
+      this.#declared.x = x * this.#basis.width
     }
+  }
 
-    this.#children.splice(index, 1)
+  setY(y: number, unit: Unit = 'px') {
+    if (unit === 'px') {
+      this.#declared.y = y
+    } else {
+      this.#declared.y = y * this.#basis.height
+    }
+  }
+
+  setWidth(width: number, unit: Unit = 'px') {
+    if (unit === 'px') {
+      this.#declared.width = width
+    } else {
+      this.#declared.width = width * this.#basis.width
+    }
+  }
+
+  setHeight(height: number, unit: Unit = 'px') {
+    if (unit === 'px') {
+      this.#declared.height = height
+    } else {
+      this.#declared.height = height * this.#basis.height
+    }
+  }
+
+  readDeclared() {
+    return this.#declared
+  }
+
+  writeComputed(x: number, y: number, width: number, height: number) {
+    this.#computed.x = x
+    this.#computed.y = y
+    this.#computed.width = width
+    this.#computed.height = height
   }
 }
 
-export class GraphicNode {
-  #parent: GraphicNode | null
-  #graphic: Graphic
-  #children: Array<GraphicNode> = []
-  #naturalDimensions!: Dimensions
+class Tree {
+  #parents: Map<Node, Node> = new Map()
+  #viewport: Rect
+  #root: Node
+  constructor(viewport: DimensionsLike) {
+    this.#viewport = new Rect(0, 0, viewport.width, viewport.height)
 
-  constructor(
-    graphic: Graphic,
-    parent: GraphicNode | null,
-    dimensions: Readonly<DimensionsInput>,
-  ) {
-    this.#parent = parent
-    this.#graphic = graphic
-    this.#setSize(dimensions)
+    this.#root = new Node(this, this.#viewport, this.#viewport, this.#viewport)
   }
 
-  get graphic(): Graphic {
-    return this.#graphic
-  }
-
-  get parent(): GraphicNode | null {
-    return this.#parent
-  }
-
-  get [DimensionsObject](): Readonly<Dimensions> {
-    return this.#naturalDimensions
-  }
-
-  get naturalWidth(): number {
-    return this.#naturalDimensions.width
-  }
-
-  get naturalHeight(): number {
-    return this.#naturalDimensions.height
-  }
-
-  resize(size: Readonly<DimensionsInput>) {
-    this.#setSize(size)
-  }
-
-  #setSize(dimensions: Readonly<DimensionsInput>) {
-    this.#naturalDimensions = parseDimensions(
-      dimensions,
-      this.#parent?.[DimensionsObject] ?? this.#graphic.viewport,
-    )
-  }
-
-  [RegisterParent](_parent: GraphicNode) {
-    if (this.#graphic[GraphicRoot] === this || this.#parent === null) {
-      throw new Error('Cannot set parent of root node')
+  parentOf(node: Node) {
+    if (node === this.#root) {
+      return null
     }
 
-    this.#parent.removeChild(this)
-  }
+    const parent = this.#parents.get(node)
 
-  setParent(parent: GraphicNode) {
-    parent.appendChild(this)
-  }
-
-  appendChild(child: GraphicNode) {
-    child[RegisterParent](this)
-  }
-
-  removeChild(child: GraphicNode) {
-    const index = this.#children.indexOf(child)
-    if (index === -1) {
-      throw new Error('Child not found')
+    if (parent == null) {
+      throw new Error('Node is not in this tree')
     }
 
-    this.#children.splice(index, 1)
+    return parent
+  }
+
+  setParent(node: Node, parent: Node) {
+    this.#parents.set(node, parent)
+  }
+}
+
+class Node implements RectLike {
+  #tree: Tree
+  #layoutItem: LayoutItem
+
+  constructor(tree: Tree, layoutItem: LayoutItem) {
+    this.#tree = tree
+    this.#layoutItem = layoutItem
+  }
+
+  getParent() {
+    return this.#tree.parentOf(this)
+  }
+
+  get x() {
+    return this.#layoutItem.x
+  }
+  get y() {
+    return this.#layoutItem.y
+  }
+  get width() {
+    return this.#layoutItem.width
+  }
+  get height() {
+    return this.#layoutItem.height
   }
 }

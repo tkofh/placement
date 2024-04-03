@@ -1,5 +1,5 @@
 <template>
-  <GraphicRoot width="1000" height="1000" fit="contain">
+  <!-- <GraphicRoot width="1000" height="1000" fit="contain"> -->
     <!-- <GraphicPolarProjection layer origin="50%" theta="0deg"> -->
 
     <!-- <GraphicFlexPlacement direction="column">
@@ -11,10 +11,19 @@
 
     <!-- </GraphicPolarProjection> -->
 
-    <GraphicAbsolutePlacement layer>
-      <GraphicCircle top="50%" left="50%" origin="50%" radius="100" />
-    </GraphicAbsolutePlacement>
-  </GraphicRoot>
+    <!-- <GraphicCircle layer top="50%" left="50%" origin="50%" radius="100" /> -->
+  <!-- </GraphicRoot> -->
+  <p>hello</p>
 </template>
 
-<script lang="ts" setup></script>
+<script lang="ts" setup>
+import { Graphic, GraphicFrame } from '../../placement/src/gom3'
+
+const graphic = new Graphic({ width: 1600, height: 900 })
+
+const other = graphic.appendChild(
+  new GraphicFrame({ top: 50, left: 100, width: '1fr', height: '1fr' }),
+)
+
+console.log(other, other.computedWidth, other.computedHeight)
+</script>
