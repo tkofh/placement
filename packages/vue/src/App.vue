@@ -17,13 +17,43 @@
 </template>
 
 <script lang="ts" setup>
-import { Graphic, GraphicFrame } from '../../placement/src/gom3'
+import { Graphic, GraphicFrame } from '../../placement/src/graphic'
 
-const graphic = new Graphic({ width: 1600, height: 900 })
+const graphic = new Graphic({ width: 100, height: 100 })
 
-const other = graphic.appendChild(
-  new GraphicFrame({ top: 50, left: 100, width: '1fr', height: '1fr' }),
+console.log('------------------------------------------')
+console.log('appending child')
+console.log('------------------------------------------')
+const graphicFrame = graphic.appendChild(
+  new GraphicFrame({ width: 100, height: 100 }),
 )
 
-console.log(other, other.computedWidth, other.computedHeight)
+console.log('------------------------------------------')
+console.log('resizing')
+console.log('------------------------------------------')
+graphic.resize(200, 200)
+
+console.log('------------------------------------------')
+console.log('setting size')
+console.log('------------------------------------------')
+
+graphicFrame.width = '100%'
+graphicFrame.height = '100%'
+console.log({
+  width: graphicFrame.computedWidth,
+  height: graphicFrame.computedHeight,
+})
+
+console.log({
+  width: graphicFrame.parent!.computedWidth,
+  height: graphicFrame.parent!.computedHeight,
+})
+
+console.log({
+  width: graphicFrame.computedWidth,
+  height: graphicFrame.computedHeight,
+})
+
+console.log(graphicFrame)
+console.log(graphic)
 </script>

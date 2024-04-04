@@ -16,25 +16,20 @@
       "import": "./dist/index.mjs",
       "types": "./dist/index.d.ts"
     },
-    "./dimensions": {
-      "require": "./dist/dimensions.cjs",
-      "import": "./dist/dimensions.mjs",
-      "types": "./dist/dimensions.d.ts"
-    },
     "./flexbox": {
       "require": "./dist/flexbox.cjs",
       "import": "./dist/flexbox.mjs",
       "types": "./dist/flexbox.d.ts"
     },
+    "./graphic": {
+      "require": "./dist/graphic.cjs",
+      "import": "./dist/graphic.mjs",
+      "types": "./dist/graphic.d.ts"
+    },
     "./primitives": {
       "require": "./dist/primitives.cjs",
       "import": "./dist/primitives.mjs",
       "types": "./dist/primitives.d.ts"
-    },
-    "./parse": {
-      "require": "./dist/parse.cjs",
-      "import": "./dist/parse.mjs",
-      "types": "./dist/parse.d.ts"
     },
     "./utils": {
       "require": "./dist/utils.cjs",

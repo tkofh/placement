@@ -1,25 +1,12 @@
-import { Node } from 'gpds/trees/general'
-import {
-  NumericProperty,
-  type Quantity,
-  QuantityProperty,
-  RatioProperty,
-} from './placement'
+import { GraphicNode } from './GraphicNode'
+import { GraphicRect } from './GraphicRect'
+import { AbsoluteLayout } from './layout/AbsoluteLayout'
+import type { Layout } from './layout/Layout'
+import { NumericProperty } from './properties/NumericProperty'
+import { type Quantity, QuantityProperty } from './properties/QuantityProperty'
+import { RatioProperty } from './properties/RatioProperty'
 
-class GraphicNode extends Node {
-  #frame: GraphicFrame
-
-  constructor(frame: GraphicFrame) {
-    super()
-    this.#frame = frame
-  }
-
-  get frame() {
-    return this.#frame
-  }
-}
-
-interface FrameOptions {
+export interface FrameOptions {
   aspectRatio?: string | number
   width?: string | number
   height?: string | number
@@ -33,7 +20,7 @@ interface FrameOptions {
   offsetY?: string | number
 }
 
-class FrameConfig {
+export class FrameConfig {
   #aspectRatio = new RatioProperty()
   #width = new QuantityProperty(QuantityProperty.DIMENSION_OR_FLEX_UNITS)
   #height = new QuantityProperty(QuantityProperty.DIMENSION_OR_FLEX_UNITS)
@@ -46,8 +33,14 @@ class FrameConfig {
   #offsetX = new QuantityProperty(QuantityProperty.DIMENSION_UNITS)
   #offsetY = new QuantityProperty(QuantityProperty.DIMENSION_UNITS)
 
-  #parsedWidth: Quantity = { value: 0, unit: QuantityProperty.UNITS.pixel }
-  #parsedHeight: Quantity = { value: 0, unit: QuantityProperty.UNITS.pixel }
+  readonly #parsedWidth: Quantity = {
+    value: 0,
+    unit: QuantityProperty.UNITS.pixel,
+  }
+  readonly #parsedHeight: Quantity = {
+    value: 0,
+    unit: QuantityProperty.UNITS.pixel,
+  }
 
   #dirty = false
 
@@ -194,6 +187,7 @@ class FrameConfig {
     if (this.#width.isDefined()) {
       this.#parsedWidth.unit = this.#width.parsed.unit
       this.#parsedWidth.value = this.#width.parsed.value
+
       return this.#parsedWidth
     }
     if (this.#height.isDefined() && this.#aspectRatio.isDefined()) {
@@ -255,201 +249,52 @@ class FrameConfig {
   }
 }
 
-class Rect {
-  #x: number
-  #y: number
-  #width: number
-  #height: number
-
-  #dirty = false
-
-  constructor(x?: number, y?: number, width?: number, height?: number) {
-    this.#x = x ?? 0
-    this.#y = y ?? 0
-    this.#width = width ?? 0
-    this.#height = height ?? 0
-  }
-
-  get x() {
-    return this.#x
-  }
-  set x(value: number) {
-    if (value !== this.#x) {
-      this.#x = value
-      this.#dirty = true
-    }
-  }
-
-  get y() {
-    return this.#y
-  }
-  set y(value: number) {
-    if (value !== this.#y) {
-      this.#y = value
-      this.#dirty = true
-    }
-  }
-
-  get width() {
-    return this.#width
-  }
-  set width(value: number) {
-    if (value !== this.#width) {
-      this.#width = value
-      this.#dirty = true
-    }
-  }
-
-  get height() {
-    return this.#height
-  }
-  set height(value: number) {
-    if (value !== this.#height) {
-      this.#height = value
-      this.#dirty = true
-    }
-  }
-
-  get dirty() {
-    return this.#dirty
-  }
-
-  clearDirty() {
-    this.#dirty = false
-  }
-}
-
-abstract class Layout {
-  base: Rect
-  configs: Array<FrameConfig> = []
-  rects: Array<Rect> = []
-
-  constructor(base: Rect) {
-    this.base = base
-  }
-
-  abstract layout(): void
-}
-
-interface AbsoluteLayoutOptions {
-  autoSizeMode?: 'fill' | 'hide'
-}
-
-class AbsoluteLayout extends Layout {
-  autoSizeMode: 'fill' | 'hide'
-
-  constructor(base: Rect, options?: AbsoluteLayoutOptions) {
-    super(base)
-
-    this.autoSizeMode = options?.autoSizeMode ?? 'fill'
-  }
-
-  computeInset(quantity: Quantity | null, basis: number) {
-    if (quantity == null) {
-      return null
-    }
-    if (quantity.unit === QuantityProperty.UNITS.percent) {
-      return (basis * quantity.value) / 100
-    }
-
-    return quantity.value
-  }
-
-  computeSize(
-    quantity: Quantity | null,
-    baseSize: number,
-    insetStart: number | null,
-    insetEnd: number | null,
-  ) {
-    if (quantity == null) {
-      if (this.autoSizeMode === 'fill') {
-        return baseSize - (insetStart ?? 0) - (insetEnd ?? 0)
-      }
-
-      if (insetStart !== null && insetEnd !== null) {
-        return baseSize - insetStart - insetEnd
-      }
-
-      return 0
-    }
-
-    if (quantity.unit === QuantityProperty.UNITS.flex) {
-      const flexBasis = baseSize - (insetStart ?? insetEnd ?? 0) * 2
-      return flexBasis * quantity.value
-    }
-
-    if (quantity.unit === QuantityProperty.UNITS.percent) {
-      return (baseSize * quantity.value) / 100
-    }
-
-    return quantity.value
-  }
-
-  layout() {
-    for (const [index, config] of this.configs.entries()) {
-      const rect = this.rects[index]
-
-      const top = this.computeInset(config.readTop(), this.base.height)
-      const right = this.computeInset(config.readRight(), this.base.width)
-      const bottom = this.computeInset(config.readBottom(), this.base.height)
-      const left = this.computeInset(config.readLeft(), this.base.width)
-
-      const width = this.computeSize(
-        config.readWidth(),
-        this.base.width,
-        left,
-        right,
-      )
-      const height = this.computeSize(
-        config.readHeight(),
-        this.base.height,
-        top,
-        bottom,
-      )
-
-      const offsetX = this.computeInset(config.readOffsetX(), width) ?? 0
-      const offsetY = this.computeInset(config.readOffsetY(), height) ?? 0
-
-      rect.x = this.base.x + (left ?? right ?? 0 + offsetX)
-      rect.y = this.base.y + (top ?? bottom ?? 0 + offsetY)
-      rect.width = width
-      rect.height = height
-    }
-  }
-}
-
 export class GraphicFrame {
   #node: GraphicNode
   #config: FrameConfig
-  #rect: Rect
+  #rect: GraphicRect
   #layout: Layout
 
   constructor(options?: FrameOptions) {
     this.#node = new GraphicNode(this)
     this.#config = new FrameConfig(options)
-    this.#rect = new Rect()
+    this.#rect = new GraphicRect()
     this.#layout = new AbsoluteLayout(this.#rect)
   }
 
-  update(force = false) {
-    let shouldUpdate = force
+  get #needsUpdate(): boolean {
+    if (this.#rect.dirty || this.#config.dirty) {
+      return true
+    }
+    if (this.parent) {
+      return this.parent.#needsUpdate
+    }
+    return false
+  }
 
-    if (!shouldUpdate) {
-      if (this.#config.dirty) {
-        shouldUpdate = true
-        this.#config.clearDirty()
-      } else if (this.#rect.dirty) {
-        shouldUpdate = true
-        this.#rect.clearDirty()
+  update(force = false): void {
+    if (this.#needsUpdate || force) {
+      if (this.parent) {
+        for (const ancestor of this.#node.ancestors()) {
+          if (!ancestor.frame.#needsUpdate) {
+            ancestor.frame.#calculate()
+          }
+        }
+      } else {
+        this.#calculate()
       }
     }
+  }
 
-    if (shouldUpdate) {
-      this.#layout.layout()
+  #calculate() {
+    console.log(this.constructor.name, 'calculating')
+    this.#layout.layout()
 
-      for (const child of this.#node.children()) {
-        child.frame.update()
-      }
+    this.#config.clearDirty()
+    this.#rect.clearDirty()
+
+    for (const child of this.#node.children()) {
+      child.frame.#calculate()
     }
   }
 
@@ -584,69 +429,5 @@ export class GraphicFrame {
   }
   get relativeY() {
     return this.#rect.y - (this.parent?.computedY ?? 0)
-  }
-}
-class GraphicRoot extends GraphicFrame {
-  #graphic: Graphic
-  constructor(graphic: Graphic, options: FrameOptions) {
-    super(options)
-    this.#graphic = graphic
-    this.update()
-  }
-
-  update(force?: boolean) {
-    this.computedWidth = this.#graphic.viewportWidth
-    this.computedHeight = this.#graphic.viewportHeight
-
-    super.update(force)
-  }
-}
-
-interface GraphicOptions {
-  width: number
-  height: number
-}
-
-export class Graphic {
-  #root: GraphicRoot
-  #viewportWidth: number
-  #viewportHeight: number
-
-  constructor(options: GraphicOptions, rootOptions: FrameOptions = {}) {
-    this.#viewportWidth = options.width
-    this.#viewportHeight = options.height
-    this.#root = new GraphicRoot(this, {
-      width: '100%',
-      height: '100%',
-      ...rootOptions,
-    })
-    // need to write more about how the graphic influences the rect of the root frame
-    // i.e. what if the root is too small? add options to configure scaling/aspect ratio preservation
-  }
-
-  get root() {
-    return this.#root
-  }
-
-  get viewportWidth() {
-    return this.#viewportWidth
-  }
-  get viewportHeight() {
-    return this.#viewportHeight
-  }
-
-  resize(width: number, height: number) {
-    this.#viewportWidth = width
-    this.#viewportHeight = height
-  }
-
-  appendChild(frame: GraphicFrame) {
-    return this.#root.appendChild(frame)
-  }
-  insertBefore(frame: GraphicFrame, before: GraphicFrame) {
-    return this.#root.insertBefore(frame, before)
-  }
-  removeChild(frame: GraphicFrame) {
-    return this.#root.removeChild(frame)
   }
 }
