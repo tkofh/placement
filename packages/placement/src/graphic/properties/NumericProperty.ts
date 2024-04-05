@@ -8,26 +8,31 @@ export class NumericProperty {
     this.#allowNegative = allowNegative
   }
 
-  get value() {
+  read() {
     if (!this.#defined) {
       return null
     }
+
     return this.#value
   }
 
-  get input() {
+  get() {
     return this.#input
   }
 
-  set input(value: string | number | null) {
-    if (value == null) {
-      this.#defined = false
-      return
+  set(value: string | number | null): boolean {
+    if (value === this.#input) {
+      return false
     }
 
-    this.#defined = true
-    this.#input = value
-    this.#parse(value)
+    if (value == null) {
+      this.#defined = false
+    } else {
+      this.#defined = true
+      this.#input = value
+      this.#parse(value)
+    }
+    return true
   }
 
   #parse(value: string | number) {

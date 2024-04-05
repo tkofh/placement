@@ -42,210 +42,179 @@ export class FrameConfig {
     unit: QuantityProperty.UNITS.pixel,
   }
 
-  #dirty = false
-
   constructor(options?: FrameOptions) {
     if (options?.aspectRatio != null) {
-      this.#aspectRatio.input = options.aspectRatio
+      this.#aspectRatio.set(options.aspectRatio)
     }
     if (options?.width != null) {
-      this.#width.input = options.width
+      this.#width.set(options.width)
     }
     if (options?.height != null) {
-      this.#height.input = options.height
+      this.#height.set(options.height)
     }
     if (options?.top != null) {
-      this.#top.input = options.top
+      this.#top.set(options.top)
     }
     if (options?.right != null) {
-      this.#right.input = options.right
+      this.#right.set(options.right)
     }
     if (options?.bottom != null) {
-      this.#bottom.input = options.bottom
+      this.#bottom.set(options.bottom)
     }
     if (options?.left != null) {
-      this.#left.input = options.left
+      this.#left.set(options.left)
     }
     if (options?.grow != null) {
-      this.#grow.input = options.grow
+      this.#grow.set(options.grow)
     }
     if (options?.shrink != null) {
-      this.#shrink.input = options.shrink
+      this.#shrink.set(options.shrink)
     }
     if (options?.offsetX != null) {
-      this.#offsetX.input = options.offsetX
+      this.#offsetX.set(options.offsetX)
     }
     if (options?.offsetY != null) {
-      this.#offsetY.input = options.offsetY
+      this.#offsetY.set(options.offsetY)
     }
   }
 
-  get aspectRatio() {
-    return this.#aspectRatio.input
+  getAspectRatio() {
+    return this.#aspectRatio.get()
   }
-  set aspectRatio(value: string | number | null) {
-    if (value !== this.#aspectRatio.input) {
-      this.#aspectRatio.input = value
-      this.#dirty = true
-    }
+  setAspectRatio(value: string | number | null) {
+    return this.#aspectRatio.set(value)
   }
-  get width() {
-    return this.#width.input
-  }
-  set width(value: string | number | null) {
-    if (value !== this.#width.input) {
-      this.#width.input = value
-      this.#dirty = true
-    }
-  }
-  get height() {
-    return this.#height.input
-  }
-  set height(value: string | number | null) {
-    if (value !== this.#height.input) {
-      this.#height.input = value
-      this.#dirty = true
-    }
-  }
-  get top() {
-    return this.#top.input
-  }
-  set top(value: string | number | null) {
-    if (value !== this.#top.input) {
-      this.#top.input = value
-      this.#dirty = true
-    }
-  }
-  get right() {
-    return this.#right.input
-  }
-  set right(value: string | number | null) {
-    if (value !== this.#right.input) {
-      this.#right.input = value
-      this.#dirty = true
-    }
-  }
-  get bottom() {
-    return this.#bottom.input
-  }
-  set bottom(value: string | number | null) {
-    if (value !== this.#bottom.input) {
-      this.#bottom.input = value
-      this.#dirty = true
-    }
-  }
-  get left() {
-    return this.#left.input
-  }
-  set left(value: string | number | null) {
-    if (value !== this.#left.input) {
-      this.#left.input = value
-      this.#dirty = true
-    }
-  }
-  get grow() {
-    return this.#grow.input
-  }
-  set grow(value: string | number | null) {
-    if (value !== this.#grow.input) {
-      this.#grow.input = value
-      this.#dirty = true
-    }
-  }
-  get shrink() {
-    return this.#shrink.input
-  }
-  set shrink(value: string | number | null) {
-    if (value !== this.#shrink.input) {
-      this.#shrink.input = value
-      this.#dirty = true
-    }
-  }
-  get offsetX() {
-    return this.#offsetX.input
-  }
-  set offsetX(value: string | number | null) {
-    if (value !== this.#offsetX.input) {
-      this.#offsetX.input = value
-      this.#dirty = true
-    }
-  }
-  get offsetY() {
-    return this.#offsetY.input
-  }
-  set offsetY(value: string | number | null) {
-    if (value !== this.#offsetY.input) {
-      this.#offsetY.input = value
-      this.#dirty = true
-    }
-  }
-
   readAspectRatio(): number | null {
-    return this.#aspectRatio.value
+    return this.#aspectRatio.read()
+  }
+
+  getWidth() {
+    return this.#width.get()
+  }
+  setWidth(value: string | number | null) {
+    return this.#width.set(value)
   }
   readWidth(): Readonly<Quantity> | null {
-    if (this.#width.isDefined()) {
-      this.#parsedWidth.unit = this.#width.parsed.unit
-      this.#parsedWidth.value = this.#width.parsed.value
+    const width = this.#width.read()
+    if (width !== null) {
+      Object.assign(this.#parsedWidth, width)
 
       return this.#parsedWidth
     }
-    if (this.#height.isDefined() && this.#aspectRatio.isDefined()) {
-      this.#parsedWidth.value =
-        this.#height.parsed.value * this.#aspectRatio.value
-      this.#parsedWidth.unit = this.#height.parsed.unit
+    const height = this.#height.read()
+    const aspectRatio = this.#aspectRatio.read()
+    if (height !== null && aspectRatio !== null) {
+      this.#parsedWidth.value = height.value * aspectRatio
+      this.#parsedWidth.unit = height.unit
 
       return this.#parsedWidth
     }
 
     return null
+  }
+
+  getHeight() {
+    return this.#height.get()
+  }
+  setHeight(value: string | number | null) {
+    return this.#height.set(value)
   }
   readHeight(): Readonly<Quantity> | null {
-    if (this.#height.isDefined()) {
-      this.#parsedHeight.unit = this.#height.parsed.unit
-      this.#parsedHeight.value = this.#height.parsed.value
+    const height = this.#height.read()
+    if (height !== null) {
+      Object.assign(this.#parsedHeight, height)
       return this.#parsedHeight
     }
 
-    if (this.#width.isDefined() && this.#aspectRatio.isDefined()) {
-      this.#parsedHeight.value =
-        this.#width.parsed.value / this.#aspectRatio.value
-      this.#parsedHeight.unit = this.#width.parsed.unit
+    const width = this.#width.read()
+    const aspectRatio = this.#aspectRatio.read()
+    if (width !== null && aspectRatio !== null) {
+      this.#parsedHeight.value = width.value / aspectRatio
+      this.#parsedHeight.unit = width.unit
       return this.#parsedHeight
     }
 
     return null
   }
+
+  getTop() {
+    return this.#top.get()
+  }
+  setTop(value: string | number | null) {
+    return this.#top.set(value)
+  }
   readTop(): Readonly<Quantity> | null {
-    return this.#top.parsed
-  }
-  readRight(): Readonly<Quantity> | null {
-    return this.#right.parsed
-  }
-  readBottom(): Readonly<Quantity> | null {
-    return this.#bottom.parsed
-  }
-  readLeft(): Readonly<Quantity> | null {
-    return this.#left.parsed
-  }
-  readGrow(): number | null {
-    return this.#grow.value
-  }
-  readShrink(): number | null {
-    return this.#shrink.value
-  }
-  readOffsetX(): Readonly<Quantity> | null {
-    return this.#offsetX.parsed
-  }
-  readOffsetY(): Readonly<Quantity> | null {
-    return this.#offsetY.parsed
+    return this.#top.read()
   }
 
-  get dirty() {
-    return this.#dirty
+  getRight() {
+    return this.#right.get()
   }
-  clearDirty() {
-    this.#dirty = false
+  setRight(value: string | number | null) {
+    return this.#right.set(value)
+  }
+  readRight(): Readonly<Quantity> | null {
+    return this.#right.read()
+  }
+
+  getBottom() {
+    return this.#bottom.get()
+  }
+  setBottom(value: string | number | null) {
+    return this.#bottom.set(value)
+  }
+  readBottom(): Readonly<Quantity> | null {
+    return this.#bottom.read()
+  }
+
+  getLeft() {
+    return this.#left.get()
+  }
+  setLeft(value: string | number | null) {
+    return this.#left.set(value)
+  }
+  readLeft(): Readonly<Quantity> | null {
+    return this.#left.read()
+  }
+
+  getGrow() {
+    return this.#grow.get()
+  }
+  setGrow(value: string | number | null) {
+    return this.#grow.set(value)
+  }
+  readGrow(): number | null {
+    return this.#grow.read()
+  }
+
+  getShrink() {
+    return this.#shrink.get()
+  }
+  setShrink(value: string | number | null) {
+    return this.#shrink.set(value)
+  }
+  readShrink(): number | null {
+    return this.#shrink.read()
+  }
+
+  getOffsetX() {
+    return this.#offsetX.get()
+  }
+  setOffsetX(value: string | number | null) {
+    return this.#offsetX.set(value)
+  }
+  readOffsetX(): Readonly<Quantity> | null {
+    return this.#offsetX.read()
+  }
+
+  getOffsetY() {
+    return this.#offsetY.get()
+  }
+  setOffsetY(value: string | number | null) {
+    return this.#offsetY.set(value)
+  }
+  readOffsetY(): Readonly<Quantity> | null {
+    return this.#offsetY.read()
   }
 }
 
@@ -255,46 +224,73 @@ export class GraphicFrame {
   #rect: GraphicRect
   #layout: Layout
 
+  #needsUpdate = false
+
   constructor(options?: FrameOptions) {
     this.#node = new GraphicNode(this)
     this.#config = new FrameConfig(options)
     this.#rect = new GraphicRect()
     this.#layout = new AbsoluteLayout(this.#rect)
+
+    this.#dimensionsUpdated()
   }
 
-  get #needsUpdate(): boolean {
-    if (this.#rect.dirty || this.#config.dirty) {
-      return true
+  update(): void {
+    const node = this.#node.findLastAncestor((node) => node.frame.#needsUpdate)
+    if (node) {
+      node.frame.#calculate()
     }
-    if (this.parent) {
-      return this.parent.#needsUpdate
-    }
-    return false
   }
 
-  update(force = false): void {
-    if (this.#needsUpdate || force) {
-      if (this.parent) {
-        for (const ancestor of this.#node.ancestors()) {
-          if (!ancestor.frame.#needsUpdate) {
-            ancestor.frame.#calculate()
-          }
-        }
-      } else {
-        this.#calculate()
+  #calculate(force = false) {
+    this.#layout.layout()
+
+    this.#needsUpdate = false
+
+    for (const child of this.#node.children()) {
+      if (child.frame.#needsUpdate || force) {
+        child.frame.#calculate(force)
       }
     }
   }
 
-  #calculate() {
-    console.log(this.constructor.name, 'calculating')
-    this.#layout.layout()
+  #configUpdated() {
+    if (!this.#needsUpdate) {
+      this.#needsUpdate = true
+      if (this.parent) {
+        for (const ancestor of this.#node.ancestors()) {
+          ancestor.frame.#needsUpdate = true
+        }
+      }
 
-    this.#config.clearDirty()
-    this.#rect.clearDirty()
+      const descendants = this.#node.descendants()
+      let descendant: GraphicNode | undefined = descendants.next().value
+      while (descendant !== undefined) {
+        let next: number = descendant.skips.none
+        if (!descendant.frame.#needsUpdate) {
+          descendant.frame.#needsUpdate = true
+          next = descendant.skips.descendants
+        }
+        descendant = descendants.next(next).value
+      }
+    }
+  }
 
-    for (const child of this.#node.children()) {
-      child.frame.#calculate()
+  #dimensionsUpdated() {
+    if (this.parent !== null) {
+      return
+    }
+    const width = this.#config.readWidth()
+    const height = this.#config.readHeight()
+
+    if (width !== null && height !== null) {
+      if (
+        width.unit === QuantityProperty.UNITS.pixel &&
+        height.unit === QuantityProperty.UNITS.pixel
+      ) {
+        this.#rect.width = width.value
+        this.#rect.height = height.value
+      }
     }
   }
 
@@ -302,7 +298,7 @@ export class GraphicFrame {
     this.#node.appendChild(frame.#node)
     this.#layout.configs.push(frame.#config)
     this.#layout.rects.push(frame.#rect)
-    this.update(true)
+    this.#calculate(true)
 
     return frame
   }
@@ -311,7 +307,7 @@ export class GraphicFrame {
 
     this.#layout.configs.splice(frame.#node.index, 0, frame.#config)
     this.#layout.rects.splice(frame.#node.index, 0, frame.#rect)
-    this.update(true)
+    this.update()
 
     return frame
   }
@@ -319,7 +315,7 @@ export class GraphicFrame {
     this.#node.removeChild(frame.#node)
     this.#layout.configs.splice(frame.#node.index, 1)
     this.#layout.rects.splice(frame.#node.index, 1)
-    this.update(true)
+    this.update()
 
     return frame
   }
@@ -329,105 +325,99 @@ export class GraphicFrame {
   }
 
   get aspectRatio() {
-    return this.#config.aspectRatio
+    return this.#config.getAspectRatio()
   }
   set aspectRatio(value: string | number | null) {
-    this.#config.aspectRatio = value
+    const changed = this.#config.setAspectRatio(value)
+    if (changed) {
+      this.#configUpdated()
+    }
   }
+
   get width() {
-    return this.#config.width
+    return this.#config.getWidth()
   }
   set width(value: string | number | null) {
-    this.#config.width = value
+    const changed = this.#config.setWidth(value)
+    if (changed) {
+      this.#dimensionsUpdated()
+      this.#configUpdated()
+    }
   }
+
   get height() {
-    return this.#config.height
+    return this.#config.getHeight()
   }
   set height(value: string | number | null) {
-    this.#config.height = value
+    const changed = this.#config.setHeight(value)
+    if (changed) {
+      this.#dimensionsUpdated()
+      this.#configUpdated()
+    }
   }
+
   get top() {
-    return this.#config.top
+    return this.#config.getTop()
   }
   set top(value: string | number | null) {
-    this.#config.top = value
+    const changed = this.#config.setTop(value)
+    if (changed) {
+      this.#configUpdated()
+    }
   }
-  get right() {
-    return this.#config.right
-  }
-  set right(value: string | number | null) {
-    this.#config.right = value
-  }
-  get bottom() {
-    return this.#config.bottom
-  }
-  set bottom(value: string | number | null) {
-    this.#config.bottom = value
-  }
+
   get left() {
-    return this.#config.left
+    return this.#config.getLeft()
   }
   set left(value: string | number | null) {
-    this.#config.left = value
+    const changed = this.#config.setLeft(value)
+    if (changed) {
+      this.#configUpdated()
+    }
   }
-  get grow() {
-    return this.#config.grow
+
+  get right() {
+    return this.#config.getRight()
   }
-  set grow(value: string | number | null) {
-    this.#config.grow = value
+  set right(value: string | number | null) {
+    const changed = this.#config.setRight(value)
+    if (changed) {
+      this.#configUpdated()
+    }
   }
-  get shrink() {
-    return this.#config.shrink
+
+  get bottom() {
+    return this.#config.getBottom()
   }
-  set shrink(value: string | number | null) {
-    this.#config.shrink = value
+  set bottom(value: string | number | null) {
+    const changed = this.#config.setBottom(value)
+    if (changed) {
+      this.#configUpdated()
+    }
   }
+
   get offsetX() {
-    return this.#config.offsetX
+    return this.#config.getOffsetX()
   }
   set offsetX(value: string | number | null) {
-    this.#config.offsetX = value
+    const changed = this.#config.setOffsetX(value)
+    if (changed) {
+      this.#configUpdated()
+    }
   }
+
   get offsetY() {
-    return this.#config.offsetY
+    return this.#config.getOffsetY()
   }
   set offsetY(value: string | number | null) {
-    this.#config.offsetY = value
+    const changed = this.#config.setOffsetY(value)
+    if (changed) {
+      this.#configUpdated()
+    }
   }
 
-  get computedX() {
+  get computed() {
     this.update()
-    return this.#rect.x
-  }
-  protected set computedX(value: number) {
-    this.#rect.x = value
-  }
-  get computedY() {
-    this.update()
-    return this.#rect.y
-  }
-  protected set computedY(value: number) {
-    this.#rect.y = value
-  }
-  get computedWidth() {
-    this.update()
-    return this.#rect.width
-  }
-  protected set computedWidth(value: number) {
-    this.#rect.width = value
-  }
-  get computedHeight() {
-    this.update()
-    return this.#rect.height
-  }
-  protected set computedHeight(value: number) {
-    this.#rect.height = value
-  }
-
-  get relativeX() {
-    return this.#rect.x - (this.parent?.computedX ?? 0)
-  }
-  get relativeY() {
-    return this.#rect.y - (this.parent?.computedY ?? 0)
+    return this.#rect.readonly
   }
 }

@@ -3,30 +3,31 @@ export class RatioProperty {
   #value = 1
   #defined = false
 
-  get value() {
+  read() {
     if (!this.#defined) {
       return null
     }
+
     return this.#value
   }
 
-  isDefined(): this is { value: number } {
-    return this.#defined
-  }
-
-  get input() {
+  get() {
     return this.#input
   }
 
-  set input(value: string | number | null) {
-    if (value == null) {
-      this.#defined = false
-      return
+  set(value: string | number | null): boolean {
+    if (value === this.#input) {
+      return false
     }
 
-    this.#defined = true
-    this.#input = value
-    this.#parse(value)
+    if (value == null) {
+      this.#defined = false
+    } else {
+      this.#defined = true
+      this.#input = value
+      this.#parse(value)
+    }
+    return true
   }
 
   #parse(value: string | number) {

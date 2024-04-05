@@ -56,32 +56,31 @@ export class QuantityProperty {
     this.#allowedUnits = allowedUnits
   }
 
-  isDefined(): this is { parsed: Quantity } {
-    return this.#defined
-  }
-
-  get parsed() {
+  read() {
     if (!this.#defined) {
       return null
     }
+
     return this.#parsed
   }
 
-  get input() {
-    if (!this.#defined) {
-      return null
-    }
+  get() {
     return this.#input
   }
 
-  set input(value: string | number | null) {
+  set(value: string | number | null): boolean {
+    if (value === this.#input) {
+      return false
+    }
+
     if (value == null) {
       this.#defined = false
-      return
+    } else {
+      this.#defined = true
+      this.#input = value
+      this.#parse(value)
     }
-    this.#defined = true
-    this.#input = value
-    this.#parse(value)
+    return true
   }
 
   #parsePixel(value: string) {

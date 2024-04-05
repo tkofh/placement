@@ -32,7 +32,6 @@ export class AbsoluteLayout extends Layout {
     insetStart: number | null,
     insetEnd: number | null,
   ) {
-    console.log({ quantity, baseSize, insetStart, insetEnd })
     if (quantity == null) {
       if (this.autoSizeMode === 'fill') {
         return baseSize - (insetStart ?? 0) - (insetEnd ?? 0)
@@ -58,18 +57,13 @@ export class AbsoluteLayout extends Layout {
   }
 
   layout() {
-    console.log('layout')
     for (const [index, config] of this.configs.entries()) {
       const rect = this.rects[index]
-
-      console.log('config', config.readWidth(), config.readHeight())
 
       const top = this.computeInset(config.readTop(), this.base.height)
       const right = this.computeInset(config.readRight(), this.base.width)
       const bottom = this.computeInset(config.readBottom(), this.base.height)
       const left = this.computeInset(config.readLeft(), this.base.width)
-
-      console.log({ top, right, bottom, left })
 
       const width = this.computeSize(
         config.readWidth(),

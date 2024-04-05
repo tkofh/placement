@@ -1,5 +1,5 @@
-import { describe, test } from 'vitest'
-import { Graphic, GraphicFrame } from '../src/graphic'
+import { describe, expect, test } from 'vitest'
+import { GraphicFrame } from '../src/graphic'
 
 describe('graphic', () => {
   // test('it works', () => {
@@ -18,34 +18,22 @@ describe('graphic', () => {
   // })
 
   test('it resizes', () => {
-    const graphic = new Graphic({ width: 100, height: 100 })
+    // const graphic = new Graphic({ width: 100, height: 100 })
 
-    console.log('------------------------------------------')
-    console.log('appending child')
-    console.log('------------------------------------------')
-    const graphicFrame = graphic.appendChild(
+    // const graphicFrame = graphic.appendChild(
+    //   new GraphicFrame({ width: 100, height: 100 }),
+    // )
+
+    const outer = new GraphicFrame({ width: 200, height: 200 })
+    const inner = outer.appendChild(
       new GraphicFrame({ width: 100, height: 100 }),
     )
 
-    console.log('------------------------------------------')
-    console.log('resizing')
-    console.log('------------------------------------------')
-    graphic.resize(200, 200)
+    inner.width = '100%'
+    inner.height = '100%'
 
-    console.log('------------------------------------------')
-    console.log('setting size')
-    console.log('------------------------------------------')
-
-    graphicFrame.width = '100%'
-    graphicFrame.height = '100%'
-
-    console.log('------------------------------------------')
-    console.log('reading')
-    console.log('------------------------------------------')
-    console.log({
-      width: graphicFrame.computedWidth,
-      height: graphicFrame.computedHeight,
-    })
+    expect(inner.computed.width).toBe(200)
+    expect(inner.computed.height).toBe(200)
 
     // console.log({
     //   width: graphicFrame.parent?.computedWidth,
@@ -56,8 +44,5 @@ describe('graphic', () => {
     //   width: graphicFrame.computedWidth,
     //   height: graphicFrame.computedHeight,
     // })
-
-    console.log(graphicFrame)
-    console.log(graphic)
   })
 })
