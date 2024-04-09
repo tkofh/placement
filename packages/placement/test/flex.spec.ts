@@ -14,8 +14,8 @@ describe('properties', () => {
       const child1 = layout.appendChild(new Frame({ width: 50, height: 50 }))
       const child2 = layout.appendChild(new Frame({ width: 50, height: 50 }))
 
-      expect(child1.computed.toJSON()).toMatchObject({ x: 0, y: 0 })
-      expect(child2.computed.toJSON()).toMatchObject({ x: 50, y: 0 })
+      expect(child1.computed).toMatchObject({ x: 0, y: 0 })
+      expect(child2.computed).toMatchObject({ x: 50, y: 0 })
     })
 
     test('row reverse', () => {
@@ -29,8 +29,8 @@ describe('properties', () => {
       const child1 = layout.appendChild(new Frame({ width: 50, height: 50 }))
       const child2 = layout.appendChild(new Frame({ width: 50, height: 50 }))
 
-      expect(child1.computed.toJSON()).toMatchObject({ x: 50, y: 0 })
-      expect(child2.computed.toJSON()).toMatchObject({ x: 0, y: 0 })
+      expect(child1.computed).toMatchObject({ x: 50, y: 0 })
+      expect(child2.computed).toMatchObject({ x: 0, y: 0 })
     })
 
     test('column', () => {
@@ -43,8 +43,8 @@ describe('properties', () => {
       const child1 = layout.appendChild(new Frame({ width: 50, height: 50 }))
       const child2 = layout.appendChild(new Frame({ width: 50, height: 50 }))
 
-      expect(child1.computed.toJSON()).toMatchObject({ x: 0, y: 0 })
-      expect(child2.computed.toJSON()).toMatchObject({ x: 0, y: 50 })
+      expect(child1.computed).toMatchObject({ x: 0, y: 0 })
+      expect(child2.computed).toMatchObject({ x: 0, y: 50 })
     })
 
     test('column reverse', () => {
@@ -57,8 +57,8 @@ describe('properties', () => {
       const child1 = layout.appendChild(new Frame({ width: 50, height: 50 }))
       const child2 = layout.appendChild(new Frame({ width: 50, height: 50 }))
 
-      expect(child1.computed.toJSON()).toMatchObject({ x: 0, y: 50 })
-      expect(child2.computed.toJSON()).toMatchObject({ x: 0, y: 0 })
+      expect(child1.computed).toMatchObject({ x: 0, y: 50 })
+      expect(child2.computed).toMatchObject({ x: 0, y: 0 })
     })
 
     test('changing direction', () => {
@@ -71,14 +71,14 @@ describe('properties', () => {
       const child2 = layout.appendChild(new Frame({ width: 50, height: 50 }))
 
       expect(layout.direction).toBe('row')
-      expect(child1.computed.toJSON()).toMatchObject({ x: 0, y: 0 })
-      expect(child2.computed.toJSON()).toMatchObject({ x: 50, y: 0 })
+      expect(child1.computed).toMatchObject({ x: 0, y: 0 })
+      expect(child2.computed).toMatchObject({ x: 50, y: 0 })
 
       layout.direction = 'column'
 
       expect(layout.direction).toBe('column')
-      expect(child1.computed.toJSON()).toMatchObject({ x: 0, y: 0 })
-      expect(child2.computed.toJSON()).toMatchObject({ x: 0, y: 50 })
+      expect(child1.computed).toMatchObject({ x: 0, y: 0 })
+      expect(child2.computed).toMatchObject({ x: 0, y: 50 })
     })
   })
 
@@ -95,9 +95,9 @@ describe('properties', () => {
       const child2 = layout.appendChild(new Frame({ width: 50, height: 50 }))
       const child3 = layout.appendChild(new Frame({ width: 50, height: 50 }))
 
-      expect(child1.computed.toJSON()).toMatchObject({ x: 0, y: 0 })
-      expect(child2.computed.toJSON()).toMatchObject({ x: 50, y: 0 })
-      expect(child3.computed.toJSON()).toMatchObject({ x: 100, y: 0 })
+      expect(child1.computed).toMatchObject({ x: 0, y: 0 })
+      expect(child2.computed).toMatchObject({ x: 50, y: 0 })
+      expect(child3.computed).toMatchObject({ x: 100, y: 0 })
     })
 
     test('wrap', () => {
@@ -112,9 +112,9 @@ describe('properties', () => {
       const child2 = layout.appendChild(new Frame({ width: 50, height: 50 }))
       const child3 = layout.appendChild(new Frame({ width: 50, height: 50 }))
 
-      expect(child1.computed.toJSON()).toMatchObject({ x: 0, y: 0 })
-      expect(child2.computed.toJSON()).toMatchObject({ x: 50, y: 0 })
-      expect(child3.computed.toJSON()).toMatchObject({ x: 0, y: 50 })
+      expect(child1.computed).toMatchObject({ x: 0, y: 0 })
+      expect(child2.computed).toMatchObject({ x: 50, y: 0 })
+      expect(child3.computed).toMatchObject({ x: 0, y: 50 })
     })
 
     test('wrap reverse', () => {
@@ -129,9 +129,9 @@ describe('properties', () => {
       const child2 = layout.appendChild(new Frame({ width: 50, height: 50 }))
       const child3 = layout.appendChild(new Frame({ width: 50, height: 50 }))
 
-      expect(child1.computed.toJSON()).toMatchObject({ x: 0, y: 50 })
-      expect(child2.computed.toJSON()).toMatchObject({ x: 50, y: 50 })
-      expect(child3.computed.toJSON()).toMatchObject({ x: 0, y: 0 })
+      expect(child1.computed).toMatchObject({ x: 0, y: 50 })
+      expect(child2.computed).toMatchObject({ x: 50, y: 50 })
+      expect(child3.computed).toMatchObject({ x: 0, y: 0 })
     })
 
     test('changing wrap', () => {
@@ -145,16 +145,16 @@ describe('properties', () => {
       const child3 = layout.appendChild(new Frame({ width: 50, height: 50 }))
 
       expect(layout.wrap).toBe(false)
-      expect(child1.computed.toJSON()).toMatchObject({ x: 0, y: 0 })
-      expect(child2.computed.toJSON()).toMatchObject({ x: 50, y: 0 })
-      expect(child3.computed.toJSON()).toMatchObject({ x: 100, y: 0 })
+      expect(child1.computed).toMatchObject({ x: 0, y: 0 })
+      expect(child2.computed).toMatchObject({ x: 50, y: 0 })
+      expect(child3.computed).toMatchObject({ x: 100, y: 0 })
 
       layout.wrap = true
 
       expect(layout.wrap).toBe(true)
-      expect(child1.computed.toJSON()).toMatchObject({ x: 0, y: 0 })
-      expect(child2.computed.toJSON()).toMatchObject({ x: 50, y: 0 })
-      expect(child3.computed.toJSON()).toMatchObject({ x: 0, y: 50 })
+      expect(child1.computed).toMatchObject({ x: 0, y: 0 })
+      expect(child2.computed).toMatchObject({ x: 50, y: 0 })
+      expect(child3.computed).toMatchObject({ x: 0, y: 50 })
     })
   })
 })

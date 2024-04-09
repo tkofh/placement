@@ -221,6 +221,7 @@ class Track {
 }
 
 export class FlexFrame extends Frame {
+  //region State
   private _direction!: FlexDirection | FrameOptionGetter<FlexDirection>
   private _wrap!: FlexWrap | FrameOptionGetter<FlexWrap>
   private _gap!: number | FrameOptionGetter
@@ -240,6 +241,7 @@ export class FlexFrame extends Frame {
   private _crossDimension!: 'width' | 'height'
   private _mainStart!: 'x' | 'y'
   private _crossStart!: 'x' | 'y'
+  //endregion
 
   constructor(frame?: FrameOptions, flex?: FlexOptions) {
     super(frame)
@@ -430,6 +432,7 @@ export class FlexFrame extends Frame {
   }
   //endregion
 
+  //region Public Methods
   override appendChild(frame: Frame): Frame {
     super.appendChild(frame)
     this._tracks.insert(frame)
@@ -475,6 +478,7 @@ export class FlexFrame extends Frame {
     this.trackSpaceOuter =
       flex?.trackSpaceOuter ?? defaultFlexOptions.trackSpaceOuter
   }
+  //endregion
 
   protected override layout() {
     const direction = this.direction

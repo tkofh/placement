@@ -29,7 +29,7 @@ export const GraphicRoot = defineComponent({
     originY: { type: [String, Number], default: '50%' },
   },
   setup(props, { slots }) {
-    const svg = shallowRef()
+    const svg = shallowRef<SVGElement>()
 
     const domRect = useDomRect(svg)
 

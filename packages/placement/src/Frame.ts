@@ -1,10 +1,10 @@
 import { Emitter } from './Emitter'
 import { FrameNode } from './FrameNode'
-import { Rect, type RectLike } from './Rect'
+import { type MutableRect, type ReadonlyRect, createRect } from './createRect'
 
 export type FrameOptionGetter<T = number> = (
-  parent: RectLike,
-  root: RectLike,
+  parent: ReadonlyRect,
+  root: ReadonlyRect,
 ) => T
 
 export interface FrameOptions {
@@ -26,7 +26,8 @@ export class Frame extends Emitter<{ updated: never }> {
     shrink: 0,
   } satisfies FrameOptions
 
-  protected readonly rect: Rect
+  protected readonly readonlyRect: ReadonlyRect
+  protected readonly rect: MutableRect
   protected readonly node: FrameNode
 
   private _width!: number | FrameOptionGetter
@@ -41,7 +42,10 @@ export class Frame extends Emitter<{ updated: never }> {
   constructor(options?: FrameOptions) {
     super()
     this.node = new FrameNode(this)
-    this.rect = new Rect()
+
+    const { readonly, mutable } = createRect()
+    this.readonlyRect = readonly
+    this.rect = mutable
 
     this.configure(options)
   }
@@ -120,25 +124,25 @@ export class Frame extends Emitter<{ updated: never }> {
     this.configUpdated()
   }
 
-  get computed(): Readonly<Rect> {
+  get computed(): ReadonlyRect {
     this.update()
-    return this.rect
+    return this.readonlyRect
   }
 
-  protected get parentRect(): Rect {
+  protected get parentRect(): ReadonlyRect {
     if (this.parent) {
-      return this.parent.rect
+      return this.parent.readonlyRect
     }
 
-    return this.rect
+    return this.readonlyRect
   }
 
-  protected get rootRect(): Rect {
+  protected get rootRect(): ReadonlyRect {
     if (this.node.root) {
-      return this.node.root.frame.rect
+      return this.node.root.frame.readonlyRect
     }
 
-    return this.rect
+    return this.readonlyRect
   }
 
   update(): void {
@@ -243,9 +247,7 @@ export class Frame extends Emitter<{ updated: never }> {
     this._needsUpdate = false
 
     for (const child of this.node.children()) {
-      // if (child.frame._needsUpdate || force) {
       child.frame._calculate(force)
-      // }
     }
 
     this.emit('updated')
