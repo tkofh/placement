@@ -7,29 +7,29 @@
   "license": "MIT",
   "sideEffects": false,
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/Frame.cjs",
+  "module": "./dist/Frame.mjs",
+  "types": "./dist/Frame.d.ts",
   "exports": {
     ".": {
-      "require": "./dist/index.cjs",
-      "import": "./dist/index.mjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/Frame.cjs",
+      "import": "./dist/Frame.mjs",
+      "types": "./dist/Frame.d.ts"
     },
-    "./flexbox": {
-      "require": "./dist/flexbox.cjs",
-      "import": "./dist/flexbox.mjs",
-      "types": "./dist/flexbox.d.ts"
+    "./Frame": {
+      "require": "./dist/Frame.cjs",
+      "import": "./dist/Frame.mjs",
+      "types": "./dist/Frame.d.ts"
     },
-    "./graphic": {
-      "require": "./dist/graphic.cjs",
-      "import": "./dist/graphic.mjs",
-      "types": "./dist/graphic.d.ts"
+    "./FlexFrame": {
+      "require": "./dist/FlexFrame.cjs",
+      "import": "./dist/FlexFrame.mjs",
+      "types": "./dist/FlexFrame.d.ts"
     },
-    "./primitives": {
-      "require": "./dist/primitives.cjs",
-      "import": "./dist/primitives.mjs",
-      "types": "./dist/primitives.d.ts"
+    "./Rect": {
+      "require": "./dist/Rect.cjs",
+      "import": "./dist/Rect.mjs",
+      "types": "./dist/Rect.d.ts"
     },
     "./utils": {
       "require": "./dist/utils.cjs",
@@ -61,6 +61,6 @@
     "vitest": "^1.4.0"
   },
   "dependencies": {
-    "gpds": "^0.0.8"
+    "gpds": "^0.0.11"
   }
 }

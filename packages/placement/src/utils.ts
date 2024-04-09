@@ -38,3 +38,8 @@ export function remap(
   const normalized = normalize(value, x1, x2)
   return lerp(normalized, y1, y2)
 }
+
+export function roundTo(value: number, precision: number) {
+  const scale = 10 ** precision
+  return Math.round(value * scale) / scale
+}
