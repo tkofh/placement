@@ -61,6 +61,6 @@
     "vitest": "^1.4.0"
   },
   "dependencies": {
-    "gpds": "^0.0.11"
+    "gpds": "^0.0.12"
   }
 }

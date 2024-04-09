@@ -1,21 +1,21 @@
 {
-  "name": "vue",
-  "private": true,
+  "name": "@placement/vue",
   "version": "0.0.0",
+  "description": "Vue components for Placement",
+  "author": "Tim Morris <timthewebguy@gmail.com>",
+  "homepage": "https://github.com/tkofh/placement#readme",
+  "license": "MIT",
+  "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc && vite build",
-    "preview": "vite preview"
+    "build": "build"
   },
   "dependencies": {
-    "placement": "workspace:^",
+    "placement": "^0.1.2",
     "vue": "^3.4.21"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0.4",
-    "typescript": "^5.4.4",
-    "vite": "^5.2.8",
-    "vue-tsc": "^2.0.10"
+    "unbuild": "^2.0.0",
+    "typescript": "^5.4.4"
   }
 }

@@ -1,18 +1,22 @@
+import type { Rect } from 'placement/Rect'
 import {
   type PropType,
+  type SlotsType,
   computed,
   defineComponent,
   h,
   shallowRef,
-  useSlots,
 } from 'vue'
-import { useDomRect } from '../composables/useDomRect.ts'
-import { useRootFrame } from '../composables/useFrame.ts'
-import { useViewportRect } from '../composables/useViewportRect.ts'
-import { normalizeDimensionOptions } from '../utils/normalizeDimensionOptions.ts'
+import { useDomRect } from '../composables/useDomRect'
+import { useRootFrame } from '../composables/useRootFrame'
+import { useViewportRect } from '../composables/useViewportRect'
+import { normalizeDimensionOptions } from '../utils/normalizeDimensionOptions'
 
-export const RootFrame = defineComponent({
+export const GraphicRoot = defineComponent({
   name: 'RootFrame',
+  slots: Object as SlotsType<{
+    default: Readonly<Rect>
+  }>,
   props: {
     width: { type: [String, Number], required: false },
     height: { type: [String, Number], required: false },
@@ -24,8 +28,8 @@ export const RootFrame = defineComponent({
     originX: { type: [String, Number], default: '50%' },
     originY: { type: [String, Number], default: '50%' },
   },
-  setup(props) {
-    const svg = shallowRef<SVGElement>()
+  setup(props, { slots }) {
+    const svg = shallowRef()
 
     const domRect = useDomRect(svg)
 
@@ -35,9 +39,6 @@ export const RootFrame = defineComponent({
         props.height,
         props.aspectRatio,
       )
-
-      console.log('width', width)
-      console.log('height', height)
 
       return {
         width:
@@ -63,34 +64,15 @@ export const RootFrame = defineComponent({
         `${viewportRect.value.x} ${viewportRect.value.y} ${viewportRect.value.width} ${viewportRect.value.height}`,
     )
 
-    const slots = useSlots()
-
     return () => {
       return h(
         'svg',
         {
           ref: svg,
-          style: {
-            width: '900',
-            height: '450',
-            border: '1px solid white',
-            overflow: 'visible',
-            maxWidth: '100%',
-            minWidth: '0',
-          },
           preserveAspectRatio: 'none',
           viewBox: viewBox.value,
         },
-        [
-          h('rect', {
-            x: root.value.x,
-            y: root.value.y,
-            width: root.value.width,
-            height: root.value.height,
-            fill: 'red',
-          }),
-          ...(slots.default ? slots.default() : []),
-        ],
+        slots.default?.(root.value),
       )
     }
   },

@@ -1,3 +1,4 @@
+import { Emitter } from './Emitter'
 import { FrameNode } from './FrameNode'
 import { Rect, type RectLike } from './Rect'
 
@@ -15,7 +16,7 @@ export interface FrameOptions {
   shrink?: number | FrameOptionGetter
 }
 
-export class Frame {
+export class Frame extends Emitter<{ updated: never }> {
   static defaults = {
     width: 0,
     height: 0,
@@ -38,10 +39,11 @@ export class Frame {
   private _needsUpdate = false
 
   constructor(options?: FrameOptions) {
+    super()
     this.node = new FrameNode(this)
     this.rect = new Rect()
 
-    Object.assign(this, Frame.defaults, options)
+    this.configure(options)
   }
 
   get parent(): Frame | null {
@@ -140,6 +142,10 @@ export class Frame {
   }
 
   update(): void {
+    if (this.parent === null && !this._needsUpdate) {
+      return
+    }
+
     const node = this.node.findLastAncestor((node) => node.frame._needsUpdate)
     if (node) {
       node.frame._calculate()
@@ -160,11 +166,27 @@ export class Frame {
     return frame
   }
 
+  insertAt(frame: Frame, index: number) {
+    this.node.insertAt(frame.node, index)
+    this.configUpdated()
+
+    return frame
+  }
+
   removeChild(frame: Frame) {
     this.node.removeChild(frame.node)
     this.configUpdated()
 
     return frame
+  }
+
+  configure(options: undefined | FrameOptions) {
+    this.width = options?.width ?? Frame.defaults.width
+    this.height = options?.height ?? Frame.defaults.height
+    this.x = options?.x ?? Frame.defaults.x
+    this.y = options?.y ?? Frame.defaults.y
+    this.grow = options?.grow ?? Frame.defaults.grow
+    this.shrink = options?.shrink ?? Frame.defaults.shrink
   }
 
   *children(): IterableIterator<this> {
@@ -225,5 +247,7 @@ export class Frame {
       child.frame._calculate(force)
       // }
     }
+
+    this.emit('updated')
   }
 }

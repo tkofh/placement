@@ -1,8 +1,8 @@
 import { Frame, type FrameOptionGetter, type FrameOptions } from './Frame'
 import { clamp, lerp } from './utils'
 
-type FlexDirection = 'row' | 'column' | 'row-reverse' | 'column-reverse'
-type FlexWrap = boolean | 'reverse'
+export type FlexDirection = 'row' | 'column' | 'row-reverse' | 'column-reverse'
+export type FlexWrap = boolean | 'reverse'
 
 export interface FlexOptions {
   direction?: FlexDirection | FrameOptionGetter<FlexDirection>
@@ -147,7 +147,7 @@ class Track {
     let between = this._gap
 
     if (this.freeSpace > 0 && this._frames.length > 1) {
-      const spacing = (this.freeSpace / (this._frames.length - 1)) * space
+      const spacing = (this.freeSpace / (this._frames.length + 1)) * space
       start += spacing * spaceOuter
       between +=
         spacing +
@@ -244,7 +244,7 @@ export class FlexFrame extends Frame {
   constructor(frame?: FrameOptions, flex?: FlexOptions) {
     super(frame)
 
-    Object.assign(this, defaultFlexOptions, flex)
+    this.configure(frame, flex)
   }
 
   //region Properties
@@ -444,11 +444,36 @@ export class FlexFrame extends Frame {
     return frame
   }
 
+  override insertAt(frame: Frame, index: number): Frame {
+    super.insertAt(frame, index)
+    this._tracks.insert(frame)
+
+    return frame
+  }
+
   override removeChild(frame: Frame): Frame {
     super.removeChild(frame)
     this._tracks.remove(frame)
 
     return frame
+  }
+
+  override configure(frame?: FrameOptions, flex?: FlexOptions) {
+    super.configure(frame)
+
+    this.direction = flex?.direction ?? defaultFlexOptions.direction
+    this.wrap = flex?.wrap ?? defaultFlexOptions.wrap
+    this.gap = flex?.gap ?? defaultFlexOptions.gap
+    this.justify = flex?.justify ?? defaultFlexOptions.justify
+    this.align = flex?.align ?? defaultFlexOptions.align
+    this.stretch = flex?.stretch ?? defaultFlexOptions.stretch
+    this.trackAlign = flex?.trackAlign ?? defaultFlexOptions.trackAlign
+    this.trackStretch = flex?.trackStretch ?? defaultFlexOptions.trackStretch
+    this.space = flex?.space ?? defaultFlexOptions.space
+    this.spaceOuter = flex?.spaceOuter ?? defaultFlexOptions.spaceOuter
+    this.trackSpace = flex?.trackSpace ?? defaultFlexOptions.trackSpace
+    this.trackSpaceOuter =
+      flex?.trackSpaceOuter ?? defaultFlexOptions.trackSpaceOuter
   }
 
   protected override layout() {
@@ -474,7 +499,7 @@ export class FlexFrame extends Frame {
     )
 
     if (trackFreeSpace > 0 && tracks.length > 1) {
-      const spacing = (trackFreeSpace / (tracks.length - 1)) * trackSpace
+      const spacing = (trackFreeSpace / (tracks.length + 1)) * trackSpace
       start += spacing * trackSpaceOuter
       between +=
         spacing +

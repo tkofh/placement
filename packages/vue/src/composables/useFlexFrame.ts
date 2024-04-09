@@ -1,4 +1,5 @@
-import { Frame, type FrameOptions } from 'placement/Frame'
+import { FlexFrame, type FlexOptions } from 'placement/FlexFrame'
+import type { FrameOptions } from 'placement/Frame'
 import type { Rect } from 'placement/Rect'
 import {
   type MaybeRefOrGetter,
@@ -9,12 +10,13 @@ import {
   watch,
   watchEffect,
 } from 'vue'
-import { ParentFrameSymbol, ParentRectSymbol } from '../internal/injections'
-import { frameRectRef } from '../utils/frameRectRef'
-import { useChildIndex } from './useChildIndex'
+import { ParentFrameSymbol, ParentRectSymbol } from '../internal/injections.ts'
+import { frameRectRef } from '../utils/frameRectRef.ts'
+import { useChildIndex } from './useChildIndex.ts'
 
-export function useFrame(
-  options: MaybeRefOrGetter<FrameOptions>,
+export function useFlexFrame(
+  frameOptions: MaybeRefOrGetter<FrameOptions>,
+  flexOptions: MaybeRefOrGetter<FlexOptions>,
 ): Readonly<Ref<Readonly<Rect>>> {
   const parentFrame = inject(ParentFrameSymbol, null)
 
@@ -24,7 +26,7 @@ export function useFrame(
 
   const index = useChildIndex()
 
-  const frame = new Frame()
+  const frame = new FlexFrame()
 
   watch(
     index,
@@ -39,7 +41,7 @@ export function useFrame(
   provide(ParentFrameSymbol, frame)
 
   watchEffect(() => {
-    frame.configure(toValue(options))
+    frame.configure(toValue(frameOptions), toValue(flexOptions))
   })
 
   const rect = frameRectRef(frame)
