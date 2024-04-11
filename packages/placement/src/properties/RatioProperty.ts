@@ -1,9 +1,15 @@
+export type RatioInput =
+  | number
+  | `${number}`
+  | `${number}${' ' | never}/${' ' | never}${number}`
+  | (string & unknown)
+
 export class RatioProperty {
-  readonly #initial: string | number | null
-  #raw: string | number | null
+  readonly #initial: RatioInput | null
+  #raw: RatioInput | null
   #value: number | null
 
-  constructor(initial: string | number | null) {
+  constructor(initial: RatioInput | null) {
     this.#initial = initial
     this.#raw = initial
     if (initial === null) {
@@ -13,14 +19,14 @@ export class RatioProperty {
     }
   }
 
-  get raw(): string | number | null {
+  get raw(): RatioInput | null {
     return this.#raw
   }
 
   get value(): number | null {
     return this.#value
   }
-  set value(value: string | number | null) {
+  set value(value: RatioInput | null) {
     const input = value === 'initial' ? this.#initial : value
     if (input === null) {
       this.#raw = null
@@ -31,7 +37,7 @@ export class RatioProperty {
     }
   }
 
-  #parse(value: string | number): number {
+  #parse(value: RatioInput): number {
     if (typeof value === 'number') {
       if (value === 0) {
         throw new Error('Ratio cannot be 0')

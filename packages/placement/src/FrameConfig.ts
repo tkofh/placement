@@ -1,31 +1,37 @@
 import type { Frame } from './Frame'
-import { NumericProperty } from './properties/NumericProperty'
-import { QuantityProperty } from './properties/QuantityProperty'
-import { RatioProperty } from './properties/RatioProperty'
+import {
+  type NumericInput,
+  NumericProperty,
+} from './properties/NumericProperty'
+import {
+  type QuantityInput,
+  QuantityProperty,
+} from './properties/QuantityProperty'
+import { type RatioInput, RatioProperty } from './properties/RatioProperty'
 import { clamp } from './utils'
 
 type RawFrameConfigValue = string | number | null
 
 export interface FrameOptions {
-  width: RawFrameConfigValue
-  height: RawFrameConfigValue
-  x: RawFrameConfigValue
-  y: RawFrameConfigValue
-  aspectRatio: RawFrameConfigValue
-  minWidth: RawFrameConfigValue
-  minHeight: RawFrameConfigValue
-  maxWidth: RawFrameConfigValue
-  maxHeight: RawFrameConfigValue
-  grow: RawFrameConfigValue
-  shrink: RawFrameConfigValue
-  paddingTop: RawFrameConfigValue
-  paddingRight: RawFrameConfigValue
-  paddingBottom: RawFrameConfigValue
-  paddingLeft: RawFrameConfigValue
-  marginTop: RawFrameConfigValue
-  marginRight: RawFrameConfigValue
-  marginBottom: RawFrameConfigValue
-  marginLeft: RawFrameConfigValue
+  width: QuantityInput
+  height: QuantityInput
+  x: QuantityInput
+  y: QuantityInput
+  aspectRatio: RatioInput | null
+  minWidth: QuantityInput
+  minHeight: QuantityInput
+  maxWidth: QuantityInput | null
+  maxHeight: QuantityInput | null
+  grow: NumericInput
+  shrink: NumericInput
+  paddingTop: QuantityInput
+  paddingRight: QuantityInput
+  paddingBottom: QuantityInput
+  paddingLeft: QuantityInput
+  marginTop: QuantityInput
+  marginRight: QuantityInput
+  marginBottom: QuantityInput
+  marginLeft: QuantityInput
 }
 
 export class FrameConfig {
@@ -35,8 +41,8 @@ export class FrameConfig {
     x: 0,
     y: 0,
     aspectRatio: null,
-    minWidth: null,
-    minHeight: null,
+    minWidth: 0,
+    minHeight: 0,
     maxWidth: null,
     maxHeight: null,
     grow: 0,

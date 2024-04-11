@@ -1,27 +1,29 @@
+export type NumericInput = number | `${number}` | (string & unknown)
+
 export class NumericProperty {
-  readonly #initial: string | number
-  #raw: string | number
+  readonly #initial: NumericInput
+  #raw: NumericInput
   #value: number
 
-  constructor(initial: string | number) {
+  constructor(initial: NumericInput) {
     this.#initial = initial
     this.#raw = initial
     this.#value = this.#parse(initial)
   }
 
-  get raw(): string | number {
+  get raw(): NumericInput {
     return this.#raw
   }
 
   get value(): number {
     return this.#value
   }
-  set value(value: string | number | null) {
+  set value(value: NumericInput | null) {
     this.#raw = value ?? this.#initial
     this.#value = this.#parse(value ?? this.#initial)
   }
 
-  #parse(value: string | number): number {
+  #parse(value: NumericInput): number {
     if (typeof value === 'number') {
       return value
     }

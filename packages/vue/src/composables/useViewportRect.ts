@@ -9,7 +9,7 @@ import {
   watchEffect,
 } from 'vue'
 import type { FrameFit } from '../internal/types'
-import { computeDimensionProp } from '../utils/parseDimensionProp'
+import { useQuantityProp } from './useQuantityProp'
 
 function createRectRef() {
   const rect = createMutableRect()
@@ -81,6 +81,9 @@ export function useViewportRect(
 ): Readonly<ShallowRef<ReadonlyRect>> {
   const { update, rectRef } = createRectRef()
 
+  const computedOriginX = useQuantityProp(originX, false, 'width', content)
+  const computedOriginY = useQuantityProp(originY, false, 'height', content)
+
   watchEffect(() => {
     const basisRect = toValue(basis)
 
@@ -105,13 +108,11 @@ export function useViewportRect(
     update(
       computeViewportOffset(
         contentRect.width - width,
-        (computeDimensionProp(toValue(originX), 'width', contentRect) ?? 0) /
-          contentRect.width,
+        (computedOriginX.value ?? 0) / contentRect.width,
       ),
       computeViewportOffset(
         contentRect.height - height,
-        (computeDimensionProp(toValue(originY), 'height', contentRect) ?? 0) /
-          contentRect.height,
+        (computedOriginY.value ?? 0) / contentRect.height,
       ),
       width,
       height,

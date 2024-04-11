@@ -11,6 +11,8 @@ const FRAME_STATE = {
 
 type FrameState = (typeof FRAME_STATE)[keyof typeof FRAME_STATE]
 
+export type { FrameOptions }
+
 export class Frame extends Emitter<{ updated: never }> {
   protected readonly box: Box
   protected readonly node: FrameNode
