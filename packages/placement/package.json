@@ -16,6 +16,11 @@
       "import": "./dist/Frame.mjs",
       "types": "./dist/Frame.d.ts"
     },
+    "./Box": {
+      "require": "./dist/Box.cjs",
+      "import": "./dist/Box.mjs",
+      "types": "./dist/Box.d.ts"
+    },
     "./Frame": {
       "require": "./dist/Frame.cjs",
       "import": "./dist/Frame.mjs",
@@ -25,6 +30,21 @@
       "require": "./dist/FlexFrame.cjs",
       "import": "./dist/FlexFrame.mjs",
       "types": "./dist/FlexFrame.d.ts"
+    },
+    "./properties/NumericProperty": {
+      "require": "./dist/properties/NumericProperty.cjs",
+      "import": "./dist/properties/NumericProperty.mjs",
+      "types": "./dist/properties/NumericProperty.d.ts"
+    },
+    "./properties/RatioProperty": {
+      "require": "./dist/properties/RatioProperty.cjs",
+      "import": "./dist/properties/RatioProperty.mjs",
+      "types": "./dist/properties/RatioProperty.d.ts"
+    },
+    "./properties/QuantityProperty": {
+      "require": "./dist/properties/QuantityProperty.cjs",
+      "import": "./dist/properties/QuantityProperty.mjs",
+      "types": "./dist/properties/QuantityProperty.d.ts"
     },
     "./utils": {
       "require": "./dist/utils.cjs",

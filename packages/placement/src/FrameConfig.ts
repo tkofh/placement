@@ -1,4 +1,7 @@
 import type { Frame } from './Frame'
+import { NumericProperty } from './properties/NumericProperty'
+import { QuantityProperty } from './properties/QuantityProperty'
+import { RatioProperty } from './properties/RatioProperty'
 import { clamp } from './utils'
 
 type RawFrameConfigValue = string | number | null
@@ -59,519 +62,397 @@ export class FrameConfig {
 
   readonly #frame: Frame
 
-  #rawWidth!: RawFrameConfigValue
-  #rawHeight!: RawFrameConfigValue
-  #rawX!: RawFrameConfigValue
-  #rawY!: RawFrameConfigValue
-  #rawAspectRatio!: RawFrameConfigValue
-  #rawMinWidth!: RawFrameConfigValue
-  #rawMinHeight!: RawFrameConfigValue
-  #rawMaxWidth!: RawFrameConfigValue
-  #rawMaxHeight!: RawFrameConfigValue
-  #rawShrink!: RawFrameConfigValue
-  #rawGrow!: RawFrameConfigValue
-  #rawPaddingTop!: RawFrameConfigValue
-  #rawPaddingRight!: RawFrameConfigValue
-  #rawPaddingBottom!: RawFrameConfigValue
-  #rawPaddingLeft!: RawFrameConfigValue
-  #rawMarginTop!: RawFrameConfigValue
-  #rawMarginRight!: RawFrameConfigValue
-  #rawMarginBottom!: RawFrameConfigValue
-  #rawMarginLeft!: RawFrameConfigValue
+  readonly #x: QuantityProperty
+  readonly #y: QuantityProperty
 
-  #width!: number
-  #height!: number
-  #x!: number
-  #y!: number
-  #aspectRatio!: number
-  #minWidth!: number
-  #minHeight!: number
-  #maxWidth!: number
-  #maxHeight!: number
-  #shrink!: number
-  #grow!: number
-  #paddingTop!: number
-  #paddingRight!: number
-  #paddingBottom!: number
-  #paddingLeft!: number
-  #marginTop!: number
-  #marginRight!: number
-  #marginBottom!: number
-  #marginLeft!: number
+  readonly #width: QuantityProperty
+  readonly #height: QuantityProperty
 
-  #widthUnit!: number
-  #heightUnit!: number
-  #xUnit!: number
-  #yUnit!: number
-  #minWidthUnit!: number
-  #minHeightUnit!: number
-  #maxWidthUnit!: number
-  #maxHeightUnit!: number
-  #paddingTopUnit!: number
-  #paddingRightUnit!: number
-  #paddingBottomUnit!: number
-  #paddingLeftUnit!: number
-  #marginTopUnit!: number
-  #marginRightUnit!: number
-  #marginBottomUnit!: number
-  #marginLeftUnit!: number
+  readonly #aspectRatio: RatioProperty
+
+  readonly #minWidth: QuantityProperty
+  readonly #minHeight: QuantityProperty
+  readonly #maxWidth: QuantityProperty
+  readonly #maxHeight: QuantityProperty
+
+  readonly #paddingTop: QuantityProperty
+  readonly #paddingRight: QuantityProperty
+  readonly #paddingBottom: QuantityProperty
+  readonly #paddingLeft: QuantityProperty
+  readonly #marginTop: QuantityProperty
+  readonly #marginRight: QuantityProperty
+  readonly #marginBottom: QuantityProperty
+  readonly #marginLeft: QuantityProperty
+
+  readonly #grow: NumericProperty
+  readonly #shrink: NumericProperty
 
   constructor(frame: Frame) {
     this.#frame = frame
+
+    this.#x = new QuantityProperty(FrameConfig.INITIAL.x, false, 'width')
+    this.#y = new QuantityProperty(FrameConfig.INITIAL.y, false, 'height')
+
+    this.#width = new QuantityProperty(
+      FrameConfig.INITIAL.width,
+      false,
+      'width',
+    )
+    this.#height = new QuantityProperty(
+      FrameConfig.INITIAL.height,
+      false,
+      'height',
+    )
+
+    this.#aspectRatio = new RatioProperty(FrameConfig.INITIAL.aspectRatio)
+
+    this.#minWidth = new QuantityProperty(
+      FrameConfig.INITIAL.minWidth,
+      false,
+      'width',
+    )
+    this.#minHeight = new QuantityProperty(
+      FrameConfig.INITIAL.minHeight,
+      false,
+      'height',
+    )
+    this.#maxWidth = new QuantityProperty(
+      FrameConfig.INITIAL.maxWidth,
+      false,
+      'width',
+    )
+    this.#maxHeight = new QuantityProperty(
+      FrameConfig.INITIAL.maxHeight,
+      false,
+      'height',
+    )
+
+    this.#paddingTop = new QuantityProperty(
+      FrameConfig.INITIAL.paddingTop,
+      false,
+      'height',
+    )
+    this.#paddingRight = new QuantityProperty(
+      FrameConfig.INITIAL.paddingRight,
+      false,
+      'width',
+    )
+    this.#paddingBottom = new QuantityProperty(
+      FrameConfig.INITIAL.paddingBottom,
+      false,
+      'height',
+    )
+    this.#paddingLeft = new QuantityProperty(
+      FrameConfig.INITIAL.paddingLeft,
+      false,
+      'width',
+    )
+    this.#marginTop = new QuantityProperty(
+      FrameConfig.INITIAL.marginTop,
+      true,
+      'height',
+    )
+    this.#marginRight = new QuantityProperty(
+      FrameConfig.INITIAL.marginRight,
+      true,
+      'width',
+    )
+    this.#marginBottom = new QuantityProperty(
+      FrameConfig.INITIAL.marginBottom,
+      true,
+      'height',
+    )
+    this.#marginLeft = new QuantityProperty(
+      FrameConfig.INITIAL.marginLeft,
+      true,
+      'width',
+    )
+
+    this.#grow = new NumericProperty(FrameConfig.INITIAL.grow)
+    this.#shrink = new NumericProperty(FrameConfig.INITIAL.shrink)
+
     this.configure(FrameConfig.INITIAL)
   }
   //region Properties
   get width(): number {
-    if (this.#width > 0) {
-      return this.#computeQuantity(
-        this.#width,
-        this.#widthUnit,
-        this.#parentRect.width,
-      )
+    const width = this.#width.compute(this.#parentRect, this.#rootRect)
+
+    if (width !== null) {
+      return width
     }
 
-    if (this.#aspectRatio > 0 && this.#height > 0) {
-      const height = this.#computeQuantity(
-        this.#height,
-        this.#heightUnit,
-        this.#parentRect.height,
-      )
-      return height * this.#aspectRatio
+    const height = this.#height.compute(this.#parentRect, this.#rootRect)
+    if (this.#aspectRatio.value !== null && height !== null) {
+      return height * this.#aspectRatio.value
     }
 
     return FrameConfig.INITIAL.width
   }
   get rawWidth(): RawFrameConfigValue {
-    return this.#rawWidth
+    return this.#width.raw
   }
   set width(value: RawFrameConfigValue) {
-    this.#internalWidth = value
+    this.#width.value = value
     this.#frame.markDirty()
-  }
-  set #internalWidth(value: RawFrameConfigValue) {
-    if (value === null) {
-      this.#width = -1
-    } else {
-      ;[this.#width, this.#widthUnit] = this.#parseQuantity(value, false)
-    }
-    this.#rawWidth = value
   }
 
   get height(): number {
-    if (this.#height > 0) {
-      return this.#computeQuantity(
-        this.#height,
-        this.#heightUnit,
-        this.#parentRect.height,
-      )
+    const height = this.#height.compute(this.#parentRect, this.#rootRect)
+    if (height !== null) {
+      return height
     }
 
-    if (this.#aspectRatio > 0 && this.#width > 0) {
-      const width = this.#computeQuantity(
-        this.#width,
-        this.#widthUnit,
-        this.#parentRect.width,
-      )
-      return width / this.#aspectRatio
+    const width = this.#width.compute(this.#parentRect, this.#rootRect)
+    if (this.#aspectRatio.value !== null && width !== null) {
+      return width / this.#aspectRatio.value
     }
 
     return FrameConfig.INITIAL.height
   }
   get rawHeight(): RawFrameConfigValue {
-    return this.#rawHeight
+    return this.#height.raw
   }
   set height(value: RawFrameConfigValue) {
-    this.#internalHeight = value
+    this.#height.value = value
     this.#frame.markDirty()
-  }
-  set #internalHeight(value: RawFrameConfigValue) {
-    if (value === null) {
-      this.#height = -1
-    } else {
-      ;[this.#height, this.#heightUnit] = this.#parseQuantity(value, false)
-    }
-    this.#rawHeight = value
   }
 
   get x(): number {
-    return this.#computeQuantity(this.#x, this.#xUnit, this.#parentRect.width)
+    return (
+      this.#x.compute(this.#parentRect, this.#rootRect) ?? FrameConfig.INITIAL.x
+    )
   }
   get rawX(): RawFrameConfigValue {
-    return this.#rawX
+    return this.#x.raw
   }
-  set x(value: RawFrameConfigValue | undefined) {
-    this.#internalX = value
+  set x(value: RawFrameConfigValue) {
+    this.#x.value = value
     this.#frame.markDirty()
-  }
-  set #internalX(value: RawFrameConfigValue | undefined) {
-    const input = value ?? FrameConfig.INITIAL.x
-    ;[this.#x, this.#xUnit] = this.#parseQuantity(input, true)
-    this.#rawX = input
   }
 
   get y(): number {
-    return this.#computeQuantity(this.#y, this.#yUnit, this.#parentRect.height)
+    return (
+      this.#y.compute(this.#parentRect, this.#rootRect) ?? FrameConfig.INITIAL.y
+    )
   }
   get rawY(): RawFrameConfigValue {
-    return this.#rawY
+    return this.#y.raw
   }
-  set y(value: RawFrameConfigValue | undefined) {
-    this.#internalY = value
+  set y(value: RawFrameConfigValue) {
+    this.#y.value = value
     this.#frame.markDirty()
-  }
-  set #internalY(value: RawFrameConfigValue | undefined) {
-    const input = value ?? FrameConfig.INITIAL.y
-    ;[this.#y, this.#yUnit] = this.#parseQuantity(input, true)
-    this.#rawY = input
   }
 
   get aspectRatio(): number | null {
-    if (this.#aspectRatio > 0) {
-      return this.#aspectRatio
+    if (this.#aspectRatio.value !== null) {
+      return this.#aspectRatio.value
     }
 
-    if (this.#height > 0 && this.#width > 0) {
-      const width = this.#computeQuantity(
-        this.#width,
-        this.#widthUnit,
-        this.#parentRect.width,
-      )
-      const height = this.#computeQuantity(
-        this.#height,
-        this.#heightUnit,
-        this.#parentRect.height,
-      )
+    const width = this.#width.compute(this.#parentRect, this.#rootRect)
+    const height = this.#height.compute(this.#parentRect, this.#rootRect)
+
+    if (width !== null && height !== null && width > 0 && height > 0) {
       return width / height
     }
 
     return FrameConfig.INITIAL.aspectRatio
   }
   get rawAspectRatio(): RawFrameConfigValue {
-    return this.#rawAspectRatio
+    return this.#aspectRatio.raw
   }
   set aspectRatio(value: RawFrameConfigValue) {
-    this.#internalAspectRatio = value
+    this.#aspectRatio.value = value
     this.#frame.markDirty()
-  }
-  set #internalAspectRatio(value: RawFrameConfigValue) {
-    if (value === null) {
-      this.#aspectRatio = -1
-    } else {
-      this.#aspectRatio = this.#parseRatio(value)
-    }
-    this.#rawAspectRatio = value
   }
 
   get minWidth(): number | null {
-    if (this.#minWidth > 0) {
-      return this.#computeQuantity(
-        this.#minWidth,
-        this.#minWidthUnit,
-        this.#parentRect.width,
-      )
-    }
-
-    return FrameConfig.INITIAL.minWidth
+    return (
+      this.#minWidth.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.minWidth
+    )
   }
   get rawMinWidth(): RawFrameConfigValue {
-    return this.#rawMinWidth
+    return this.#minWidth.raw
   }
   set minWidth(value: RawFrameConfigValue) {
-    this.#internalMinWidth = value
+    this.#minWidth.value = value
     this.#frame.markDirty()
-  }
-  set #internalMinWidth(value: RawFrameConfigValue) {
-    if (value == null) {
-      this.#minWidth = -1
-    } else {
-      ;[this.#minWidth, this.#minWidthUnit] = this.#parseQuantity(value, false)
-    }
-    this.#rawMinWidth = value
   }
 
   get minHeight(): number | null {
-    if (this.#minHeight > 0) {
-      return this.#computeQuantity(
-        this.#minHeight,
-        this.#minHeightUnit,
-        this.#parentRect.height,
-      )
-    }
-
-    return FrameConfig.INITIAL.minHeight
+    return (
+      this.#minHeight.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.minHeight
+    )
   }
   get rawMinHeight(): RawFrameConfigValue {
-    return this.#rawMinHeight
+    return this.#minHeight.raw
   }
   set minHeight(value: RawFrameConfigValue) {
-    this.#internalMinHeight = value
+    this.#minHeight.value = value
     this.#frame.markDirty()
-  }
-  set #internalMinHeight(value: RawFrameConfigValue) {
-    if (value == null) {
-      this.#minHeight = -1
-    } else {
-      ;[this.#minHeight, this.#minHeightUnit] = this.#parseQuantity(
-        value,
-        false,
-      )
-    }
-    this.#rawMinHeight = value
   }
 
   get maxWidth(): number | null {
-    if (this.#maxWidth > 0) {
-      return this.#computeQuantity(
-        this.#maxWidth,
-        this.#maxWidthUnit,
-        this.#parentRect.width,
-      )
-    }
-
-    return FrameConfig.INITIAL.maxWidth
+    return (
+      this.#maxWidth.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.maxWidth
+    )
   }
   get rawMaxWidth(): RawFrameConfigValue {
-    return this.#rawMaxWidth
+    return this.#maxWidth.raw
   }
   set maxWidth(value: RawFrameConfigValue) {
-    this.#internalMaxWidth = value
+    this.#maxWidth.value = value
     this.#frame.markDirty()
-  }
-  set #internalMaxWidth(value: RawFrameConfigValue) {
-    if (value == null) {
-      this.#maxWidth = -1
-    } else {
-      ;[this.#maxWidth, this.#maxWidthUnit] = this.#parseQuantity(value, false)
-    }
-    this.#rawMaxWidth = value
   }
 
   get maxHeight(): number | null {
-    if (this.#maxHeight > 0) {
-      return this.#computeQuantity(
-        this.#maxHeight,
-        this.#maxHeightUnit,
-        this.#parentRect.height,
-      )
-    }
-
-    return FrameConfig.INITIAL.maxHeight
+    return (
+      this.#maxHeight.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.maxHeight
+    )
   }
   get rawMaxHeight(): RawFrameConfigValue {
-    return this.#rawMaxHeight
+    return this.#maxHeight.raw
   }
   set maxHeight(value: RawFrameConfigValue) {
-    this.#internalMaxHeight = value
+    this.#maxHeight.value = value
     this.#frame.markDirty()
-  }
-  set #internalMaxHeight(value: RawFrameConfigValue) {
-    if (value == null) {
-      this.#maxHeight = -1
-    } else {
-      ;[this.#maxHeight, this.#maxHeightUnit] = this.#parseQuantity(
-        value,
-        false,
-      )
-    }
-    this.#rawMaxHeight = value
   }
 
   get grow(): number {
-    return this.#grow
+    return this.#grow.value
   }
   get rawGrow(): RawFrameConfigValue {
-    return this.#rawGrow
+    return this.#grow.raw
   }
   set grow(value: RawFrameConfigValue) {
-    this.#internalGrow = value
+    this.#grow.value = value
     this.#frame.markDirty()
-  }
-  set #internalGrow(value: RawFrameConfigValue) {
-    this.#grow = this.#parseNumber(value ?? FrameConfig.INITIAL.grow)
-    this.#rawGrow = value
   }
 
   get shrink(): number {
-    return this.#shrink
+    return this.#shrink.value
   }
   get rawShrink(): RawFrameConfigValue {
-    return this.#rawShrink
+    return this.#shrink.raw
   }
   set shrink(value: RawFrameConfigValue) {
-    this.#internalShrink = value
+    this.#shrink.value = value
     this.#frame.markDirty()
-  }
-  set #internalShrink(value: RawFrameConfigValue) {
-    this.#shrink = this.#parseNumber(value ?? FrameConfig.INITIAL.shrink)
-    this.#rawShrink = value
   }
 
   get paddingTop(): number {
-    return this.#computeQuantity(
-      this.#paddingTop,
-      this.#paddingTopUnit,
-      this.#parentRect.height,
+    return (
+      this.#paddingTop.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.paddingTop
     )
   }
   get rawPaddingTop(): RawFrameConfigValue {
-    return this.#rawPaddingTop
+    return this.#paddingTop.raw
   }
   set paddingTop(value: RawFrameConfigValue) {
-    this.#internalPaddingTop = value
+    this.#paddingTop.value = value
     this.#frame.markDirty()
-  }
-  set #internalPaddingTop(value: RawFrameConfigValue) {
-    ;[this.#paddingTop, this.#paddingTopUnit] = this.#parseQuantity(
-      value ?? FrameConfig.INITIAL.paddingTop,
-      false,
-    )
   }
 
   get paddingRight(): number {
-    return this.#computeQuantity(
-      this.#paddingRight,
-      this.#paddingRightUnit,
-      this.#parentRect.width,
+    return (
+      this.#paddingRight.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.paddingRight
     )
   }
   get rawPaddingRight(): RawFrameConfigValue {
-    return this.#rawPaddingRight
+    return this.#paddingRight.raw
   }
   set paddingRight(value: RawFrameConfigValue) {
-    this.#internalPaddingRight = value
+    this.#paddingRight.value = value
     this.#frame.markDirty()
-  }
-  set #internalPaddingRight(value: RawFrameConfigValue) {
-    ;[this.#paddingRight, this.#paddingRightUnit] = this.#parseQuantity(
-      value ?? FrameConfig.INITIAL.paddingRight,
-      false,
-    )
   }
 
   get paddingBottom(): number {
-    return this.#computeQuantity(
-      this.#paddingBottom,
-      this.#paddingBottomUnit,
-      this.#parentRect.height,
+    return (
+      this.#paddingBottom.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.paddingBottom
     )
   }
   get rawPaddingBottom(): RawFrameConfigValue {
-    return this.#rawPaddingBottom
+    return this.#paddingBottom.raw
   }
   set paddingBottom(value: RawFrameConfigValue) {
-    this.#internalPaddingBottom = value
+    this.#paddingBottom.value = value
     this.#frame.markDirty()
-  }
-  set #internalPaddingBottom(value: RawFrameConfigValue) {
-    ;[this.#paddingBottom, this.#paddingBottomUnit] = this.#parseQuantity(
-      value ?? FrameConfig.INITIAL.paddingBottom,
-      false,
-    )
   }
 
   get paddingLeft(): number {
-    return this.#computeQuantity(
-      this.#paddingLeft,
-      this.#paddingLeftUnit,
-      this.#parentRect.width,
+    return (
+      this.#paddingLeft.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.paddingLeft
     )
   }
   get rawPaddingLeft(): RawFrameConfigValue {
-    return this.#rawPaddingLeft
+    return this.#paddingLeft.raw
   }
   set paddingLeft(value: RawFrameConfigValue) {
-    this.#internalPaddingLeft = value
+    this.#paddingLeft.value = value
     this.#frame.markDirty()
-  }
-  set #internalPaddingLeft(value: RawFrameConfigValue) {
-    ;[this.#paddingLeft, this.#paddingLeftUnit] = this.#parseQuantity(
-      value ?? FrameConfig.INITIAL.paddingLeft,
-      false,
-    )
   }
 
   get marginTop(): number {
-    return this.#computeQuantity(
-      this.#marginTop,
-      this.#marginTopUnit,
-      this.#parentRect.height,
+    return (
+      this.#marginTop.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.marginTop
     )
   }
   get rawMarginTop(): RawFrameConfigValue {
-    return this.#rawMarginTop
+    return this.#marginTop.raw
   }
   set marginTop(value: RawFrameConfigValue) {
-    this.#internalMarginTop = value
+    this.#marginTop.value = value
     this.#frame.markDirty()
-  }
-  set #internalMarginTop(value: RawFrameConfigValue) {
-    ;[this.#marginTop, this.#marginTopUnit] = this.#parseQuantity(
-      value ?? FrameConfig.INITIAL.marginTop,
-      true,
-    )
   }
 
   get marginRight(): number {
-    return this.#computeQuantity(
-      this.#marginRight,
-      this.#marginRightUnit,
-      this.#parentRect.width,
+    return (
+      this.#marginRight.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.marginRight
     )
   }
   get rawMarginRight(): RawFrameConfigValue {
-    return this.#rawMarginRight
+    return this.#marginRight.raw
   }
   set marginRight(value: RawFrameConfigValue) {
-    this.#internalMarginRight = value
+    this.#marginRight.value = value
     this.#frame.markDirty()
-  }
-  set #internalMarginRight(value: RawFrameConfigValue) {
-    ;[this.#marginRight, this.#marginRightUnit] = this.#parseQuantity(
-      value ?? FrameConfig.INITIAL.marginRight,
-      true,
-    )
   }
 
   get marginBottom(): number {
-    return this.#computeQuantity(
-      this.#marginBottom,
-      this.#marginBottomUnit,
-      this.#parentRect.height,
+    return (
+      this.#marginBottom.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.marginBottom
     )
   }
   get rawMarginBottom(): RawFrameConfigValue {
-    return this.#rawMarginBottom
+    return this.#marginBottom.raw
   }
   set marginBottom(value: RawFrameConfigValue) {
-    this.#internalMarginBottom = value
+    this.#marginBottom.value = value
     this.#frame.markDirty()
-  }
-  set #internalMarginBottom(value: RawFrameConfigValue) {
-    ;[this.#marginBottom, this.#marginBottomUnit] = this.#parseQuantity(
-      value ?? FrameConfig.INITIAL.marginBottom,
-      true,
-    )
   }
 
   get marginLeft(): number {
-    return this.#computeQuantity(
-      this.#marginLeft,
-      this.#marginLeftUnit,
-      this.#parentRect.width,
+    return (
+      this.#marginLeft.compute(this.#parentRect, this.#rootRect) ??
+      FrameConfig.INITIAL.marginLeft
     )
   }
   get rawMarginLeft(): RawFrameConfigValue {
-    return this.#rawMarginLeft
+    return this.#marginLeft.raw
   }
   set marginLeft(value: RawFrameConfigValue) {
-    this.#internalMarginLeft = value
+    this.#marginLeft.value = value
     this.#frame.markDirty()
-  }
-  set #internalMarginLeft(value: RawFrameConfigValue) {
-    ;[this.#marginLeft, this.#marginLeftUnit] = this.#parseQuantity(
-      value ?? FrameConfig.INITIAL.marginLeft,
-      true,
-    )
   }
   //endregion
 
@@ -656,176 +537,63 @@ export class FrameConfig {
 
   configure(options: Partial<FrameOptions>) {
     if (options.width != null) {
-      this.#internalWidth = options.width
+      this.#width.value = options.width
     }
     if (options.height != null) {
-      this.#internalHeight = options.height
+      this.#height.value = options.height
     }
     if (options.x != null) {
-      this.#internalX = options.x
+      this.#x.value = options.x
     }
     if (options.y != null) {
-      this.#internalY = options.y
+      this.#y.value = options.y
     }
     if (options.aspectRatio != null) {
-      this.#internalAspectRatio = options.aspectRatio
+      this.#aspectRatio.value = options.aspectRatio
     }
     if (options.minWidth != null) {
-      this.#internalMinWidth = options.minWidth
+      this.#minWidth.value = options.minWidth
     }
     if (options.minHeight != null) {
-      this.#internalMinHeight = options.minHeight
+      this.#minHeight.value = options.minHeight
     }
     if (options.maxWidth != null) {
-      this.#internalMaxWidth = options.maxWidth
+      this.#maxWidth.value = options.maxWidth
     }
     if (options.maxHeight != null) {
-      this.#internalMaxHeight = options.maxHeight
+      this.#maxHeight.value = options.maxHeight
     }
     if (options.grow != null) {
-      this.#internalGrow = options.grow
+      this.#shrink.value = options.grow
     }
     if (options.shrink != null) {
-      this.#internalShrink = options.shrink
+      this.#grow.value = options.shrink
     }
     if (options.paddingTop != null) {
-      this.#internalPaddingTop = options.paddingTop
+      this.#paddingTop.value = options.paddingTop
     }
     if (options.paddingRight != null) {
-      this.#internalPaddingRight = options.paddingRight
+      this.#paddingRight.value = options.paddingRight
     }
     if (options.paddingBottom != null) {
-      this.#internalPaddingBottom = options.paddingBottom
+      this.#paddingBottom.value = options.paddingBottom
     }
     if (options.paddingLeft != null) {
-      this.#internalPaddingLeft = options.paddingLeft
+      this.#paddingLeft.value = options.paddingLeft
     }
     if (options.marginTop != null) {
-      this.#internalMarginTop = options.marginTop
+      this.#marginTop.value = options.marginTop
     }
     if (options.marginRight != null) {
-      this.#internalMarginRight = options.marginRight
+      this.#marginRight.value = options.marginRight
     }
     if (options.marginBottom != null) {
-      this.#internalMarginBottom = options.marginBottom
+      this.#marginBottom.value = options.marginBottom
     }
     if (options.marginLeft != null) {
-      this.#internalMarginLeft = options.marginLeft
+      this.#marginLeft.value = options.marginLeft
     }
 
     this.#frame.markDirty()
-  }
-
-  #parseNumber(value: string | number) {
-    if (typeof value === 'number') {
-      return value
-    }
-
-    const parsed = Number.parseFloat(value)
-
-    if (Number.isNaN(parsed)) {
-      throw new Error(`Invalid number: ${value}`)
-    }
-
-    return parsed
-  }
-
-  #parseRatio(value: string | number) {
-    if (typeof value === 'number') {
-      if (value === 0) {
-        throw new Error('Ratio cannot be 0')
-      }
-
-      return value
-    }
-
-    const [numerator, denominator] = value.split('/')
-
-    const parsedNumerator = Number(numerator)
-
-    if (Number.isNaN(parsedNumerator)) {
-      throw new Error(
-        `Invalid ratio: ${value} (numerator must be a number, got ${denominator})`,
-      )
-    }
-
-    if (denominator === undefined) {
-      return parsedNumerator
-    }
-
-    const parsedDenominator = Number(denominator)
-
-    if (Number.isNaN(parsedDenominator) || parsedDenominator === 0) {
-      throw new Error(
-        `Invalid ratio: ${value} (denominator must be a non-zero number, got ${denominator})`,
-      )
-    }
-
-    return parsedNumerator / parsedDenominator
-  }
-
-  #parseQuantity(value: string | number, allowNegative: boolean) {
-    if (typeof value === 'number') {
-      return [value, FrameConfig.UNITS.px]
-    }
-
-    let unit: number = FrameConfig.UNITS.px
-    let parsed: number
-
-    if (value.endsWith('px')) {
-      parsed = Number.parseFloat(value.slice(0, -2))
-    } else if (value.endsWith('%')) {
-      unit = FrameConfig.UNITS.percent
-      parsed = Number.parseFloat(value.slice(0, -1))
-    } else if (value.endsWith('vw')) {
-      unit = FrameConfig.UNITS.vw
-      parsed = Number.parseFloat(value.slice(0, -2))
-    } else if (value.endsWith('vh')) {
-      unit = FrameConfig.UNITS.vh
-      parsed = Number.parseFloat(value.slice(0, -2))
-    } else if (value.endsWith('vmin')) {
-      unit = FrameConfig.UNITS.vmin
-      parsed = Number.parseFloat(value.slice(0, -4))
-    } else if (value.endsWith('vmax')) {
-      unit = FrameConfig.UNITS.vmax
-      parsed = Number.parseFloat(value.slice(0, -4))
-    } else {
-      throw new Error(`Could not parse quantity ${value}`)
-    }
-
-    if (Number.isNaN(parsed)) {
-      throw new Error(`Invalid quantity: ${value}`)
-    }
-
-    if (!allowNegative && parsed < 0) {
-      throw new Error(
-        `Negative values are not allowed for this property: ${value}`,
-      )
-    }
-
-    return [parsed, unit]
-  }
-
-  #computeQuantity(value: number, unit: number, percentBasis: number) {
-    switch (unit) {
-      case FrameConfig.UNITS.px:
-        return value
-      case FrameConfig.UNITS.percent:
-        return (percentBasis * value) / 100
-      case FrameConfig.UNITS.vw:
-        return (this.#rootRect.width * value) / 100
-      case FrameConfig.UNITS.vh:
-        return (this.#rootRect.height * value) / 100
-      case FrameConfig.UNITS.vmin:
-        return (
-          (Math.min(this.#rootRect.width, this.#rootRect.height) * value) / 100
-        )
-      case FrameConfig.UNITS.vmax:
-        return (
-          (Math.max(this.#rootRect.width, this.#rootRect.height) * value) / 100
-        )
-    }
-
-    throw new Error(`Unknown unit: ${unit}`)
   }
 }

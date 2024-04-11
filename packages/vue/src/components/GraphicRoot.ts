@@ -1,4 +1,4 @@
-import type { Rect } from 'placement/Rect'
+import type { ReadonlyRect } from 'placement/Box'
 import {
   type PropType,
   type SlotsType,
@@ -10,12 +10,11 @@ import {
 import { useDomRect } from '../composables/useDomRect'
 import { useRootFrame } from '../composables/useRootFrame'
 import { useViewportRect } from '../composables/useViewportRect'
-import { normalizeDimensionOptions } from '../utils/normalizeDimensionOptions'
 
 export const GraphicRoot = defineComponent({
   name: 'RootFrame',
   slots: Object as SlotsType<{
-    default: Readonly<Rect>
+    default: Readonly<ReadonlyRect>
   }>,
   props: {
     width: { type: [String, Number], required: false },
@@ -33,24 +32,11 @@ export const GraphicRoot = defineComponent({
 
     const domRect = useDomRect(svg)
 
-    const root = useRootFrame(() => {
-      const { width, height } = normalizeDimensionOptions(
-        props.width,
-        props.height,
-        props.aspectRatio,
-      )
-
-      return {
-        width:
-          typeof width === 'function'
-            ? width(domRect.value, domRect.value)
-            : width,
-        height:
-          typeof height === 'function'
-            ? height(domRect.value, domRect.value)
-            : height,
-      }
-    })
+    const root = useRootFrame(() => ({
+      width: props.width,
+      height: props.height,
+      aspectRatio: props.aspectRatio,
+    }))
 
     const viewportRect = useViewportRect(
       domRect,

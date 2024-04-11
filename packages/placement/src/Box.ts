@@ -1,10 +1,26 @@
 import { roundTo } from './utils'
 
+export interface MutableRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface ReadonlyRect {
   readonly x: number
   readonly y: number
   readonly width: number
   readonly height: number
+}
+
+export function createMutableRect(): MutableRect {
+  return {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  }
 }
 
 export class Box {

@@ -1,4 +1,4 @@
-import { Rect } from 'placement/Rect'
+import { type ReadonlyRect, createMutableRect } from 'placement/Box'
 import {
   type MaybeRefOrGetter,
   type ShallowRef,
@@ -10,8 +10,8 @@ import {
 
 export function useDomRect(
   element: MaybeRefOrGetter<Element | undefined>,
-): Readonly<ShallowRef<Rect>> {
-  const rect = shallowRef(new Rect())
+): Readonly<ShallowRef<ReadonlyRect>> {
+  const rect = shallowRef(createMutableRect())
 
   const observer = new ResizeObserver(([entry]) => {
     rect.value.width = entry.contentRect.width

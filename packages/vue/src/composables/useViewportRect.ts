@@ -1,4 +1,4 @@
-import { Rect, type RectLike } from 'placement/Rect'
+import { type ReadonlyRect, createMutableRect } from 'placement/Box'
 import { clamp } from 'placement/utils'
 import {
   type MaybeRefOrGetter,
@@ -12,7 +12,7 @@ import type { FrameFit } from '../internal/types'
 import { computeDimensionProp } from '../utils/parseDimensionProp'
 
 function createRectRef() {
-  const rect = new Rect()
+  const rect = createMutableRect()
 
   const rectRef = shallowRef(rect)
   return {
@@ -73,12 +73,12 @@ function computeViewportOffset(delta: number, offset: number) {
 }
 
 export function useViewportRect(
-  basis: MaybeRefOrGetter<RectLike>,
-  content: MaybeRefOrGetter<RectLike>,
+  basis: MaybeRefOrGetter<ReadonlyRect>,
+  content: MaybeRefOrGetter<ReadonlyRect>,
   fit: MaybeRefOrGetter<FrameFit>,
   originX: MaybeRefOrGetter<number | string>,
   originY: MaybeRefOrGetter<number | string>,
-): Readonly<ShallowRef<Rect>> {
+): Readonly<ShallowRef<ReadonlyRect>> {
   const { update, rectRef } = createRectRef()
 
   watchEffect(() => {
