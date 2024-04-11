@@ -17,7 +17,7 @@ interface ChildIndexAPI {
 
 const ParentSymbol = Symbol('Parent') as InjectionKey<ChildIndexAPI>
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: necessary efficient tree traversal
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: necessary tree traversal
 function updateIndexes(
   states: Map<number, IndexInternalState>,
   vm: ComponentInternalInstance,

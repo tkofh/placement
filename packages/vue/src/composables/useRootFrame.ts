@@ -12,9 +12,9 @@ import {
   ParentFrameSymbol,
   ParentRectSymbol,
   RootRectSymbol,
-} from '../internal/injections.ts'
-import { frameRectRef } from '../utils/frameRectRef.ts'
-import { registerIndexParent } from './useChildIndex.ts'
+} from '../internal/injections'
+import { frameRectRef } from '../utils/frameRectRef'
+import { registerIndexParent } from './useChildIndex'
 
 export function useRootFrame(
   options: MaybeRefOrGetter<FrameOptions>,

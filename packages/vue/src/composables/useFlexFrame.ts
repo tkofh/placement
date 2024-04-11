@@ -10,9 +10,9 @@ import {
   watch,
   watchEffect,
 } from 'vue'
-import { ParentFrameSymbol, ParentRectSymbol } from '../internal/injections.ts'
-import { frameRectRef } from '../utils/frameRectRef.ts'
-import { useChildIndex } from './useChildIndex.ts'
+import { ParentFrameSymbol, ParentRectSymbol } from '../internal/injections'
+import { frameRectRef } from '../utils/frameRectRef'
+import { useChildIndex } from './useChildIndex'
 
 export function useFlexFrame(
   frameOptions: MaybeRefOrGetter<FrameOptions>,

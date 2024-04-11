@@ -8,8 +8,8 @@ import {
   triggerRef,
   watchEffect,
 } from 'vue'
-import type { FrameFit } from '../internal/types.ts'
-import { computeDimensionProp } from '../utils/parseDimensionProp.ts'
+import type { FrameFit } from '../internal/types'
+import { computeDimensionProp } from '../utils/parseDimensionProp'
 
 function createRectRef() {
   const rect = new Rect()

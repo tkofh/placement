@@ -1,6 +1,6 @@
 import type { FrameOptions } from 'placement/Frame'
-import { parseDimensionProp } from './parseDimensionProp.ts'
-import { parseRatioProp } from './parseRatioProp.ts'
+import { parseDimensionProp } from './parseDimensionProp'
+import { parseRatioProp } from './parseRatioProp'
 
 export function normalizeDimensionOptions(
   width: string | number | undefined,

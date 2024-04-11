@@ -26,11 +26,6 @@
       "import": "./dist/FlexFrame.mjs",
       "types": "./dist/FlexFrame.d.ts"
     },
-    "./Rect": {
-      "require": "./dist/Rect.cjs",
-      "import": "./dist/Rect.mjs",
-      "types": "./dist/Rect.d.ts"
-    },
     "./utils": {
       "require": "./dist/utils.cjs",
       "import": "./dist/utils.mjs",
