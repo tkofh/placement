@@ -71,6 +71,62 @@ class FlexItem {
     return this.#layout.direction.startsWith('row') ? 'row' : 'column'
   }
 
+  get #definiteMainMargin(): number {
+    if (this.#directionAxis === 'row') {
+      const top = this.frame.config.marginTop
+      const bottom = this.frame.config.marginBottom
+
+      return (top === 'auto' ? 0 : top) + (bottom === 'auto' ? 0 : bottom)
+    }
+    const left = this.frame.config.marginLeft
+    const right = this.frame.config.marginRight
+
+    return (left === 'auto' ? 0 : left) + (right === 'auto' ? 0 : right)
+  }
+
+  get #definiteCrossMargin(): number {
+    if (this.#directionAxis === 'row') {
+      const left = this.frame.config.marginLeft
+      const right = this.frame.config.marginRight
+
+      return (left === 'auto' ? 0 : left) + (right === 'auto' ? 0 : right)
+    }
+    const top = this.frame.config.marginTop
+    const bottom = this.frame.config.marginBottom
+
+    return (top === 'auto' ? 0 : top) + (bottom === 'auto' ? 0 : bottom)
+  }
+
+  get outerHypotheticalMainSize(): number {
+    return (
+      this.#definiteMainMargin +
+      (this.#directionAxis === 'row'
+        ? this.frame.config.constrainedWidth
+        : this.frame.config.constrainedHeight)
+    )
+  }
+
+  get outerMaxMainSize(): number {
+    return this.#directionAxis === 'row'
+      ? this.frame.config.effectiveMaxWidth + this.#definiteMainMargin
+      : this.frame.config.effectiveMaxHeight + this.#definiteMainMargin
+  }
+
+  get outerMinMainSize(): number {
+    return this.#directionAxis === 'row'
+      ? this.frame.config.effectiveMinWidth + this.#definiteMainMargin
+      : this.frame.config.effectiveMinHeight + this.#definiteMainMargin
+  }
+
+  get outerHypotheticalCrossSize(): number {
+    return (
+      this.#definiteCrossMargin +
+      (this.#directionAxis === 'row'
+        ? this.frame.config.constrainedHeight
+        : this.frame.config.constrainedWidth)
+    )
+  }
+
   get scaledShrinkFactor(): number {
     return (
       this.frame.config.shrink *
@@ -78,30 +134,6 @@ class FlexItem {
         ? this.frame.innerRect.width
         : this.frame.innerRect.height)
     )
-  }
-
-  get outerHypotheticalMainSize(): number {
-    return this.#directionAxis === 'row'
-      ? this.frame.config.outerConstrainedWidth
-      : this.frame.config.outerConstrainedHeight
-  }
-
-  get outerMaxMainSize(): number {
-    return this.#directionAxis === 'row'
-      ? this.frame.config.outerEffectiveMaxWidth
-      : this.frame.config.outerEffectiveMaxHeight
-  }
-
-  get outerMinMainSize(): number {
-    return this.#directionAxis === 'row'
-      ? this.frame.config.outerEffectiveMinWidth
-      : this.frame.config.outerEffectiveMinHeight
-  }
-
-  get outerHypotheticalCrossSize(): number {
-    return this.#directionAxis === 'row'
-      ? this.frame.config.outerConstrainedHeight
-      : this.frame.config.outerConstrainedWidth
   }
 
   get availableShrinkage(): number {
@@ -428,7 +460,7 @@ export class FlexLayout {
   }
   set direction(value: FlexDirection) {
     this.#direction = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   get wrap(): FlexWrap {
@@ -436,7 +468,7 @@ export class FlexLayout {
   }
   set wrap(value: FlexWrap) {
     this.#wrap = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   get gap(): number {
@@ -444,7 +476,7 @@ export class FlexLayout {
   }
   set gap(value: number) {
     this.#gap = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   get justify(): number {
@@ -452,7 +484,7 @@ export class FlexLayout {
   }
   set justify(value: number) {
     this.#justify = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   get align(): number {
@@ -460,7 +492,7 @@ export class FlexLayout {
   }
   set align(value: number) {
     this.#align = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   get stretch(): number {
@@ -468,7 +500,7 @@ export class FlexLayout {
   }
   set stretch(value: number) {
     this.#stretch = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   get linesAlign(): number {
@@ -476,7 +508,7 @@ export class FlexLayout {
   }
   set linesAlign(value: number) {
     this.#linesAlign = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   get linesStretch(): number {
@@ -490,7 +522,7 @@ export class FlexLayout {
   }
   set linesStretch(value: number) {
     this.#linesStretch = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   get space(): number {
@@ -498,7 +530,7 @@ export class FlexLayout {
   }
   set space(value: number) {
     this.#space = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   get spaceOuter(): number {
@@ -506,7 +538,7 @@ export class FlexLayout {
   }
   set spaceOuter(value: number) {
     this.#spaceOuter = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   get linesSpace(): number {
@@ -514,7 +546,7 @@ export class FlexLayout {
   }
   set linesSpace(value: number) {
     this.#linesSpace = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   get linesSpaceOuter(): number {
@@ -522,7 +554,7 @@ export class FlexLayout {
   }
   set linesSpaceOuter(value: number) {
     this.#linesSpaceOuter = value
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
   //endregion
 
@@ -578,7 +610,7 @@ export class FlexLayout {
       this.#linesSpaceOuter = options.linesSpaceOuter
     }
 
-    this.#frame.markDirty()
+    this.#frame.markNeedsUpdate()
   }
 
   insert(frame: Frame): Frame {

@@ -2,48 +2,43 @@ export type RatioInput =
   | number
   | `${number}`
   | `${number}${' ' | never}/${' ' | never}${number}`
-  | (string & unknown)
+  | 'none'
+  | 'initial'
 
 export class RatioProperty {
-  readonly #initial: RatioInput | null
-  #raw: RatioInput | null
-  #value: number | null
+  #raw: RatioInput
+  #value: number | 'none'
 
-  constructor(initial: RatioInput | null) {
-    this.#initial = initial
-    this.#raw = initial
-    if (initial === null) {
-      this.#value = null
-    } else {
-      this.#value = this.#parse(initial)
-    }
+  constructor() {
+    this.#raw = 'initial'
+    this.#value = 'none'
   }
 
-  get raw(): RatioInput | null {
+  get raw(): RatioInput {
     return this.#raw
   }
 
-  get value(): number | null {
+  get value(): number | 'none' {
     return this.#value
   }
-  set value(value: RatioInput | null) {
-    const input = value === 'initial' ? this.#initial : value
-    if (input === null) {
-      this.#raw = null
-      this.#value = null
-    } else {
-      this.#raw = input
-      this.#value = this.#parse(input)
-    }
+  set value(value: RatioInput) {
+    this.#raw = value
+    this.#parse(value)
   }
 
-  #parse(value: RatioInput): number {
+  #parse(value: RatioInput) {
     if (typeof value === 'number') {
       if (value === 0) {
         throw new Error('Ratio cannot be 0')
       }
 
-      return value
+      this.#value = value
+      return
+    }
+
+    if (value === 'none' || value === 'initial') {
+      this.#value = 'none'
+      return
     }
 
     const [numerator, denominator] = value.split('/')

@@ -1,14 +1,13 @@
-export type NumericInput = number | `${number}` | (string & unknown)
+export type NumericInput = number | `${number}` | 'initial'
 
 export class NumericProperty {
-  readonly #initial: NumericInput
-  #raw: NumericInput
-  #value: number
+  readonly #initial = 0
+  readonly #allowNegative: boolean
+  #raw: NumericInput = 'initial'
+  #value = 0
 
-  constructor(initial: NumericInput) {
-    this.#initial = initial
-    this.#raw = initial
-    this.#value = this.#parse(initial)
+  constructor(allowNegative = false) {
+    this.#allowNegative = allowNegative
   }
 
   get raw(): NumericInput {
@@ -18,14 +17,20 @@ export class NumericProperty {
   get value(): number {
     return this.#value
   }
-  set value(value: NumericInput | null) {
-    this.#raw = value ?? this.#initial
-    this.#value = this.#parse(value ?? this.#initial)
+  set value(value: NumericInput) {
+    this.#raw = value
+    this.#parse(value)
   }
 
-  #parse(value: NumericInput): number {
+  #parse(value: NumericInput) {
     if (typeof value === 'number') {
-      return value
+      this.#value = value
+      return
+    }
+
+    if (value === 'initial') {
+      this.#value = this.#initial
+      return
     }
 
     const parsed = Number.parseFloat(value)
@@ -34,6 +39,10 @@ export class NumericProperty {
       throw new Error(`Invalid number: ${value}`)
     }
 
-    return parsed
+    if (!this.#allowNegative && parsed < 0) {
+      throw new Error(`Negative numbers are not allowed: ${value}`)
+    }
+
+    this.#value = parsed
   }
 }

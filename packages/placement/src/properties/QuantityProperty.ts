@@ -1,107 +1,110 @@
 import type { ReadonlyRect } from '../Box'
 
 export type Unit = 'px' | '%' | 'vw' | 'vh' | 'vmin' | 'vmax'
-export type QuantityInput = number | `${number}${Unit}` | (string & unknown)
+export type Quantity = number | `${number}${Unit}`
+export type QuantityKeyword = 'auto' | 'none'
+export type QuantityInput<Keyword extends QuantityKeyword = never> =
+  | Quantity
+  | 'initial'
+  | Keyword
 
-export class QuantityProperty {
-  static readonly #UNITS = {
-    px: 0,
-    percent: 1,
-    vw: 2,
-    vh: 3,
-    vmin: 4,
-    vmax: 5,
-  } as const
+const UNITS = {
+  px: 0,
+  percent: 1,
+  vw: 2,
+  vh: 3,
+  vmin: 4,
+  vmax: 5,
+} as const
 
-  readonly #initial: QuantityInput | null
+type UnitId = (typeof UNITS)[keyof typeof UNITS]
+
+export class QuantityProperty<Keyword extends QuantityKeyword = never> {
   readonly #allowNegative: boolean
   readonly #percentBasis: 'width' | 'height'
-  #raw: QuantityInput | null
-  #value!: number | null
-  #unit!: number
+  #allowedKeywords = new Set<Keyword>()
+  #keyword: Keyword | null = null
+  #value = 0
+  #unit: UnitId = UNITS.px
 
   constructor(
-    initial: QuantityInput | null,
     allowNegative = false,
     percentBasis: 'width' | 'height' = 'width',
+    keywords: Array<Keyword> = [],
   ) {
-    this.#initial = initial
     this.#allowNegative = allowNegative
     this.#percentBasis = percentBasis
-    this.#raw = initial
-    if (initial === null) {
-      this.#value = null
-    } else {
-      this.#parse(initial)
+
+    for (const keyword of keywords) {
+      this.#allowedKeywords.add(keyword)
     }
   }
 
-  get raw(): QuantityInput | null {
-    return this.#raw
+  get value(): number | Keyword {
+    return this.#keyword ?? this.#value
+  }
+  set value(value: QuantityInput<Keyword>) {
+    if (this.#allowedKeywords.has(value as Keyword)) {
+      this.#keyword = value as Keyword
+      return
+    }
+    this.#parse(value as QuantityInput)
   }
 
-  get value(): number | null {
-    return this.#value
-  }
-  set value(value: QuantityInput | null) {
-    const input = value === 'initial' ? this.#initial : value
-    if (input === null) {
-      this.#raw = null
-      this.#value = null
-    } else {
-      this.#raw = input
-      this.#parse(input)
+  compute(parent: ReadonlyRect, root: ReadonlyRect): number | Keyword {
+    if (this.#keyword !== null) {
+      return this.#keyword
     }
-  }
 
-  compute(parent: ReadonlyRect, root: ReadonlyRect) {
-    if (this.#value === null) {
-      return null
-    }
     switch (this.#unit) {
-      case QuantityProperty.#UNITS.px:
+      case UNITS.px:
         return this.#value
-      case QuantityProperty.#UNITS.percent:
+      case UNITS.percent:
         return (parent[this.#percentBasis] * this.#value) / 100
-      case QuantityProperty.#UNITS.vw:
+      case UNITS.vw:
         return (root.width * this.#value) / 100
-      case QuantityProperty.#UNITS.vh:
+      case UNITS.vh:
         return (root.height * this.#value) / 100
-      case QuantityProperty.#UNITS.vmin:
+      case UNITS.vmin:
         return (Math.min(root.width, root.height) * this.#value) / 100
-      case QuantityProperty.#UNITS.vmax:
+      case UNITS.vmax:
         return (Math.max(root.width, root.height) * this.#value) / 100
     }
-
-    throw new Error(`Unknown quantity: ${this.#raw}`)
   }
 
   #parse(value: QuantityInput) {
     if (typeof value === 'number') {
-      this.#unit = QuantityProperty.#UNITS.px
+      this.#unit = UNITS.px
       this.#value = value
       return
     }
 
-    let unit: number = QuantityProperty.#UNITS.px
+    if (value === 'initial') {
+      this.#unit = UNITS.px
+      this.#value = 0
+      return
+    }
+
+    let unit: UnitId
     let parsed: number
 
     if (value.endsWith('px')) {
+      unit = UNITS.px
       parsed = Number.parseFloat(value.slice(0, -2))
     } else if (value.endsWith('%')) {
-      unit = QuantityProperty.#UNITS.percent
+      unit = UNITS.percent
       parsed = Number.parseFloat(value.slice(0, -1))
     } else if (value.endsWith('vw')) {
-      unit = QuantityProperty.#UNITS.vw
+      unit = UNITS.vw
       parsed = Number.parseFloat(value.slice(0, -2))
     } else if (value.endsWith('vh')) {
-      unit = QuantityProperty.#UNITS.vh
+      unit = UNITS.vh
       parsed = Number.parseFloat(value.slice(0, -2))
     } else if (value.endsWith('vmin')) {
-      unit = QuantityProperty.#UNITS.vmin
+      unit = UNITS.vmin
       parsed = Number.parseFloat(value.slice(0, -4))
     } else if (value.endsWith('vmax')) {
-      unit = QuantityProperty.#UNITS.vmax
+      unit = UNITS.vmax
       parsed = Number.parseFloat(value.slice(0, -4))
     } else {
       throw new Error(`Could not parse quantity ${value}`)

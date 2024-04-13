@@ -4,9 +4,10 @@ import { FrameConfig, type FrameOptions } from './FrameConfig'
 import { FrameNode } from './FrameNode'
 
 const FRAME_STATE = {
-  clean: 0,
-  dirty: 1,
-  updating: 2,
+  idle: 0,
+  descendantNeedsUpdate: 1,
+  needsUpdate: 2,
+  updating: 3,
 } as const
 
 type FrameState = (typeof FRAME_STATE)[keyof typeof FRAME_STATE]
@@ -19,7 +20,7 @@ export class Frame extends Emitter<{ updated: never }> {
 
   readonly config: FrameConfig
 
-  #state: FrameState = FRAME_STATE.clean
+  #state: FrameState = FRAME_STATE.idle
 
   constructor(options?: Partial<FrameOptions>) {
     super()
@@ -48,60 +49,50 @@ export class Frame extends Emitter<{ updated: never }> {
   }
 
   get rect(): ReadonlyRect {
-    this.update()
+    if (this.root.#state !== FRAME_STATE.updating) {
+      this.update()
+    }
     return this.box.rect
   }
 
   get innerRect(): ReadonlyRect {
-    this.update()
+    if (this.root.#state !== FRAME_STATE.updating) {
+      this.update()
+    }
     return this.box.innerRect
   }
 
   get outerRect(): ReadonlyRect {
-    this.update()
+    if (this.root.#state !== FRAME_STATE.updating) {
+      this.update()
+    }
     return this.box.outerRect
-  }
-
-  update(): void {
-    if (
-      (this.parent === null && this.#state !== FRAME_STATE.dirty) ||
-      this.#state === FRAME_STATE.updating
-    ) {
-      return
-    }
-
-    const node = this.node.findLastAncestor(
-      (node) => node.frame.#state === FRAME_STATE.dirty,
-    )
-    if (node) {
-      node.frame.#calculate()
-    }
   }
 
   appendChild(frame: Frame) {
     this.node.appendChild(frame.node)
-    this.markDirty()
+    this.markNeedsUpdate()
 
     return frame
   }
 
   insertBefore(frame: Frame, before: Frame) {
     this.node.insertBefore(frame.node, before.node)
-    this.markDirty()
+    this.markNeedsUpdate()
 
     return frame
   }
 
   insertAt(frame: Frame, index: number) {
     this.node.insertAt(frame.node, index)
-    this.markDirty()
+    this.markNeedsUpdate()
 
     return frame
   }
 
   removeChild(frame: Frame) {
     this.node.removeChild(frame.node)
-    this.markDirty()
+    this.markNeedsUpdate()
 
     return frame
   }
@@ -112,6 +103,35 @@ export class Frame extends Emitter<{ updated: never }> {
     }
   }
 
+  update(): void {
+    if (this.root.#state === FRAME_STATE.updating) {
+      throw new Error('Cannot update while updating')
+    }
+
+    if (this.root.#state !== FRAME_STATE.idle) {
+      this.root.#updateTree()
+    }
+  }
+
+  markNeedsUpdate() {
+    if (this.root.#state === FRAME_STATE.updating) {
+      throw new Error('Cannot mark needsUpdate while updating')
+    }
+
+    if (this.#state === FRAME_STATE.needsUpdate) {
+      return
+    }
+
+    this.#state = FRAME_STATE.needsUpdate
+
+    for (const ancestor of this.node.ancestors()) {
+      if (ancestor.frame.#state !== FRAME_STATE.idle) {
+        break
+      }
+      ancestor.frame.#state = FRAME_STATE.descendantNeedsUpdate
+    }
+  }
+
   protected layout() {
     for (const frame of this.children()) {
       frame.box.paddingTop = frame.config.paddingTop
@@ -119,39 +139,66 @@ export class Frame extends Emitter<{ updated: never }> {
       frame.box.paddingBottom = frame.config.paddingBottom
       frame.box.paddingLeft = frame.config.paddingLeft
 
-      frame.box.marginTop = frame.config.marginTop
-      frame.box.marginRight = frame.config.marginRight
-      frame.box.marginBottom = frame.config.marginBottom
-      frame.box.marginLeft = frame.config.marginLeft
+      if (
+        frame.config.marginTop === 'auto' &&
+        frame.config.marginBottom === 'auto'
+      ) {
+        const freeSpace = this.box.innerRect.height - frame.box.height
+        frame.box.marginTop = freeSpace / 2
+        frame.box.marginBottom = freeSpace / 2
+      } else if (
+        frame.config.marginTop === 'auto' &&
+        frame.config.marginBottom !== 'auto'
+      ) {
+        frame.box.marginTop =
+          this.box.innerRect.height -
+          frame.box.height -
+          frame.config.marginBottom
+      } else if (
+        frame.config.marginTop !== 'auto' &&
+        frame.config.marginBottom === 'auto'
+      ) {
+        frame.box.marginBottom =
+          this.box.innerRect.height - frame.box.height - frame.config.marginTop
+      } else if (
+        frame.config.marginTop !== 'auto' &&
+        frame.config.marginBottom !== 'auto'
+      ) {
+        frame.box.marginTop = frame.config.marginTop
+        frame.box.marginBottom = frame.config.marginBottom
+      }
+
+      if (
+        frame.config.marginLeft === 'auto' &&
+        frame.config.marginRight === 'auto'
+      ) {
+        const freeSpace = this.box.innerRect.width - frame.box.width
+        frame.box.marginLeft = freeSpace / 2
+        frame.box.marginRight = freeSpace / 2
+      } else if (
+        frame.config.marginLeft === 'auto' &&
+        frame.config.marginRight !== 'auto'
+      ) {
+        frame.box.marginLeft =
+          this.box.innerRect.width - frame.box.width - frame.config.marginRight
+      } else if (
+        frame.config.marginLeft !== 'auto' &&
+        frame.config.marginRight === 'auto'
+      ) {
+        frame.box.marginRight =
+          this.box.innerRect.width - frame.box.width - frame.config.marginLeft
+      } else if (
+        frame.config.marginLeft !== 'auto' &&
+        frame.config.marginRight !== 'auto'
+      ) {
+        frame.box.marginLeft = frame.config.marginLeft
+        frame.box.marginRight = frame.config.marginRight
+      }
 
       frame.box.outerX = this.innerRect.x + frame.config.x
       frame.box.outerY = this.innerRect.y + frame.config.y
       frame.box.width = frame.config.constrainedWidth
       frame.box.height = frame.config.constrainedHeight
-    }
-  }
-
-  markDirty() {
-    this.#state = FRAME_STATE.dirty
-
-    if (this.parent && this.parent.#state === FRAME_STATE.clean) {
-      for (const ancestor of this.node.ancestors()) {
-        if (ancestor.frame.#state !== FRAME_STATE.clean) {
-          break
-        }
-        ancestor.frame.#state = FRAME_STATE.dirty
-      }
-    }
-
-    const descendants = this.node.descendants()
-    let descendant = descendants.next()
-    while (descendant.done === false) {
-      let skip: number = descendant.value.skips.none
-      if (!descendant.value.frame.#state) {
-        descendant.value.frame.#state = FRAME_STATE.dirty
-        skip = descendant.value.skips.descendants
-      }
-      descendant = descendants.next(skip)
     }
   }
 
@@ -162,32 +209,59 @@ export class Frame extends Emitter<{ updated: never }> {
     return frame.box
   }
 
-  #calculate() {
-    let holdsLock = false
-    if (this.root.#state !== FRAME_STATE.updating) {
-      this.root.#state = FRAME_STATE.updating
-      holdsLock = true
+  #updateTree() {
+    // if the root needs to update we skip to the calculation step,
+    // as all descendants will need to be recalculated
+    if (this.#state === FRAME_STATE.needsUpdate) {
+      this.#state = FRAME_STATE.updating
+
+      this.#calculate()
+
+      this.#state = FRAME_STATE.idle
+
+      return
     }
 
-    if (this.parent === null) {
+    this.#state = FRAME_STATE.updating
+
+    const skips = this.node.skips
+
+    const descendants = this.node.descendants(this.node.traversal.depth)
+    let descendant = descendants.next()
+    while (!descendant.done) {
+      const { frame } = descendant.value
+
+      if (frame.#state === FRAME_STATE.idle) {
+        descendant = descendants.next(skips.descendants)
+      } else if (frame.#state === FRAME_STATE.descendantNeedsUpdate) {
+        frame.#state = FRAME_STATE.idle
+        descendant = descendants.next(skips.none)
+      } else {
+        frame.#calculate()
+        descendant = descendants.next(skips.descendants)
+      }
+    }
+
+    this.#state = FRAME_STATE.idle
+  }
+
+  #calculate() {
+    const isRoot = this.root === this
+    if (isRoot) {
       this.box.width = this.config.width
       this.box.height = this.config.height
     }
 
     this.layout()
 
-    if (this.root !== this) {
-      this.#state = FRAME_STATE.clean
+    if (!isRoot) {
+      this.#state = FRAME_STATE.idle
     }
 
     this.emit('updated')
 
     for (const child of this.node.children()) {
       child.frame.#calculate()
-    }
-
-    if (holdsLock) {
-      this.root.#state = FRAME_STATE.clean
     }
   }
 }

@@ -10,467 +10,302 @@ import {
 import { type RatioInput, RatioProperty } from './properties/RatioProperty'
 import { clamp } from './utils'
 
-type RawFrameConfigValue = string | number | null
-
 export interface FrameOptions {
-  width: QuantityInput
-  height: QuantityInput
+  width: QuantityInput<'auto'>
+  height: QuantityInput<'auto'>
   x: QuantityInput
   y: QuantityInput
-  aspectRatio: RatioInput | null
-  minWidth: QuantityInput
-  minHeight: QuantityInput
-  maxWidth: QuantityInput | null
-  maxHeight: QuantityInput | null
+  aspectRatio: RatioInput
+  minWidth: QuantityInput<'auto'>
+  minHeight: QuantityInput<'auto'>
+  maxWidth: QuantityInput<'none'>
+  maxHeight: QuantityInput<'none'>
   grow: NumericInput
   shrink: NumericInput
   paddingTop: QuantityInput
   paddingRight: QuantityInput
   paddingBottom: QuantityInput
   paddingLeft: QuantityInput
-  marginTop: QuantityInput
-  marginRight: QuantityInput
-  marginBottom: QuantityInput
-  marginLeft: QuantityInput
+  marginTop: QuantityInput<'auto'>
+  marginRight: QuantityInput<'auto'>
+  marginBottom: QuantityInput<'auto'>
+  marginLeft: QuantityInput<'auto'>
 }
 
 export class FrameConfig {
-  static readonly INITIAL = {
-    width: 0,
-    height: 0,
-    x: 0,
-    y: 0,
-    aspectRatio: null,
-    minWidth: 0,
-    minHeight: 0,
-    maxWidth: null,
-    maxHeight: null,
-    grow: 0,
-    shrink: 0,
-    paddingTop: 0,
-    paddingRight: 0,
-    paddingBottom: 0,
-    paddingLeft: 0,
-    marginTop: 0,
-    marginRight: 0,
-    marginBottom: 0,
-    marginLeft: 0,
-  } satisfies FrameOptions
-
-  static readonly UNITS = {
-    px: 0,
-    percent: 1,
-    vw: 2,
-    vh: 3,
-    vmin: 4,
-    vmax: 5,
-  } as const
-
   readonly #frame: Frame
 
   readonly #x: QuantityProperty
   readonly #y: QuantityProperty
 
-  readonly #width: QuantityProperty
-  readonly #height: QuantityProperty
+  readonly #width: QuantityProperty<'auto'>
+  readonly #height: QuantityProperty<'auto'>
 
   readonly #aspectRatio: RatioProperty
 
-  readonly #minWidth: QuantityProperty
-  readonly #minHeight: QuantityProperty
-  readonly #maxWidth: QuantityProperty
-  readonly #maxHeight: QuantityProperty
+  readonly #minWidth: QuantityProperty<'auto'>
+  readonly #minHeight: QuantityProperty<'auto'>
+  readonly #maxWidth: QuantityProperty<'none'>
+  readonly #maxHeight: QuantityProperty<'none'>
 
   readonly #paddingTop: QuantityProperty
   readonly #paddingRight: QuantityProperty
   readonly #paddingBottom: QuantityProperty
   readonly #paddingLeft: QuantityProperty
-  readonly #marginTop: QuantityProperty
-  readonly #marginRight: QuantityProperty
-  readonly #marginBottom: QuantityProperty
-  readonly #marginLeft: QuantityProperty
+  readonly #marginTop: QuantityProperty<'auto'>
+  readonly #marginRight: QuantityProperty<'auto'>
+  readonly #marginBottom: QuantityProperty<'auto'>
+  readonly #marginLeft: QuantityProperty<'auto'>
 
   readonly #grow: NumericProperty
   readonly #shrink: NumericProperty
 
+  readonly #updateTarget: Frame
+
   constructor(frame: Frame) {
     this.#frame = frame
 
-    this.#x = new QuantityProperty(FrameConfig.INITIAL.x, false, 'width')
-    this.#y = new QuantityProperty(FrameConfig.INITIAL.y, false, 'height')
+    this.#x = new QuantityProperty(false, 'width')
+    this.#y = new QuantityProperty(false, 'height')
 
-    this.#width = new QuantityProperty(
-      FrameConfig.INITIAL.width,
-      false,
-      'width',
-    )
-    this.#height = new QuantityProperty(
-      FrameConfig.INITIAL.height,
-      false,
-      'height',
-    )
+    this.#width = new QuantityProperty(false, 'width', ['auto'])
+    this.#height = new QuantityProperty(false, 'height')
 
-    this.#aspectRatio = new RatioProperty(FrameConfig.INITIAL.aspectRatio)
+    this.#aspectRatio = new RatioProperty()
 
-    this.#minWidth = new QuantityProperty(
-      FrameConfig.INITIAL.minWidth,
-      false,
-      'width',
-    )
-    this.#minHeight = new QuantityProperty(
-      FrameConfig.INITIAL.minHeight,
-      false,
-      'height',
-    )
-    this.#maxWidth = new QuantityProperty(
-      FrameConfig.INITIAL.maxWidth,
-      false,
-      'width',
-    )
-    this.#maxHeight = new QuantityProperty(
-      FrameConfig.INITIAL.maxHeight,
-      false,
-      'height',
-    )
+    this.#minWidth = new QuantityProperty(false, 'width')
+    this.#minHeight = new QuantityProperty(false, 'height')
+    this.#maxWidth = new QuantityProperty(false, 'width', ['none'])
+    this.#maxWidth.value = 'none'
+    this.#maxHeight = new QuantityProperty(false, 'height', ['none'])
+    this.#maxHeight.value = 'none'
 
-    this.#paddingTop = new QuantityProperty(
-      FrameConfig.INITIAL.paddingTop,
-      false,
-      'height',
-    )
-    this.#paddingRight = new QuantityProperty(
-      FrameConfig.INITIAL.paddingRight,
-      false,
-      'width',
-    )
-    this.#paddingBottom = new QuantityProperty(
-      FrameConfig.INITIAL.paddingBottom,
-      false,
-      'height',
-    )
-    this.#paddingLeft = new QuantityProperty(
-      FrameConfig.INITIAL.paddingLeft,
-      false,
-      'width',
-    )
-    this.#marginTop = new QuantityProperty(
-      FrameConfig.INITIAL.marginTop,
-      true,
-      'height',
-    )
-    this.#marginRight = new QuantityProperty(
-      FrameConfig.INITIAL.marginRight,
-      true,
-      'width',
-    )
-    this.#marginBottom = new QuantityProperty(
-      FrameConfig.INITIAL.marginBottom,
-      true,
-      'height',
-    )
-    this.#marginLeft = new QuantityProperty(
-      FrameConfig.INITIAL.marginLeft,
-      true,
-      'width',
-    )
+    this.#paddingTop = new QuantityProperty(false, 'height')
+    this.#paddingRight = new QuantityProperty(false, 'width')
+    this.#paddingBottom = new QuantityProperty(false, 'height')
+    this.#paddingLeft = new QuantityProperty(false, 'width')
+    this.#marginTop = new QuantityProperty(true, 'height', ['auto'])
+    this.#marginRight = new QuantityProperty(true, 'width', ['auto'])
+    this.#marginBottom = new QuantityProperty(true, 'height', ['auto'])
+    this.#marginLeft = new QuantityProperty(true, 'width', ['auto'])
 
-    this.#grow = new NumericProperty(FrameConfig.INITIAL.grow)
-    this.#shrink = new NumericProperty(FrameConfig.INITIAL.shrink)
+    this.#grow = new NumericProperty()
+    this.#shrink = new NumericProperty()
 
-    this.configure(FrameConfig.INITIAL)
+    this.#updateTarget = frame.parent ?? frame
   }
   //region Properties
   get width(): number {
     const width = this.#width.compute(this.#parentRect, this.#rootRect)
 
-    if (width !== null) {
+    if (width !== 'auto') {
       return width
     }
 
     const height = this.#height.compute(this.#parentRect, this.#rootRect)
-    if (this.#aspectRatio.value !== null && height !== null) {
+    if (this.#aspectRatio.value !== 'none' && height !== 'auto') {
       return height * this.#aspectRatio.value
     }
 
-    return FrameConfig.INITIAL.width
+    return 0
   }
-  get rawWidth(): RawFrameConfigValue {
-    return this.#width.raw
-  }
-  set width(value: RawFrameConfigValue) {
+  set width(value: QuantityInput<'auto'>) {
     this.#width.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
   get height(): number {
     const height = this.#height.compute(this.#parentRect, this.#rootRect)
-    if (height !== null) {
+    if (height !== 'auto') {
       return height
     }
 
     const width = this.#width.compute(this.#parentRect, this.#rootRect)
-    if (this.#aspectRatio.value !== null && width !== null) {
+    if (this.#aspectRatio.value !== 'none' && width !== 'auto') {
       return width / this.#aspectRatio.value
     }
 
-    return FrameConfig.INITIAL.height
+    return 0
   }
-  get rawHeight(): RawFrameConfigValue {
-    return this.#height.raw
-  }
-  set height(value: RawFrameConfigValue) {
+  set height(value: QuantityInput<'auto'>) {
     this.#height.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
   get x(): number {
-    return (
-      this.#x.compute(this.#parentRect, this.#rootRect) ?? FrameConfig.INITIAL.x
-    )
+    return this.#x.compute(this.#parentRect, this.#rootRect)
   }
-  get rawX(): RawFrameConfigValue {
-    return this.#x.raw
-  }
-  set x(value: RawFrameConfigValue) {
+  set x(value: QuantityInput) {
     this.#x.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
   get y(): number {
-    return (
-      this.#y.compute(this.#parentRect, this.#rootRect) ?? FrameConfig.INITIAL.y
-    )
+    return this.#y.compute(this.#parentRect, this.#rootRect)
   }
-  get rawY(): RawFrameConfigValue {
-    return this.#y.raw
-  }
-  set y(value: RawFrameConfigValue) {
+  set y(value: QuantityInput) {
     this.#y.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
-  get aspectRatio(): number | null {
-    if (this.#aspectRatio.value !== null) {
+  get aspectRatio(): number | 'none' {
+    if (this.#aspectRatio.value !== 'none') {
       return this.#aspectRatio.value
     }
 
     const width = this.#width.compute(this.#parentRect, this.#rootRect)
     const height = this.#height.compute(this.#parentRect, this.#rootRect)
 
-    if (width !== null && height !== null && width > 0 && height > 0) {
+    if (width !== 'auto' && height !== 'auto' && width > 0 && height > 0) {
       return width / height
     }
 
-    return FrameConfig.INITIAL.aspectRatio
+    return 'none'
   }
-  get rawAspectRatio(): RawFrameConfigValue {
-    return this.#aspectRatio.raw
-  }
-  set aspectRatio(value: RawFrameConfigValue) {
+  set aspectRatio(value: RatioInput) {
     this.#aspectRatio.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
-  get minWidth(): number | null {
-    return (
-      this.#minWidth.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.minWidth
-    )
+  get minWidth(): number {
+    const minWidth = this.#minWidth.compute(this.#parentRect, this.#rootRect)
+
+    if (minWidth !== 'auto') {
+      return minWidth
+    }
+    return this.width
   }
-  get rawMinWidth(): RawFrameConfigValue {
-    return this.#minWidth.raw
-  }
-  set minWidth(value: RawFrameConfigValue) {
+  set minWidth(value: QuantityInput<'auto'>) {
     this.#minWidth.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
   get minHeight(): number | null {
-    return (
-      this.#minHeight.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.minHeight
-    )
+    const minHeight = this.#minHeight.compute(this.#parentRect, this.#rootRect)
+
+    if (minHeight !== 'auto') {
+      return minHeight
+    }
+    return this.height
   }
-  get rawMinHeight(): RawFrameConfigValue {
-    return this.#minHeight.raw
-  }
-  set minHeight(value: RawFrameConfigValue) {
+  set minHeight(value: QuantityInput<'auto'>) {
     this.#minHeight.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
-  get maxWidth(): number | null {
-    return (
-      this.#maxWidth.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.maxWidth
-    )
+  get maxWidth(): number {
+    const maxWidth = this.#maxWidth.compute(this.#parentRect, this.#rootRect)
+
+    if (maxWidth !== 'none') {
+      return maxWidth
+    }
+
+    return Number.POSITIVE_INFINITY
   }
-  get rawMaxWidth(): RawFrameConfigValue {
-    return this.#maxWidth.raw
-  }
-  set maxWidth(value: RawFrameConfigValue) {
+  set maxWidth(value: QuantityInput<'none'>) {
     this.#maxWidth.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
   get maxHeight(): number | null {
-    return (
-      this.#maxHeight.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.maxHeight
-    )
+    const maxHeight = this.#maxHeight.compute(this.#parentRect, this.#rootRect)
+
+    if (maxHeight !== 'none') {
+      return maxHeight
+    }
+
+    return Number.POSITIVE_INFINITY
   }
-  get rawMaxHeight(): RawFrameConfigValue {
-    return this.#maxHeight.raw
-  }
-  set maxHeight(value: RawFrameConfigValue) {
+  set maxHeight(value: QuantityInput<'none'>) {
     this.#maxHeight.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
   get grow(): number {
     return this.#grow.value
   }
-  get rawGrow(): RawFrameConfigValue {
-    return this.#grow.raw
-  }
-  set grow(value: RawFrameConfigValue) {
+  set grow(value: NumericInput) {
     this.#grow.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
   get shrink(): number {
     return this.#shrink.value
   }
-  get rawShrink(): RawFrameConfigValue {
-    return this.#shrink.raw
-  }
-  set shrink(value: RawFrameConfigValue) {
+  set shrink(value: NumericInput) {
     this.#shrink.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
   get paddingTop(): number {
-    return (
-      this.#paddingTop.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.paddingTop
-    )
+    return this.#paddingTop.compute(this.#parentRect, this.#rootRect)
   }
-  get rawPaddingTop(): RawFrameConfigValue {
-    return this.#paddingTop.raw
-  }
-  set paddingTop(value: RawFrameConfigValue) {
+  set paddingTop(value: QuantityInput) {
     this.#paddingTop.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
   get paddingRight(): number {
-    return (
-      this.#paddingRight.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.paddingRight
-    )
+    return this.#paddingRight.compute(this.#parentRect, this.#rootRect)
   }
-  get rawPaddingRight(): RawFrameConfigValue {
-    return this.#paddingRight.raw
-  }
-  set paddingRight(value: RawFrameConfigValue) {
+  set paddingRight(value: QuantityInput) {
     this.#paddingRight.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
   get paddingBottom(): number {
-    return (
-      this.#paddingBottom.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.paddingBottom
-    )
+    return this.#paddingBottom.compute(this.#parentRect, this.#rootRect)
   }
-  get rawPaddingBottom(): RawFrameConfigValue {
-    return this.#paddingBottom.raw
-  }
-  set paddingBottom(value: RawFrameConfigValue) {
+  set paddingBottom(value: QuantityInput) {
     this.#paddingBottom.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
   get paddingLeft(): number {
-    return (
-      this.#paddingLeft.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.paddingLeft
-    )
+    return this.#paddingLeft.compute(this.#parentRect, this.#rootRect)
   }
-  get rawPaddingLeft(): RawFrameConfigValue {
-    return this.#paddingLeft.raw
-  }
-  set paddingLeft(value: RawFrameConfigValue) {
+  set paddingLeft(value: QuantityInput) {
     this.#paddingLeft.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
-  get marginTop(): number {
-    return (
-      this.#marginTop.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.marginTop
-    )
+  // auto will be
+  get marginTop(): number | 'auto' {
+    return this.#marginTop.compute(this.#parentRect, this.#rootRect)
   }
-  get rawMarginTop(): RawFrameConfigValue {
-    return this.#marginTop.raw
-  }
-  set marginTop(value: RawFrameConfigValue) {
+  set marginTop(value: QuantityInput<'auto'>) {
     this.#marginTop.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
-  get marginRight(): number {
-    return (
-      this.#marginRight.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.marginRight
-    )
+  get marginRight(): number | 'auto' {
+    return this.#marginRight.compute(this.#parentRect, this.#rootRect)
   }
-  get rawMarginRight(): RawFrameConfigValue {
-    return this.#marginRight.raw
-  }
-  set marginRight(value: RawFrameConfigValue) {
+  set marginRight(value: QuantityInput<'auto'>) {
     this.#marginRight.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
-  get marginBottom(): number {
-    return (
-      this.#marginBottom.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.marginBottom
-    )
+  get marginBottom(): number | 'auto' {
+    return this.#marginBottom.compute(this.#parentRect, this.#rootRect)
   }
-  get rawMarginBottom(): RawFrameConfigValue {
-    return this.#marginBottom.raw
-  }
-  set marginBottom(value: RawFrameConfigValue) {
+  set marginBottom(value: QuantityInput<'auto'>) {
     this.#marginBottom.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 
-  get marginLeft(): number {
-    return (
-      this.#marginLeft.compute(this.#parentRect, this.#rootRect) ??
-      FrameConfig.INITIAL.marginLeft
-    )
+  get marginLeft(): number | 'auto' {
+    return this.#marginLeft.compute(this.#parentRect, this.#rootRect)
   }
-  get rawMarginLeft(): RawFrameConfigValue {
-    return this.#marginLeft.raw
-  }
-  set marginLeft(value: RawFrameConfigValue) {
+  set marginLeft(value: QuantityInput<'auto'>) {
     this.#marginLeft.value = value
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
   //endregion
 
   //region Computed Properties
   get effectiveMinWidth(): number {
     return Math.max(this.minWidth ?? 0, this.paddingLeft + this.paddingRight)
-  }
-  get innerEffectiveMinWidth(): number {
-    return this.effectiveMinWidth - this.paddingLeft - this.paddingRight
-  }
-  get outerEffectiveMinWidth(): number {
-    return this.effectiveMinWidth + this.marginLeft + this.marginRight
   }
 
   get effectiveMaxWidth(): number {
@@ -479,21 +314,9 @@ export class FrameConfig {
       this.effectiveMinWidth,
     )
   }
-  get innerEffectiveMaxWidth(): number {
-    return this.effectiveMaxWidth - this.paddingLeft - this.paddingRight
-  }
-  get outerEffectiveMaxWidth(): number {
-    return this.effectiveMaxWidth + this.marginLeft + this.marginRight
-  }
 
   get effectiveMinHeight(): number {
     return Math.max(this.minHeight ?? 0, this.paddingTop + this.paddingBottom)
-  }
-  get innerEffectiveMinHeight(): number {
-    return this.effectiveMinHeight - this.paddingTop - this.paddingBottom
-  }
-  get outerEffectiveMinHeight(): number {
-    return this.effectiveMinHeight + this.marginTop + this.marginBottom
   }
 
   get effectiveMaxHeight(): number {
@@ -502,31 +325,13 @@ export class FrameConfig {
       this.effectiveMinHeight,
     )
   }
-  get innerEffectiveMaxHeight(): number {
-    return this.effectiveMaxHeight - this.paddingTop - this.paddingBottom
-  }
-  get outerEffectiveMaxHeight(): number {
-    return this.effectiveMaxHeight + this.marginTop + this.marginBottom
-  }
 
   get constrainedWidth(): number {
     return clamp(this.width, this.effectiveMinWidth, this.effectiveMaxWidth)
   }
-  get innerConstrainedWidth(): number {
-    return this.constrainedWidth - this.paddingLeft - this.paddingRight
-  }
-  get outerConstrainedWidth(): number {
-    return this.constrainedWidth + this.marginLeft + this.marginRight
-  }
 
   get constrainedHeight(): number {
     return clamp(this.height, this.effectiveMinHeight, this.effectiveMaxHeight)
-  }
-  get innerConstrainedHeight(): number {
-    return this.constrainedHeight - this.paddingTop - this.paddingBottom
-  }
-  get outerConstrainedHeight(): number {
-    return this.constrainedHeight + this.marginTop + this.marginBottom
   }
   //endregion
 
@@ -600,6 +405,6 @@ export class FrameConfig {
       this.#marginLeft.value = options.marginLeft
     }
 
-    this.#frame.markDirty()
+    this.#updateTarget.markNeedsUpdate()
   }
 }
