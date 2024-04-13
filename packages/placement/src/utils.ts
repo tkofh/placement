@@ -43,3 +43,7 @@ export function roundTo(value: number, precision: number) {
   const scale = 10 ** precision
   return Math.round(value * scale) / scale
 }
+
+export function keysOf<T extends object>(object: T): Array<keyof T> {
+  return Object.keys(object) as never
+}

@@ -346,6 +346,7 @@ export class FrameConfig {
     return this.#frame.root.innerRect
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: todo refactor after we switch to factories
   configure(options: Partial<FrameOptions>) {
     if (options.width != null) {
       this.#width.value = options.width

@@ -139,61 +139,34 @@ export class Frame extends Emitter<{ updated: never }> {
       frame.box.paddingBottom = frame.config.paddingBottom
       frame.box.paddingLeft = frame.config.paddingLeft
 
+      let autoSizeY = this.box.innerRect.height - frame.box.height
       if (
         frame.config.marginTop === 'auto' &&
         frame.config.marginBottom === 'auto'
       ) {
-        const freeSpace = this.box.innerRect.height - frame.box.height
-        frame.box.marginTop = freeSpace / 2
-        frame.box.marginBottom = freeSpace / 2
-      } else if (
-        frame.config.marginTop === 'auto' &&
-        frame.config.marginBottom !== 'auto'
-      ) {
-        frame.box.marginTop =
-          this.box.innerRect.height -
-          frame.box.height -
-          frame.config.marginBottom
-      } else if (
-        frame.config.marginTop !== 'auto' &&
-        frame.config.marginBottom === 'auto'
-      ) {
-        frame.box.marginBottom =
-          this.box.innerRect.height - frame.box.height - frame.config.marginTop
-      } else if (
-        frame.config.marginTop !== 'auto' &&
-        frame.config.marginBottom !== 'auto'
-      ) {
-        frame.box.marginTop = frame.config.marginTop
-        frame.box.marginBottom = frame.config.marginBottom
+        autoSizeY *= 0.5
       }
 
+      let autoSizeX = this.box.innerRect.width - frame.box.width
       if (
         frame.config.marginLeft === 'auto' &&
         frame.config.marginRight === 'auto'
       ) {
-        const freeSpace = this.box.innerRect.width - frame.box.width
-        frame.box.marginLeft = freeSpace / 2
-        frame.box.marginRight = freeSpace / 2
-      } else if (
-        frame.config.marginLeft === 'auto' &&
-        frame.config.marginRight !== 'auto'
-      ) {
-        frame.box.marginLeft =
-          this.box.innerRect.width - frame.box.width - frame.config.marginRight
-      } else if (
-        frame.config.marginLeft !== 'auto' &&
-        frame.config.marginRight === 'auto'
-      ) {
-        frame.box.marginRight =
-          this.box.innerRect.width - frame.box.width - frame.config.marginLeft
-      } else if (
-        frame.config.marginLeft !== 'auto' &&
-        frame.config.marginRight !== 'auto'
-      ) {
-        frame.box.marginLeft = frame.config.marginLeft
-        frame.box.marginRight = frame.config.marginRight
+        autoSizeX *= 0.5
       }
+
+      frame.box.marginTop =
+        frame.config.marginTop === 'auto' ? autoSizeY : frame.config.marginTop
+      frame.box.marginBottom =
+        frame.config.marginBottom === 'auto'
+          ? autoSizeY
+          : frame.config.marginBottom
+      frame.box.marginLeft =
+        frame.config.marginLeft === 'auto' ? autoSizeX : frame.config.marginLeft
+      frame.box.marginRight =
+        frame.config.marginRight === 'auto'
+          ? autoSizeX
+          : frame.config.marginRight
 
       frame.box.outerX = this.innerRect.x + frame.config.x
       frame.box.outerY = this.innerRect.y + frame.config.y
