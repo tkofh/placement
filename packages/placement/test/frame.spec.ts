@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { Frame } from '../src/Frame'
+import { Frame } from '../src/frame/Frame'
 
 describe('frame', () => {
   test('it resizes', () => {

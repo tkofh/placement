@@ -46,7 +46,7 @@ export class Emitter<Events extends Record<EventType, unknown>> {
     }
   }
 
-  protected emit<Key extends keyof Events>(type: Key, evt?: Events[Key]) {
+  emit<Key extends keyof Events>(type: Key, evt?: Events[Key]) {
     const handlers = this.#handlers?.get(type)
     if (handlers) {
       handlers.slice().map((handler) => {

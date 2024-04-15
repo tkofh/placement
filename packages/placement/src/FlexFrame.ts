@@ -4,8 +4,8 @@ import {
   type FlexOptions,
   type FlexWrap,
 } from './FlexLayout'
-import { Frame } from './Frame'
-import type { FrameOptions } from './FrameConfig'
+import { Frame } from './frame/Frame'
+import type { FrameOptions } from './placement/FrameConfig'
 
 export class FlexFrame extends Frame {
   #flex: FlexLayout

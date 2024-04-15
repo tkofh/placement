@@ -6,23 +6,16 @@ export type RatioInput =
   | 'initial'
 
 export class RatioProperty {
-  #raw: RatioInput
   #value: number | 'none'
 
   constructor() {
-    this.#raw = 'initial'
     this.#value = 'none'
-  }
-
-  get raw(): RatioInput {
-    return this.#raw
   }
 
   get value(): number | 'none' {
     return this.#value
   }
   set value(value: RatioInput) {
-    this.#raw = value
     this.#parse(value)
   }
 

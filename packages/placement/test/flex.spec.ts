@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from 'vitest'
 import { FlexFrame } from '../src/FlexFrame'
-import { Frame } from '../src/Frame'
+import { Frame } from '../src/frame/Frame'
 
 describe('properties', () => {
   describe('direction', () => {

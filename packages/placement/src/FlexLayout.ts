@@ -1,4 +1,4 @@
-import type { Frame } from './Frame'
+import type { Frame } from './frame/Frame'
 
 function spatialOffsets(
   t: number,

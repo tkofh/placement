@@ -1,4 +1,4 @@
-import type { ReadonlyRect } from '../Box'
+import type { ReadonlyRect } from '../rect/Rect'
 
 export type Unit = 'px' | '%' | 'vw' | 'vh' | 'vmin' | 'vmax'
 export type Quantity = number | `${number}${Unit}`
@@ -44,11 +44,13 @@ export class QuantityProperty<Keyword extends QuantityKeyword = never> {
     return this.#keyword ?? this.#value
   }
   set value(value: QuantityInput<Keyword>) {
-    if (this.#allowedKeywords.has(value as Keyword)) {
-      this.#keyword = value as Keyword
-      return
+    if (value !== this.#value) {
+      if (this.#allowedKeywords.has(value as Keyword)) {
+        this.#keyword = value as Keyword
+        return
+      }
+      this.#parse(value as QuantityInput)
     }
-    this.#parse(value as QuantityInput)
   }
 
   compute(parent: ReadonlyRect, root: ReadonlyRect): number | Keyword {

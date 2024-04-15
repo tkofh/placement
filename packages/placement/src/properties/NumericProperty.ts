@@ -3,22 +3,16 @@ export type NumericInput = number | `${number}` | 'initial'
 export class NumericProperty {
   readonly #initial = 0
   readonly #allowNegative: boolean
-  #raw: NumericInput = 'initial'
   #value = 0
 
   constructor(allowNegative = false) {
     this.#allowNegative = allowNegative
   }
 
-  get raw(): NumericInput {
-    return this.#raw
-  }
-
   get value(): number {
     return this.#value
   }
   set value(value: NumericInput) {
-    this.#raw = value
     this.#parse(value)
   }
 
