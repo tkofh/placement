@@ -47,3 +47,15 @@ export function roundTo(value: number, precision: number) {
 export function keysOf<T extends object>(object: T): Array<keyof T> {
   return Object.keys(object) as never
 }
+
+export function stripUndefined<T extends object>(object: T): Partial<T> {
+  const out: Partial<T> = {}
+
+  for (const key of keysOf(object)) {
+    if (object[key] !== undefined) {
+      out[key] = object[key]
+    }
+  }
+
+  return out
+}
