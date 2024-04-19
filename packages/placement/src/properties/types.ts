@@ -75,7 +75,7 @@ export type NumberInput<Config extends Partial<PropConfig<string>>> =
   Config extends { number: true } ? number | `${number}` : never
 export type RatioInput<Config extends Partial<PropConfig<string>>> =
   Config extends { ratio: true }
-    ? number | `${number}` | `${number}${' ' | never}/${' ' | never}${number}`
+    ? number | `${number}` | `${number}${' ' | ''}/${' ' | ''}${number}`
     : never
 
 export type Input<Config extends Partial<PropConfig<string>>> =

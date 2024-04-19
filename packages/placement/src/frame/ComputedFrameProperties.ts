@@ -234,8 +234,14 @@ export class ComputedFrameProperties {
     return this.#properties.alignSelf.parsed.value
   }
 
-  get stretchContent(): number {
-    return this.#properties.stretchContent.parsed.value
+  get stretchContent(): number | 'auto' {
+    const stretchContent = this.#properties.stretchContent.parsed
+
+    if (stretchContent.type === DATA_TYPES.keyword) {
+      return stretchContent.keyword
+    }
+
+    return stretchContent.value
   }
   get stretchItems(): number {
     return this.#properties.stretchItems.parsed.value
@@ -271,26 +277,28 @@ export class ComputedFrameProperties {
     return this.#computePercentage(columnGap.value, this.#container.width)
   }
 
-  get justifySpace(): number {
-    const justifySpace = this.#properties.justifySpace.parsed
+  get justifyContentSpace(): number {
+    const justifyContentSpace = this.#properties.justifyContentSpace.parsed
 
-    return clamp(justifySpace.value, 0, 1)
+    return clamp(justifyContentSpace.value, 0, 1)
   }
-  get justifySpaceOuter(): number {
-    const justifySpaceOuter = this.#properties.justifySpaceOuter.parsed
+  get justifyContentSpaceOuter(): number {
+    const justifyContentSpaceOuter =
+      this.#properties.justifyContentSpaceOuter.parsed
 
-    return clamp(justifySpaceOuter.value, 0, 1)
+    return clamp(justifyContentSpaceOuter.value, 0, 1)
   }
 
-  get alignSpace(): number {
-    const alignSpace = this.#properties.alignSpace.parsed
+  get alignContentSpace(): number {
+    const alignContentSpace = this.#properties.alignContentSpace.parsed
 
-    return clamp(alignSpace.value, 0, 1)
+    return clamp(alignContentSpace.value, 0, 1)
   }
-  get alignSpaceOuter(): number {
-    const alignSpaceOuter = this.#properties.alignSpaceOuter.parsed
+  get alignContentSpaceOuter(): number {
+    const alignContentSpaceOuter =
+      this.#properties.alignContentSpaceOuter.parsed
 
-    return clamp(alignSpaceOuter.value, 0, 1)
+    return clamp(alignContentSpaceOuter.value, 0, 1)
   }
 
   get #definiteWidth(): number | null {

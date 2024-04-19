@@ -5,23 +5,13 @@ import { clamp } from '../../utils'
 import type { Layout } from '../types'
 
 export class AbsoluteLayout implements Layout {
-  readonly #parentProperties: ComputedFrameProperties
-  readonly #parentRect: ReadonlyRect
+  readonly #rect: ReadonlyRect
 
   readonly #boxes = new Map<ComputedFrameProperties, Rect>()
   readonly #items: Array<ComputedFrameProperties> = []
 
-  #innerX = 0
-  #innerY = 0
-  #innerWidth = 0
-  #innerHeight = 0
-
-  constructor(
-    parentProperties: ComputedFrameProperties,
-    parentRect: ReadonlyRect,
-  ) {
-    this.#parentProperties = parentProperties
-    this.#parentRect = parentRect
+  constructor(rect: ReadonlyRect) {
+    this.#rect = rect
   }
 
   insert(config: ComputedFrameProperties, box: Rect, index: number) {
@@ -35,24 +25,11 @@ export class AbsoluteLayout implements Layout {
   }
 
   calculate() {
-    this.#computeInnerRect()
     for (const config of this.#items) {
       const box = this.#boxes.get(config) as Rect
 
       this.#placeBox(config, box)
     }
-  }
-
-  #computeInnerRect() {
-    const insetTop = this.#parentProperties.insetTop
-    const insetRight = this.#parentProperties.insetRight
-    const insetBottom = this.#parentProperties.insetBottom
-    const insetLeft = this.#parentProperties.insetLeft
-
-    this.#innerX = this.#parentRect.x + insetLeft
-    this.#innerY = this.#parentRect.y + insetTop
-    this.#innerWidth = this.#parentRect.width - insetLeft - insetRight
-    this.#innerHeight = this.#parentRect.height - insetTop - insetBottom
   }
 
   #placeBox(config: ComputedFrameProperties, box: Rect) {
@@ -96,7 +73,7 @@ export class AbsoluteLayout implements Layout {
       const definiteLeft = offsetLeft === 'none' ? 0 : offsetLeft
       const definiteRight = offsetRight === 'none' ? 0 : offsetRight
 
-      definiteWidth = this.#innerWidth - (definiteLeft + definiteRight)
+      definiteWidth = this.#rect.width - (definiteLeft + definiteRight)
     }
 
     return clamp(definiteWidth, minWidth, maxWidth)
@@ -117,7 +94,7 @@ export class AbsoluteLayout implements Layout {
       const definiteTop = offsetTop === 'none' ? 0 : offsetTop
       const definiteBottom = offsetBottom === 'none' ? 0 : offsetBottom
 
-      definiteHeight = this.#innerHeight - (definiteTop + definiteBottom)
+      definiteHeight = this.#rect.height - (definiteTop + definiteBottom)
     }
 
     return clamp(definiteHeight, minHeight, maxHeight)
@@ -128,16 +105,16 @@ export class AbsoluteLayout implements Layout {
     offsetLeft: number | 'auto' | 'none',
     offsetRight: number | 'auto' | 'none',
   ): number {
-    let x = this.#innerX
+    let x = this.#rect.x
 
     if (typeof offsetLeft === 'number') {
       x += offsetLeft
     } else if (typeof offsetRight === 'number') {
-      x += this.#innerWidth - width - offsetRight
+      x += this.#rect.width - width - offsetRight
     } else if (offsetLeft === 'auto' && offsetRight === 'auto') {
-      x += (this.#innerWidth - width) * 0.5
+      x += (this.#rect.width - width) * 0.5
     } else if (offsetLeft === 'auto') {
-      x += this.#innerWidth - width
+      x += this.#rect.width - width
     }
 
     return x
@@ -148,16 +125,16 @@ export class AbsoluteLayout implements Layout {
     offsetTop: number | 'auto' | 'none',
     offsetBottom: number | 'auto' | 'none',
   ): number {
-    let y = this.#innerY
+    let y = this.#rect.y
 
     if (typeof offsetTop === 'number') {
       y += offsetTop
     } else if (typeof offsetBottom === 'number') {
-      y += this.#innerHeight - height - offsetBottom
+      y += this.#rect.height - height - offsetBottom
     } else if (offsetTop === 'auto' && offsetBottom === 'auto') {
-      y += (this.#innerHeight - height) * 0.5
+      y += (this.#rect.height - height) * 0.5
     } else if (offsetTop === 'auto') {
-      y += this.#innerHeight - height
+      y += this.#rect.height - height
     }
 
     return y

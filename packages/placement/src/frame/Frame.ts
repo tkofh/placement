@@ -5,11 +5,13 @@ import type { ReadonlyRect } from '../rect'
 import { Rect } from '../rect/Rect'
 import { ComputedFrameProperties } from './ComputedFrameProperties'
 import { Emitter } from './Emitter'
+import { FrameInnerRect } from './FrameInnerRect'
 import { FrameNode } from './FrameNode'
 import {
   type AutoLengthPercentInput,
   type AutoNoneLengthPercentNegativeInput,
   type AutoRatioInput,
+  type AutoScalarNumberInput,
   FrameProperties,
   type LengthPercentageInput,
   type NoneLengthPercentInput,
@@ -27,24 +29,21 @@ const FRAME_STATE = {
 type FrameState = (typeof FRAME_STATE)[keyof typeof FRAME_STATE]
 
 export class Frame {
-  readonly #rect: Rect
-  readonly #properties: FrameProperties
-  readonly #node: FrameNode
   readonly #emitter = new Emitter<{ updated: never }>()
-  readonly #layout: Layout
+  readonly #rect = new Rect()
+  readonly #properties = new FrameProperties()
+  readonly #computed = new ComputedFrameProperties(this.#properties, this.#rect)
+  readonly #innerRect = new FrameInnerRect(this.#rect, this.#computed)
+  readonly #node = new FrameNode(this)
   #state: FrameState = FRAME_STATE.idle
 
-  readonly #computed: ComputedFrameProperties
+  readonly #layout: Layout
 
   constructor(layout: 'flex' | 'absolute') {
-    this.#rect = new Rect()
-    this.#properties = new FrameProperties()
-    this.#computed = new ComputedFrameProperties(this.#properties, this.#rect)
-    this.#node = new FrameNode(this)
     this.#layout =
       layout === 'absolute'
-        ? new AbsoluteLayout(this.#computed, this.#rect.readonly)
-        : new FlexLayout(this.#computed, this.#rect.readonly)
+        ? new AbsoluteLayout(this.#innerRect)
+        : new FlexLayout(this.#computed, this.#innerRect)
   }
 
   get parent(): Frame | null {
@@ -181,6 +180,45 @@ export class Frame {
     }
   }
 
+  get offsetX(): AutoNoneLengthPercentNegativeInput | 'mixed' {
+    const offsetLeft = this.offsetLeft
+    const offsetRight = this.offsetRight
+    if (offsetLeft === offsetRight) {
+      return offsetLeft
+    }
+    return 'mixed'
+  }
+  set offsetX(value: AutoNoneLengthPercentNegativeInput) {
+    this.offsetLeft = value
+    this.offsetRight = value
+  }
+
+  get offsetY(): AutoNoneLengthPercentNegativeInput | 'mixed' {
+    const offsetTop = this.offsetTop
+    const offsetBottom = this.offsetBottom
+    if (offsetTop === offsetBottom) {
+      return offsetTop
+    }
+    return 'mixed'
+  }
+  set offsetY(value: AutoNoneLengthPercentNegativeInput) {
+    this.offsetTop = value
+    this.offsetBottom = value
+  }
+
+  get offset(): AutoNoneLengthPercentNegativeInput | 'mixed' {
+    const offsetX = this.offsetX
+    const offsetY = this.offsetY
+    if (offsetX === offsetY) {
+      return offsetX
+    }
+    return 'mixed'
+  }
+  set offset(value: AutoNoneLengthPercentNegativeInput) {
+    this.offsetX = value
+    this.offsetY = value
+  }
+
   get insetTop(): LengthPercentageInput {
     return this.#properties.insetTop.value
   }
@@ -223,6 +261,45 @@ export class Frame {
       insetLeft.value = value
       this.#configUpdated()
     }
+  }
+
+  get insetX(): LengthPercentageInput | 'mixed' {
+    const insetLeft = this.insetLeft
+    const insetRight = this.insetRight
+    if (insetLeft === insetRight) {
+      return insetLeft
+    }
+    return 'mixed'
+  }
+  set insetX(value: LengthPercentageInput) {
+    this.insetLeft = value
+    this.insetRight = value
+  }
+
+  get insetY(): LengthPercentageInput | 'mixed' {
+    const insetTop = this.insetTop
+    const insetBottom = this.insetBottom
+    if (insetTop === insetBottom) {
+      return insetTop
+    }
+    return 'mixed'
+  }
+  set insetY(value: LengthPercentageInput) {
+    this.insetTop = value
+    this.insetBottom = value
+  }
+
+  get inset(): LengthPercentageInput | 'mixed' {
+    const insetX = this.insetX
+    const insetY = this.insetY
+    if (insetX === insetY) {
+      return insetX
+    }
+    return 'mixed'
+  }
+  set inset(value: LengthPercentageInput) {
+    this.insetX = value
+    this.insetY = value
   }
 
   get grow(): NoneNumberInput {
@@ -339,6 +416,45 @@ export class Frame {
     }
   }
 
+  get placeContent(): ScalarNumberInput | 'mixed' {
+    const justifyContent = this.justifyContent
+    const alignContent = this.alignContent
+    if (justifyContent === alignContent) {
+      return justifyContent
+    }
+    return 'mixed'
+  }
+  set placeContent(value: ScalarNumberInput) {
+    this.justifyContent = value
+    this.alignContent = value
+  }
+
+  get placeItems(): ScalarNumberInput | 'mixed' {
+    const justifyItems = this.justifyItems
+    const alignItems = this.alignItems
+    if (justifyItems === alignItems) {
+      return justifyItems
+    }
+    return 'mixed'
+  }
+  set placeItems(value: ScalarNumberInput) {
+    this.justifyItems = value
+    this.alignItems = value
+  }
+
+  get placeSelf(): ScalarNumberInput | 'mixed' {
+    const justifySelf = this.justifySelf
+    const alignSelf = this.alignSelf
+    if (justifySelf === alignSelf) {
+      return justifySelf
+    }
+    return 'mixed'
+  }
+  set placeSelf(value: ScalarNumberInput) {
+    this.justifySelf = value
+    this.alignSelf = value
+  }
+
   get rowGap(): NoneLengthPercentInput {
     return this.#properties.rowGap.value
   }
@@ -361,54 +477,93 @@ export class Frame {
     }
   }
 
-  get justifySpace(): ScalarNumberInput {
-    return this.#properties.justifySpace.value
+  get gap(): NoneLengthPercentInput | 'mixed' {
+    const rowGap = this.rowGap
+    const columnGap = this.columnGap
+    if (rowGap === columnGap) {
+      return rowGap
+    }
+    return 'mixed'
   }
-  set justifySpace(value: ScalarNumberInput) {
-    const justifySpace = this.#properties.justifySpace
-    if (justifySpace.value !== value) {
-      justifySpace.value = value
+  set gap(value: NoneLengthPercentInput) {
+    this.rowGap = value
+    this.columnGap = value
+  }
+
+  get justifyContentSpace(): ScalarNumberInput {
+    return this.#properties.justifyContentSpace.value
+  }
+  set justifyContentSpace(value: ScalarNumberInput) {
+    const justifyContentSpace = this.#properties.justifyContentSpace
+    if (justifyContentSpace.value !== value) {
+      justifyContentSpace.value = value
       this.#configUpdated()
     }
   }
 
-  get alignSpace(): ScalarNumberInput {
-    return this.#properties.alignSpace.value
+  get alignContentSpace(): ScalarNumberInput {
+    return this.#properties.alignContentSpace.value
   }
-  set alignSpace(value: ScalarNumberInput) {
-    const alignSpace = this.#properties.alignSpace
-    if (alignSpace.value !== value) {
-      alignSpace.value = value
+  set alignContentSpace(value: ScalarNumberInput) {
+    const alignContentSpace = this.#properties.alignContentSpace
+    if (alignContentSpace.value !== value) {
+      alignContentSpace.value = value
       this.#configUpdated()
     }
   }
 
-  get justifySpaceOuter(): ScalarNumberInput {
-    return this.#properties.justifySpaceOuter.value
+  get placeContentSpace(): ScalarNumberInput | 'mixed' {
+    const justifyContentSpace = this.justifyContentSpace
+    const alignContentSpace = this.alignContentSpace
+    if (justifyContentSpace === alignContentSpace) {
+      return justifyContentSpace
+    }
+    return 'mixed'
   }
-  set justifySpaceOuter(value: ScalarNumberInput) {
-    const justifySpaceOuter = this.#properties.justifySpaceOuter
-    if (justifySpaceOuter.value !== value) {
-      justifySpaceOuter.value = value
+  set placeContentSpace(value: ScalarNumberInput) {
+    this.justifyContentSpace = value
+    this.alignContentSpace = value
+  }
+
+  get justifyContentSpaceOuter(): ScalarNumberInput {
+    return this.#properties.justifyContentSpaceOuter.value
+  }
+  set justifyContentSpaceOuter(value: ScalarNumberInput) {
+    const justifyContentSpaceOuter = this.#properties.justifyContentSpaceOuter
+    if (justifyContentSpaceOuter.value !== value) {
+      justifyContentSpaceOuter.value = value
       this.#configUpdated()
     }
   }
 
-  get alignSpaceOuter(): ScalarNumberInput {
-    return this.#properties.alignSpaceOuter.value
+  get alignContentSpaceOuter(): ScalarNumberInput {
+    return this.#properties.alignContentSpaceOuter.value
   }
-  set alignSpaceOuter(value: ScalarNumberInput) {
-    const alignSpaceOuter = this.#properties.alignSpaceOuter
-    if (alignSpaceOuter.value !== value) {
-      alignSpaceOuter.value = value
+  set alignContentSpaceOuter(value: ScalarNumberInput) {
+    const alignContentSpaceOuter = this.#properties.alignContentSpaceOuter
+    if (alignContentSpaceOuter.value !== value) {
+      alignContentSpaceOuter.value = value
       this.#configUpdated()
     }
   }
 
-  get stretchContent(): ScalarNumberInput {
+  get placeContentSpaceOuter(): ScalarNumberInput | 'mixed' {
+    const justifyContentSpaceOuter = this.justifyContentSpaceOuter
+    const alignContentSpaceOuter = this.alignContentSpaceOuter
+    if (justifyContentSpaceOuter === alignContentSpaceOuter) {
+      return justifyContentSpaceOuter
+    }
+    return 'mixed'
+  }
+  set placeContentSpaceOuter(value: ScalarNumberInput) {
+    this.justifyContentSpaceOuter = value
+    this.alignContentSpaceOuter = value
+  }
+
+  get stretchContent(): AutoScalarNumberInput {
     return this.#properties.stretchContent.value
   }
-  set stretchContent(value: ScalarNumberInput) {
+  set stretchContent(value: AutoScalarNumberInput) {
     const stretchContent = this.#properties.stretchContent
     if (stretchContent.value !== value) {
       stretchContent.value = value
@@ -451,7 +606,7 @@ export class Frame {
 
     this.#layout.insert(frame.#computed, frame.#rect, frame.#node.index)
 
-    frame.#computed.updateRects(this.#rect.readonly, this.root.#rect.readonly)
+    frame.#computed.updateRects(this.#innerRect, this.root.#innerRect)
 
     this.#markNeedsUpdate()
 
@@ -542,16 +697,16 @@ export class Frame {
   #updateTree() {
     const width = this.#computed.width
     const height = this.#computed.height
-    if (width === 'auto' || height === 'auto') {
-      throw new Error('Root frame must have definite width and height')
-    }
 
-    this.#rect.width = width
-    this.#rect.height = height
+    this.#rect.width = typeof width === 'string' ? 0 : width
+    this.#rect.height = typeof height === 'string' ? 0 : height
+
+    const incomingState = this.#state
+    this.#state = FRAME_STATE.updating
 
     // if the root needs to update we skip to the calculation step,
     // as all descendants will need to be recalculated
-    if (this.#state === FRAME_STATE.needsUpdate) {
+    if (incomingState === FRAME_STATE.needsUpdate) {
       this.#state = FRAME_STATE.updating
 
       this.#calculate()
@@ -560,8 +715,6 @@ export class Frame {
 
       return
     }
-
-    this.#state = FRAME_STATE.updating
 
     const skips = this.#node.skips
 

@@ -21,6 +21,16 @@ type AutoRatio = typeof autoRatio
 
 export type AutoRatioInput = Input<AutoRatio>
 
+const autoScalarNumber = {
+  keyword: ['auto'],
+  number: true,
+  allowNegative: false,
+} as const
+
+type AutoScalarNumber = typeof autoScalarNumber
+
+export type AutoScalarNumberInput = Input<AutoScalarNumber>
+
 const noneLengthPercent = {
   keyword: ['none'],
   length: true,
@@ -124,30 +134,30 @@ export class FrameProperties {
   #alignItems?: Property<ScalarNumber>
   #alignSelf?: Property<ScalarNumber>
 
-  #stretchContent?: Property<ScalarNumber>
+  #stretchContent?: Property<AutoScalarNumber>
   #stretchItems?: Property<ScalarNumber>
   #stretchSelf?: Property<ScalarNumber>
 
   #rowGap?: Property<NoneLengthPercent>
   #columnGap?: Property<NoneLengthPercent>
 
-  #justifySpace?: Property<ScalarNumber>
-  #justifySpaceOuter?: Property<ScalarNumber>
+  #justifyContentSpace?: Property<ScalarNumber>
+  #justifyContentSpaceOuter?: Property<ScalarNumber>
 
-  #alignSpace?: Property<ScalarNumber>
-  #alignSpaceOuter?: Property<ScalarNumber>
+  #alignContentSpace?: Property<ScalarNumber>
+  #alignContentSpaceOuter?: Property<ScalarNumber>
 
   get width() {
-    this.#width ||= new Property(autoLengthPercent, 0)
+    this.#width ||= new Property(autoLengthPercent, 'auto')
     return this.#width
   }
   get height() {
-    this.#height ||= new Property(autoLengthPercent, 0)
+    this.#height ||= new Property(autoLengthPercent, 'auto')
     return this.#height
   }
 
   get aspectRatio() {
-    this.#aspectRatio ||= new Property(autoRatio, 0)
+    this.#aspectRatio ||= new Property(autoRatio, 'auto')
     return this.#aspectRatio
   }
 
@@ -169,19 +179,19 @@ export class FrameProperties {
   }
 
   get offsetTop() {
-    this.#offsetTop ||= new Property(autoNoneLengthPercentNegative, 0)
+    this.#offsetTop ||= new Property(autoNoneLengthPercentNegative, 'none')
     return this.#offsetTop
   }
   get offsetRight() {
-    this.#offsetRight ||= new Property(autoNoneLengthPercentNegative, 0)
+    this.#offsetRight ||= new Property(autoNoneLengthPercentNegative, 'none')
     return this.#offsetRight
   }
   get offsetBottom() {
-    this.#offsetBottom ||= new Property(autoNoneLengthPercentNegative, 0)
+    this.#offsetBottom ||= new Property(autoNoneLengthPercentNegative, 'none')
     return this.#offsetBottom
   }
   get offsetLeft() {
-    this.#offsetLeft ||= new Property(autoNoneLengthPercentNegative, 0)
+    this.#offsetLeft ||= new Property(autoNoneLengthPercentNegative, 'none')
     return this.#offsetLeft
   }
 
@@ -250,7 +260,7 @@ export class FrameProperties {
   }
 
   get stretchContent() {
-    this.#stretchContent ||= new Property(scalarNumber, 0)
+    this.#stretchContent ||= new Property(autoScalarNumber, 'auto')
 
     return this.#stretchContent
   }
@@ -276,25 +286,25 @@ export class FrameProperties {
     return this.#columnGap
   }
 
-  get justifySpace() {
-    this.#justifySpace ||= new Property(scalarNumber, 0)
+  get justifyContentSpace() {
+    this.#justifyContentSpace ||= new Property(scalarNumber, 0)
 
-    return this.#justifySpace
+    return this.#justifyContentSpace
   }
-  get justifySpaceOuter() {
-    this.#justifySpaceOuter ||= new Property(scalarNumber, 0)
+  get justifyContentSpaceOuter() {
+    this.#justifyContentSpaceOuter ||= new Property(scalarNumber, 0)
 
-    return this.#justifySpaceOuter
+    return this.#justifyContentSpaceOuter
   }
 
-  get alignSpace() {
-    this.#alignSpace ||= new Property(scalarNumber, 0)
+  get alignContentSpace() {
+    this.#alignContentSpace ||= new Property(scalarNumber, 0)
 
-    return this.#alignSpace
+    return this.#alignContentSpace
   }
-  get alignSpaceOuter() {
-    this.#alignSpaceOuter ||= new Property(scalarNumber, 0)
+  get alignContentSpaceOuter() {
+    this.#alignContentSpaceOuter ||= new Property(scalarNumber, 0)
 
-    return this.#alignSpaceOuter
+    return this.#alignContentSpaceOuter
   }
 }

@@ -118,8 +118,8 @@ export class FlexLine {
       this.#layout.mainSize - this.#totalMainSize,
       this.#layout.mainGap,
       this.#items.length,
-      this.#layout.justifySpace,
-      this.#layout.justifySpaceOuter,
+      this.#layout.justifyContentSpace,
+      this.#layout.justifyContentSpaceOuter,
     )
 
     if (this.#layout.directionReverse) {
@@ -163,8 +163,9 @@ export class FlexLine {
   #reflowWrap() {
     for (const [index, item] of this.#items.entries()) {
       if (
+        index > 0 &&
         this.#totalMainSize + item.outerHypotheticalMainSize >
-        this.#layout.mainSize
+          this.#layout.mainSize
       ) {
         if (this.#next === null) {
           this.#next = new FlexLine(this.#layout)
@@ -209,7 +210,7 @@ export class FlexLine {
       this.#growableItems.add(item)
     }
     if (item.frame.shrink > 0) {
-      this.#totalScaledShrink += item.frame.shrink
+      this.#totalScaledShrink += item.scaledShrinkFactor
       this.#shrinkableItems.add(item)
     }
   }
@@ -227,7 +228,6 @@ export class FlexLine {
           growth = item.availableGrowth
           this.#growableItems.delete(item)
           this.#totalGrowth -= item.frame.grow
-          continue
         }
 
         item.mainSize += growth
@@ -242,9 +242,10 @@ export class FlexLine {
       this.#shrinkableItems.size > 0
     ) {
       const totalShrink = this.#totalMainSize - this.#layout.mainSize
+      const totalScaledShrink = this.#totalScaledShrink
+
       for (const item of this.#shrinkableItems) {
-        let shrink =
-          (totalShrink * item.scaledShrinkFactor) / this.#totalScaledShrink
+        let shrink = (totalShrink * item.scaledShrinkFactor) / totalScaledShrink
 
         if (shrink > item.availableShrinkage) {
           shrink = item.availableShrinkage
@@ -268,6 +269,7 @@ export class FlexLine {
 
   #placeItemsMainReverse(start: number, between: number) {
     let cursor = this.#layout.mainSize - start
+
     for (const item of this.#items) {
       cursor -= item.mainSize
       item.mainOffset = cursor
@@ -277,10 +279,8 @@ export class FlexLine {
 
   #placeItemsCross(crossPosition: number, crossSize: number) {
     for (const item of this.#items) {
-      if (this.#layout.stretchItems > 0) {
-        item.crossSize +=
-          (crossSize - item.crossSize) * this.#layout.stretchItems
-      }
+      item.crossSize += (crossSize - item.crossSize) * this.#layout.stretchItems
+
       item.crossOffset =
         crossPosition + (crossSize - item.crossSize) * this.#layout.alignItems
     }

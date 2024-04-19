@@ -7,79 +7,62 @@ import { FlexLine } from './FlexLine'
 import { spatialOffsets } from './utils'
 
 export class FlexLayout implements Layout {
-  readonly #parentProps: ComputedFrameProperties
-  readonly #parentRect: ReadonlyRect
+  readonly #computed: ComputedFrameProperties
+  readonly #rect: ReadonlyRect
   readonly #lines: FlexLine
 
   constructor(parentProps: ComputedFrameProperties, parentRect: ReadonlyRect) {
-    this.#parentProps = parentProps
-    this.#parentRect = parentRect
+    this.#computed = parentProps
+    this.#rect = parentRect
 
     this.#lines = new FlexLine(this)
   }
 
   get directionAxis(): 'row' | 'column' {
-    return this.#parentProps.flexDirection.startsWith('row') ? 'row' : 'column'
+    return this.#computed.flexDirection.startsWith('row') ? 'row' : 'column'
   }
   get directionReverse(): boolean {
-    return this.#parentProps.flexDirection.endsWith('reverse')
+    return this.#computed.flexDirection.endsWith('reverse')
   }
   get wrap() {
-    return this.#parentProps.flexWrap
+    return this.#computed.flexWrap
   }
 
   get mainGap() {
     return this.directionAxis === 'row'
-      ? this.#parentProps.rowGap
-      : this.#parentProps.columnGap
+      ? this.#computed.rowGap
+      : this.#computed.columnGap
   }
   get mainSize(): number {
-    return this.directionAxis === 'row' ? this.#innerWidth : this.#innerHeight
+    return this.directionAxis === 'row' ? this.#rect.width : this.#rect.height
   }
 
   get justifyContent(): number {
-    return this.#parentProps.justifyContent
+    return this.#computed.justifyContent
   }
 
-  get justifySpace(): number {
-    return this.#parentProps.justifySpace
+  get justifyContentSpace(): number {
+    return this.#computed.justifyContentSpace
   }
-  get justifySpaceOuter(): number {
-    return this.#parentProps.justifySpaceOuter
+  get justifyContentSpaceOuter(): number {
+    return this.#computed.justifyContentSpaceOuter
   }
 
   get stretchItems(): number {
-    return this.#parentProps.stretchItems
+    return this.#computed.stretchItems
   }
 
   get alignItems(): number {
-    return this.#parentProps.alignItems
-  }
-
-  get #innerWidth(): number {
-    return Math.max(
-      0,
-      this.#parentRect.width -
-        this.#parentProps.insetLeft -
-        this.#parentProps.insetRight,
-    )
-  }
-  get #innerHeight(): number {
-    return Math.max(
-      0,
-      this.#parentRect.height -
-        this.#parentProps.insetTop -
-        this.#parentProps.insetBottom,
-    )
+    return this.#computed.alignItems
   }
 
   get #crossGap() {
     return this.directionAxis === 'row'
-      ? this.#parentProps.columnGap
-      : this.#parentProps.rowGap
+      ? this.#computed.columnGap
+      : this.#computed.rowGap
   }
   get #crossSize(): number {
-    return this.directionAxis === 'row' ? this.#innerHeight : this.#innerWidth
+    return this.directionAxis === 'row' ? this.#rect.height : this.#rect.width
   }
 
   insert(
@@ -88,7 +71,6 @@ export class FlexLayout implements Layout {
     index: number,
   ): ComputedFrameProperties {
     this.#lines.insert(frame, rect, index)
-    this.reflow()
 
     return frame
   }
@@ -119,22 +101,28 @@ export class FlexLayout implements Layout {
     }
     totalLinesCrossSize -= this.#crossGap
 
+    const stretchContent =
+      typeof this.#computed.stretchContent === 'number'
+        ? this.#computed.stretchContent
+        : lines.length === 1
+          ? 1
+          : 0
+
     const totalLineStretch =
-      Math.max(this.#crossSize - totalLinesCrossSize, 0) *
-      this.#parentProps.stretchContent
+      Math.max(this.#crossSize - totalLinesCrossSize, 0) * stretchContent
 
     const { start, between } = spatialOffsets(
-      this.#parentProps.alignContent,
+      this.#computed.alignContent,
       this.#crossSize - totalLinesCrossSize + totalLineStretch,
       this.#crossGap,
       lines.length,
-      this.#parentProps.alignSpace,
-      this.#parentProps.alignSpaceOuter,
+      this.#computed.alignContentSpace,
+      this.#computed.alignContentSpaceOuter,
     )
 
     const lineStretch = totalLineStretch / lines.length
 
-    if (this.#parentProps.flexWrap === 'wrap-reverse') {
+    if (this.#computed.flexWrap === 'wrap-reverse') {
       let crossPosition = totalLinesCrossSize + start
       for (const line of lines) {
         crossPosition -= line.itemsCrossSize
@@ -152,8 +140,8 @@ export class FlexLayout implements Layout {
 
   calculate() {
     for (const item of this.placeItems()) {
-      item.rect.x = item.x
-      item.rect.y = item.y
+      item.rect.x = this.#rect.x + item.x
+      item.rect.y = this.#rect.y + item.y
       item.rect.width = item.width
       item.rect.height = item.height
     }

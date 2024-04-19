@@ -4,6 +4,7 @@ import type {
   AutoLengthPercentInput,
   AutoNoneLengthPercentNegativeInput,
   AutoRatioInput,
+  AutoScalarNumberInput,
   FlexDirectionInput,
   FlexWrapInput,
   LengthPercentageInput,
@@ -21,10 +22,16 @@ export interface FrameOptions {
   insetRight?: LengthPercentageInput
   insetBottom?: LengthPercentageInput
   insetLeft?: LengthPercentageInput
+  insetX?: LengthPercentageInput
+  insetY?: LengthPercentageInput
+  inset?: LengthPercentageInput
   offsetTop?: AutoNoneLengthPercentNegativeInput
   offsetRight?: AutoNoneLengthPercentNegativeInput
   offsetBottom?: AutoNoneLengthPercentNegativeInput
   offsetLeft?: AutoNoneLengthPercentNegativeInput
+  offsetX?: AutoNoneLengthPercentNegativeInput
+  offsetY?: AutoNoneLengthPercentNegativeInput
+  offset?: AutoNoneLengthPercentNegativeInput
   minWidth?: NoneLengthPercentInput
   minHeight?: NoneLengthPercentInput
   maxWidth?: NoneLengthPercentInput
@@ -35,13 +42,23 @@ export interface FrameOptions {
   flexWrap?: FlexWrapInput
   rowGap?: LengthPercentageInput
   columnGap?: LengthPercentageInput
+  gap?: LengthPercentageInput
   justifyContent?: ScalarNumberInput
   justifyItems?: ScalarNumberInput
   justifySelf?: ScalarNumberInput
   alignContent?: ScalarNumberInput
   alignItems?: ScalarNumberInput
   alignSelf?: ScalarNumberInput
-  stretchContent?: ScalarNumberInput
+  placeContent?: ScalarNumberInput
+  placeItems?: ScalarNumberInput
+  placeSelf?: ScalarNumberInput
+  justifyContentSpace?: ScalarNumberInput
+  justifyContentSpaceOuter?: ScalarNumberInput
+  alignContentSpace?: ScalarNumberInput
+  alignContentSpaceOuter?: ScalarNumberInput
+  placeContentSpace?: ScalarNumberInput
+  placeContentSpaceOuter?: ScalarNumberInput
+  stretchContent?: AutoScalarNumberInput
   stretchItems?: ScalarNumberInput
   stretchSelf?: ScalarNumberInput
 }

@@ -194,7 +194,7 @@ export class Property<const Config extends Partial<PropConfig<string>>> {
       !Number.isNaN(input) &&
       (this.#config.allowNegative || numericInput >= 0)
     ) {
-      this.#parsed.type = DATA_TYPES.percentage
+      this.#parsed.type = DATA_TYPES.number
       this.#parsed.value = numericInput
       parsed = true
     }
@@ -213,7 +213,7 @@ export class Property<const Config extends Partial<PropConfig<string>>> {
     return parsed
   }
   #parseRatioString(input: string): boolean {
-    const [numerator, denominator] = input.split('/')
+    const [numerator, denominator = '1'] = input.split('/')
 
     const parsedNumerator = Number(numerator)
     const parsedDenominator = Number(denominator)
