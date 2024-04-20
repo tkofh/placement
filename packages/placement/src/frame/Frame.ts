@@ -302,6 +302,41 @@ export class Frame {
     this.insetY = value
   }
 
+  get translateX(): LengthPercentNegativeInput {
+    return this.#properties.translateX.value
+  }
+  set translateX(value: LengthPercentNegativeInput) {
+    const translateX = this.#properties.translateX
+    if (translateX.value !== value) {
+      translateX.value = value
+      this.#configUpdated()
+    }
+  }
+
+  get translateY(): LengthPercentNegativeInput {
+    return this.#properties.translateY.value
+  }
+  set translateY(value: LengthPercentNegativeInput) {
+    const translateY = this.#properties.translateY
+    if (translateY.value !== value) {
+      translateY.value = value
+      this.#configUpdated()
+    }
+  }
+
+  get translate(): LengthPercentNegativeInput | 'mixed' {
+    const translateX = this.translateX
+    const translateY = this.translateY
+    if (translateX === translateY) {
+      return translateX
+    }
+    return 'mixed'
+  }
+  set translate(value: LengthPercentNegativeInput) {
+    this.translateX = value
+    this.translateY = value
+  }
+
   get grow(): NoneNumberInput {
     return this.#properties.grow.value
   }

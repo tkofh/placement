@@ -54,8 +54,8 @@ export class AbsoluteLayout implements Layout {
     box.width = width
     box.height = height
 
-    box.x = this.#computeX(width, offsetLeft, offsetRight)
-    box.y = this.#computeY(height, offsetTop, offsetBottom)
+    box.x = this.#computeX(width, offsetLeft, offsetRight) + config.translateX
+    box.y = this.#computeY(height, offsetTop, offsetBottom) + config.translateY
   }
 
   #computeWidth(

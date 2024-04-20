@@ -120,6 +120,9 @@ export class FrameProperties {
   #insetBottom?: Property<LengthPercentNegative>
   #insetLeft?: Property<LengthPercentNegative>
 
+  #translateX?: Property<LengthPercentNegative>
+  #translateY?: Property<LengthPercentNegative>
+
   #grow?: Property<NoneNumber>
   #shrink?: Property<NoneNumber>
 
@@ -210,6 +213,15 @@ export class FrameProperties {
   get insetLeft() {
     this.#insetLeft ||= new Property(lengthPercentNegative, 0)
     return this.#insetLeft
+  }
+
+  get translateX() {
+    this.#translateX ||= new Property(lengthPercentNegative, 0)
+    return this.#translateX
+  }
+  get translateY() {
+    this.#translateY ||= new Property(lengthPercentNegative, 0)
+    return this.#translateY
   }
 
   get grow() {

@@ -36,6 +36,9 @@ export interface FrameOptions {
   minHeight?: NoneLengthPercentInput
   maxWidth?: NoneLengthPercentInput
   maxHeight?: NoneLengthPercentInput
+  translateX?: LengthPercentNegativeInput
+  translateY?: LengthPercentNegativeInput
+  translate?: LengthPercentNegativeInput
   grow?: NoneNumberInput
   shrink?: NoneNumberInput
   flexDirection?: FlexDirectionInput

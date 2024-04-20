@@ -130,8 +130,8 @@ export class FlexLayout implements Layout {
 
   calculate() {
     for (const item of this.placeItems()) {
-      item.rect.x = this.#rect.x + item.x
-      item.rect.y = this.#rect.y + item.y
+      item.rect.x = this.#rect.x + item.x + item.frame.translateX
+      item.rect.y = this.#rect.y + item.y + item.frame.translateY
       item.rect.width = item.width
       item.rect.height = item.height
     }

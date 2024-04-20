@@ -184,6 +184,23 @@ export class ComputedFrameProperties {
     return this.#computePercentage(insetLeft.value, this.#self.width)
   }
 
+  get translateX(): number {
+    const translateX = this.#properties.translateX.parsed
+
+    if (translateX.type === DATA_TYPES.length) {
+      return this.#computeLength(translateX.value, translateX.unit)
+    }
+    return this.#computePercentage(translateX.value, this.#container.width)
+  }
+  get translateY(): number {
+    const translateY = this.#properties.translateY.parsed
+
+    if (translateY.type === DATA_TYPES.length) {
+      return this.#computeLength(translateY.value, translateY.unit)
+    }
+    return this.#computePercentage(translateY.value, this.#container.height)
+  }
+
   get grow(): number {
     const grow = this.#properties.grow.parsed
 
