@@ -46,7 +46,7 @@ const autoNoneLengthPercentNegative = {
   keyword: ['auto', 'none'],
   length: true,
   percentage: true,
-  allowNegative: false,
+  allowNegative: true,
 } as const
 
 type AutoNoneLengthPercentNegative = typeof autoNoneLengthPercentNegative
@@ -54,15 +54,15 @@ type AutoNoneLengthPercentNegative = typeof autoNoneLengthPercentNegative
 export type AutoNoneLengthPercentNegativeInput =
   Input<AutoNoneLengthPercentNegative>
 
-const lengthPercentage = {
+const lengthPercentNegative = {
   length: true,
   percentage: true,
-  allowNegative: false,
+  allowNegative: true,
 } as const
 
-type LengthPercentage = typeof lengthPercentage
+type LengthPercentNegative = typeof lengthPercentNegative
 
-export type LengthPercentageInput = Input<LengthPercentage>
+export type LengthPercentNegativeInput = Input<LengthPercentNegative>
 
 const noneNumber = {
   keyword: ['none'],
@@ -115,10 +115,10 @@ export class FrameProperties {
   #offsetBottom?: Property<AutoNoneLengthPercentNegative>
   #offsetLeft?: Property<AutoNoneLengthPercentNegative>
 
-  #insetTop?: Property<LengthPercentage>
-  #insetRight?: Property<LengthPercentage>
-  #insetBottom?: Property<LengthPercentage>
-  #insetLeft?: Property<LengthPercentage>
+  #insetTop?: Property<LengthPercentNegative>
+  #insetRight?: Property<LengthPercentNegative>
+  #insetBottom?: Property<LengthPercentNegative>
+  #insetLeft?: Property<LengthPercentNegative>
 
   #grow?: Property<NoneNumber>
   #shrink?: Property<NoneNumber>
@@ -196,19 +196,19 @@ export class FrameProperties {
   }
 
   get insetTop() {
-    this.#insetTop ||= new Property(autoNoneLengthPercentNegative, 0)
+    this.#insetTop ||= new Property(lengthPercentNegative, 0)
     return this.#insetTop
   }
   get insetRight() {
-    this.#insetRight ||= new Property(autoNoneLengthPercentNegative, 0)
+    this.#insetRight ||= new Property(lengthPercentNegative, 0)
     return this.#insetRight
   }
   get insetBottom() {
-    this.#insetBottom ||= new Property(autoNoneLengthPercentNegative, 0)
+    this.#insetBottom ||= new Property(lengthPercentNegative, 0)
     return this.#insetBottom
   }
   get insetLeft() {
-    this.#insetLeft ||= new Property(autoNoneLengthPercentNegative, 0)
+    this.#insetLeft ||= new Property(lengthPercentNegative, 0)
     return this.#insetLeft
   }
 

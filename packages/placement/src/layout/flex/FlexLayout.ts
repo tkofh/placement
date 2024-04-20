@@ -77,18 +77,8 @@ export class FlexLayout implements Layout {
 
   remove(frame: ComputedFrameProperties): ComputedFrameProperties {
     this.#lines.remove(frame)
-    this.reflow()
 
     return frame
-  }
-
-  reflow() {
-    const lines = this.#lines.reflow()
-    let line = lines.next()
-
-    while (!line.done) {
-      line = lines.next()
-    }
   }
 
   *placeItems(): IterableIterator<FlexItem> {

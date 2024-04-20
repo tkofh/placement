@@ -7,7 +7,7 @@ import type {
   AutoScalarNumberInput,
   FlexDirectionInput,
   FlexWrapInput,
-  LengthPercentageInput,
+  LengthPercentNegativeInput,
   NoneLengthPercentInput,
   NoneNumberInput,
   ScalarNumberInput,
@@ -18,13 +18,13 @@ export interface FrameOptions {
   width?: AutoLengthPercentInput
   height?: AutoLengthPercentInput
   aspectRatio?: AutoRatioInput
-  insetTop?: LengthPercentageInput
-  insetRight?: LengthPercentageInput
-  insetBottom?: LengthPercentageInput
-  insetLeft?: LengthPercentageInput
-  insetX?: LengthPercentageInput
-  insetY?: LengthPercentageInput
-  inset?: LengthPercentageInput
+  insetTop?: LengthPercentNegativeInput
+  insetRight?: LengthPercentNegativeInput
+  insetBottom?: LengthPercentNegativeInput
+  insetLeft?: LengthPercentNegativeInput
+  insetX?: LengthPercentNegativeInput
+  insetY?: LengthPercentNegativeInput
+  inset?: LengthPercentNegativeInput
   offsetTop?: AutoNoneLengthPercentNegativeInput
   offsetRight?: AutoNoneLengthPercentNegativeInput
   offsetBottom?: AutoNoneLengthPercentNegativeInput
@@ -40,9 +40,9 @@ export interface FrameOptions {
   shrink?: NoneNumberInput
   flexDirection?: FlexDirectionInput
   flexWrap?: FlexWrapInput
-  rowGap?: LengthPercentageInput
-  columnGap?: LengthPercentageInput
-  gap?: LengthPercentageInput
+  rowGap?: LengthPercentNegativeInput
+  columnGap?: LengthPercentNegativeInput
+  gap?: LengthPercentNegativeInput
   justifyContent?: ScalarNumberInput
   justifyItems?: ScalarNumberInput
   justifySelf?: ScalarNumberInput

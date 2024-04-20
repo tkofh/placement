@@ -13,7 +13,7 @@ import {
   type AutoRatioInput,
   type AutoScalarNumberInput,
   FrameProperties,
-  type LengthPercentageInput,
+  type LengthPercentNegativeInput,
   type NoneLengthPercentInput,
   type NoneNumberInput,
   type ScalarNumberInput,
@@ -219,10 +219,10 @@ export class Frame {
     this.offsetY = value
   }
 
-  get insetTop(): LengthPercentageInput {
+  get insetTop(): LengthPercentNegativeInput {
     return this.#properties.insetTop.value
   }
-  set insetTop(value: LengthPercentageInput) {
+  set insetTop(value: LengthPercentNegativeInput) {
     const insetTop = this.#properties.insetTop
     if (insetTop.value !== value) {
       insetTop.value = value
@@ -230,10 +230,10 @@ export class Frame {
     }
   }
 
-  get insetRight(): LengthPercentageInput {
+  get insetRight(): LengthPercentNegativeInput {
     return this.#properties.insetRight.value
   }
-  set insetRight(value: LengthPercentageInput) {
+  set insetRight(value: LengthPercentNegativeInput) {
     const insetRight = this.#properties.insetRight
     if (insetRight.value !== value) {
       insetRight.value = value
@@ -241,10 +241,10 @@ export class Frame {
     }
   }
 
-  get insetBottom(): LengthPercentageInput {
+  get insetBottom(): LengthPercentNegativeInput {
     return this.#properties.insetBottom.value
   }
-  set insetBottom(value: LengthPercentageInput) {
+  set insetBottom(value: LengthPercentNegativeInput) {
     const insetBottom = this.#properties.insetBottom
     if (insetBottom.value !== value) {
       insetBottom.value = value
@@ -252,10 +252,10 @@ export class Frame {
     }
   }
 
-  get insetLeft(): LengthPercentageInput {
+  get insetLeft(): LengthPercentNegativeInput {
     return this.#properties.insetLeft.value
   }
-  set insetLeft(value: LengthPercentageInput) {
+  set insetLeft(value: LengthPercentNegativeInput) {
     const insetLeft = this.#properties.insetLeft
     if (insetLeft.value !== value) {
       insetLeft.value = value
@@ -263,7 +263,7 @@ export class Frame {
     }
   }
 
-  get insetX(): LengthPercentageInput | 'mixed' {
+  get insetX(): LengthPercentNegativeInput | 'mixed' {
     const insetLeft = this.insetLeft
     const insetRight = this.insetRight
     if (insetLeft === insetRight) {
@@ -271,12 +271,12 @@ export class Frame {
     }
     return 'mixed'
   }
-  set insetX(value: LengthPercentageInput) {
+  set insetX(value: LengthPercentNegativeInput) {
     this.insetLeft = value
     this.insetRight = value
   }
 
-  get insetY(): LengthPercentageInput | 'mixed' {
+  get insetY(): LengthPercentNegativeInput | 'mixed' {
     const insetTop = this.insetTop
     const insetBottom = this.insetBottom
     if (insetTop === insetBottom) {
@@ -284,12 +284,12 @@ export class Frame {
     }
     return 'mixed'
   }
-  set insetY(value: LengthPercentageInput) {
+  set insetY(value: LengthPercentNegativeInput) {
     this.insetTop = value
     this.insetBottom = value
   }
 
-  get inset(): LengthPercentageInput | 'mixed' {
+  get inset(): LengthPercentNegativeInput | 'mixed' {
     const insetX = this.insetX
     const insetY = this.insetY
     if (insetX === insetY) {
@@ -297,7 +297,7 @@ export class Frame {
     }
     return 'mixed'
   }
-  set inset(value: LengthPercentageInput) {
+  set inset(value: LengthPercentNegativeInput) {
     this.insetX = value
     this.insetY = value
   }

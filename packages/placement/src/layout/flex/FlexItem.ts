@@ -49,8 +49,8 @@ export class FlexItem {
       : this.mainSize - this.#definiteMainOffset
   }
 
-  get #definiteMainOffsetStart(): number {
-    let offsetStart: string | number
+  get #mainOffsetStart(): number | 'auto' {
+    let offsetStart: number | 'auto' | 'none'
 
     if (this.#layout.directionAxis === 'row') {
       if (this.#layout.directionReverse) {
@@ -64,10 +64,10 @@ export class FlexItem {
       offsetStart = this.frame.offsetTop
     }
 
-    return typeof offsetStart === 'string' ? 0 : offsetStart
+    return offsetStart === 'none' ? 0 : offsetStart
   }
-  get #definiteMainOffsetEnd(): number {
-    let offsetEnd: string | number
+  get #mainOffsetEnd(): number | 'auto' {
+    let offsetEnd: number | 'auto' | 'none'
 
     if (this.#layout.directionAxis === 'row') {
       if (this.#layout.directionReverse) {
@@ -81,14 +81,21 @@ export class FlexItem {
       offsetEnd = this.frame.offsetBottom
     }
 
-    return typeof offsetEnd === 'string' ? 0 : offsetEnd
+    return offsetEnd === 'none' ? 0 : offsetEnd
+  }
+
+  get #definiteMainOffsetStart(): number {
+    return typeof this.#mainOffsetStart === 'number' ? this.#mainOffsetStart : 0
+  }
+  get #definiteMainOffsetEnd(): number {
+    return typeof this.#mainOffsetEnd === 'number' ? this.#mainOffsetEnd : 0
   }
   get #definiteMainOffset(): number {
     return this.#definiteMainOffsetStart + this.#definiteMainOffsetEnd
   }
 
-  get #definiteCrossOffsetStart(): number {
-    let offsetStart: string | number
+  get #crossOffsetStart(): number | 'auto' {
+    let offsetStart: number | 'auto' | 'none'
 
     if (this.#layout.directionAxis === 'row') {
       if (this.#layout.wrap === 'wrap-reverse') {
@@ -102,10 +109,10 @@ export class FlexItem {
       offsetStart = this.frame.offsetLeft
     }
 
-    return typeof offsetStart === 'string' ? 0 : offsetStart
+    return offsetStart === 'none' ? 0 : offsetStart
   }
-  get #definiteCrossOffsetEnd(): number {
-    let offsetEnd: string | number
+  get #crossOffsetEnd(): number | 'auto' {
+    let offsetEnd: number | 'auto' | 'none'
 
     if (this.#layout.directionAxis === 'row') {
       if (this.#layout.wrap === 'wrap-reverse') {
@@ -119,7 +126,16 @@ export class FlexItem {
       offsetEnd = this.frame.offsetRight
     }
 
-    return typeof offsetEnd === 'string' ? 0 : offsetEnd
+    return offsetEnd === 'none' ? 0 : offsetEnd
+  }
+
+  get #definiteCrossOffsetStart(): number {
+    return typeof this.#crossOffsetStart === 'number'
+      ? this.#crossOffsetStart
+      : 0
+  }
+  get #definiteCrossOffsetEnd(): number {
+    return typeof this.#crossOffsetEnd === 'number' ? this.#crossOffsetEnd : 0
   }
   get #definiteCrossOffset(): number {
     return this.#definiteCrossOffsetStart + this.#definiteCrossOffsetEnd
@@ -161,6 +177,19 @@ export class FlexItem {
     const insetBottom = this.frame.insetBottom
 
     return Math.max(0, height - insetTop - insetBottom)
+  }
+
+  get offsetAutoMainStart(): number {
+    return this.#mainOffsetStart === 'auto' ? 1 : 0
+  }
+  get offsetAutoMainEnd(): number {
+    return this.#mainOffsetEnd === 'auto' ? 1 : 0
+  }
+  get offsetAutoCrossStart(): number {
+    return this.#crossOffsetStart === 'auto' ? 1 : 0
+  }
+  get offsetAutoCrossEnd(): number {
+    return this.#crossOffsetEnd === 'auto' ? 1 : 0
   }
 
   get outerHypotheticalMainSize(): number {

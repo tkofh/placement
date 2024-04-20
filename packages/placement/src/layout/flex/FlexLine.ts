@@ -13,6 +13,7 @@ export class FlexLine {
   #itemsCrossSize = 0
   #totalGrowth = 0
   #totalScaledShrink = 0
+  #totalMainAutoOffset = 0
 
   #growableItems: Set<FlexItem> = new Set()
   #shrinkableItems: Set<FlexItem> = new Set()
@@ -22,10 +23,13 @@ export class FlexLine {
   }
 
   get #firstIndex(): number {
-    return this.#items[0].index
+    return this.#items[0]?.index ?? -1
   }
   get #lastIndex(): number {
-    return this.#items[this.#items.length - 1].index
+    return this.#items[this.#items.length - 1]?.index ?? -1
+  }
+  get #freeMainSize(): number {
+    return this.#layout.mainSize - this.#totalMainSize
   }
 
   get itemsCrossSize(): number {
@@ -37,12 +41,12 @@ export class FlexLine {
   }
 
   insert(frame: ComputedFrameProperties, rect: Rect, index: number) {
-    if (this.#items.length === 0 || this.#next === null) {
-      this.#items.push(new FlexItem(this.#layout, frame, rect, index))
-      return
-    }
-
     if (index > this.#lastIndex) {
+      if (this.#next === null) {
+        this.#items.push(new FlexItem(this.#layout, frame, rect, index))
+        return
+      }
+
       this.#next.insert(frame, rect, index)
       return
     }
@@ -82,6 +86,7 @@ export class FlexLine {
     this.#itemsCrossSize = 0
     this.#totalGrowth = 0
     this.#totalScaledShrink = 0
+    this.#totalMainAutoOffset = 0
     this.#growableItems.clear()
     this.#shrinkableItems.clear()
 
@@ -113,9 +118,9 @@ export class FlexLine {
       this.#shrinkItems()
     }
 
-    const { start, between } = spatialOffsets(
+    const mainOffsets = spatialOffsets(
       this.#layout.justifyContent,
-      this.#layout.mainSize - this.#totalMainSize,
+      this.#freeMainSize,
       this.#layout.mainGap,
       this.#items.length,
       this.#layout.justifyContentSpace,
@@ -123,12 +128,20 @@ export class FlexLine {
     )
 
     if (this.#layout.directionReverse) {
-      this.#placeItemsMainReverse(start, between)
+      this.#placeItemsReverse(
+        mainOffsets.start,
+        mainOffsets.between,
+        crossPosition,
+        crossSize,
+      )
     } else {
-      this.#placeItemsMainForward(start, between)
+      this.#placeItemsForward(
+        mainOffsets.start,
+        mainOffsets.between,
+        crossPosition,
+        crossSize,
+      )
     }
-
-    this.#placeItemsCross(crossPosition, crossSize)
 
     yield* this.#items
   }
@@ -213,6 +226,9 @@ export class FlexLine {
       this.#totalScaledShrink += item.scaledShrinkFactor
       this.#shrinkableItems.add(item)
     }
+
+    this.#totalMainAutoOffset +=
+      item.offsetAutoMainStart + item.offsetAutoMainEnd
   }
 
   #growItems() {
@@ -220,8 +236,7 @@ export class FlexLine {
       this.#totalMainSize < this.#layout.mainSize &&
       this.#growableItems.size > 0
     ) {
-      const growthUnit =
-        (this.#layout.mainSize - this.#totalMainSize) / this.#totalGrowth
+      const growthUnit = this.#freeMainSize / this.#totalGrowth
       for (const item of this.#growableItems) {
         let growth = growthUnit * item.growthFactor
         if (growth > item.availableGrowth) {
@@ -259,28 +274,56 @@ export class FlexLine {
     }
   }
 
-  #placeItemsMainForward(start: number, between: number) {
-    let cursor = start
+  #placeItemsForward(
+    mainStart: number,
+    mainBetween: number,
+    crossPosition: number,
+    crossSize: number,
+  ) {
+    const autoOffset =
+      this.#totalMainAutoOffset === 0
+        ? 0
+        : this.#freeMainSize / this.#totalMainAutoOffset
+
+    let cursor = mainStart
     for (const item of this.#items) {
+      cursor += item.offsetAutoMainStart * autoOffset
       item.mainOffset = cursor
-      cursor += item.mainSize + between
+      cursor +=
+        item.mainSize + mainBetween + item.offsetAutoMainEnd * autoOffset
+
+      this.#placeItemCross(item, crossPosition, crossSize)
     }
   }
 
-  #placeItemsMainReverse(start: number, between: number) {
+  #placeItemsReverse(
+    start: number,
+    between: number,
+    crossPosition: number,
+    crossSize: number,
+  ) {
+    const autoOffset =
+      this.#totalMainAutoOffset === 0
+        ? 0
+        : this.#freeMainSize / this.#totalMainAutoOffset
     let cursor = this.#layout.mainSize - start
 
     for (const item of this.#items) {
-      cursor -= item.mainSize
+      cursor -= item.mainSize + item.offsetAutoMainStart * autoOffset
       item.mainOffset = cursor
-      cursor -= between
+      cursor -= between + item.offsetAutoMainEnd * autoOffset
+
+      this.#placeItemCross(item, crossPosition, crossSize)
     }
   }
 
-  #placeItemsCross(crossPosition: number, crossSize: number) {
-    for (const item of this.#items) {
+  #placeItemCross(item: FlexItem, crossPosition: number, crossSize: number) {
+    const itemCrossAuto = item.offsetAutoCrossStart + item.offsetAutoCrossEnd
+    if (itemCrossAuto > 0) {
+      const autoOffset = (crossSize - item.crossSize) / itemCrossAuto
+      item.crossOffset = crossPosition + item.offsetAutoCrossStart * autoOffset
+    } else {
       item.crossSize += (crossSize - item.crossSize) * this.#layout.stretchItems
-
       item.crossOffset =
         crossPosition + (crossSize - item.crossSize) * this.#layout.alignItems
     }
