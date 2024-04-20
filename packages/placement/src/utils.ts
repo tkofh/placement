@@ -39,8 +39,23 @@ export function remap(
   return lerp(normalized, y1, y2)
 }
 
-export function cleanupInput<const Input extends string | number>(
-  input: Input,
-): Input {
-  return (typeof input === 'string' ? input.replace(/\s/g, '') : input) as never
+export function roundTo(value: number, precision: number) {
+  const scale = 10 ** precision
+  return Math.round(value * scale) / scale
+}
+
+export function keysOf<T extends object>(object: T): Array<keyof T> {
+  return Object.keys(object) as never
+}
+
+export function stripUndefined<T extends object>(object: T): Partial<T> {
+  const out: Partial<T> = {}
+
+  for (const key of keysOf(object)) {
+    if (object[key] !== undefined) {
+      out[key] = object[key]
+    }
+  }
+
+  return out
 }
