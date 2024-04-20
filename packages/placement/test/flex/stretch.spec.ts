@@ -202,3 +202,68 @@ describe('stretch content', () => {
     expect(child3.rect.height).toBe(42.5)
   })
 })
+
+describe('stretch self', () => {
+  test('0', () => {
+    const parent = createFrame({
+      layout: 'flex',
+      flexDirection: 'row',
+      width: '100px',
+      height: '100px',
+      stretchItems: 0,
+    })
+
+    const child = parent.appendChild(
+      createFrame({
+        layout: 'flex',
+        width: '10px',
+        height: '10px',
+        stretchSelf: 1,
+      }),
+    )
+
+    expect(child.rect.height).toBe(100)
+  })
+
+  test('0.5', () => {
+    const parent = createFrame({
+      layout: 'flex',
+      flexDirection: 'row',
+      width: '100px',
+      height: '100px',
+      stretchItems: 0,
+    })
+
+    const child = parent.appendChild(
+      createFrame({
+        layout: 'flex',
+        width: '10px',
+        height: '10px',
+        stretchSelf: 0.5,
+      }),
+    )
+
+    expect(child.rect.height).toBe(55)
+  })
+
+  test('1', () => {
+    const parent = createFrame({
+      layout: 'flex',
+      flexDirection: 'row',
+      width: '100px',
+      height: '100px',
+      stretchItems: 0,
+    })
+
+    const child = parent.appendChild(
+      createFrame({
+        layout: 'flex',
+        width: '10px',
+        height: '10px',
+        stretchSelf: 1,
+      }),
+    )
+
+    expect(child.rect.height).toBe(100)
+  })
+})

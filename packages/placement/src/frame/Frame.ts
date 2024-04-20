@@ -361,27 +361,27 @@ export class Frame {
     }
   }
 
-  get justifyItems(): ScalarNumberInput {
-    return this.#properties.justifyItems.value
-  }
-  set justifyItems(value: ScalarNumberInput) {
-    const justifyItems = this.#properties.justifyItems
-    if (justifyItems.value !== value) {
-      justifyItems.value = value
-      this.#configUpdated()
-    }
-  }
-
-  get justifySelf(): ScalarNumberInput {
-    return this.#properties.justifySelf.value
-  }
-  set justifySelf(value: ScalarNumberInput) {
-    const justifySelf = this.#properties.justifySelf
-    if (justifySelf.value !== value) {
-      justifySelf.value = value
-      this.#configUpdated()
-    }
-  }
+  // get justifyItems(): ScalarNumberInput {
+  //   return this.#properties.justifyItems.value
+  // }
+  // set justifyItems(value: ScalarNumberInput) {
+  //   const justifyItems = this.#properties.justifyItems
+  //   if (justifyItems.value !== value) {
+  //     justifyItems.value = value
+  //     this.#configUpdated()
+  //   }
+  // }
+  //
+  // get justifySelf(): ScalarNumberInput {
+  //   return this.#properties.justifySelf.value
+  // }
+  // set justifySelf(value: ScalarNumberInput) {
+  //   const justifySelf = this.#properties.justifySelf
+  //   if (justifySelf.value !== value) {
+  //     justifySelf.value = value
+  //     this.#configUpdated()
+  //   }
+  // }
 
   get alignItems(): ScalarNumberInput {
     return this.#properties.alignItems.value
@@ -405,10 +405,10 @@ export class Frame {
     }
   }
 
-  get alignSelf(): ScalarNumberInput {
+  get alignSelf(): AutoScalarNumberInput {
     return this.#properties.alignSelf.value
   }
-  set alignSelf(value: ScalarNumberInput) {
+  set alignSelf(value: AutoScalarNumberInput) {
     const alignSelf = this.#properties.alignSelf
     if (alignSelf.value !== value) {
       alignSelf.value = value
@@ -429,31 +429,31 @@ export class Frame {
     this.alignContent = value
   }
 
-  get placeItems(): ScalarNumberInput | 'mixed' {
-    const justifyItems = this.justifyItems
-    const alignItems = this.alignItems
-    if (justifyItems === alignItems) {
-      return justifyItems
-    }
-    return 'mixed'
-  }
-  set placeItems(value: ScalarNumberInput) {
-    this.justifyItems = value
-    this.alignItems = value
-  }
+  // get placeItems(): ScalarNumberInput | 'mixed' {
+  //   const justifyItems = this.justifyItems
+  //   const alignItems = this.alignItems
+  //   if (justifyItems === alignItems) {
+  //     return justifyItems
+  //   }
+  //   return 'mixed'
+  // }
+  // set placeItems(value: ScalarNumberInput) {
+  //   this.justifyItems = value
+  //   this.alignItems = value
+  // }
 
-  get placeSelf(): ScalarNumberInput | 'mixed' {
-    const justifySelf = this.justifySelf
-    const alignSelf = this.alignSelf
-    if (justifySelf === alignSelf) {
-      return justifySelf
-    }
-    return 'mixed'
-  }
-  set placeSelf(value: ScalarNumberInput) {
-    this.justifySelf = value
-    this.alignSelf = value
-  }
+  // get placeSelf(): ScalarNumberInput | 'mixed' {
+  //   const justifySelf = this.justifySelf
+  //   const alignSelf = this.alignSelf
+  //   if (justifySelf === alignSelf) {
+  //     return justifySelf
+  //   }
+  //   return 'mixed'
+  // }
+  // set placeSelf(value: ScalarNumberInput) {
+  //   this.justifySelf = value
+  //   this.alignSelf = value
+  // }
 
   get rowGap(): NoneLengthPercentInput {
     return this.#properties.rowGap.value
@@ -582,10 +582,10 @@ export class Frame {
     }
   }
 
-  get stretchSelf(): ScalarNumberInput {
+  get stretchSelf(): AutoScalarNumberInput {
     return this.#properties.stretchSelf.value
   }
-  set stretchSelf(value: ScalarNumberInput) {
+  set stretchSelf(value: AutoScalarNumberInput) {
     const stretchSelf = this.#properties.stretchSelf
     if (stretchSelf.value !== value) {
       stretchSelf.value = value

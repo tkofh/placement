@@ -217,12 +217,18 @@ export class ComputedFrameProperties {
   get justifyContent(): number {
     return this.#properties.justifyContent.parsed.value
   }
-  get justifyItems(): number {
-    return this.#properties.justifyItems.parsed.value
-  }
-  get justifySelf(): number {
-    return this.#properties.justifySelf.parsed.value
-  }
+  // get justifyItems(): number {
+  //   return this.#properties.justifyItems.parsed.value
+  // }
+  // get justifySelf(): number | 'auto' {
+  //   const justifySelf = this.#properties.justifySelf.parsed
+  //
+  //   if (justifySelf.type === DATA_TYPES.keyword) {
+  //     return justifySelf.keyword
+  //   }
+  //
+  //   return justifySelf.value
+  // }
 
   get alignContent(): number {
     return this.#properties.alignContent.parsed.value
@@ -230,8 +236,14 @@ export class ComputedFrameProperties {
   get alignItems(): number {
     return this.#properties.alignItems.parsed.value
   }
-  get alignSelf(): number {
-    return this.#properties.alignSelf.parsed.value
+  get alignSelf(): number | 'auto' {
+    const alignSelf = this.#properties.alignSelf.parsed
+
+    if (alignSelf.type === DATA_TYPES.keyword) {
+      return alignSelf.keyword
+    }
+
+    return alignSelf.value
   }
 
   get stretchContent(): number | 'auto' {
@@ -246,8 +258,14 @@ export class ComputedFrameProperties {
   get stretchItems(): number {
     return this.#properties.stretchItems.parsed.value
   }
-  get stretchSelf(): number {
-    return this.#properties.stretchSelf.parsed.value
+  get stretchSelf(): number | 'auto' {
+    const stretchSelf = this.#properties.stretchSelf.parsed
+
+    if (stretchSelf.type === DATA_TYPES.keyword) {
+      return stretchSelf.keyword
+    }
+
+    return stretchSelf.value
   }
 
   get rowGap(): number {

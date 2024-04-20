@@ -285,3 +285,77 @@ describe('align content', () => {
     expect(child3.rect).toMatchObject({ x: 75, y: 0 })
   })
 })
+
+describe('align self', () => {
+  test('0', () => {
+    const parent = createFrame({
+      layout: 'flex',
+      flexDirection: 'row',
+      alignItems: 1,
+      width: '100px',
+      height: '100px',
+    })
+
+    const child = parent.appendChild(
+      createFrame({
+        layout: 'flex',
+        width: '10px',
+        height: '10px',
+      }),
+    )
+
+    expect(child.rect.y).toBe(90)
+
+    child.alignSelf = 0
+
+    expect(child.rect.y).toBe(0)
+  })
+
+  test('0.5', () => {
+    const parent = createFrame({
+      layout: 'flex',
+      flexDirection: 'row',
+      alignItems: 1,
+      width: '100px',
+      height: '100px',
+    })
+
+    const child = parent.appendChild(
+      createFrame({
+        layout: 'flex',
+        width: '10px',
+        height: '10px',
+      }),
+    )
+
+    expect(child.rect.y).toBe(90)
+
+    child.alignSelf = 0.5
+
+    expect(child.rect.y).toBe(45)
+  })
+
+  test('1', () => {
+    const parent = createFrame({
+      layout: 'flex',
+      flexDirection: 'row',
+      alignItems: 0,
+      width: '100px',
+      height: '100px',
+    })
+
+    const child = parent.appendChild(
+      createFrame({
+        layout: 'flex',
+        width: '10px',
+        height: '10px',
+      }),
+    )
+
+    expect(child.rect.y).toBe(0)
+
+    child.alignSelf = 1
+
+    expect(child.rect.y).toBe(90)
+  })
+})

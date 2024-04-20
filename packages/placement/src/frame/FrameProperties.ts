@@ -127,16 +127,16 @@ export class FrameProperties {
   #flexWrap?: Property<FlexWrap>
 
   #justifyContent?: Property<ScalarNumber>
-  #justifyItems?: Property<ScalarNumber>
-  #justifySelf?: Property<ScalarNumber>
+  // #justifyItems?: Property<ScalarNumber>
+  // #justifySelf?: Property<AutoScalarNumber>
 
   #alignContent?: Property<ScalarNumber>
   #alignItems?: Property<ScalarNumber>
-  #alignSelf?: Property<ScalarNumber>
+  #alignSelf?: Property<AutoScalarNumber>
 
   #stretchContent?: Property<AutoScalarNumber>
   #stretchItems?: Property<ScalarNumber>
-  #stretchSelf?: Property<ScalarNumber>
+  #stretchSelf?: Property<AutoScalarNumber>
 
   #rowGap?: Property<NoneLengthPercent>
   #columnGap?: Property<NoneLengthPercent>
@@ -234,16 +234,16 @@ export class FrameProperties {
     this.#justifyContent ||= new Property(scalarNumber, 0)
     return this.#justifyContent
   }
-  get justifyItems() {
-    this.#justifyItems ||= new Property(scalarNumber, 0)
-
-    return this.#justifyItems
-  }
-  get justifySelf() {
-    this.#justifySelf ||= new Property(scalarNumber, 0)
-
-    return this.#justifySelf
-  }
+  // get justifyItems() {
+  //   this.#justifyItems ||= new Property(scalarNumber, 0)
+  //
+  //   return this.#justifyItems
+  // }
+  // get justifySelf() {
+  //   this.#justifySelf ||= new Property(autoScalarNumber, 'auto')
+  //
+  //   return this.#justifySelf
+  // }
 
   get alignContent() {
     this.#alignContent ||= new Property(scalarNumber, 0)
@@ -255,7 +255,7 @@ export class FrameProperties {
     return this.#alignItems
   }
   get alignSelf() {
-    this.#alignSelf ||= new Property(scalarNumber, 0)
+    this.#alignSelf ||= new Property(autoScalarNumber, 'auto')
     return this.#alignSelf
   }
 
@@ -270,7 +270,7 @@ export class FrameProperties {
     return this.#stretchItems
   }
   get stretchSelf() {
-    this.#stretchSelf ||= new Property(scalarNumber, 0)
+    this.#stretchSelf ||= new Property(autoScalarNumber, 'auto')
 
     return this.#stretchSelf
   }

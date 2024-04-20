@@ -322,10 +322,18 @@ export class FlexLine {
     if (itemCrossAuto > 0) {
       const autoOffset = (crossSize - item.crossSize) / itemCrossAuto
       item.crossOffset = crossPosition + item.offsetAutoCrossStart * autoOffset
-    } else {
-      item.crossSize += (crossSize - item.crossSize) * this.#layout.stretchItems
-      item.crossOffset =
-        crossPosition + (crossSize - item.crossSize) * this.#layout.alignItems
+      return
     }
+
+    const stretch =
+      item.frame.stretchSelf === 'auto'
+        ? this.#layout.stretchItems
+        : item.frame.stretchSelf
+    const align =
+      item.frame.alignSelf === 'auto'
+        ? this.#layout.alignItems
+        : item.frame.alignSelf
+    item.crossSize += (crossSize - item.crossSize) * stretch
+    item.crossOffset = crossPosition + (crossSize - item.crossSize) * align
   }
 }

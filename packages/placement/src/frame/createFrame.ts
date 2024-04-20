@@ -44,14 +44,14 @@ export interface FrameOptions {
   columnGap?: LengthPercentNegativeInput
   gap?: LengthPercentNegativeInput
   justifyContent?: ScalarNumberInput
-  justifyItems?: ScalarNumberInput
-  justifySelf?: ScalarNumberInput
+  // justifyItems?: ScalarNumberInput
+  // justifySelf?: ScalarNumberInput
   alignContent?: ScalarNumberInput
   alignItems?: ScalarNumberInput
   alignSelf?: ScalarNumberInput
   placeContent?: ScalarNumberInput
-  placeItems?: ScalarNumberInput
-  placeSelf?: ScalarNumberInput
+  // placeItems?: ScalarNumberInput
+  // placeSelf?: ScalarNumberInput
   justifyContentSpace?: ScalarNumberInput
   justifyContentSpaceOuter?: ScalarNumberInput
   alignContentSpace?: ScalarNumberInput
