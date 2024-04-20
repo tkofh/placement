@@ -11,11 +11,11 @@
     "build": "build"
   },
   "dependencies": {
-    "placement": "^0.1.2",
-    "vue": "^3.4.21"
+    "placement": "workspace:^",
+    "vue": "^3.4.23"
   },
   "devDependencies": {
-    "unbuild": "^2.0.0",
-    "typescript": "^5.4.4"
+    "typescript": "^5.4.5",
+    "unbuild": "^2.0.0"
   }
 }
