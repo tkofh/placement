@@ -397,10 +397,10 @@ export class Frame {
   }
 
   // get justifyItems(): ScalarNumberInput {
-  //   return this.#properties.justifyItems.value
+  //   return this.#property.justifyItems.value
   // }
   // set justifyItems(value: ScalarNumberInput) {
-  //   const justifyItems = this.#properties.justifyItems
+  //   const justifyItems = this.#property.justifyItems
   //   if (justifyItems.value !== value) {
   //     justifyItems.value = value
   //     this.#configUpdated()
@@ -408,10 +408,10 @@ export class Frame {
   // }
   //
   // get justifySelf(): ScalarNumberInput {
-  //   return this.#properties.justifySelf.value
+  //   return this.#property.justifySelf.value
   // }
   // set justifySelf(value: ScalarNumberInput) {
-  //   const justifySelf = this.#properties.justifySelf
+  //   const justifySelf = this.#property.justifySelf
   //   if (justifySelf.value !== value) {
   //     justifySelf.value = value
   //     this.#configUpdated()

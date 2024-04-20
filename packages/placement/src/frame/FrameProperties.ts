@@ -1,5 +1,5 @@
-import { Property } from '../properties/property'
-import type { Input } from '../properties/types'
+import { Property } from '../property/property'
+import type { Input } from '../property/types'
 
 const autoLengthPercent = {
   keyword: ['auto'],

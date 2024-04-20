@@ -1,4 +1,4 @@
-import { DATA_TYPES, type LengthUnit } from '../properties'
+import { DATA_TYPES, type LengthUnit } from '../property'
 import type { ReadonlyRect } from '../rect'
 import { clamp } from '../utils'
 import type { FrameProperties } from './FrameProperties'
@@ -235,10 +235,10 @@ export class ComputedFrameProperties {
     return this.#properties.justifyContent.parsed.value
   }
   // get justifyItems(): number {
-  //   return this.#properties.justifyItems.parsed.value
+  //   return this.#property.justifyItems.parsed.value
   // }
   // get justifySelf(): number | 'auto' {
-  //   const justifySelf = this.#properties.justifySelf.parsed
+  //   const justifySelf = this.#property.justifySelf.parsed
   //
   //   if (justifySelf.type === DATA_TYPES.keyword) {
   //     return justifySelf.keyword
