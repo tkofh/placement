@@ -1,2 +1,5 @@
-export { createFrame, type FrameOptions } from './createFrame'
+export { createFrame } from './createFrame'
 export { type Frame } from './Frame'
+export { type FrameOptions } from './FrameProperties'
+export { updateFrame } from './updateFrame'
+export { isFrame } from './isFrame'

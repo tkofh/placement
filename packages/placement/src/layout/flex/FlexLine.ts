@@ -204,6 +204,10 @@ export class FlexLine {
       this.#updateMeasurements(item)
       this.#items.push(item)
       this.#next.#items.shift()
+
+      if (this.#next.#items.length === 0) {
+        this.#next = this.#next.#next
+      }
     }
 
     this.#totalMainSize -= this.#layout.mainGap

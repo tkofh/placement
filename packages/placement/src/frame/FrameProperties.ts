@@ -1,15 +1,26 @@
-import { Property } from '../property/property'
-import type { Input } from '../property/types'
+import type { Input } from '../property'
+import { Property } from '../property/Property'
 
 const autoLengthPercent = {
   keyword: ['auto'],
   length: true,
-  percentage: true,
+  percentage: 'width',
   allowNegative: false,
 } as const
 
 type AutoLengthPercent = typeof autoLengthPercent
-export type AutoLengthPercentInput = Input<AutoLengthPercent>
+
+const autoLengthVerticalPercent = {
+  keyword: ['auto'],
+  length: true,
+  percentage: 'height',
+  allowNegative: false,
+} as const
+
+type AutoLengthVerticalPercent = typeof autoLengthVerticalPercent
+export type AutoLengthPercentInput = Input<
+  AutoLengthPercent | AutoLengthVerticalPercent
+>
 
 const autoRatio = {
   keyword: ['auto'],
@@ -34,29 +45,51 @@ export type AutoScalarNumberInput = Input<AutoScalarNumber>
 const noneLengthPercent = {
   keyword: ['none'],
   length: true,
-  percentage: true,
+  percentage: 'width',
   allowNegative: false,
 } as const
 
 type NoneLengthPercent = typeof noneLengthPercent
 
-export type NoneLengthPercentInput = Input<NoneLengthPercent>
+const noneLengthVerticalPercent = {
+  keyword: ['none'],
+  length: true,
+  percentage: 'height',
+  allowNegative: false,
+} as const
+
+type NoneLengthVerticalPercent = typeof noneLengthVerticalPercent
+
+export type NoneLengthPercentInput = Input<
+  NoneLengthPercent | NoneLengthVerticalPercent
+>
 
 const autoNoneLengthPercentNegative = {
   keyword: ['auto', 'none'],
   length: true,
-  percentage: true,
+  percentage: 'width',
   allowNegative: true,
 } as const
 
 type AutoNoneLengthPercentNegative = typeof autoNoneLengthPercentNegative
 
-export type AutoNoneLengthPercentNegativeInput =
-  Input<AutoNoneLengthPercentNegative>
+const autoNoneLengthVerticalPercentNegative = {
+  keyword: ['auto', 'none'],
+  length: true,
+  percentage: 'height',
+  allowNegative: true,
+} as const
+
+type AutoNoneLengthVerticalPercentNegative =
+  typeof autoNoneLengthVerticalPercentNegative
+
+export type AutoNoneLengthPercentNegativeInput = Input<
+  AutoNoneLengthPercentNegative | AutoNoneLengthVerticalPercentNegative
+>
 
 const lengthPercentNegative = {
   length: true,
-  percentage: true,
+  percentage: 'width',
   allowNegative: true,
 } as const
 
@@ -99,63 +132,72 @@ type FlexWrap = typeof flexWrap
 
 export type FlexWrapInput = Input<FlexWrap>
 
+export interface FrameOptions {
+  width?: AutoLengthPercentInput
+  height?: AutoLengthPercentInput
+  aspectRatio?: AutoRatioInput
+  insetTop?: LengthPercentNegativeInput
+  insetRight?: LengthPercentNegativeInput
+  insetBottom?: LengthPercentNegativeInput
+  insetLeft?: LengthPercentNegativeInput
+  insetX?: LengthPercentNegativeInput
+  insetY?: LengthPercentNegativeInput
+  inset?: LengthPercentNegativeInput
+  offsetTop?: AutoNoneLengthPercentNegativeInput
+  offsetRight?: AutoNoneLengthPercentNegativeInput
+  offsetBottom?: AutoNoneLengthPercentNegativeInput
+  offsetLeft?: AutoNoneLengthPercentNegativeInput
+  offsetX?: AutoNoneLengthPercentNegativeInput
+  offsetY?: AutoNoneLengthPercentNegativeInput
+  offset?: AutoNoneLengthPercentNegativeInput
+  minWidth?: NoneLengthPercentInput
+  minHeight?: NoneLengthPercentInput
+  maxWidth?: NoneLengthPercentInput
+  maxHeight?: NoneLengthPercentInput
+  translateX?: LengthPercentNegativeInput
+  translateY?: LengthPercentNegativeInput
+  translate?: LengthPercentNegativeInput
+  grow?: NoneNumberInput
+  shrink?: NoneNumberInput
+  flexDirection?: FlexDirectionInput
+  flexWrap?: FlexWrapInput
+  rowGap?: LengthPercentNegativeInput
+  columnGap?: LengthPercentNegativeInput
+  gap?: LengthPercentNegativeInput
+  justifyContent?: ScalarNumberInput
+  alignContent?: ScalarNumberInput
+  alignItems?: ScalarNumberInput
+  alignSelf?: ScalarNumberInput
+  placeContent?: ScalarNumberInput
+  justifyContentSpace?: ScalarNumberInput
+  justifyContentSpaceOuter?: ScalarNumberInput
+  alignContentSpace?: ScalarNumberInput
+  alignContentSpaceOuter?: ScalarNumberInput
+  placeContentSpace?: ScalarNumberInput
+  placeContentSpaceOuter?: ScalarNumberInput
+  stretchContent?: AutoScalarNumberInput
+  stretchItems?: ScalarNumberInput
+  stretchSelf?: ScalarNumberInput
+}
+
 export class FrameProperties {
+  //region Sizing
   #width?: Property<AutoLengthPercent>
-  #height?: Property<AutoLengthPercent>
+  #height?: Property<AutoLengthVerticalPercent>
 
   #aspectRatio?: Property<AutoRatio>
 
   #minWidth?: Property<NoneLengthPercent>
-  #minHeight?: Property<NoneLengthPercent>
+  #minHeight?: Property<NoneLengthVerticalPercent>
   #maxWidth?: Property<NoneLengthPercent>
-  #maxHeight?: Property<NoneLengthPercent>
-
-  #offsetTop?: Property<AutoNoneLengthPercentNegative>
-  #offsetRight?: Property<AutoNoneLengthPercentNegative>
-  #offsetBottom?: Property<AutoNoneLengthPercentNegative>
-  #offsetLeft?: Property<AutoNoneLengthPercentNegative>
-
-  #insetTop?: Property<LengthPercentNegative>
-  #insetRight?: Property<LengthPercentNegative>
-  #insetBottom?: Property<LengthPercentNegative>
-  #insetLeft?: Property<LengthPercentNegative>
-
-  #translateX?: Property<LengthPercentNegative>
-  #translateY?: Property<LengthPercentNegative>
-
-  #grow?: Property<NoneNumber>
-  #shrink?: Property<NoneNumber>
-
-  #flexDirection?: Property<FlexDirection>
-  #flexWrap?: Property<FlexWrap>
-
-  #justifyContent?: Property<ScalarNumber>
-  // #justifyItems?: Property<ScalarNumber>
-  // #justifySelf?: Property<AutoScalarNumber>
-
-  #alignContent?: Property<ScalarNumber>
-  #alignItems?: Property<ScalarNumber>
-  #alignSelf?: Property<AutoScalarNumber>
-
-  #stretchContent?: Property<AutoScalarNumber>
-  #stretchItems?: Property<ScalarNumber>
-  #stretchSelf?: Property<AutoScalarNumber>
-
-  #rowGap?: Property<NoneLengthPercent>
-  #columnGap?: Property<NoneLengthPercent>
-
-  #justifyContentSpace?: Property<ScalarNumber>
-  #justifyContentSpaceOuter?: Property<ScalarNumber>
-
-  #alignContentSpace?: Property<ScalarNumber>
-  #alignContentSpaceOuter?: Property<ScalarNumber>
+  #maxHeight?: Property<NoneLengthVerticalPercent>
 
   get width() {
     this.#width ||= new Property(autoLengthPercent, 'auto')
     return this.#width
   }
   get height() {
-    this.#height ||= new Property(autoLengthPercent, 'auto')
+    this.#height ||= new Property(autoLengthVerticalPercent, 'auto')
     return this.#height
   }
 
@@ -169,7 +211,7 @@ export class FrameProperties {
     return this.#minWidth
   }
   get minHeight() {
-    this.#minHeight ||= new Property(noneLengthPercent, 'none')
+    this.#minHeight ||= new Property(noneLengthVerticalPercent, 'none')
     return this.#minHeight
   }
   get maxWidth() {
@@ -177,12 +219,49 @@ export class FrameProperties {
     return this.#maxWidth
   }
   get maxHeight() {
-    this.#maxHeight ||= new Property(noneLengthPercent, 'none')
+    this.#maxHeight ||= new Property(noneLengthVerticalPercent, 'none')
     return this.#maxHeight
   }
 
+  #serializeSizing(output: Record<string, string | number>) {
+    if (this.#width) {
+      output.width = this.#width.value
+    }
+    if (this.#height) {
+      output.height = this.#height.value
+    }
+    if (this.#aspectRatio) {
+      output.aspectRatio = this.#aspectRatio.value
+    }
+    if (this.#minWidth) {
+      output.minWidth = this.#minWidth.value
+    }
+    if (this.#minHeight) {
+      output.minHeight = this.#minHeight.value
+    }
+    if (this.#maxWidth) {
+      output.maxWidth = this.#maxWidth.value
+    }
+    if (this.#maxHeight) {
+      output.maxHeight = this.#maxHeight.value
+    }
+  }
+  //endregion
+
+  //region Positioning
+  #offsetTop?: Property<AutoNoneLengthVerticalPercentNegative>
+  #offsetRight?: Property<AutoNoneLengthPercentNegative>
+  #offsetBottom?: Property<AutoNoneLengthVerticalPercentNegative>
+  #offsetLeft?: Property<AutoNoneLengthPercentNegative>
+
+  #translateX?: Property<LengthPercentNegative>
+  #translateY?: Property<LengthPercentNegative>
+
   get offsetTop() {
-    this.#offsetTop ||= new Property(autoNoneLengthPercentNegative, 'none')
+    this.#offsetTop ||= new Property(
+      autoNoneLengthVerticalPercentNegative,
+      'none',
+    )
     return this.#offsetTop
   }
   get offsetRight() {
@@ -190,13 +269,53 @@ export class FrameProperties {
     return this.#offsetRight
   }
   get offsetBottom() {
-    this.#offsetBottom ||= new Property(autoNoneLengthPercentNegative, 'none')
+    this.#offsetBottom ||= new Property(
+      autoNoneLengthVerticalPercentNegative,
+      'none',
+    )
     return this.#offsetBottom
   }
   get offsetLeft() {
     this.#offsetLeft ||= new Property(autoNoneLengthPercentNegative, 'none')
     return this.#offsetLeft
   }
+
+  get translateX() {
+    this.#translateX ||= new Property(lengthPercentNegative, 0)
+    return this.#translateX
+  }
+  get translateY() {
+    this.#translateY ||= new Property(lengthPercentNegative, 0)
+    return this.#translateY
+  }
+
+  #serializePositioning(output: Record<string, string | number>) {
+    if (this.#offsetTop) {
+      output.offsetTop = this.#offsetTop.value
+    }
+    if (this.#offsetRight) {
+      output.offsetRight = this.#offsetRight.value
+    }
+    if (this.#offsetBottom) {
+      output.offsetBottom = this.#offsetBottom.value
+    }
+    if (this.#offsetLeft) {
+      output.offsetLeft = this.#offsetLeft.value
+    }
+    if (this.#translateX) {
+      output.translateX = this.#translateX.value
+    }
+    if (this.#translateY) {
+      output.translateY = this.#translateY.value
+    }
+  }
+  //endregion
+
+  //region General Layout
+  #insetTop?: Property<LengthPercentNegative>
+  #insetRight?: Property<LengthPercentNegative>
+  #insetBottom?: Property<LengthPercentNegative>
+  #insetLeft?: Property<LengthPercentNegative>
 
   get insetTop() {
     this.#insetTop ||= new Property(lengthPercentNegative, 0)
@@ -215,14 +334,29 @@ export class FrameProperties {
     return this.#insetLeft
   }
 
-  get translateX() {
-    this.#translateX ||= new Property(lengthPercentNegative, 0)
-    return this.#translateX
+  #serializeGeneralLayout(output: Record<string, string | number>) {
+    if (this.#insetTop) {
+      output.insetTop = this.#insetTop.value
+    }
+    if (this.#insetRight) {
+      output.insetRight = this.#insetRight.value
+    }
+    if (this.#insetBottom) {
+      output.insetBottom = this.#insetBottom.value
+    }
+    if (this.#insetLeft) {
+      output.insetLeft = this.#insetLeft.value
+    }
   }
-  get translateY() {
-    this.#translateY ||= new Property(lengthPercentNegative, 0)
-    return this.#translateY
-  }
+  //endregion
+
+  //region Flex Item
+  #grow?: Property<NoneNumber>
+  #shrink?: Property<NoneNumber>
+
+  #alignSelf?: Property<AutoScalarNumber>
+
+  #stretchSelf?: Property<AutoScalarNumber>
 
   get grow() {
     this.#grow ||= new Property(noneNumber, 0)
@@ -232,6 +366,54 @@ export class FrameProperties {
     this.#shrink ||= new Property(noneNumber, 0)
     return this.#shrink
   }
+
+  get stretchSelf() {
+    this.#stretchSelf ||= new Property(autoScalarNumber, 'auto')
+
+    return this.#stretchSelf
+  }
+
+  get alignSelf() {
+    this.#alignSelf ||= new Property(autoScalarNumber, 'auto')
+    return this.#alignSelf
+  }
+
+  #serializeFlexItem(output: Record<string, string | number>) {
+    if (this.#grow) {
+      output.grow = this.#grow.value
+    }
+    if (this.#shrink) {
+      output.shrink = this.#shrink.value
+    }
+    if (this.#alignSelf) {
+      output.alignSelf = this.#alignSelf.value
+    }
+    if (this.#stretchSelf) {
+      output.stretchSelf = this.#stretchSelf.value
+    }
+  }
+  //endregion
+
+  //region Flex Container
+  #flexDirection?: Property<FlexDirection>
+  #flexWrap?: Property<FlexWrap>
+
+  #justifyContent?: Property<ScalarNumber>
+
+  #alignContent?: Property<ScalarNumber>
+  #alignItems?: Property<ScalarNumber>
+
+  #stretchContent?: Property<AutoScalarNumber>
+  #stretchItems?: Property<ScalarNumber>
+
+  #rowGap?: Property<NoneLengthPercent>
+  #columnGap?: Property<NoneLengthVerticalPercent>
+
+  #justifyContentSpace?: Property<ScalarNumber>
+  #justifyContentSpaceOuter?: Property<ScalarNumber>
+
+  #alignContentSpace?: Property<ScalarNumber>
+  #alignContentSpaceOuter?: Property<ScalarNumber>
 
   get flexDirection() {
     this.#flexDirection ||= new Property(flexDirection, 'row')
@@ -246,16 +428,6 @@ export class FrameProperties {
     this.#justifyContent ||= new Property(scalarNumber, 0)
     return this.#justifyContent
   }
-  // get justifyItems() {
-  //   this.#justifyItems ||= new Property(scalarNumber, 0)
-  //
-  //   return this.#justifyItems
-  // }
-  // get justifySelf() {
-  //   this.#justifySelf ||= new Property(autoScalarNumber, 'auto')
-  //
-  //   return this.#justifySelf
-  // }
 
   get alignContent() {
     this.#alignContent ||= new Property(scalarNumber, 0)
@@ -265,10 +437,6 @@ export class FrameProperties {
   get alignItems() {
     this.#alignItems ||= new Property(scalarNumber, 0)
     return this.#alignItems
-  }
-  get alignSelf() {
-    this.#alignSelf ||= new Property(autoScalarNumber, 'auto')
-    return this.#alignSelf
   }
 
   get stretchContent() {
@@ -281,11 +449,6 @@ export class FrameProperties {
 
     return this.#stretchItems
   }
-  get stretchSelf() {
-    this.#stretchSelf ||= new Property(autoScalarNumber, 'auto')
-
-    return this.#stretchSelf
-  }
 
   get rowGap() {
     this.#rowGap ||= new Property(noneLengthPercent, 0)
@@ -293,7 +456,7 @@ export class FrameProperties {
     return this.#rowGap
   }
   get columnGap() {
-    this.#columnGap ||= new Property(noneLengthPercent, 0)
+    this.#columnGap ||= new Property(noneLengthVerticalPercent, 0)
 
     return this.#columnGap
   }
@@ -318,5 +481,60 @@ export class FrameProperties {
     this.#alignContentSpaceOuter ||= new Property(scalarNumber, 0)
 
     return this.#alignContentSpaceOuter
+  }
+
+  #serializeFlexContainer(output: Record<string, string | number>) {
+    if (this.#flexDirection) {
+      output.flexDirection = this.#flexDirection.value
+    }
+    if (this.#flexWrap) {
+      output.flexWrap = this.#flexWrap.value
+    }
+    if (this.#justifyContent) {
+      output.justifyContent = this.#justifyContent.value
+    }
+    if (this.#alignContent) {
+      output.alignContent = this.#alignContent.value
+    }
+    if (this.#alignItems) {
+      output.alignItems = this.#alignItems.value
+    }
+    if (this.#stretchContent) {
+      output.stretchContent = this.#stretchContent.value
+    }
+    if (this.#stretchItems) {
+      output.stretchItems = this.#stretchItems.value
+    }
+    if (this.#rowGap) {
+      output.rowGap = this.#rowGap.value
+    }
+    if (this.#columnGap) {
+      output.columnGap = this.#columnGap.value
+    }
+    if (this.#justifyContentSpace) {
+      output.justifyContentSpace = this.#justifyContentSpace.value
+    }
+    if (this.#justifyContentSpaceOuter) {
+      output.justifyContentSpaceOuter = this.#justifyContentSpaceOuter.value
+    }
+    if (this.#alignContentSpace) {
+      output.alignContentSpace = this.#alignContentSpace.value
+    }
+    if (this.#alignContentSpaceOuter) {
+      output.alignContentSpaceOuter = this.#alignContentSpaceOuter.value
+    }
+  }
+  //endregion
+
+  serialize() {
+    const serialized: Record<string, string | number> = {}
+
+    this.#serializeSizing(serialized)
+    this.#serializePositioning(serialized)
+    this.#serializeGeneralLayout(serialized)
+    this.#serializeFlexItem(serialized)
+    this.#serializeFlexContainer(serialized)
+
+    return serialized
   }
 }

@@ -1,4 +1,4 @@
-import type { ReadonlyRect } from 'placement/Box'
+import type { ReadonlyRect } from 'placement/rect'
 import {
   type PropType,
   type SlotsType,
@@ -8,42 +8,38 @@ import {
   shallowRef,
 } from 'vue'
 import { useDomRect } from '../composables/useDomRect'
+import type { OriginXInput, OriginYInput } from '../composables/useProperty'
 import { useRootFrame } from '../composables/useRootFrame'
 import { useViewportRect } from '../composables/useViewportRect'
+import { frameSizingPropDefs } from '../internal/props'
+import type { FrameFit } from '../internal/types'
 
-export const GraphicRoot = defineComponent({
+const rootFramePropDefs = {
+  ...frameSizingPropDefs,
+  fit: { type: String as PropType<FrameFit>, default: 'contain' },
+  originX: { type: String as PropType<OriginXInput>, default: '50%' },
+  originY: { type: String as PropType<OriginYInput>, default: '50%' },
+} as const
+
+export const RootFrame = defineComponent({
   name: 'RootFrame',
+  props: rootFramePropDefs,
   slots: Object as SlotsType<{
     default: Readonly<ReadonlyRect>
   }>,
-  props: {
-    width: { type: [String, Number], required: false },
-    height: { type: [String, Number], required: false },
-    aspectRatio: { type: [String, Number], required: false },
-    fit: {
-      type: String as PropType<'fill' | 'cover' | 'contain'>,
-      default: 'contain',
-    },
-    originX: { type: [String, Number], default: '50%' },
-    originY: { type: [String, Number], default: '50%' },
-  },
   setup(props, { slots }) {
     const svg = shallowRef<SVGElement>()
 
     const domRect = useDomRect(svg)
 
-    const root = useRootFrame(() => ({
-      width: props.width,
-      height: props.height,
-      aspectRatio: props.aspectRatio,
-    }))
+    const root = useRootFrame(domRect, props)
 
     const viewportRect = useViewportRect(
       domRect,
       root,
-      () => props.fit,
-      () => props.originX,
-      () => props.originY,
+      () => props.fit ?? 'contain',
+      () => props.originX ?? '50%',
+      () => props.originY ?? '50%',
     )
     const viewBox = computed(
       () =>

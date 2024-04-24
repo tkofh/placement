@@ -1,4 +1,3 @@
-import { DATA_TYPES, type LengthUnit } from '../property'
 import type { ReadonlyRect } from '../rect'
 import { clamp } from '../utils'
 import type { FrameProperties } from './FrameProperties'
@@ -50,369 +49,249 @@ export class ComputedFrameProperties {
   }
 
   get minWidth(): number {
-    const minWidth = this.#properties.minWidth.parsed
+    const minWidth = this.#properties.minWidth.getComputed(
+      this.#container,
+      this.#viewport,
+    )
 
-    if (minWidth.type === DATA_TYPES.length) {
-      return this.#computeLength(minWidth.value, minWidth.unit)
-    }
-    if (minWidth.type === DATA_TYPES.percentage) {
-      return this.#computePercentage(minWidth.value, this.#container.width)
+    if (typeof minWidth === 'number') {
+      return minWidth
     }
 
     return 0
   }
   get minHeight(): number {
-    const minHeight = this.#properties.minHeight.parsed
+    const minHeight = this.#properties.minHeight.getComputed(
+      this.#container,
+      this.#viewport,
+    )
 
-    if (minHeight.type === DATA_TYPES.length) {
-      return this.#computeLength(minHeight.value, minHeight.unit)
-    }
-    if (minHeight.type === DATA_TYPES.percentage) {
-      return this.#computePercentage(minHeight.value, this.#container.height)
+    if (typeof minHeight === 'number') {
+      return minHeight
     }
 
     return 0
   }
   get maxWidth(): number {
-    const maxWidth = this.#properties.maxWidth.parsed
+    const maxWidth = this.#properties.maxWidth.getComputed(
+      this.#container,
+      this.#viewport,
+    )
 
-    if (maxWidth.type === DATA_TYPES.length) {
-      return this.#computeLength(maxWidth.value, maxWidth.unit)
-    }
-    if (maxWidth.type === DATA_TYPES.percentage) {
-      return this.#computePercentage(maxWidth.value, this.#container.width)
+    if (typeof maxWidth === 'number') {
+      return maxWidth
     }
 
     return Number.POSITIVE_INFINITY
   }
   get maxHeight(): number {
-    const maxHeight = this.#properties.maxHeight.parsed
+    const maxHeight = this.#properties.maxHeight.getComputed(
+      this.#container,
+      this.#viewport,
+    )
 
-    if (maxHeight.type === DATA_TYPES.length) {
-      return this.#computeLength(maxHeight.value, maxHeight.unit)
-    }
-    if (maxHeight.type === DATA_TYPES.percentage) {
-      return this.#computePercentage(maxHeight.value, this.#container.height)
+    if (typeof maxHeight === 'number') {
+      return maxHeight
     }
 
     return Number.POSITIVE_INFINITY
   }
 
   get offsetTop(): number | 'auto' | 'none' {
-    const offsetTop = this.#properties.offsetTop.parsed
-
-    if (offsetTop.type === DATA_TYPES.length) {
-      return this.#computeLength(offsetTop.value, offsetTop.unit)
-    }
-    if (offsetTop.type === DATA_TYPES.percentage) {
-      return this.#computePercentage(offsetTop.value, this.#container.height)
-    }
-
-    return offsetTop.keyword
+    return this.#properties.offsetTop.getComputed(
+      this.#container,
+      this.#viewport,
+    )
   }
   get offsetRight(): number | 'auto' | 'none' {
-    const offsetRight = this.#properties.offsetRight.parsed
-
-    if (offsetRight.type === DATA_TYPES.length) {
-      return this.#computeLength(offsetRight.value, offsetRight.unit)
-    }
-    if (offsetRight.type === DATA_TYPES.percentage) {
-      return this.#computePercentage(offsetRight.value, this.#container.width)
-    }
-
-    return offsetRight.keyword
+    return this.#properties.offsetRight.getComputed(
+      this.#container,
+      this.#viewport,
+    )
   }
   get offsetBottom(): number | 'auto' | 'none' {
-    const offsetBottom = this.#properties.offsetBottom.parsed
-
-    if (offsetBottom.type === DATA_TYPES.length) {
-      return this.#computeLength(offsetBottom.value, offsetBottom.unit)
-    }
-    if (offsetBottom.type === DATA_TYPES.percentage) {
-      return this.#computePercentage(offsetBottom.value, this.#container.height)
-    }
-
-    return offsetBottom.keyword
+    return this.#properties.offsetBottom.getComputed(
+      this.#container,
+      this.#viewport,
+    )
   }
   get offsetLeft(): number | 'auto' | 'none' {
-    const offsetLeft = this.#properties.offsetLeft.parsed
-
-    if (offsetLeft.type === DATA_TYPES.length) {
-      return this.#computeLength(offsetLeft.value, offsetLeft.unit)
-    }
-    if (offsetLeft.type === DATA_TYPES.percentage) {
-      return this.#computePercentage(offsetLeft.value, this.#container.width)
-    }
-
-    return offsetLeft.keyword
+    return this.#properties.offsetLeft.getComputed(
+      this.#container,
+      this.#viewport,
+    )
   }
 
   get insetTop(): number {
-    const insetTop = this.#properties.insetTop.parsed
-
-    if (insetTop.type === DATA_TYPES.length) {
-      return this.#computeLength(insetTop.value, insetTop.unit, this.#self)
-    }
-    return this.#computePercentage(insetTop.value, this.#self.height)
+    return this.#properties.insetTop.getComputed(this.#self, this.#viewport)
   }
   get insetRight(): number {
-    const insetRight = this.#properties.insetRight.parsed
-
-    if (insetRight.type === DATA_TYPES.length) {
-      return this.#computeLength(insetRight.value, insetRight.unit, this.#self)
-    }
-    return this.#computePercentage(insetRight.value, this.#self.width)
+    return this.#properties.insetRight.getComputed(this.#self, this.#viewport)
   }
   get insetBottom(): number {
-    const insetBottom = this.#properties.insetBottom.parsed
-
-    if (insetBottom.type === DATA_TYPES.length) {
-      return this.#computeLength(
-        insetBottom.value,
-        insetBottom.unit,
-        this.#self,
-      )
-    }
-    return this.#computePercentage(insetBottom.value, this.#self.height)
+    return this.#properties.insetBottom.getComputed(this.#self, this.#viewport)
   }
   get insetLeft(): number {
-    const insetLeft = this.#properties.insetLeft.parsed
-
-    if (insetLeft.type === DATA_TYPES.length) {
-      return this.#computeLength(insetLeft.value, insetLeft.unit, this.#self)
-    }
-    return this.#computePercentage(insetLeft.value, this.#self.width)
+    return this.#properties.insetLeft.getComputed(this.#self, this.#viewport)
   }
 
   get translateX(): number {
-    const translateX = this.#properties.translateX.parsed
-
-    if (translateX.type === DATA_TYPES.length) {
-      return this.#computeLength(translateX.value, translateX.unit)
-    }
-    return this.#computePercentage(translateX.value, this.#container.width)
+    return this.#properties.translateX.getComputed(this.#self, this.#viewport)
   }
   get translateY(): number {
-    const translateY = this.#properties.translateY.parsed
-
-    if (translateY.type === DATA_TYPES.length) {
-      return this.#computeLength(translateY.value, translateY.unit)
-    }
-    return this.#computePercentage(translateY.value, this.#container.height)
+    return this.#properties.translateY.getComputed(this.#self, this.#viewport)
   }
 
   get grow(): number {
-    const grow = this.#properties.grow.parsed
+    const grow = this.#properties.grow.getComputed(
+      this.#container,
+      this.#viewport,
+    )
 
-    if (grow.type === DATA_TYPES.number) {
-      return grow.value
+    if (typeof grow === 'number') {
+      return grow
     }
 
     return 0
   }
   get shrink(): number {
-    const shrink = this.#properties.shrink.parsed
+    const shrink = this.#properties.shrink.getComputed(
+      this.#container,
+      this.#viewport,
+    )
 
-    if (shrink.type === DATA_TYPES.number) {
-      return shrink.value
+    if (typeof shrink === 'number') {
+      return shrink
     }
 
     return 0
   }
 
   get flexDirection(): 'row' | 'row-reverse' | 'column' | 'column-reverse' {
-    const flexDirection = this.#properties.flexDirection.parsed
-
-    return flexDirection.keyword
+    return this.#properties.flexDirection.getComputed()
   }
   get flexWrap(): 'nowrap' | 'wrap' | 'wrap-reverse' {
-    const flexWrap = this.#properties.flexWrap.parsed
-
-    return flexWrap.keyword
+    return this.#properties.flexWrap.getComputed()
   }
 
   get justifyContent(): number {
-    return this.#properties.justifyContent.parsed.value
+    return this.#properties.justifyContent.getComputed()
   }
-  // get justifyItems(): number {
-  //   return this.#property.justifyItems.parsed.value
-  // }
-  // get justifySelf(): number | 'auto' {
-  //   const justifySelf = this.#property.justifySelf.parsed
-  //
-  //   if (justifySelf.type === DATA_TYPES.keyword) {
-  //     return justifySelf.keyword
-  //   }
-  //
-  //   return justifySelf.value
-  // }
 
   get alignContent(): number {
-    return this.#properties.alignContent.parsed.value
+    return clamp(this.#properties.alignContent.getComputed(), 0, 1)
   }
   get alignItems(): number {
-    return this.#properties.alignItems.parsed.value
+    return clamp(this.#properties.alignItems.getComputed(), 0, 1)
   }
   get alignSelf(): number | 'auto' {
-    const alignSelf = this.#properties.alignSelf.parsed
+    const alignSelf = this.#properties.alignSelf.getComputed()
 
-    if (alignSelf.type === DATA_TYPES.keyword) {
-      return alignSelf.keyword
+    if (typeof alignSelf === 'number') {
+      return clamp(alignSelf, 0, 1)
     }
 
-    return alignSelf.value
+    return 'auto'
   }
 
   get stretchContent(): number | 'auto' {
-    const stretchContent = this.#properties.stretchContent.parsed
+    const stretchContent = this.#properties.stretchContent.getComputed()
 
-    if (stretchContent.type === DATA_TYPES.keyword) {
-      return stretchContent.keyword
+    if (typeof stretchContent === 'number') {
+      return clamp(stretchContent, 0, 1)
     }
 
-    return stretchContent.value
+    return 'auto'
   }
   get stretchItems(): number {
-    return this.#properties.stretchItems.parsed.value
+    return clamp(this.#properties.stretchItems.getComputed(), 0, 1)
   }
   get stretchSelf(): number | 'auto' {
-    const stretchSelf = this.#properties.stretchSelf.parsed
+    const stretchSelf = this.#properties.stretchSelf.getComputed()
 
-    if (stretchSelf.type === DATA_TYPES.keyword) {
-      return stretchSelf.keyword
+    if (typeof stretchSelf === 'number') {
+      return clamp(stretchSelf, 0, 1)
     }
 
-    return stretchSelf.value
+    return 'auto'
   }
 
   get rowGap(): number {
-    const rowGap = this.#properties.rowGap.parsed
+    const rowGap = this.#properties.rowGap.getComputed(
+      this.#container,
+      this.#viewport,
+    )
 
-    if (rowGap.type === DATA_TYPES.keyword) {
-      return 0
+    if (typeof rowGap === 'number') {
+      return rowGap
     }
 
-    if (rowGap.type === DATA_TYPES.length) {
-      return this.#computeLength(rowGap.value, rowGap.unit)
-    }
-
-    return this.#computePercentage(rowGap.value, this.#container.height)
+    return 0
   }
   get columnGap(): number {
-    const columnGap = this.#properties.columnGap.parsed
+    const columnGap = this.#properties.columnGap.getComputed(
+      this.#container,
+      this.#viewport,
+    )
 
-    if (columnGap.type === DATA_TYPES.keyword) {
-      return 0
+    if (typeof columnGap === 'number') {
+      return columnGap
     }
 
-    if (columnGap.type === DATA_TYPES.length) {
-      return this.#computeLength(columnGap.value, columnGap.unit)
-    }
-
-    return this.#computePercentage(columnGap.value, this.#container.width)
+    return 0
   }
 
   get justifyContentSpace(): number {
-    const justifyContentSpace = this.#properties.justifyContentSpace.parsed
-
-    return clamp(justifyContentSpace.value, 0, 1)
+    return clamp(this.#properties.justifyContentSpace.getComputed(), 0, 1)
   }
   get justifyContentSpaceOuter(): number {
-    const justifyContentSpaceOuter =
-      this.#properties.justifyContentSpaceOuter.parsed
-
-    return clamp(justifyContentSpaceOuter.value, 0, 1)
+    return clamp(this.#properties.justifyContentSpaceOuter.getComputed(), 0, 1)
   }
 
   get alignContentSpace(): number {
-    const alignContentSpace = this.#properties.alignContentSpace.parsed
-
-    return clamp(alignContentSpace.value, 0, 1)
+    return clamp(this.#properties.alignContentSpace.getComputed(), 0, 1)
   }
   get alignContentSpaceOuter(): number {
-    const alignContentSpaceOuter =
-      this.#properties.alignContentSpaceOuter.parsed
-
-    return clamp(alignContentSpaceOuter.value, 0, 1)
+    return clamp(this.#properties.alignContentSpaceOuter.getComputed(), 0, 1)
   }
 
   get #definiteWidth(): number | null {
-    const width = this.#properties.width.parsed
+    const width = this.#properties.width.getComputed(
+      this.#container,
+      this.#viewport,
+    )
 
-    if (width.type === DATA_TYPES.length) {
-      return this.#computeLength(width.value, width.unit)
-    }
-    if (width.type === DATA_TYPES.percentage) {
-      return this.#computePercentage(width.value, this.#container.width)
+    if (typeof width === 'number') {
+      return width
     }
 
     return null
   }
 
   get #definiteHeight(): number | null {
-    const height = this.#properties.height.parsed
+    const height = this.#properties.height.getComputed(
+      this.#container,
+      this.#viewport,
+    )
 
-    if (height.type === DATA_TYPES.length) {
-      return this.#computeLength(height.value, height.unit)
-    }
-    if (height.type === DATA_TYPES.percentage) {
-      return this.#computePercentage(height.value, this.#container.height)
+    if (typeof height === 'number') {
+      return height
     }
 
     return null
   }
 
   get #definiteAspectRatio(): number | null {
-    const aspectRatio = this.#properties.aspectRatio.parsed
+    const aspectRatio = this.#properties.aspectRatio.getComputed(
+      this.#container,
+      this.#viewport,
+    )
 
-    if (aspectRatio.type === DATA_TYPES.ratio) {
-      return aspectRatio.value
+    if (typeof aspectRatio === 'number') {
+      return aspectRatio
     }
 
     return null
-  }
-
-  #computeLength(
-    value: number,
-    unit: LengthUnit,
-    container: ReadonlyRect = this.#container,
-  ) {
-    if (unit === 'px') {
-      return value
-    }
-    if (unit === 'cw') {
-      return (value * container.width) / 100
-    }
-    if (unit === 'ch') {
-      return (value * container.height) / 100
-    }
-    if (unit === 'vw') {
-      return (value * this.#viewport.width) / 100
-    }
-    if (unit === 'vh') {
-      return (value * this.#viewport.height) / 100
-    }
-    if (unit === 'cmin') {
-      return (value * Math.min(container.width, container.height)) / 100
-    }
-    if (unit === 'cmax') {
-      return (value * Math.max(container.width, container.height)) / 100
-    }
-    if (unit === 'vmin') {
-      return (
-        (value * Math.min(this.#viewport.width, this.#viewport.height)) / 100
-      )
-    }
-    if (unit === 'vmax') {
-      return (
-        (value * Math.max(this.#viewport.width, this.#viewport.height)) / 100
-      )
-    }
-    throw new Error(`unrecognized unit ${unit}`)
-  }
-
-  #computePercentage(value: number, basis: number) {
-    return (value * basis) / 100
   }
 
   updateRects(container: ReadonlyRect, viewport: ReadonlyRect = container) {

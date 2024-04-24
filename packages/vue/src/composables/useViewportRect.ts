@@ -1,4 +1,4 @@
-import { type ReadonlyRect, createMutableRect } from 'placement/Box'
+import { type ReadonlyRect, createRect } from 'placement/rect'
 import { clamp } from 'placement/utils'
 import {
   type MaybeRefOrGetter,
@@ -9,10 +9,15 @@ import {
   watchEffect,
 } from 'vue'
 import type { FrameFit } from '../internal/types'
-import { useQuantityProp } from './useQuantityProp'
+import {
+  type OriginXInput,
+  type OriginYInput,
+  useOriginX,
+  useOriginY,
+} from './useProperty'
 
 function createRectRef() {
-  const rect = createMutableRect()
+  const rect = createRect()
 
   const rectRef = shallowRef(rect)
   return {
@@ -76,13 +81,13 @@ export function useViewportRect(
   basis: MaybeRefOrGetter<ReadonlyRect>,
   content: MaybeRefOrGetter<ReadonlyRect>,
   fit: MaybeRefOrGetter<FrameFit>,
-  originX: MaybeRefOrGetter<number | string>,
-  originY: MaybeRefOrGetter<number | string>,
+  originX: MaybeRefOrGetter<OriginXInput>,
+  originY: MaybeRefOrGetter<OriginYInput>,
 ): Readonly<ShallowRef<ReadonlyRect>> {
   const { update, rectRef } = createRectRef()
 
-  const computedOriginX = useQuantityProp(originX, false, 'width', content)
-  const computedOriginY = useQuantityProp(originY, false, 'height', content)
+  const computedOriginX = useOriginX(originX, content)
+  const computedOriginY = useOriginY(originY, content)
 
   watchEffect(() => {
     const basisRect = toValue(basis)

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { createFrame } from '../../src/frame/createFrame'
+import { createFrame } from '../../src/frame'
 
 describe('definite', () => {
   test('should respect definite main offset start', () => {

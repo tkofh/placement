@@ -98,11 +98,13 @@ export class FlexLayout implements Layout {
           ? 1
           : 0
 
+    const alignContent = lines.length === 1 ? 0 : this.#computed.alignContent
+
     const totalLineStretch =
       Math.max(this.#crossSize - totalLinesCrossSize, 0) * stretchContent
 
     const { start, between } = spatialOffsets(
-      this.#computed.alignContent,
+      alignContent,
       this.#crossSize - totalLinesCrossSize + totalLineStretch,
       this.#crossGap,
       lines.length,

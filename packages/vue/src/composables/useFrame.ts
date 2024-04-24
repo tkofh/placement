@@ -1,9 +1,12 @@
-import { Frame, type FrameOptions } from 'placement/Frame'
-import type { Rect } from 'placement/Rect'
+import { createFrame } from 'placement/frame'
+import type { FrameOptions } from 'placement/frame'
+import type { ReadonlyRect } from 'placement/rect'
 import {
   type MaybeRefOrGetter,
   type Ref,
   inject,
+  onBeforeUnmount,
+  onBeforeUpdate,
   provide,
   toValue,
   watch,
@@ -11,11 +14,13 @@ import {
 } from 'vue'
 import { ParentFrameSymbol, ParentRectSymbol } from '../internal/injections'
 import { frameRectRef } from '../utils/frameRectRef'
-import { useChildIndex } from './useChildIndex'
+import { registerIndexParent, useChildIndex } from './useChildIndex'
 
 export function useFrame(
+  layout: 'absolute' | 'flex',
   options: MaybeRefOrGetter<FrameOptions>,
-): Readonly<Ref<Readonly<Rect>>> {
+  isLeaf: boolean,
+): Readonly<Ref<Readonly<ReadonlyRect>>> {
   const parentFrame = inject(ParentFrameSymbol, null)
 
   if (parentFrame === null) {
@@ -24,25 +29,37 @@ export function useFrame(
 
   const index = useChildIndex()
 
-  const frame = new Frame()
+  registerIndexParent()
+
+  const frame = createFrame({ layout })
 
   watch(
     index,
-    (current, previous) => {
-      if (previous == null || current > previous) {
+    (current) => {
+      if (current > -1) {
         parentFrame.insertAt(frame, current)
+        parentFrame.update()
       }
     },
     { immediate: true },
   )
 
-  provide(ParentFrameSymbol, frame)
+  onBeforeUpdate(() => {
+    frame.update()
+  })
 
   watchEffect(() => {
-    frame.configure(toValue(options))
+    frame.assign(toValue(options))
+  })
+
+  onBeforeUnmount(() => {
+    parentFrame.removeChild(frame)
+    parentFrame.update()
   })
 
   const rect = frameRectRef(frame)
+
+  provide(ParentFrameSymbol, isLeaf ? null : frame)
 
   provide(ParentRectSymbol, rect)
 

@@ -1,85 +1,61 @@
 import {
-  type ComponentInternalInstance,
   type InjectionKey,
   type Ref,
-  type VNode,
   customRef,
   getCurrentInstance,
   inject,
   onBeforeUnmount,
+  onBeforeUpdate,
+  onMounted,
   provide,
+  shallowRef,
+  watch,
 } from 'vue'
 
 interface ChildIndexAPI {
-  register: (uid: number) => Readonly<Ref<number>>
-  remove: (uid: number) => void
-}
-
-const ParentSymbol = Symbol('Parent') as InjectionKey<ChildIndexAPI>
-
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: necessary tree traversal
-function updateIndexes(
-  states: Map<number, IndexInternalState>,
-  vm: ComponentInternalInstance,
-) {
-  const subtree = vm.subTree
-
-  const found = new Set<number>()
-
-  let index = 0
-
-  const vnodes: Array<VNode> = [subtree]
-  while (vnodes.length > 0) {
-    const vnode = vnodes.pop() as VNode
-
-    if (vnode.component !== null) {
-      const uid = vnode.component.uid
-      if (found.has(uid)) {
-        continue
-      }
-
-      const state = states.get(uid)
-      if (state == null) {
-        continue
-      }
-
-      found.add(uid)
-      if (state.value !== index) {
-        state.value = index
-        state.trigger()
-      }
-      index++
-    }
-
-    if (found.size === states.size) {
-      break
-    }
-
-    if (Array.isArray(vnode.children)) {
-      for (const child of vnode.children.flat()) {
-        if (
-          typeof child === 'object' &&
-          child != null &&
-          !Array.isArray(child)
-        ) {
-          vnodes.unshift(child)
-        }
-      }
-    }
-  }
-
-  for (const [uid, state] of states) {
-    if (!found.has(uid)) {
-      state.value = -1
-      state.trigger()
-      states.delete(uid)
-    }
-  }
+  register: (node: Ref<Node | null>) => Readonly<Ref<number>>
+  remove: (index: number) => void
 }
 
 interface IndexInternalState {
   trigger: () => void
   value: number
+}
+
+const ParentSymbol = Symbol('Parent') as InjectionKey<ChildIndexAPI>
+
+function useVmEl() {
+  const vm = getCurrentInstance()
+
+  if (vm == null) {
+    throw new Error('useVmEl must be called within a setup function')
+  }
+
+  const el = shallowRef<Node | null>(null)
+
+  onMounted(() => {
+    el.value = vm.vnode.el as Node
+  })
+  onBeforeUpdate(() => {
+    el.value = vm.vnode.el as Node
+  })
+  onBeforeUnmount(() => {
+    el.value = null
+  })
+
+  return el
+}
+
+function getNodeIndex(node: Node, orderedNodes: Array<Node>): number {
+  for (const [index, orderedNode] of orderedNodes.entries()) {
+    if (
+      orderedNode.compareDocumentPosition(node) &
+      Node.DOCUMENT_POSITION_PRECEDING
+    ) {
+      return index
+    }
+  }
+  return orderedNodes.length
 }
 
 export function registerIndexParent() {
@@ -91,45 +67,90 @@ export function registerIndexParent() {
     )
   }
 
-  const triggers = new Map<number, IndexInternalState>()
+  const triggers = new Map<Node, IndexInternalState>()
 
-  const register = (uid: number) => {
-    const index = customRef((track, trigger) => {
-      const state: IndexInternalState = {
-        trigger,
-        value: -1,
-      }
-      triggers.set(uid, state)
+  let register: (node: Ref<Node | null>) => Readonly<Ref<number>>
+  let remove: (index: number) => void
 
-      return {
-        get() {
-          track()
-          return state.value
-        },
-        set() {
-          throw new Error('Readonly')
-        },
-      }
+  let autoIndex = 0
+
+  if (import.meta.server) {
+    register = () => {
+      return shallowRef(autoIndex++) as Readonly<Ref<number>>
+    }
+    remove = () => {}
+  } else {
+    let isMounted = false
+    onMounted(() => {
+      isMounted = true
     })
 
-    updateIndexes(triggers, vm)
+    const orderedNodes: Array<Node> = []
 
-    return index
-  }
-
-  const remove = (uid: number) => {
-    const removed = triggers.get(uid)
-    if (removed == null) {
-      return
-    }
-
-    triggers.delete(uid)
-
-    for (const state of triggers.values()) {
-      if (state.value > removed.value) {
-        state.value--
+    const shiftIndexes = (index: number, delta: number) => {
+      for (const node of orderedNodes.slice(index + 1)) {
+        const state = triggers.get(node)
+        if (state == null) {
+          continue
+        }
+        state.value += delta
         state.trigger()
       }
+    }
+
+    const insert = (node: Node) => {
+      if (isMounted) {
+        const state = triggers.get(node)
+        if (state == null) {
+          return
+        }
+
+        const index = getNodeIndex(node, orderedNodes)
+
+        orderedNodes.splice(index, 0, node)
+        if (index < orderedNodes.length - 1 && !isMounted) {
+          shiftIndexes(index, 1)
+        }
+
+        state.value = index
+        state.trigger()
+      } else {
+        orderedNodes.push(node)
+      }
+    }
+    remove = (index: number) => {
+      orderedNodes.splice(index, 1)
+      if (index < orderedNodes.length) {
+        shiftIndexes(index, -1)
+      }
+    }
+
+    register = (node: Ref<Node | null>) => {
+      return customRef((track, trigger) => {
+        const state: IndexInternalState = {
+          trigger,
+          value: isMounted ? -1 : autoIndex++,
+        }
+        const stop = watch(
+          node,
+          (node) => {
+            if (node) {
+              triggers.set(node, state)
+              insert(node)
+              stop()
+            }
+          },
+          { immediate: true },
+        )
+
+        return {
+          get() {
+            track()
+            return state.value
+          },
+          set() {},
+        }
+      })
     }
   }
 
@@ -137,23 +158,17 @@ export function registerIndexParent() {
 }
 
 export function useChildIndex() {
-  const vm = getCurrentInstance()
+  const el = useVmEl()
 
-  if (vm == null) {
-    throw new Error('useChildIndex must be called within a setup function')
-  }
+  const parent = inject(ParentSymbol, null)
 
-  const api = inject(ParentSymbol, null)
-
-  if (api === null) {
+  if (parent === null) {
     throw new Error('No parent index found')
   }
 
-  const uid = vm.uid
-  const index = api.register(uid)
-
+  const index = parent.register(el)
   onBeforeUnmount(() => {
-    api.remove(uid)
+    parent.remove(index.value)
   })
 
   return index

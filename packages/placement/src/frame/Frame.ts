@@ -12,12 +12,14 @@ import {
   type AutoNoneLengthPercentNegativeInput,
   type AutoRatioInput,
   type AutoScalarNumberInput,
+  type FrameOptions,
   FrameProperties,
   type LengthPercentNegativeInput,
   type NoneLengthPercentInput,
   type NoneNumberInput,
   type ScalarNumberInput,
 } from './FrameProperties'
+import { updateFrame } from './updateFrame'
 
 const FRAME_STATE = {
   idle: 0,
@@ -32,7 +34,10 @@ export class Frame {
   readonly #emitter = new Emitter<{ updated: never }>()
   readonly #rect = new Rect()
   readonly #properties = new FrameProperties()
-  readonly #computed = new ComputedFrameProperties(this.#properties, this.#rect)
+  readonly #computed = new ComputedFrameProperties(
+    this.#properties,
+    this.#rect.readonly,
+  )
   readonly #innerRect = new FrameInnerRect(this.#rect, this.#computed)
   readonly #node = new FrameNode(this)
   #state: FrameState = FRAME_STATE.idle
@@ -62,121 +67,143 @@ export class Frame {
   get width(): AutoLengthPercentInput {
     return this.#properties.width.value
   }
-  set width(value: AutoLengthPercentInput) {
-    const width = this.#properties.width
-    if (width.value !== value) {
-      width.value = value
-      this.#configUpdated()
+  set width(value: AutoLengthPercentInput | undefined) {
+    if (value !== undefined) {
+      const width = this.#properties.width
+      if (width.value !== value) {
+        width.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get height(): AutoLengthPercentInput {
     return this.#properties.height.value
   }
-  set height(value: AutoLengthPercentInput) {
-    const height = this.#properties.height
-    if (height.value !== value) {
-      height.value = value
-      this.#configUpdated()
+  set height(value: AutoLengthPercentInput | undefined) {
+    if (value !== undefined) {
+      const height = this.#properties.height
+      if (height.value !== value) {
+        height.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get aspectRatio(): AutoRatioInput {
     return this.#properties.aspectRatio.value
   }
-  set aspectRatio(value: AutoRatioInput) {
-    const aspectRatio = this.#properties.aspectRatio
-    if (aspectRatio.value !== value) {
-      aspectRatio.value = value
-      this.#configUpdated()
+  set aspectRatio(value: AutoRatioInput | undefined) {
+    if (value !== undefined) {
+      const aspectRatio = this.#properties.aspectRatio
+      if (aspectRatio.value !== value) {
+        aspectRatio.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get minWidth(): NoneLengthPercentInput {
     return this.#properties.minWidth.value
   }
-  set minWidth(value: NoneLengthPercentInput) {
-    const minWidth = this.#properties.minWidth
-    if (minWidth.value !== value) {
-      minWidth.value = value
-      this.#configUpdated()
+  set minWidth(value: NoneLengthPercentInput | undefined) {
+    if (value !== undefined) {
+      const minWidth = this.#properties.minWidth
+      if (minWidth.value !== value) {
+        minWidth.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get minHeight(): NoneLengthPercentInput {
     return this.#properties.minHeight.value
   }
-  set minHeight(value: NoneLengthPercentInput) {
-    const minHeight = this.#properties.minHeight
-    if (minHeight.value !== value) {
-      minHeight.value = value
-      this.#configUpdated()
+  set minHeight(value: NoneLengthPercentInput | undefined) {
+    if (value !== undefined) {
+      const minHeight = this.#properties.minHeight
+      if (minHeight.value !== value) {
+        minHeight.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get maxWidth(): NoneLengthPercentInput {
     return this.#properties.maxWidth.value
   }
-  set maxWidth(value: NoneLengthPercentInput) {
-    const maxWidth = this.#properties.maxWidth
-    if (maxWidth.value !== value) {
-      maxWidth.value = value
-      this.#configUpdated()
+  set maxWidth(value: NoneLengthPercentInput | undefined) {
+    if (value !== undefined) {
+      const maxWidth = this.#properties.maxWidth
+      if (maxWidth.value !== value) {
+        maxWidth.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get maxHeight(): NoneLengthPercentInput {
     return this.#properties.maxHeight.value
   }
-  set maxHeight(value: NoneLengthPercentInput) {
-    const maxHeight = this.#properties.maxHeight
-    if (maxHeight.value !== value) {
-      maxHeight.value = value
-      this.#configUpdated()
+  set maxHeight(value: NoneLengthPercentInput | undefined) {
+    if (value !== undefined) {
+      const maxHeight = this.#properties.maxHeight
+      if (maxHeight.value !== value) {
+        maxHeight.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get offsetTop(): AutoNoneLengthPercentNegativeInput {
     return this.#properties.offsetTop.value
   }
-  set offsetTop(value: AutoNoneLengthPercentNegativeInput) {
-    const offsetTop = this.#properties.offsetTop
-    if (offsetTop.value !== value) {
-      offsetTop.value = value
-      this.#configUpdated()
+  set offsetTop(value: AutoNoneLengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      const offsetTop = this.#properties.offsetTop
+      if (offsetTop.value !== value) {
+        offsetTop.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get offsetRight(): AutoNoneLengthPercentNegativeInput {
     return this.#properties.offsetRight.value
   }
-  set offsetRight(value: AutoNoneLengthPercentNegativeInput) {
-    const offsetRight = this.#properties.offsetRight
-    if (offsetRight.value !== value) {
-      offsetRight.value = value
-      this.#configUpdated()
+  set offsetRight(value: AutoNoneLengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      const offsetRight = this.#properties.offsetRight
+      if (offsetRight.value !== value) {
+        offsetRight.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get offsetBottom(): AutoNoneLengthPercentNegativeInput {
     return this.#properties.offsetBottom.value
   }
-  set offsetBottom(value: AutoNoneLengthPercentNegativeInput) {
-    const offsetBottom = this.#properties.offsetBottom
-    if (offsetBottom.value !== value) {
-      offsetBottom.value = value
-      this.#configUpdated()
+  set offsetBottom(value: AutoNoneLengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      const offsetBottom = this.#properties.offsetBottom
+      if (offsetBottom.value !== value) {
+        offsetBottom.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get offsetLeft(): AutoNoneLengthPercentNegativeInput {
     return this.#properties.offsetLeft.value
   }
-  set offsetLeft(value: AutoNoneLengthPercentNegativeInput) {
-    const offsetLeft = this.#properties.offsetLeft
-    if (offsetLeft.value !== value) {
-      offsetLeft.value = value
-      this.#configUpdated()
+  set offsetLeft(value: AutoNoneLengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      const offsetLeft = this.#properties.offsetLeft
+      if (offsetLeft.value !== value) {
+        offsetLeft.value = value
+        this.#configUpdated()
+      }
     }
   }
 
@@ -188,9 +215,11 @@ export class Frame {
     }
     return 'mixed'
   }
-  set offsetX(value: AutoNoneLengthPercentNegativeInput) {
-    this.offsetLeft = value
-    this.offsetRight = value
+  set offsetX(value: AutoNoneLengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      this.offsetLeft = value
+      this.offsetRight = value
+    }
   }
 
   get offsetY(): AutoNoneLengthPercentNegativeInput | 'mixed' {
@@ -201,9 +230,11 @@ export class Frame {
     }
     return 'mixed'
   }
-  set offsetY(value: AutoNoneLengthPercentNegativeInput) {
-    this.offsetTop = value
-    this.offsetBottom = value
+  set offsetY(value: AutoNoneLengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      this.offsetTop = value
+      this.offsetBottom = value
+    }
   }
 
   get offset(): AutoNoneLengthPercentNegativeInput | 'mixed' {
@@ -214,52 +245,62 @@ export class Frame {
     }
     return 'mixed'
   }
-  set offset(value: AutoNoneLengthPercentNegativeInput) {
-    this.offsetX = value
-    this.offsetY = value
+  set offset(value: AutoNoneLengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      this.offsetX = value
+      this.offsetY = value
+    }
   }
 
   get insetTop(): LengthPercentNegativeInput {
     return this.#properties.insetTop.value
   }
-  set insetTop(value: LengthPercentNegativeInput) {
-    const insetTop = this.#properties.insetTop
-    if (insetTop.value !== value) {
-      insetTop.value = value
-      this.#configUpdated()
+  set insetTop(value: LengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      const insetTop = this.#properties.insetTop
+      if (insetTop.value !== value) {
+        insetTop.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get insetRight(): LengthPercentNegativeInput {
     return this.#properties.insetRight.value
   }
-  set insetRight(value: LengthPercentNegativeInput) {
-    const insetRight = this.#properties.insetRight
-    if (insetRight.value !== value) {
-      insetRight.value = value
-      this.#configUpdated()
+  set insetRight(value: LengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      const insetRight = this.#properties.insetRight
+      if (insetRight.value !== value) {
+        insetRight.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get insetBottom(): LengthPercentNegativeInput {
     return this.#properties.insetBottom.value
   }
-  set insetBottom(value: LengthPercentNegativeInput) {
-    const insetBottom = this.#properties.insetBottom
-    if (insetBottom.value !== value) {
-      insetBottom.value = value
-      this.#configUpdated()
+  set insetBottom(value: LengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      const insetBottom = this.#properties.insetBottom
+      if (insetBottom.value !== value) {
+        insetBottom.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get insetLeft(): LengthPercentNegativeInput {
     return this.#properties.insetLeft.value
   }
-  set insetLeft(value: LengthPercentNegativeInput) {
-    const insetLeft = this.#properties.insetLeft
-    if (insetLeft.value !== value) {
-      insetLeft.value = value
-      this.#configUpdated()
+  set insetLeft(value: LengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      const insetLeft = this.#properties.insetLeft
+      if (insetLeft.value !== value) {
+        insetLeft.value = value
+        this.#configUpdated()
+      }
     }
   }
 
@@ -271,9 +312,11 @@ export class Frame {
     }
     return 'mixed'
   }
-  set insetX(value: LengthPercentNegativeInput) {
-    this.insetLeft = value
-    this.insetRight = value
+  set insetX(value: LengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      this.insetLeft = value
+      this.insetRight = value
+    }
   }
 
   get insetY(): LengthPercentNegativeInput | 'mixed' {
@@ -284,9 +327,11 @@ export class Frame {
     }
     return 'mixed'
   }
-  set insetY(value: LengthPercentNegativeInput) {
-    this.insetTop = value
-    this.insetBottom = value
+  set insetY(value: LengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      this.insetTop = value
+      this.insetBottom = value
+    }
   }
 
   get inset(): LengthPercentNegativeInput | 'mixed' {
@@ -297,30 +342,36 @@ export class Frame {
     }
     return 'mixed'
   }
-  set inset(value: LengthPercentNegativeInput) {
-    this.insetX = value
-    this.insetY = value
+  set inset(value: LengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      this.insetX = value
+      this.insetY = value
+    }
   }
 
   get translateX(): LengthPercentNegativeInput {
     return this.#properties.translateX.value
   }
-  set translateX(value: LengthPercentNegativeInput) {
-    const translateX = this.#properties.translateX
-    if (translateX.value !== value) {
-      translateX.value = value
-      this.#configUpdated()
+  set translateX(value: LengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      const translateX = this.#properties.translateX
+      if (translateX.value !== value) {
+        translateX.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get translateY(): LengthPercentNegativeInput {
     return this.#properties.translateY.value
   }
-  set translateY(value: LengthPercentNegativeInput) {
-    const translateY = this.#properties.translateY
-    if (translateY.value !== value) {
-      translateY.value = value
-      this.#configUpdated()
+  set translateY(value: LengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      const translateY = this.#properties.translateY
+      if (translateY.value !== value) {
+        translateY.value = value
+        this.#configUpdated()
+      }
     }
   }
 
@@ -332,30 +383,36 @@ export class Frame {
     }
     return 'mixed'
   }
-  set translate(value: LengthPercentNegativeInput) {
-    this.translateX = value
-    this.translateY = value
+  set translate(value: LengthPercentNegativeInput | undefined) {
+    if (value !== undefined) {
+      this.translateX = value
+      this.translateY = value
+    }
   }
 
   get grow(): NoneNumberInput {
     return this.#properties.grow.value
   }
-  set grow(value: NoneNumberInput) {
-    const grow = this.#properties.grow
-    if (grow.value !== value) {
-      grow.value = value
-      this.#configUpdated()
+  set grow(value: NoneNumberInput | undefined) {
+    if (value !== undefined) {
+      const grow = this.#properties.grow
+      if (grow.value !== value) {
+        grow.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get shrink(): NoneNumberInput {
     return this.#properties.shrink.value
   }
-  set shrink(value: NoneNumberInput) {
-    const shrink = this.#properties.shrink
-    if (shrink.value !== value) {
-      shrink.value = value
-      this.#configUpdated()
+  set shrink(value: NoneNumberInput | undefined) {
+    if (value !== undefined) {
+      const shrink = this.#properties.shrink
+      if (shrink.value !== value) {
+        shrink.value = value
+        this.#configUpdated()
+      }
     }
   }
 
@@ -366,88 +423,79 @@ export class Frame {
     | 'row'
     | 'row-reverse'
     | 'column'
-    | 'column-reverse') {
-    const flexDirection = this.#properties.flexDirection
-    if (flexDirection.value !== value) {
-      flexDirection.value = value
-      this.#configUpdated()
+    | 'column-reverse'
+    | undefined) {
+    if (value !== undefined) {
+      const flexDirection = this.#properties.flexDirection
+      if (flexDirection.value !== value) {
+        flexDirection.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get flexWrap(): 'nowrap' | 'wrap' | 'wrap-reverse' {
     return this.#properties.flexWrap.value
   }
-  set flexWrap(value: 'nowrap' | 'wrap' | 'wrap-reverse') {
-    const flexWrap = this.#properties.flexWrap
-    if (flexWrap.value !== value) {
-      flexWrap.value = value
-      this.#configUpdated()
+  set flexWrap(value: 'nowrap' | 'wrap' | 'wrap-reverse' | undefined) {
+    if (value !== undefined) {
+      const flexWrap = this.#properties.flexWrap
+      if (flexWrap.value !== value) {
+        flexWrap.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get justifyContent(): ScalarNumberInput {
     return this.#properties.justifyContent.value
   }
-  set justifyContent(value: ScalarNumberInput) {
-    const justifyContent = this.#properties.justifyContent
-    if (justifyContent.value !== value) {
-      justifyContent.value = value
-      this.#configUpdated()
+  set justifyContent(value: ScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      const justifyContent = this.#properties.justifyContent
+      if (justifyContent.value !== value) {
+        justifyContent.value = value
+        this.#configUpdated()
+      }
     }
   }
-
-  // get justifyItems(): ScalarNumberInput {
-  //   return this.#property.justifyItems.value
-  // }
-  // set justifyItems(value: ScalarNumberInput) {
-  //   const justifyItems = this.#property.justifyItems
-  //   if (justifyItems.value !== value) {
-  //     justifyItems.value = value
-  //     this.#configUpdated()
-  //   }
-  // }
-  //
-  // get justifySelf(): ScalarNumberInput {
-  //   return this.#property.justifySelf.value
-  // }
-  // set justifySelf(value: ScalarNumberInput) {
-  //   const justifySelf = this.#property.justifySelf
-  //   if (justifySelf.value !== value) {
-  //     justifySelf.value = value
-  //     this.#configUpdated()
-  //   }
-  // }
 
   get alignItems(): ScalarNumberInput {
     return this.#properties.alignItems.value
   }
-  set alignItems(value: ScalarNumberInput) {
-    const alignItems = this.#properties.alignItems
-    if (alignItems.value !== value) {
-      alignItems.value = value
-      this.#configUpdated()
+  set alignItems(value: ScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      const alignItems = this.#properties.alignItems
+      if (alignItems.value !== value) {
+        alignItems.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get alignContent(): ScalarNumberInput {
     return this.#properties.alignContent.value
   }
-  set alignContent(value: ScalarNumberInput) {
-    const alignContent = this.#properties.alignContent
-    if (alignContent.value !== value) {
-      alignContent.value = value
-      this.#configUpdated()
+  set alignContent(value: ScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      const alignContent = this.#properties.alignContent
+      if (alignContent.value !== value) {
+        alignContent.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get alignSelf(): AutoScalarNumberInput {
     return this.#properties.alignSelf.value
   }
-  set alignSelf(value: AutoScalarNumberInput) {
-    const alignSelf = this.#properties.alignSelf
-    if (alignSelf.value !== value) {
-      alignSelf.value = value
-      this.#configUpdated()
+  set alignSelf(value: AutoScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      const alignSelf = this.#properties.alignSelf
+      if (alignSelf.value !== value) {
+        alignSelf.value = value
+        this.#configUpdated()
+      }
     }
   }
 
@@ -459,56 +507,36 @@ export class Frame {
     }
     return 'mixed'
   }
-  set placeContent(value: ScalarNumberInput) {
-    this.justifyContent = value
-    this.alignContent = value
+  set placeContent(value: ScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      this.justifyContent = value
+      this.alignContent = value
+    }
   }
-
-  // get placeItems(): ScalarNumberInput | 'mixed' {
-  //   const justifyItems = this.justifyItems
-  //   const alignItems = this.alignItems
-  //   if (justifyItems === alignItems) {
-  //     return justifyItems
-  //   }
-  //   return 'mixed'
-  // }
-  // set placeItems(value: ScalarNumberInput) {
-  //   this.justifyItems = value
-  //   this.alignItems = value
-  // }
-
-  // get placeSelf(): ScalarNumberInput | 'mixed' {
-  //   const justifySelf = this.justifySelf
-  //   const alignSelf = this.alignSelf
-  //   if (justifySelf === alignSelf) {
-  //     return justifySelf
-  //   }
-  //   return 'mixed'
-  // }
-  // set placeSelf(value: ScalarNumberInput) {
-  //   this.justifySelf = value
-  //   this.alignSelf = value
-  // }
 
   get rowGap(): NoneLengthPercentInput {
     return this.#properties.rowGap.value
   }
-  set rowGap(value: NoneLengthPercentInput) {
-    const rowGap = this.#properties.rowGap
-    if (rowGap.value !== value) {
-      rowGap.value = value
-      this.#configUpdated()
+  set rowGap(value: NoneLengthPercentInput | undefined) {
+    if (value !== undefined) {
+      const rowGap = this.#properties.rowGap
+      if (rowGap.value !== value) {
+        rowGap.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get columnGap(): NoneLengthPercentInput {
     return this.#properties.columnGap.value
   }
-  set columnGap(value: NoneLengthPercentInput) {
-    const columnGap = this.#properties.columnGap
-    if (columnGap.value !== value) {
-      columnGap.value = value
-      this.#configUpdated()
+  set columnGap(value: NoneLengthPercentInput | undefined) {
+    if (value !== undefined) {
+      const columnGap = this.#properties.columnGap
+      if (columnGap.value !== value) {
+        columnGap.value = value
+        this.#configUpdated()
+      }
     }
   }
 
@@ -520,30 +548,36 @@ export class Frame {
     }
     return 'mixed'
   }
-  set gap(value: NoneLengthPercentInput) {
-    this.rowGap = value
-    this.columnGap = value
+  set gap(value: NoneLengthPercentInput | undefined) {
+    if (value !== undefined) {
+      this.rowGap = value
+      this.columnGap = value
+    }
   }
 
   get justifyContentSpace(): ScalarNumberInput {
     return this.#properties.justifyContentSpace.value
   }
-  set justifyContentSpace(value: ScalarNumberInput) {
-    const justifyContentSpace = this.#properties.justifyContentSpace
-    if (justifyContentSpace.value !== value) {
-      justifyContentSpace.value = value
-      this.#configUpdated()
+  set justifyContentSpace(value: ScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      const justifyContentSpace = this.#properties.justifyContentSpace
+      if (justifyContentSpace.value !== value) {
+        justifyContentSpace.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get alignContentSpace(): ScalarNumberInput {
     return this.#properties.alignContentSpace.value
   }
-  set alignContentSpace(value: ScalarNumberInput) {
-    const alignContentSpace = this.#properties.alignContentSpace
-    if (alignContentSpace.value !== value) {
-      alignContentSpace.value = value
-      this.#configUpdated()
+  set alignContentSpace(value: ScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      const alignContentSpace = this.#properties.alignContentSpace
+      if (alignContentSpace.value !== value) {
+        alignContentSpace.value = value
+        this.#configUpdated()
+      }
     }
   }
 
@@ -555,30 +589,36 @@ export class Frame {
     }
     return 'mixed'
   }
-  set placeContentSpace(value: ScalarNumberInput) {
-    this.justifyContentSpace = value
-    this.alignContentSpace = value
+  set placeContentSpace(value: ScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      this.justifyContentSpace = value
+      this.alignContentSpace = value
+    }
   }
 
   get justifyContentSpaceOuter(): ScalarNumberInput {
     return this.#properties.justifyContentSpaceOuter.value
   }
-  set justifyContentSpaceOuter(value: ScalarNumberInput) {
-    const justifyContentSpaceOuter = this.#properties.justifyContentSpaceOuter
-    if (justifyContentSpaceOuter.value !== value) {
-      justifyContentSpaceOuter.value = value
-      this.#configUpdated()
+  set justifyContentSpaceOuter(value: ScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      const justifyContentSpaceOuter = this.#properties.justifyContentSpaceOuter
+      if (justifyContentSpaceOuter.value !== value) {
+        justifyContentSpaceOuter.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get alignContentSpaceOuter(): ScalarNumberInput {
     return this.#properties.alignContentSpaceOuter.value
   }
-  set alignContentSpaceOuter(value: ScalarNumberInput) {
-    const alignContentSpaceOuter = this.#properties.alignContentSpaceOuter
-    if (alignContentSpaceOuter.value !== value) {
-      alignContentSpaceOuter.value = value
-      this.#configUpdated()
+  set alignContentSpaceOuter(value: ScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      const alignContentSpaceOuter = this.#properties.alignContentSpaceOuter
+      if (alignContentSpaceOuter.value !== value) {
+        alignContentSpaceOuter.value = value
+        this.#configUpdated()
+      }
     }
   }
 
@@ -590,44 +630,56 @@ export class Frame {
     }
     return 'mixed'
   }
-  set placeContentSpaceOuter(value: ScalarNumberInput) {
-    this.justifyContentSpaceOuter = value
-    this.alignContentSpaceOuter = value
+  set placeContentSpaceOuter(value: ScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      this.justifyContentSpaceOuter = value
+      this.alignContentSpaceOuter = value
+    }
   }
 
   get stretchContent(): AutoScalarNumberInput {
     return this.#properties.stretchContent.value
   }
-  set stretchContent(value: AutoScalarNumberInput) {
-    const stretchContent = this.#properties.stretchContent
-    if (stretchContent.value !== value) {
-      stretchContent.value = value
-      this.#configUpdated()
+  set stretchContent(value: AutoScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      const stretchContent = this.#properties.stretchContent
+      if (stretchContent.value !== value) {
+        stretchContent.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get stretchItems(): ScalarNumberInput {
     return this.#properties.stretchItems.value
   }
-  set stretchItems(value: ScalarNumberInput) {
-    const stretchItems = this.#properties.stretchItems
-    if (stretchItems.value !== value) {
-      stretchItems.value = value
-      this.#configUpdated()
+  set stretchItems(value: ScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      const stretchItems = this.#properties.stretchItems
+      if (stretchItems.value !== value) {
+        stretchItems.value = value
+        this.#configUpdated()
+      }
     }
   }
 
   get stretchSelf(): AutoScalarNumberInput {
     return this.#properties.stretchSelf.value
   }
-  set stretchSelf(value: AutoScalarNumberInput) {
-    const stretchSelf = this.#properties.stretchSelf
-    if (stretchSelf.value !== value) {
-      stretchSelf.value = value
-      this.#configUpdated()
+  set stretchSelf(value: AutoScalarNumberInput | undefined) {
+    if (value !== undefined) {
+      const stretchSelf = this.#properties.stretchSelf
+      if (stretchSelf.value !== value) {
+        stretchSelf.value = value
+        this.#configUpdated()
+      }
     }
   }
   //endregion
+
+  get [Symbol.toStringTag]() {
+    return 'Frame'
+  }
 
   get rect(): ReadonlyRect {
     if (this.root.#state !== FRAME_STATE.updating) {
@@ -702,6 +754,18 @@ export class Frame {
     }
   }
 
+  set<Key extends keyof FrameOptions>(key: Key, value: FrameOptions[Key]) {
+    ;(this as FrameOptions)[key] = value
+  }
+
+  assign(options: Partial<FrameOptions>) {
+    updateFrame(this, options)
+  }
+
+  serialize() {
+    return this.#properties.serialize()
+  }
+
   #markNeedsUpdate() {
     if (this.root.#state === FRAME_STATE.updating) {
       throw new Error('Cannot mark needsUpdate while updating')
@@ -751,9 +815,9 @@ export class Frame {
       return
     }
 
-    const skips = this.#node.skips
+    const skips = FrameNode.skips
 
-    const descendants = this.#node.descendants(this.#node.traversal.depth)
+    const descendants = this.#node.descendants(FrameNode.traversal.depth)
     let descendant = descendants.next()
     while (!descendant.done) {
       const { frame } = descendant.value
@@ -774,6 +838,8 @@ export class Frame {
 
   #calculate() {
     if (this.#node.size === 1) {
+      this.#emitter.emit('updated')
+
       return
     }
 

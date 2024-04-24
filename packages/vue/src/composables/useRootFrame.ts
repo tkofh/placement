@@ -1,5 +1,6 @@
-import { Frame, type FrameOptions } from 'placement'
-import type { Rect } from 'placement/Rect'
+import { createFrame } from 'placement'
+import type { FrameOptions } from 'placement/frame'
+import type { ReadonlyRect } from 'placement/rect'
 import {
   type MaybeRefOrGetter,
   type Ref,
@@ -16,20 +17,44 @@ import {
 import { frameRectRef } from '../utils/frameRectRef'
 import { registerIndexParent } from './useChildIndex'
 
+type RootFrameOptions = Pick<
+  FrameOptions,
+  | 'width'
+  | 'height'
+  | 'aspectRatio'
+  | 'minWidth'
+  | 'minHeight'
+  | 'maxWidth'
+  | 'maxHeight'
+>
+
 export function useRootFrame(
-  options: MaybeRefOrGetter<FrameOptions>,
-): Readonly<Ref<Readonly<Rect>>> {
-  const frame = new Frame()
+  domRect: MaybeRefOrGetter<ReadonlyRect>,
+  options: MaybeRefOrGetter<RootFrameOptions>,
+): Readonly<Ref<ReadonlyRect>> {
+  const root = createFrame({ layout: 'absolute' })
+  watchEffect(() => {
+    const { width, height } = toValue(domRect)
+    root.assign({ width, height })
+    root.update()
+  })
+
+  const frame = root.appendChild(createFrame({ layout: 'absolute' }))
 
   provide(ParentFrameSymbol, frame)
   registerIndexParent()
 
   watchEffect(() => {
-    frame.configure(toValue(options))
+    const frameOptions = toValue(options)
+    frame.assign({
+      ...frameOptions,
+      width: frameOptions.width ?? '100%',
+      height: frameOptions.height ?? '100%',
+    })
   })
 
   onBeforeUpdate(() => {
-    frame.update()
+    root.update()
   })
 
   const rect = frameRectRef(frame)

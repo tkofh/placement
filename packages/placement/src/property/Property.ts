@@ -1,5 +1,7 @@
+import type { ReadonlyRect } from '../rect'
 import { DATA_TYPES, DEFAULT_CONFIG, DEFAULT_PARSE_RESULT } from './constants'
 import type {
+  ComputedOutput,
   Input,
   LengthUnit,
   ParseResult,
@@ -51,6 +53,33 @@ export class Property<const Config extends Partial<PropConfig<string>>> {
 
   get parsed(): TypedParseResult<Config> {
     return this.#parsed as never
+  }
+
+  getComputed(
+    container?: ReadonlyRect,
+    viewport?: ReadonlyRect,
+  ): ComputedOutput<Config> {
+    let result: string | number
+    if (this.#parsed.type === DATA_TYPES.keyword) {
+      result = this.#parsed.keyword
+    } else if (this.#parsed.type === DATA_TYPES.percentage) {
+      const basis =
+        (this.#config.percentage === 'width'
+          ? container?.width
+          : container?.height) ?? 0
+      result = (this.#parsed.value * basis) / 100
+    } else if (this.#parsed.type === DATA_TYPES.length) {
+      result = this.#computeLength(
+        this.#parsed.value,
+        this.#parsed.unit,
+        container,
+        viewport,
+      )
+    } else {
+      result = this.#parsed.value
+    }
+
+    return result as never
   }
 
   #parse(value: string | number) {
@@ -168,7 +197,7 @@ export class Property<const Config extends Partial<PropConfig<string>>> {
     }
 
     if (
-      !Number.isNaN(input) &&
+      !Number.isNaN(numericInput) &&
       (this.#config.allowNegative || numericInput >= 0)
     ) {
       this.#parsed.type = DATA_TYPES.percentage
@@ -231,10 +260,43 @@ export class Property<const Config extends Partial<PropConfig<string>>> {
 
     return parsed
   }
-}
 
-export function createProperty<
-  const Config extends Partial<PropConfig<string>>,
->(config: Config, initial: string | number) {
-  return new Property(config, initial)
+  #computeLength(
+    value: number,
+    unit: LengthUnit,
+    container?: ReadonlyRect,
+    viewport?: ReadonlyRect,
+  ): number {
+    const containerWidth = container?.width ?? 0
+    const containerHeight = container?.height ?? 0
+    const viewportWidth = viewport?.width ?? 0
+    const viewportHeight = viewport?.height ?? 0
+
+    if (unit === 'cw') {
+      return (value * containerWidth) / 100
+    }
+    if (unit === 'ch') {
+      return (value * containerHeight) / 100
+    }
+    if (unit === 'vw') {
+      return (value * viewportWidth) / 100
+    }
+    if (unit === 'vh') {
+      return (value * viewportHeight) / 100
+    }
+    if (unit === 'cmin') {
+      return (value * Math.min(containerWidth, containerHeight)) / 100
+    }
+    if (unit === 'cmax') {
+      return (value * Math.max(containerWidth, containerHeight)) / 100
+    }
+    if (unit === 'vmin') {
+      return (value * Math.min(viewportWidth, viewportHeight)) / 100
+    }
+    if (unit === 'vmax') {
+      return (value * Math.max(viewportWidth, viewportHeight)) / 100
+    }
+
+    return value
+  }
 }

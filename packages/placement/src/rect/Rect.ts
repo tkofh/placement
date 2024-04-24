@@ -18,6 +18,9 @@ export class Rect implements MutableRect {
     return this.#x
   }
   set x(value: number) {
+    if (Number.isNaN(value)) {
+      throw new Error('Cannot set rect.x to NaN')
+    }
     this.#x = roundTo(value, this.#precision)
   }
 
@@ -25,6 +28,9 @@ export class Rect implements MutableRect {
     return this.#y
   }
   set y(value: number) {
+    if (Number.isNaN(value)) {
+      throw new Error('Cannot set rect.y to NaN')
+    }
     this.#y = roundTo(value, this.#precision)
   }
 
@@ -32,6 +38,9 @@ export class Rect implements MutableRect {
     return this.#width
   }
   set width(value: number) {
+    if (Number.isNaN(value)) {
+      throw new Error('Cannot set rect.width to NaN')
+    }
     this.#width = Math.max(roundTo(value, this.#precision), 0)
   }
 
@@ -39,6 +48,9 @@ export class Rect implements MutableRect {
     return this.#height
   }
   set height(value: number) {
+    if (Number.isNaN(value)) {
+      throw new Error('Cannot set rect.height to NaN')
+    }
     this.#height = Math.max(roundTo(value, this.#precision), 0)
   }
 

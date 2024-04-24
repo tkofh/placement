@@ -18,7 +18,7 @@ export type Keyword = 'none' | 'auto'
 export interface PropConfig<Keyword extends string> {
   keyword: ReadonlyArray<Keyword> | false
   length: boolean
-  percentage: boolean
+  percentage: 'width' | 'height' | false
   number: boolean
   ratio: boolean
   allowNegative: boolean
@@ -63,24 +63,40 @@ export type TypedParseResult<Config extends Partial<PropConfig<string>>> =
   | NumberParseResult<Config>
   | RatioParseResult<Config>
 
-export type KeywordInput<Config extends Partial<PropConfig<string>>> =
-  Config extends { keyword: ReadonlyArray<infer Keyword> } ? Keyword : never
+export type ExtractKeyword<Config extends Partial<PropConfig<string>>> =
+  Config extends { readonly keyword: ReadonlyArray<infer Keyword> }
+    ? Keyword
+    : never
 export type LengthInput<Config extends Partial<PropConfig<string>>> =
-  Config extends { length: true }
+  Config extends { readonly length: true }
     ? number | `${number}` | `${number}${LengthUnit}`
     : never
 export type PercentageInput<Config extends Partial<PropConfig<string>>> =
-  Config extends { percentage: true } ? number | `${number}%` : never
+  Config extends { readonly percentage: 'width' | 'height' }
+    ? number | `${number}%`
+    : never
 export type NumberInput<Config extends Partial<PropConfig<string>>> =
-  Config extends { number: true } ? number | `${number}` : never
+  Config extends { readonly number: true } ? number | `${number}` : never
 export type RatioInput<Config extends Partial<PropConfig<string>>> =
-  Config extends { ratio: true }
+  Config extends { readonly ratio: true }
     ? number | `${number}` | `${number}${' ' | ''}/${' ' | ''}${number}`
     : never
 
 export type Input<Config extends Partial<PropConfig<string>>> =
-  | KeywordInput<Config>
+  | ExtractKeyword<Config>
   | LengthInput<Config>
   | PercentageInput<Config>
   | NumberInput<Config>
   | RatioInput<Config>
+
+type NumericOutput<Config extends Partial<PropConfig<string>>> = Config extends
+  | { readonly number: true }
+  | { readonly ratio: true }
+  | { readonly percentage: 'width' | 'height' }
+  | { readonly length: true }
+  ? number
+  : never
+
+export type ComputedOutput<Config extends Partial<PropConfig<string>>> =
+  | NumericOutput<Config>
+  | ExtractKeyword<Config>

@@ -5,12 +5,14 @@ export function frameRectRef(frame: Frame) {
   const rect = frame.rect
 
   return customRef((track, trigger) => {
-    frame.on('updated', trigger)
+    frame.onUpdate(() => {
+      trigger()
+    })
 
     return {
       get() {
         track()
-        return rect
+        return { ...rect }
       },
       set() {
         throw new Error('Readonly')
