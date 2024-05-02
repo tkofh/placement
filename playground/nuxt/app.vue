@@ -28,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-const _show = ref(true)
+const show = ref(true)
 </script>
 
 <style>
