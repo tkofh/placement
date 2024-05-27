@@ -7,8 +7,11 @@ import {
   h,
   shallowRef,
 } from 'vue'
+import type {
+  OriginXInput,
+  OriginYInput,
+} from '../composables/properties/origin'
 import { useDomRect } from '../composables/useDomRect'
-import type { OriginXInput, OriginYInput } from '../composables/useProperty'
 import { useRootFrame } from '../composables/useRootFrame'
 import { useViewportRect } from '../composables/useViewportRect'
 import { frameSizingPropDefs } from '../internal/props'

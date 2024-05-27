@@ -1,34 +1,36 @@
 <template>
-<RootFrame fit="contain" max-width="1600" @click="show=!show">
-  <FlexFrame
+  <RootFrame aspect-ratio="16/9" fit="cover">
+    <FlexFrame
       width="100%"
       height="100%"
-      fill="#ccc"
-      gap="20px"
-      flex-wrap="wrap"
-      inset="20px"
+      gap="10px"
       flex-direction="row"
-      align-items="0.5"
-      align-content="0.5"
-  >
-    <BasicFrame width="300" height="400" #default="rect">
-      <rect v-bind="rect" fill="#333" />
-      <text :x="rect.x" :y="rect.y" fill="white">1</text>
-    </BasicFrame>
-    <BasicFrame v-if="show" width="300" height="400" grow="1" #default="rect">
-      <rect v-bind="rect" fill="#333" />
-      <text :x="rect.x" :y="rect.y" fill="white">2</text>
-    </BasicFrame>
-    <BasicFrame width="300" height="400" #default="rect">
-      <rect v-bind="rect" fill="#333" />
-      <text :x="rect.x" :y="rect.y" fill="white">3</text>
-    </BasicFrame>
-  </FlexFrame>
-</RootFrame>
+      flex-wrap="wrap"
+    >
+      <FlexFrame
+        width="100px"
+        height="100px"
+        grow="1"
+        stroke-width="3px"
+        stroke="black"
+        min-width="600px"
+      />
+      <AbsoluteFrame width="200px" height="100px">
+        <AbsoluteFrame width="100%" height="100%" fill="blue" />
+        <GraphicText width="200px" height="100px">Hello World</GraphicText>
+      </AbsoluteFrame>
+    </FlexFrame>
+  </RootFrame>
 </template>
 
 <script setup lang="ts">
-const show = ref(true)
+const show = ref(false)
+
+onMounted(() => {
+  setInterval(() => {
+    show.value = !show.value
+  }, 2000)
+})
 </script>
 
 <style>
@@ -37,8 +39,9 @@ const show = ref(true)
   margin: 0;
   padding: 0;
 }
-svg, body, html {
-  overflow: clip;
+svg,
+body,
+html {
   width: 100dvw;
   height: 100dvh;
 }

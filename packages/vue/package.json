@@ -21,11 +21,6 @@
       "import": "./dist/components/AbsoluteFrame.mjs",
       "types": "./dist/components/AbsoluteFrame.d.ts"
     },
-    "./BasicFrame": {
-      "require": "./dist/components/BasicFrame.cjs",
-      "import": "./dist/components/BasicFrame.mjs",
-      "types": "./dist/components/BasicFrame.d.ts"
-    },
     "./FlexFrame": {
       "require": "./dist/components/FlexFrame.cjs",
       "import": "./dist/components/FlexFrame.mjs",
@@ -35,6 +30,11 @@
       "require": "./dist/components/RootFrame.cjs",
       "import": "./dist/components/RootFrame.mjs",
       "types": "./dist/components/RootFrame.d.ts"
+    },
+    "./GraphicText": {
+      "require": "./dist/components/GraphicText.cjs",
+      "import": "./dist/components/GraphicText.mjs",
+      "types": "./dist/components/GraphicText.d.ts"
     },
     "./useFrame": {
       "require": "./dist/composables/useFrame.cjs",
@@ -67,10 +67,10 @@
     "@nuxt/kit": "^3.11.2",
     "@nuxt/schema": "^3.11.2",
     "placement": "workspace:^",
-    "vue": "^3.4.24"
+    "vue": "^3.4.27"
   },
   "devDependencies": {
-    "@types/node": "^20.12.7",
+    "@types/node": "^20.12.12",
     "typescript": "^5.4.5",
     "unbuild": "^2.0.0"
   }

@@ -10,9 +10,13 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@coily/vue": "^0.8.0",
+    "@nuxt/eslint": "^0.3.13",
     "@placement/vue": "workspace:^",
+    "eslint": "^9.3.0",
     "nuxt": "^3.11.2",
-    "vue": "^3.4.21",
-    "vue-router": "^4.3.0"
+    "prettier": "^3.2.5",
+    "vue": "^3.4.27",
+    "vue-router": "^4.3.2"
   }
 }

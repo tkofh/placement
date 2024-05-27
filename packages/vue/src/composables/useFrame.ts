@@ -14,7 +14,7 @@ import {
 } from 'vue'
 import { ParentFrameSymbol, ParentRectSymbol } from '../internal/injections'
 import { frameRectRef } from '../utils/frameRectRef'
-import { registerIndexParent, useChildIndex } from './useChildIndex'
+import { useChildIndex, useIndexParent } from './useChildIndex'
 
 export function useFrame(
   layout: 'absolute' | 'flex',
@@ -29,7 +29,7 @@ export function useFrame(
 
   const index = useChildIndex()
 
-  registerIndexParent()
+  useIndexParent()
 
   const frame = createFrame({ layout })
 

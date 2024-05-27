@@ -15,7 +15,7 @@ import {
   RootRectSymbol,
 } from '../internal/injections'
 import { frameRectRef } from '../utils/frameRectRef'
-import { registerIndexParent } from './useChildIndex'
+import { useIndexParent } from './useChildIndex'
 
 type RootFrameOptions = Pick<
   FrameOptions,
@@ -42,7 +42,7 @@ export function useRootFrame(
   const frame = root.appendChild(createFrame({ layout: 'absolute' }))
 
   provide(ParentFrameSymbol, frame)
-  registerIndexParent()
+  useIndexParent()
 
   watchEffect(() => {
     const frameOptions = toValue(options)

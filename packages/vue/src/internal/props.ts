@@ -1,9 +1,17 @@
 import type { FrameOptions } from 'placement'
 import type { PropType } from 'vue'
+import type {
+  RadiusInput,
+  RadiusXInput,
+  RadiusYInput,
+} from '../composables/properties/radius'
 import type { Numberish } from './types'
 
 export const svgPaintPropDefs = {
-  fill: { type: [String, Boolean] as PropType<string | true>, required: false },
+  fill: {
+    type: [String, Boolean] as PropType<string | boolean>,
+    required: false,
+  },
   fillOpacity: {
     type: [Number, String] as PropType<Numberish>,
     required: false,
@@ -13,7 +21,7 @@ export const svgPaintPropDefs = {
     required: false,
   },
   stroke: {
-    type: [String, Boolean] as PropType<string | true>,
+    type: [String, Boolean] as PropType<string | boolean>,
     required: false,
   },
   strokeWidth: {
@@ -39,6 +47,21 @@ export const svgPaintPropDefs = {
   },
   strokeOpacity: {
     type: [Number, String] as PropType<Numberish>,
+    required: false,
+  },
+}
+
+export const svgRadiusPropDefs = {
+  r: {
+    type: [Number, String] as PropType<RadiusInput>,
+    required: false,
+  },
+  rx: {
+    type: [Number, String] as PropType<RadiusXInput>,
+    required: false,
+  },
+  ry: {
+    type: [Number, String] as PropType<RadiusYInput>,
     required: false,
   },
 }
@@ -79,7 +102,6 @@ export const frameSizingPropDefs = {
 }
 
 export const frameSelfPropDefs = {
-  ...frameSizingPropDefs,
   offsetTop: {
     type: [Number, String] as PropType<FrameOptions['offsetTop']>,
     required: false,
@@ -138,7 +160,7 @@ export const frameSelfPropDefs = {
   },
 }
 
-export const frameInsetProps = {
+export const frameInsetPropDefs = {
   insetTop: {
     type: [Number, String] as PropType<FrameOptions['insetTop']>,
     required: false,
@@ -169,7 +191,7 @@ export const frameInsetProps = {
   },
 }
 
-export const frameFlexProps = {
+export const frameFlexPropDefs = {
   flexDirection: {
     type: String as PropType<
       'row' | 'row-reverse' | 'column' | 'column-reverse'

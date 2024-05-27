@@ -68,4 +68,8 @@ export class Rect implements MutableRect {
     }
     return this.#readonly
   }
+
+  get aspectRatio() {
+    return roundTo(this.width / this.height, this.#precision)
+  }
 }

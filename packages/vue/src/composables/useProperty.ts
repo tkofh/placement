@@ -33,37 +33,3 @@ export function useProperty<const Config extends Partial<PropConfig<string>>>(
 
   return computed
 }
-
-const originX = {
-  length: true,
-  percentage: 'width',
-} as const
-
-type OriginX = typeof originX
-
-export type OriginXInput = Input<OriginX>
-
-export function useOriginX(
-  value: MaybeRefOrGetter<OriginXInput>,
-  parent: MaybeRefOrGetter<ReadonlyRect>,
-  root: MaybeRefOrGetter<ReadonlyRect> = parent,
-): Readonly<ShallowRef<number>> {
-  return useProperty(originX, value, parent, root)
-}
-
-const originY = {
-  length: true,
-  percentage: 'height',
-} as const
-
-type OriginY = typeof originY
-
-export type OriginYInput = Input<OriginY>
-
-export function useOriginY(
-  value: MaybeRefOrGetter<OriginYInput>,
-  parent: MaybeRefOrGetter<ReadonlyRect>,
-  root: MaybeRefOrGetter<ReadonlyRect> = parent,
-): Readonly<ShallowRef<number>> {
-  return useProperty(originY, value, parent, root)
-}

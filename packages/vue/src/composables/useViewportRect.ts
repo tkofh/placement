@@ -1,58 +1,21 @@
-import { type ReadonlyRect, createRect } from 'placement/rect'
+import type { ReadonlyRect } from 'placement/rect'
 import { clamp } from 'placement/utils'
 import {
   type MaybeRefOrGetter,
   type ShallowRef,
-  shallowRef,
   toValue,
-  triggerRef,
   watchEffect,
 } from 'vue'
 import type { FrameFit } from '../internal/types'
+import { rectRef } from '../utils/rectRef'
 import {
   type OriginXInput,
   type OriginYInput,
   useOriginX,
   useOriginY,
-} from './useProperty'
+} from './properties/origin'
 
-function createRectRef() {
-  const rect = createRect()
-
-  const rectRef = shallowRef(rect)
-  return {
-    update: (x: number, y: number, width: number, height: number) => {
-      let didUpdate = false
-
-      if (rect.x !== x) {
-        rect.x = x
-        didUpdate = true
-      }
-
-      if (rect.y !== y) {
-        rect.y = y
-        didUpdate = true
-      }
-
-      if (rect.width !== width) {
-        rect.width = width
-        didUpdate = true
-      }
-
-      if (rect.height !== height) {
-        rect.height = height
-        didUpdate = true
-      }
-
-      if (didUpdate) {
-        triggerRef(rectRef)
-      }
-    },
-    rectRef,
-  }
-}
-
-function computeViewportScale(
+function viewportScale(
   fit: FrameFit,
   basisWidth: number,
   basisHeight: number,
@@ -69,7 +32,7 @@ function computeViewportScale(
   return scale
 }
 
-function computeViewportOffset(delta: number, offset: number) {
+function viewportOffset(delta: number, offset: number) {
   if (delta === 0) {
     return 0
   }
@@ -84,7 +47,7 @@ export function useViewportRect(
   originX: MaybeRefOrGetter<OriginXInput>,
   originY: MaybeRefOrGetter<OriginYInput>,
 ): Readonly<ShallowRef<ReadonlyRect>> {
-  const { update, rectRef } = createRectRef()
+  const { update, rect } = rectRef()
 
   const computedOriginX = useOriginX(originX, content)
   const computedOriginY = useOriginY(originY, content)
@@ -99,7 +62,7 @@ export function useViewportRect(
 
     const contentRect = toValue(content)
 
-    const scale = computeViewportScale(
+    const scale = viewportScale(
       toValue(fit),
       basisRect.width,
       basisRect.height,
@@ -111,18 +74,22 @@ export function useViewportRect(
     const height = basisRect.height * scale
 
     update(
-      computeViewportOffset(
+      viewportOffset(
         contentRect.width - width,
-        (computedOriginX.value ?? 0) / contentRect.width,
+        contentRect.width > 0
+          ? (computedOriginX.value ?? 0) / contentRect.width
+          : 0,
       ),
-      computeViewportOffset(
+      viewportOffset(
         contentRect.height - height,
-        (computedOriginY.value ?? 0) / contentRect.height,
+        contentRect.height > 0
+          ? (computedOriginY.value ?? 0) / contentRect.height
+          : 0,
       ),
       width,
       height,
     )
   })
 
-  return rectRef
+  return rect
 }

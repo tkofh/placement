@@ -1,6 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   devtools: { enabled: false },
-  modules: ['@placement/vue/nuxt'],
   ssr: true,
+
+  modules: ['@nuxt/eslint', '@coily/vue/nuxt', '@placement/vue/nuxt'],
 })

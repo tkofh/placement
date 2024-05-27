@@ -6,8 +6,8 @@ export const ParentFrameSymbol = Symbol(
   'ParentFrame',
 ) as InjectionKey<Frame | null>
 export const ParentRectSymbol = Symbol('ParentFrame') as InjectionKey<
-  Ref<Readonly<ReadonlyRect>>
+  Readonly<Ref<ReadonlyRect>>
 >
 export const RootRectSymbol = Symbol('RootFrame') as InjectionKey<
-  Ref<Readonly<ReadonlyRect>>
+  Readonly<Ref<ReadonlyRect>>
 >

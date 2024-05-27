@@ -1,175 +1,111 @@
 import {
+  type ComponentInternalInstance,
   type InjectionKey,
   type Ref,
-  customRef,
   getCurrentInstance,
   inject,
-  onBeforeUnmount,
-  onBeforeUpdate,
-  onMounted,
+  onUnmounted,
+  onUpdated,
   provide,
-  shallowRef,
-  watch,
+  ref,
 } from 'vue'
 
-interface ChildIndexAPI {
-  register: (node: Ref<Node | null>) => Readonly<Ref<number>>
-  remove: (index: number) => void
+type ChildIndexAPI = (vm: ComponentInternalInstance) => Readonly<Ref<number>>
+
+const injection = Symbol.for('ChildIndexRoot') as InjectionKey<ChildIndexAPI>
+
+export function isRecordOrArray(
+  input: unknown,
+): input is Record<string, unknown> | Array<unknown> {
+  return typeof input === 'object' && input !== null
+}
+function isNode(node: unknown): node is Node {
+  return isRecordOrArray(node) && 'nodeType' in node
+}
+function getVmNode(vm: ComponentInternalInstance) {
+  if (!isNode(vm.vnode.el)) {
+    throw new Error('No vnode.el')
+  }
+
+  return vm.vnode.el
 }
 
-interface IndexInternalState {
-  trigger: () => void
-  value: number
+function compareVmNodes(
+  a: ComponentInternalInstance,
+  b: ComponentInternalInstance,
+) {
+  const aNode = getVmNode(a)
+  const bNode = getVmNode(b)
+
+  const comparison = bNode.compareDocumentPosition(aNode)
+
+  if (comparison & Node.DOCUMENT_POSITION_PRECEDING) {
+    return -1
+  }
+  if (comparison & Node.DOCUMENT_POSITION_FOLLOWING) {
+    return 1
+  }
+
+  throw new Error('non-comparable nodes')
 }
 
-const ParentSymbol = Symbol('Parent') as InjectionKey<ChildIndexAPI>
+class OrderedInstanceStorage {
+  readonly #storage = new Map<ComponentInternalInstance, Ref<number>>()
+  readonly #order: Array<ComponentInternalInstance> = []
 
-function useVmEl() {
+  #nextIndex = 0
+
+  insert(vm: ComponentInternalInstance) {
+    const index = ref(this.#nextIndex++)
+    this.#storage.set(vm, index)
+    this.#order.push(vm)
+
+    return index
+  }
+
+  remove(vm: ComponentInternalInstance) {
+    this.#order.splice(this.#order.indexOf(vm), 1)
+    this.#storage.delete(vm)
+  }
+
+  update() {
+    this.#order.sort(compareVmNodes)
+
+    for (const [index, vm] of this.#order.entries()) {
+      const indexRef = this.#storage.get(vm)
+      if (indexRef === undefined) {
+        throw new Error('No index ref')
+      }
+
+      indexRef.value = index
+    }
+  }
+}
+
+export function useIndexParent() {
+  const storage = new OrderedInstanceStorage()
+
+  provide(injection, (vm) => {
+    onUnmounted(() => {
+      storage.remove(vm)
+    }, vm)
+
+    return storage.insert(vm)
+  })
+
+  onUpdated(() => {
+    storage.update()
+  })
+}
+
+export function useChildIndex(): Readonly<Ref<number>> {
+  const register = inject(injection, null)
   const vm = getCurrentInstance()
 
-  if (vm == null) {
-    throw new Error('useVmEl must be called within a setup function')
+  if (register === null || vm === null) {
+    console.warn('no parent or vm')
+    return ref(-1)
   }
 
-  const el = shallowRef<Node | null>(null)
-
-  onMounted(() => {
-    el.value = vm.vnode.el as Node
-  })
-  onBeforeUpdate(() => {
-    el.value = vm.vnode.el as Node
-  })
-  onBeforeUnmount(() => {
-    el.value = null
-  })
-
-  return el
-}
-
-function getNodeIndex(node: Node, orderedNodes: Array<Node>): number {
-  for (const [index, orderedNode] of orderedNodes.entries()) {
-    if (
-      orderedNode.compareDocumentPosition(node) &
-      Node.DOCUMENT_POSITION_PRECEDING
-    ) {
-      return index
-    }
-  }
-  return orderedNodes.length
-}
-
-export function registerIndexParent() {
-  const vm = getCurrentInstance()
-
-  if (vm == null) {
-    throw new Error(
-      'registerIndexParent must be called within a setup function',
-    )
-  }
-
-  const triggers = new Map<Node, IndexInternalState>()
-
-  let register: (node: Ref<Node | null>) => Readonly<Ref<number>>
-  let remove: (index: number) => void
-
-  let autoIndex = 0
-
-  if (import.meta.server) {
-    register = () => {
-      return shallowRef(autoIndex++) as Readonly<Ref<number>>
-    }
-    remove = () => {}
-  } else {
-    let isMounted = false
-    onMounted(() => {
-      isMounted = true
-    })
-
-    const orderedNodes: Array<Node> = []
-
-    const shiftIndexes = (index: number, delta: number) => {
-      for (const node of orderedNodes.slice(index + 1)) {
-        const state = triggers.get(node)
-        if (state == null) {
-          continue
-        }
-        state.value += delta
-        state.trigger()
-      }
-    }
-
-    const insert = (node: Node) => {
-      if (isMounted) {
-        const state = triggers.get(node)
-        if (state == null) {
-          return
-        }
-
-        const index = getNodeIndex(node, orderedNodes)
-
-        orderedNodes.splice(index, 0, node)
-        if (index < orderedNodes.length - 1 && !isMounted) {
-          shiftIndexes(index, 1)
-        }
-
-        state.value = index
-        state.trigger()
-      } else {
-        orderedNodes.push(node)
-      }
-    }
-    remove = (index: number) => {
-      orderedNodes.splice(index, 1)
-      if (index < orderedNodes.length) {
-        shiftIndexes(index, -1)
-      }
-    }
-
-    register = (node: Ref<Node | null>) => {
-      return customRef((track, trigger) => {
-        const state: IndexInternalState = {
-          trigger,
-          value: isMounted ? -1 : autoIndex++,
-        }
-        const stop = watch(
-          node,
-          (node) => {
-            if (node) {
-              triggers.set(node, state)
-              insert(node)
-              stop()
-            }
-          },
-          { immediate: true },
-        )
-
-        return {
-          get() {
-            track()
-            return state.value
-          },
-          set() {},
-        }
-      })
-    }
-  }
-
-  provide(ParentSymbol, { register, remove })
-}
-
-export function useChildIndex() {
-  const el = useVmEl()
-
-  const parent = inject(ParentSymbol, null)
-
-  if (parent === null) {
-    throw new Error('No parent index found')
-  }
-
-  const index = parent.register(el)
-  onBeforeUnmount(() => {
-    parent.remove(index.value)
-  })
-
-  return index
+  return register(vm)
 }

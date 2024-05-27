@@ -6,7 +6,13 @@ import {
 } from '@nuxt/kit'
 import type {} from '@nuxt/schema'
 
-const components = ['AbsoluteFrame', 'BasicFrame', 'FlexFrame', 'RootFrame']
+const components = [
+  'AbsoluteFrame',
+  'BasicFrame',
+  'FlexFrame',
+  'RootFrame',
+  'GraphicText',
+]
 const composables = ['useFrame', 'useRootRect']
 
 const pluginTemplate = `export default definePayloadPlugin(() => {
