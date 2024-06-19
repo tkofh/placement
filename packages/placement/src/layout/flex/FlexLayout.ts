@@ -1,6 +1,6 @@
 import type { ComputedFrameProperties } from '../../frame/ComputedFrameProperties'
 import type { ReadonlyRect } from '../../rect'
-import type { Rect } from '../../rect/Rect'
+import type { Rect } from '../../rect/rect'
 import type { Layout } from '../types'
 import type { FlexItem } from './FlexItem'
 import { FlexLine } from './FlexLine'

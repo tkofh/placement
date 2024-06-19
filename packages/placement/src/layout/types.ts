@@ -1,5 +1,5 @@
 import type { ComputedFrameProperties } from '../frame/ComputedFrameProperties'
-import type { Rect } from '../rect/Rect'
+import type { Rect } from '../rect/rect'
 
 export interface Layout {
   insert(props: ComputedFrameProperties, box: Rect, index: number): void

@@ -15,6 +15,6 @@ export function spatialOffsets(
     start += spacing * spaceOuter
     between += spacing + (spacing * 2 * (1 - spaceOuter)) / (items - 1)
   }
-
+  0
   return { start, between }
 }

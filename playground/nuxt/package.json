@@ -13,10 +13,10 @@
     "@coily/vue": "^0.8.0",
     "@nuxt/eslint": "^0.3.13",
     "@placement/vue": "workspace:^",
-    "eslint": "^9.3.0",
-    "nuxt": "^3.11.2",
-    "prettier": "^3.2.5",
-    "vue": "^3.4.27",
-    "vue-router": "^4.3.2"
+    "eslint": "^9.5.0",
+    "nuxt": "^3.12.2",
+    "prettier": "^3.3.2",
+    "vue": "^3.4.29",
+    "vue-router": "^4.3.3"
   }
 }
