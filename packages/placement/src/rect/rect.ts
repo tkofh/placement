@@ -26,6 +26,7 @@ export interface Rect {
   readonly left: number
   readonly right: number
   readonly area: number
+  readonly aspectRatio: number
   readonly pipe: (...fns: ReadonlyArray<MapFn<Rect>>) => Rect
 }
 
@@ -55,6 +56,12 @@ const RectProto: Omit<Rect, 'x' | 'y' | 'width' | 'height' | 'precision'> = {
   get area() {
     return roundTo(
       (this as Rect).width * (this as Rect).height,
+      (this as Rect).precision,
+    )
+  },
+  get aspectRatio() {
+    return roundTo(
+      (this as Rect).width / (this as Rect).height,
       (this as Rect).precision,
     )
   },
@@ -440,3 +447,121 @@ export const align: {
     }[x.value](),
   )
 })
+
+export const adjustTop: {
+  (self: Rect, top: number): Rect
+  (top: number): (self: Rect) => Rect
+} = dual(2, (self: Rect, top: number) => {
+  const amount = Math.min(self.height, top)
+  return rect(
+    self.x,
+    self.y + amount,
+    self.width,
+    self.height - amount,
+    self.precision,
+  )
+})
+
+export const adjustBottom: {
+  (self: Rect, bottom: number): Rect
+  (bottom: number): (self: Rect) => Rect
+} = dual(2, (self: Rect, bottom: number) => {
+  const amount = Math.min(self.height, bottom)
+  return rect(self.x, self.y, self.width, self.height - amount, self.precision)
+})
+
+export const adjustLeft: {
+  (self: Rect, left: number): Rect
+  (left: number): (self: Rect) => Rect
+} = dual(2, (self: Rect, left: number) => {
+  const amount = Math.min(self.width, left)
+  return rect(
+    self.x + amount,
+    self.y,
+    self.width - amount,
+    self.height,
+    self.precision,
+  )
+})
+
+export const adjustRight: {
+  (self: Rect, right: number): Rect
+  (right: number): (self: Rect) => Rect
+} = dual(2, (self: Rect, right: number) => {
+  const amount = Math.min(self.width, right)
+  return rect(self.x, self.y, self.width - amount, self.height, self.precision)
+})
+
+export const adjustX: {
+  (self: Rect, amount: number): Rect
+  (self: Rect, left: number, right: number): Rect
+  (amount: number): (self: Rect) => Rect
+  (left: number, right: number): (self: Rect) => Rect
+} = dual(
+  (args) => isRect(args[0]),
+  (self: Rect, left: number, right?: number) => {
+    const amountLeft = Math.min(left, self.width * 0.5)
+    const amountRight = Math.min(right ?? left, self.width * 0.5)
+
+    return rect(
+      self.x + amountLeft,
+      self.y,
+      self.width - amountLeft - amountRight,
+      self.height,
+      self.precision,
+    )
+  },
+)
+
+export const adjustY: {
+  (self: Rect, amount: number): Rect
+  (self: Rect, top: number, bottom: number): Rect
+  (amount: number): (self: Rect) => Rect
+  (top: number, bottom: number): (self: Rect) => Rect
+} = dual(
+  (args) => isRect(args[0]),
+  (self: Rect, top: number, bottom?: number) => {
+    const amountTop = Math.min(top, self.height * 0.5)
+    const amountBottom = Math.min(bottom ?? top, self.height * 0.5)
+
+    return rect(
+      self.x,
+      self.y + amountTop,
+      self.width,
+      self.height - amountTop - amountBottom,
+      self.precision,
+    )
+  },
+)
+
+export const adjust: {
+  (self: Rect, amount: number): Rect
+  (self: Rect, y: number, x: number): Rect
+  (self: Rect, top: number, x: number, bottom: number): Rect
+  (self: Rect, top: number, right: number, bottom: number, left: number): Rect
+  (amount: number): (self: Rect) => Rect
+  (y: number, x: number): (self: Rect) => Rect
+  (top: number, x: number, bottom: number): (self: Rect) => Rect
+  (
+    top: number,
+    right: number,
+    bottom: number,
+    left: number,
+  ): (self: Rect) => Rect
+} = dual(
+  (args) => isRect(args[0]),
+  (self: Rect, top: number, right?: number, bottom?: number, left?: number) => {
+    const amountTop = Math.min(top, self.height * 0.5)
+    const amountRight = Math.min(right ?? top, self.width * 0.5)
+    const amountBottom = Math.min(bottom ?? top, self.height * 0.5)
+    const amountLeft = Math.min(left ?? right ?? top, self.width * 0.5)
+
+    return rect(
+      self.x + amountLeft,
+      self.y + amountTop,
+      self.width - amountLeft - amountRight,
+      self.height - amountTop - amountBottom,
+      self.precision,
+    )
+  },
+)
