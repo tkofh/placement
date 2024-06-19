@@ -370,19 +370,15 @@ export const alignCenterY: {
 export const alignCenter: {
   (self: Rect, target: Rect): Rect
   (target: Rect): (self: Rect) => Rect
-} = dual(2, (self: Rect, target: Rect) => {
-  console.log('alignCenter', {
-    self,
-    target,
-  })
-  return rect(
+} = dual(2, (self: Rect, target: Rect) =>
+  rect(
     target.x + (target.width - self.width) / 2,
     target.y + (target.width - self.height) / 2,
     self.width,
     self.height,
     self.precision,
-  )
-})
+  ),
+)
 
 const parser = oneOf([
   oneOf([
@@ -409,8 +405,6 @@ export const align: {
   (target: Rect, align: Align): (self: Rect) => Rect
 } = dual(3, (self: Rect, target: Rect, align: Align) => {
   const alignment = parseAlign(align)
-
-  console.log(alignment)
 
   if (!alignment.valid) {
     throw new TypeError('Invalid alignment')
