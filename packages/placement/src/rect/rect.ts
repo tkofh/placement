@@ -166,34 +166,65 @@ export const translate: {
 )
 
 export const scaleX: {
-  (self: Rect, scalar: number): Rect
-  (scalar: number): (self: Rect) => Rect
-} = dual(2, (self: Rect, scalar: number) =>
-  rect(self.x, self.y, self.width * scalar, self.height, self.precision),
+  (self: Rect, scalar: number, origin?: number): Rect
+  (scalar: number, origin?: number): (self: Rect) => Rect
+} = dual(
+  (args) => isRect(args[0]),
+  (self: Rect, scalar: number, origin?: number) => {
+    const scaled = self.width * scalar
+    const deltaSize = scaled - self.width
+
+    return rect(
+      self.x - (origin ?? 0) * deltaSize,
+      self.y,
+      scaled,
+      self.height,
+      self.precision,
+    )
+  },
 )
 
 export const scaleY: {
-  (self: Rect, scalar: number): Rect
-  (scalar: number): (self: Rect) => Rect
-} = dual(2, (self: Rect, scalar: number) =>
-  rect(self.x, self.y, self.width, self.height * scalar, self.precision),
+  (self: Rect, scalar: number, origin?: number): Rect
+  (scalar: number, origin?: number): (self: Rect) => Rect
+} = dual(
+  (args) => isRect(args[0]),
+  (self: Rect, scalar: number, origin?: number) => {
+    const scaled = self.height * scalar
+    const deltaSize = scaled - self.height
+
+    return rect(
+      self.x,
+      self.y - (origin ?? 0) * deltaSize,
+      self.width,
+      scaled,
+      self.precision,
+    )
+  },
 )
 
 export const scale: {
   (self: Rect, scalar: number): Rect
-  (self: Rect, scalarX: number, scalarY: number): Rect
+  (self: Rect, scalar: number, origin?: number): Rect
   (scalar: number): (self: Rect) => Rect
-  (scalarX: number, scalarY: number): (self: Rect) => Rect
+  (scalar: number, origin?: number): (self: Rect) => Rect
 } = dual(
   (args) => isRect(args[0]),
-  (self: Rect, scalar: number) =>
+  (self: Rect, scalar: number, origin?: number) => {
+    const scaledWidth = self.width * scalar
+    const scaledHeight = self.height * scalar
+
+    const deltaWidth = scaledWidth - self.width
+    const deltaHeight = scaledHeight - self.height
+
     rect(
-      self.x,
-      self.y,
-      self.width * scalar,
-      self.height * scalar,
+      self.x - (origin ?? 0) * deltaWidth,
+      self.y - (origin ?? 0) * deltaHeight,
+      scaledWidth,
+      scaledHeight,
       self.precision,
-    ),
+    )
+  },
 )
 
 export const minX: {
