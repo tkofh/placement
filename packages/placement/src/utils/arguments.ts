@@ -47,3 +47,21 @@ export function normalizeTRBL(
   // all
   return [a ?? 0, a ?? 0, a ?? 0, a ?? 0]
 }
+
+export function auto(input: number, fallback: number): number
+export function auto(
+  input: number,
+  negativeFallback: number,
+  positiveFallback: number,
+): number
+export function auto(
+  input: number,
+  negativeFallback: number,
+  positiveFallback: number = negativeFallback,
+): number {
+  return input === Number.NEGATIVE_INFINITY
+    ? negativeFallback
+    : input === Number.POSITIVE_INFINITY
+      ? positiveFallback
+      : input
+}

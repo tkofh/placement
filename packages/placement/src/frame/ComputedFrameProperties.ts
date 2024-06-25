@@ -1,5 +1,5 @@
+import { clamp } from '../math'
 import type { ReadonlyRect } from '../rect'
-import { clamp } from '../utils'
 import type { FrameProperties } from './FrameProperties'
 
 export class ComputedFrameProperties {

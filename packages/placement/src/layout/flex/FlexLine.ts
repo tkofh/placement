@@ -1,5 +1,5 @@
 import type { ComputedFrameProperties } from '../../frame/ComputedFrameProperties'
-import type { Rect } from '../../rect/rect'
+import type { Rect } from '../../rect'
 import { FlexItem } from './FlexItem'
 import type { FlexLayout } from './FlexLayout'
 import { spatialOffsets } from './utils'

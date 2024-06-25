@@ -10,12 +10,12 @@
     "publish-packages": "pnpm check:report && turbo run build test:run && changeset version && changeset publish && pnpm check"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.8.1",
+    "@biomejs/biome": "^1.8.2",
     "@changesets/cli": "^2.27.5",
     "@tsconfig/node20": "^20.1.4",
-    "lefthook": "^1.6.16",
+    "lefthook": "^1.6.18",
     "turbo": "^2.0.4",
-    "typescript": "^5.4.5",
+    "typescript": "^5.5.2",
     "vitest": "^1.6.0"
   },
   "packageManager": "pnpm@9.4.0",

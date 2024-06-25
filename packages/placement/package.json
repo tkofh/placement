@@ -46,6 +46,7 @@
     "url": "git+https://github.com/tkofh/placement.git"
   },
   "scripts": {
+    "run": "tsx ./src/flexbox.ts",
     "build": "unbuild",
     "test": "vitest",
     "test:run": "vitest run",
@@ -55,10 +56,10 @@
     "url": "https://github.com/tkofh/placement/issues"
   },
   "devDependencies": {
-    "@types/node": "^20.14.5",
+    "@types/node": "^20.14.7",
     "@vitest/coverage-v8": "^1.6.0",
     "@vitest/ui": "^1.6.0",
-    "tsx": "^4.15.6",
+    "tsx": "^4.15.7",
     "unbuild": "^2.0.0",
     "vitest": "^1.6.0"
   },

@@ -1,7 +1,7 @@
 import type { ComputedFrameProperties } from '../../frame/ComputedFrameProperties'
+import { clamp } from '../../math'
+import type { Rect } from '../../rect'
 import type { ReadonlyRect } from '../../rect'
-import type { Rect } from '../../rect/rect'
-import { clamp } from '../../utils'
 import type { Layout } from '../types'
 
 export class AbsoluteLayout implements Layout {

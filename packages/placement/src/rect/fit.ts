@@ -1,4 +1,4 @@
-import { clamp, normalize } from '../utils'
+import { clamp, normalize } from '../math'
 
 function originToAlignment(origin: number, setting: number): number {
   return normalize(origin, 0, setting)

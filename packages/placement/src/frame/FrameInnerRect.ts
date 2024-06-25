@@ -1,5 +1,5 @@
+import type { Rect } from '../rect'
 import type { ReadonlyRect } from '../rect'
-import type { Rect } from '../rect/rect'
 import type { ComputedFrameProperties } from './ComputedFrameProperties'
 
 export class FrameInnerRect implements ReadonlyRect {

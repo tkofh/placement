@@ -1,44 +1,19 @@
 export type MapFn<T = unknown> = (a: T) => T
+export type FinalMapFn<T = unknown, R = unknown> = (a: T) => R
 
-export function pipe<T>(value: T, ...fns: Array<(value: T) => T>): T
+export function pipe<T, R>(
+  value: T,
+  ...fns: [...Array<MapFn<T>>, FinalMapFn<T, R>]
+): R
 export function pipe(
   value: unknown,
-  a?: MapFn,
-  b?: MapFn,
-  c?: MapFn,
-  d?: MapFn,
-  e?: MapFn,
-  f?: MapFn,
-  g?: MapFn,
-  h?: MapFn,
+  ...fns: Array<MapFn<unknown> | FinalMapFn<unknown, unknown>>
 ): unknown {
-  switch (arguments.length) {
-    case 1:
-      return value
-    case 2:
-      return a!(value)
-    case 3:
-      return b!(a!(value))
-    case 4:
-      return c!(b!(a!(value)))
-    case 5:
-      return d!(c!(b!(a!(value))))
-    case 6:
-      return e!(d!(c!(b!(a!(value)))))
-    case 7:
-      return f!(e!(d!(c!(b!(a!(value))))))
-    case 8:
-      return g!(f!(e!(d!(c!(b!(a!(value)))))))
-    case 9:
-      return h!(g!(f!(e!(d!(c!(b!(a!(value))))))))
-    default: {
-      let ret = arguments[0]
-      for (let i = 1; i < arguments.length; i++) {
-        ret = arguments[i](ret)
-      }
-      return ret
-    }
+  let ret = value
+  for (let i = 0; i < fns.length; i++) {
+    ret = fns[i](ret)
   }
+  return ret
 }
 
 export const dual: {

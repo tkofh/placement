@@ -1,6 +1,6 @@
 import type { ComputedFrameProperties } from '../../frame/ComputedFrameProperties'
-import type { Rect } from '../../rect/rect'
-import { clamp } from '../../utils'
+import { clamp } from '../../math'
+import type { Rect } from '../../rect'
 import type { FlexLayout } from './FlexLayout'
 
 export class FlexItem {
