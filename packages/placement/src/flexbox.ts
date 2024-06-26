@@ -1,145 +1,152 @@
-// import { parse } from 'valued'
-// import { oneOf, someOf } from 'valued/combinators'
-// import { keyword } from 'valued/data/keyword'
-// import { type Frame, frame } from './frame'
-// import { type Rect, rect } from './rect'
-// import { type Span, span } from './span'
-// import { dual } from './utils/function'
-// import { clamp } from './utils/math'
-//
-// const direction = oneOf([
-//   keyword('row'),
-//   keyword('column'),
-//   keyword('row-reverse'),
-//   keyword('column-reverse'),
-// ])
-//
-// const wrap = oneOf([
-//   keyword('nowrap'),
-//   keyword('wrap'),
-//   keyword('wrap-reverse'),
-// ])
-//
-// const flow = someOf([direction, wrap])
-//
-// function parseFlow(input: string): [FlexDirection | null, FlexWrap | null] {
-//   const result = parse(input, flow)
-//   if (!result.valid) {
-//     return [null, null]
-//   }
-//
-//   return [result.value[0]?.value ?? null, result.value[1]?.value ?? null]
-// }
-//
-// type Mutable<T> = T extends object
-//   ? { -readonly [K in keyof T]: Mutable<T[K]> }
-//   : T
-//
-// type FlexDirection = 'row' | 'column' | 'row-reverse' | 'column-reverse'
-// type FlexWrap = 'nowrap' | 'wrap' | 'wrap-reverse'
-//
-// type FlexFlow =
-//   | FlexDirection
-//   | FlexWrap
-//   | `${FlexDirection} ${FlexWrap}`
-//   | `${FlexWrap} ${FlexDirection}`
-//
-// interface Flexbox {
-//   readonly flow?: FlexFlow
-//   readonly direction?: FlexDirection
-//   readonly wrap?: FlexWrap
-//   readonly placeContent?: number
-//   readonly alignContent?: number
-//   readonly alignItems?: number
-//   readonly stretchContent?: number
-//   readonly stretchItems?: number
-//   readonly justifyContent?: number
-//   readonly gap?: number
-//   readonly rowGap?: number
-//   readonly columnGap?: number
-//   readonly placeContentSpace?: number
-//   readonly placeContentSpaceOuter?: number
-//   readonly justifyContentSpace?: number
-//   readonly justifyContentSpaceOuter?: number
-//   readonly alignContentSpace?: number
-//   readonly alignContentSpaceOuter?: number
-// }
-//
-// class NormalizedFlexbox {
-//   readonly direction: FlexDirection = 'row'
-//   readonly wrap: FlexWrap = 'nowrap'
-//   readonly alignContent: number = 0
-//   readonly alignItems: number = 0
-//   readonly stretchContent: number = 0
-//   readonly stretchItems: number = 0
-//   readonly justifyContent: number = 0
-//   readonly rowGap: number = 0
-//   readonly columnGap: number = 0
-//   readonly justifyContentSpace: number = 0
-//   readonly justifyContentSpaceOuter: number = 0
-//   readonly alignContentSpace: number = 0
-//   readonly alignContentSpaceOuter: number = 0
-//
-//   constructor(flexbox: Flexbox) {
-//     if (typeof flexbox.flow === 'string') {
-//       const [direction, wrap] = parseFlow(flexbox.flow)
-//
-//       if (direction !== null) {
-//         this.direction = direction
-//       }
-//
-//       if (wrap !== null) {
-//         this.wrap = wrap
-//       }
-//     } else {
-//       this.direction = flexbox.direction ?? this.direction
-//       this.wrap = flexbox.wrap ?? this.wrap
-//     }
-//
-//     this.justifyContent =
-//       flexbox.justifyContent ?? flexbox.placeContent ?? this.justifyContent
-//     this.alignContent =
-//       flexbox.alignContent ?? flexbox.placeContent ?? this.alignContent
-//
-//     this.alignItems = flexbox.alignItems ?? this.alignItems
-//
-//     this.stretchContent = flexbox.stretchContent ?? this.stretchContent
-//     this.stretchItems = flexbox.stretchItems ?? this.stretchItems
-//
-//     this.rowGap = flexbox.rowGap ?? flexbox.gap ?? this.rowGap
-//     this.columnGap = flexbox.columnGap ?? flexbox.gap ?? this.columnGap
-//
-//     this.justifyContentSpace =
-//       flexbox.justifyContentSpace ??
-//       flexbox.placeContentSpace ??
-//       this.justifyContentSpace
-//     this.justifyContentSpaceOuter =
-//       flexbox.justifyContentSpaceOuter ??
-//       flexbox.placeContentSpaceOuter ??
-//       this.justifyContentSpaceOuter
-//     this.alignContentSpace =
-//       flexbox.alignContentSpace ??
-//       flexbox.placeContentSpace ??
-//       this.alignContentSpace
-//     this.alignContentSpaceOuter =
-//       flexbox.alignContentSpaceOuter ??
-//       flexbox.placeContentSpaceOuter ??
-//       this.alignContentSpaceOuter
-//   }
-//
-//   get isRow(): boolean {
-//     return this.direction === 'row' || this.direction === 'row-reverse'
-//   }
-//
-//   get mainGap(): number {
-//     return this.isRow ? this.rowGap : this.columnGap
-//   }
-//
-//   get crossGap(): number {
-//     return this.isRow ? this.columnGap : this.rowGap
-//   }
-// }
-//
+import { parse } from 'valued'
+import { oneOf, someOf } from 'valued/combinators'
+import { keyword } from 'valued/data/keyword'
+
+const direction = oneOf([
+  keyword('row'),
+  keyword('column'),
+  keyword('row-reverse'),
+  keyword('column-reverse'),
+])
+
+const wrap = oneOf([
+  keyword('nowrap'),
+  keyword('wrap'),
+  keyword('wrap-reverse'),
+])
+
+const flow = someOf([direction, wrap])
+
+function parseFlow(input: string): [FlexDirection | null, FlexWrap | null] {
+  const result = parse(input, flow)
+  if (!result.valid) {
+    return [null, null]
+  }
+
+  return [result.value[0]?.value ?? null, result.value[1]?.value ?? null]
+}
+
+type Mutable<T> = T extends object
+  ? { -readonly [K in keyof T]: Mutable<T[K]> }
+  : T
+
+type FlexDirection = 'row' | 'column' | 'row-reverse' | 'column-reverse'
+type FlexWrap = 'nowrap' | 'wrap' | 'wrap-reverse'
+
+type FlexFlow =
+  | FlexDirection
+  | FlexWrap
+  | `${FlexDirection} ${FlexWrap}`
+  | `${FlexWrap} ${FlexDirection}`
+
+interface Flexbox {
+  readonly flow?: FlexFlow
+  readonly direction?: FlexDirection
+  readonly wrap?: FlexWrap
+  readonly placeContent?: number
+  readonly alignContent?: number
+  readonly alignItems?: number
+  readonly stretchContent?: number
+  readonly stretchItems?: number
+  readonly justifyContent?: number
+  readonly gap?: number
+  readonly rowGap?: number
+  readonly columnGap?: number
+  readonly placeContentSpace?: number
+  readonly placeContentSpaceOuter?: number
+  readonly justifyContentSpace?: number
+  readonly justifyContentSpaceOuter?: number
+  readonly alignContentSpace?: number
+  readonly alignContentSpaceOuter?: number
+}
+
+class NormalizedFlexbox {
+  readonly direction: FlexDirection = 'row'
+  readonly wrap: FlexWrap = 'nowrap'
+  readonly alignContent: number = 0
+  readonly alignItems: number = 0
+  readonly stretchContent: number = 0
+  readonly stretchItems: number = 0
+  readonly justifyContent: number = 0
+  readonly rowGap: number = 0
+  readonly columnGap: number = 0
+  readonly justifyContentSpace: number = 0
+  readonly justifyContentSpaceOuter: number = 0
+  readonly alignContentSpace: number = 0
+  readonly alignContentSpaceOuter: number = 0
+
+  constructor(flexbox: Flexbox) {
+    if (typeof flexbox.flow === 'string') {
+      const [direction, wrap] = parseFlow(flexbox.flow)
+
+      if (direction !== null) {
+        this.direction = direction
+      }
+
+      if (wrap !== null) {
+        this.wrap = wrap
+      }
+    } else {
+      this.direction = flexbox.direction ?? this.direction
+      this.wrap = flexbox.wrap ?? this.wrap
+    }
+
+    this.justifyContent =
+      flexbox.justifyContent ?? flexbox.placeContent ?? this.justifyContent
+    this.alignContent =
+      flexbox.alignContent ?? flexbox.placeContent ?? this.alignContent
+
+    this.alignItems = flexbox.alignItems ?? this.alignItems
+
+    this.stretchContent = flexbox.stretchContent ?? this.stretchContent
+    this.stretchItems = flexbox.stretchItems ?? this.stretchItems
+
+    this.rowGap = flexbox.rowGap ?? flexbox.gap ?? this.rowGap
+    this.columnGap = flexbox.columnGap ?? flexbox.gap ?? this.columnGap
+
+    this.justifyContentSpace =
+      flexbox.justifyContentSpace ??
+      flexbox.placeContentSpace ??
+      this.justifyContentSpace
+    this.justifyContentSpaceOuter =
+      flexbox.justifyContentSpaceOuter ??
+      flexbox.placeContentSpaceOuter ??
+      this.justifyContentSpaceOuter
+    this.alignContentSpace =
+      flexbox.alignContentSpace ??
+      flexbox.placeContentSpace ??
+      this.alignContentSpace
+    this.alignContentSpaceOuter =
+      flexbox.alignContentSpaceOuter ??
+      flexbox.placeContentSpaceOuter ??
+      this.alignContentSpaceOuter
+  }
+
+  get isRow(): boolean {
+    return this.direction === 'row' || this.direction === 'row-reverse'
+  }
+
+  get mainGap(): number {
+    return this.isRow ? this.rowGap : this.columnGap
+  }
+
+  get crossGap(): number {
+    return this.isRow ? this.columnGap : this.rowGap
+  }
+}
+
+/**
+ * 1. take all frames and turn them into pairs of spans.
+ *    the spans should represent the main and cross axes
+ *    of the layout rather than the x/y axes
+ * 2. break the spans into lines based on flex-wrap
+ * 3. for each line, turn the spans into intervals
+ * 4. turn each flex line into a span for the cross axis
+ *    (if there are more than one line)
+ * 5. zip each pair of intervals together to create
+ *    the final rects
+ */
+
 // interface FlexItem {
 //   readonly definiteMainOffsetStart: number
 //   readonly definiteCrossOffsetStart: number

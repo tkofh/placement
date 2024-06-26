@@ -65,3 +65,9 @@ export function auto(
       ? positiveFallback
       : input
 }
+
+export function isAuto(value: number): boolean {
+  return (
+    value === Number.NEGATIVE_INFINITY || value === Number.POSITIVE_INFINITY
+  )
+}

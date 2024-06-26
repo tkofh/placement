@@ -1,7 +1,21 @@
+import {
+  type SequenceTrackItem,
+  type SequenceTrackItemInput,
+  applyGrow,
+  applyShrink,
+  sequenceTrackItem,
+} from './internal/track/sequence'
+import {
+  type StackTrackItem,
+  type StackTrackItemInput,
+  applyStretch,
+  stackTrackItem,
+} from './internal/track/stack'
+import { type Interval, interval } from './interval'
 import { Pipeable } from './pipeable'
-import { type Span, size as setSize } from './span'
 import { auto } from './utils/arguments'
 import { dual } from './utils/function'
+import { clamp, normalize, remap } from './utils/math'
 
 const TypeBrand: unique symbol = Symbol('placement/track')
 type TypeBrand = typeof TypeBrand
@@ -9,426 +23,273 @@ type TypeBrand = typeof TypeBrand
 class Track extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
-  readonly size: number | null
-
-  private _maxDefiniteOuterSize: number | undefined
-  private _maxDefiniteOuterSizeMin: number | undefined
-  private _maxDefiniteOuterSizeMax: number | undefined
-  private _minDefiniteOuterSize: number | undefined
-  private _minDefiniteOuterSizeMin: number | undefined
-  private _minDefiniteOuterSizeMax: number | undefined
-  private _totalDefiniteOuterSize: number | undefined
-  private _totalGappedDefiniteOuterSize: number | undefined
-  private _totalDefiniteOuterSizeMin: number | undefined
-  private _totalGappedDefiniteOuterSizeMin: number | undefined
-  private _totalDefiniteOuterSizeMax: number | undefined
-  private _totalGappedDefiniteOuterSizeMax: number | undefined
-  private _totalAutoOffsets: number | undefined
-
   constructor(
-    readonly spans: ReadonlyArray<Span>,
-    size?: number | null,
-    readonly gap = 0,
+    readonly intervals: ReadonlyArray<Interval>,
+    readonly size: number,
   ) {
     super()
-
-    if (size != null && size < 0) {
-      throw new RangeError('Track size must be a non-negative number')
-    }
-
-    if (spans.length === 0) {
-      throw new RangeError('Track must have at least one span')
-    }
-
-    this.size = size ?? null
   }
 
-  get maxDefiniteOuterSize(): number {
-    if (this._maxDefiniteOuterSize === undefined) {
-      this._maxDefiniteOuterSize = maxDefiniteOuterSize(this)
-    }
-    return this._maxDefiniteOuterSize
+  get start() {
+    return this.intervals[0].start
   }
 
-  get maxDefiniteOuterSizeMin(): number {
-    if (this._maxDefiniteOuterSizeMin === undefined) {
-      this._maxDefiniteOuterSizeMin = maxDefiniteOuterSizeMin(this)
-    }
-    return this._maxDefiniteOuterSizeMin
+  get end() {
+    return this.intervals[this.intervals.length - 1].end
   }
 
-  get maxDefiniteOuterSizeMax(): number {
-    if (this._maxDefiniteOuterSizeMax === undefined) {
-      this._maxDefiniteOuterSizeMax = maxDefiniteOuterSizeMax(this)
-    }
-    return this._maxDefiniteOuterSizeMax
-  }
-
-  get minDefiniteOuterSize(): number {
-    if (this._minDefiniteOuterSize === undefined) {
-      this._minDefiniteOuterSize = minDefiniteOuterSize(this)
-    }
-    return this._minDefiniteOuterSize
-  }
-
-  get minDefiniteOuterSizeMin(): number {
-    if (this._minDefiniteOuterSizeMin === undefined) {
-      this._minDefiniteOuterSizeMin = minDefiniteOuterSizeMin(this)
-    }
-    return this._minDefiniteOuterSizeMin
-  }
-
-  get minDefiniteOuterSizeMax(): number {
-    if (this._minDefiniteOuterSizeMax === undefined) {
-      this._minDefiniteOuterSizeMax = minDefiniteOuterSizeMax(this)
-    }
-    return this._minDefiniteOuterSizeMax
-  }
-
-  get totalDefiniteOuterSize(): number {
-    if (this._totalDefiniteOuterSize === undefined) {
-      this._totalDefiniteOuterSize = totalDefiniteOuterSize(this, 0)
-    }
-    return this._totalDefiniteOuterSize
-  }
-
-  get totalGappedDefiniteOuterSize(): number {
-    if (this._totalGappedDefiniteOuterSize === undefined) {
-      this._totalGappedDefiniteOuterSize = totalDefiniteOuterSize(
-        this,
-        this.gap,
-      )
-    }
-    return this._totalGappedDefiniteOuterSize
-  }
-
-  get totalDefiniteOuterSizeMin(): number {
-    if (this._totalDefiniteOuterSizeMin === undefined) {
-      this._totalDefiniteOuterSizeMin = totalDefiniteOuterSizeMin(this, 0)
-    }
-    return this._totalDefiniteOuterSizeMin
-  }
-
-  get totalGappedDefiniteOuterSizeMin(): number {
-    if (this._totalGappedDefiniteOuterSizeMin === undefined) {
-      this._totalGappedDefiniteOuterSizeMin = totalDefiniteOuterSizeMin(
-        this,
-        this.gap,
-      )
-    }
-    return this._totalGappedDefiniteOuterSizeMin
-  }
-
-  get totalDefiniteOuterSizeMax(): number {
-    if (this._totalDefiniteOuterSizeMax === undefined) {
-      this._totalDefiniteOuterSizeMax = totalDefiniteOuterSizeMax(this, 0)
-    }
-    return this._totalDefiniteOuterSizeMax
-  }
-
-  get totalGappedDefiniteOuterSizeMax(): number {
-    if (this._totalGappedDefiniteOuterSizeMax === undefined) {
-      this._totalGappedDefiniteOuterSizeMax = totalDefiniteOuterSizeMax(
-        this,
-        this.gap,
-      )
-    }
-    return this._totalGappedDefiniteOuterSizeMax
-  }
-
-  get totalAutoOffsets(): number {
-    if (this._totalAutoOffsets === undefined) {
-      this._totalAutoOffsets = totalAutoOffsets(this)
-    }
-    return this._totalAutoOffsets
+  get innerSize(): number {
+    return Math.abs(this.end - this.start)
   }
 }
 
-interface TrackOptions {
-  size?: number
-  gap?: number
-}
-
-export function track(
-  spans: ReadonlyArray<Span>,
-  options: TrackOptions = {},
-): Track {
-  return new Track(spans, options.size, options.gap)
-}
+export type { Track }
 
 export function isTrack(value: unknown): value is Track {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
 
-export type { Track }
-
-export const addSpan: {
-  (track: Track, span: Span): Track
-  (track: Track, span: Span, index: number): Track
-  (span: Span): (track: Track) => Track
-  (span: Span, index: number): (track: Track) => Track
-} = dual(
-  (args) => isTrack(args[0]),
-  (track: Track, span: Span, index?: number) => {
-    const spans = [...track.spans]
-    if (index !== undefined) {
-      spans.splice(index, 0, span)
-    } else {
-      spans.push(span)
-    }
-    return new Track(spans, track.size)
-  },
-)
-
-export const removeSpan: {
-  (track: Track, target: Span): Track
-  (track: Track, index: number): Track
-  (index: number): (track: Track) => Track
-  (target: Span): (track: Track) => Track
-} = dual(2, (track: Track, target: number | Span) => {
-  const spans = [...track.spans]
-  if (typeof target === 'number') {
-    spans.splice(target, 1)
-  } else {
-    spans.splice(spans.indexOf(target), 1)
-  }
-  return new Track(spans, track.size)
-})
-
-export const size: {
-  (track: Track, size: number): Track
-  (size: number): (track: Track) => Track
-} = dual(2, (track: Track, size: number) => new Track(track.spans, size))
-
-export const gap: {
-  (track: Track, gap: number): Track
-  (gap: number): (track: Track) => Track
-} = dual(
-  2,
-  (track: Track, gap: number) => new Track(track.spans, track.size, gap),
-)
-
-export const fit: {
-  (track: Track, mode: 'max' | 'sum'): Track
-  (
-    track: Track,
-    mode: 'max' | 'sum',
-    reference: 'min' | 'max' | 'current',
-  ): Track
-  (mode: 'max' | 'sum'): (track: Track) => Track
-  (
-    mode: 'max' | 'sum',
-    reference: 'min' | 'max' | 'current',
-  ): (track: Track) => Track
-} = dual(
-  (args) => isTrack(args[0]),
-  (
-    track: Track,
-    mode: 'max' | 'sum',
-    reference: 'min' | 'max' | 'current' = 'current',
-  ) => {
-    if (mode === 'max') {
-      if (reference === 'min') {
-        return size(track, track.maxDefiniteOuterSize)
-      }
-
-      if (reference === 'max') {
-        return size(track, track.totalDefiniteOuterSizeMax)
-      }
-
-      return size(track, track.maxDefiniteOuterSize)
-    }
-
-    if (reference === 'min') {
-      return size(track, track.totalDefiniteOuterSizeMin)
-    }
-
-    if (reference === 'max') {
-      return size(track, track.totalDefiniteOuterSizeMax)
-    }
-
-    return size(track, track.totalDefiniteOuterSize)
-  },
-)
-
-const maxDefiniteOuterSize = (track: Track): number =>
-  track.spans.reduce((max, span) => Math.max(max, span.constrainedSize), 0)
-
-const maxDefiniteOuterSizeMin = (track: Track): number =>
-  track.spans.reduce((max, span) => Math.max(max, span.definiteOuterSizeMin), 0)
-
-const maxDefiniteOuterSizeMax = (track: Track): number =>
-  track.spans.reduce((max, span) => Math.max(max, span.definiteOuterSizeMax), 0)
-
-const minDefiniteOuterSize = (track: Track): number =>
-  track.spans.reduce(
-    (min, span) => Math.min(min, span.constrainedSize),
-    Number.POSITIVE_INFINITY,
-  )
-
-const minDefiniteOuterSizeMin = (track: Track): number =>
-  track.spans.reduce(
-    (min, span) => Math.min(min, span.definiteOuterSizeMin),
-    Number.POSITIVE_INFINITY,
-  )
-
-const minDefiniteOuterSizeMax = (track: Track): number =>
-  track.spans.reduce(
-    (min, span) => Math.min(min, span.definiteOuterSizeMax),
-    Number.POSITIVE_INFINITY,
-  )
-
-const totalDefiniteOuterSize = (track: Track, gap: number) =>
-  track.spans.reduce((sum, span) => sum + span.constrainedSize + gap, -gap)
-
-const totalDefiniteOuterSizeMin = (track: Track, gap: number) =>
-  track.spans.reduce((sum, span) => sum + span.definiteOuterSizeMin + gap, -gap)
-
-const totalDefiniteOuterSizeMax = (track: Track, gap: number) =>
-  track.spans.reduce((sum, span) => sum + span.definiteOuterSizeMax + gap, -gap)
-
-const totalAutoOffsets = (track: Track): number =>
-  track.spans.reduce((sum, span) => sum + span.auto, 0)
-
-export const grow = (track: Track) => {
-  if (track.size === null) {
-    return track
-  }
-
-  if (track.totalAutoOffsets > 0) {
-    return track
-  }
-
-  let freeMainSize = track.size - track.totalGappedDefiniteOuterSize
-
-  const pendingGrowth = new Map<Span, number>()
-  let trackTotalGrowth = 0
-
-  for (const span of track.spans) {
-    if (span.grow > 0) {
-      pendingGrowth.set(span, 0)
-      trackTotalGrowth += span.grow
-    }
-  }
-
-  const growable = new Set(pendingGrowth.keys())
-
-  while (freeMainSize > 0) {
-    const growthUnit = freeMainSize / trackTotalGrowth
-
-    for (const span of growable) {
-      const pending = pendingGrowth.get(span) ?? 0
-      let growth = growthUnit * span.grow
-
-      if (span.size + pending + growth > span.definiteOuterSizeMax) {
-        growth = span.definiteOuterSizeMax - span.size - pending
-        trackTotalGrowth -= span.grow
-        growable.delete(span)
-      }
-
-      pendingGrowth.set(span, pending + growth)
-      freeMainSize -= growth
-    }
-  }
-
-  return new Track(
-    track.spans.map((span) => {
-      const growth = pendingGrowth.get(span) ?? 0
-      return growth > 0 ? span.pipe(setSize(span.size + growth)) : span
-    }),
-    track.size,
-    track.gap,
-  )
+interface BaseOptions {
+  place?: number
+  size?: number
 }
 
-export const shrink = (track: Track) => {
-  if (track.size === null) {
-    return track
-  }
-
-  if (track.totalAutoOffsets > 0) {
-    return track
-  }
-
-  let freeMainSize = track.totalGappedDefiniteOuterSize - track.size
-
-  const pendingShrink = new Map<Span, number>()
-  let trackTotalShrink = 0
-
-  for (const span of track.spans) {
-    if (span.shrink > 0) {
-      pendingShrink.set(span, 0)
-      trackTotalShrink += span.shrink
-    }
-  }
-
-  const shrinkable = new Set(pendingShrink.keys())
-
-  while (freeMainSize > 0) {
-    const shrinkUnit = freeMainSize / trackTotalShrink
-
-    for (const span of shrinkable) {
-      const pending = pendingShrink.get(span) ?? 0
-      let shrink = shrinkUnit * span.shrink
-
-      if (span.size - pending - shrink < span.definiteOuterSizeMin) {
-        shrink = span.size - span.definiteOuterSizeMin - pending
-        trackTotalShrink -= span.shrink
-        shrinkable.delete(span)
-      }
-
-      pendingShrink.set(span, pending + shrink)
-      freeMainSize -= shrink
-    }
-  }
-
-  return new Track(
-    track.spans.map((span) => {
-      const shrink = pendingShrink.get(span) ?? 0
-      return shrink > 0 ? span.pipe(setSize(span.size - shrink)) : span
-    }),
-    track.size,
-    track.gap,
-  )
+interface StackOptions extends BaseOptions {
+  stretch?: number
 }
 
-export const growOrShrink = (track: Track) => {
-  if (track.size == null) {
-    return track
-  }
-
-  if (track.totalAutoOffsets > 0) {
-    return track
-  }
-
-  if (track.size === track.totalGappedDefiniteOuterSize) {
-    return track
-  }
-
-  if (track.size > track.totalGappedDefiniteOuterSize) {
-    return grow(track)
-  }
-
-  return shrink(track)
+interface SequenceOptions extends BaseOptions {
+  gap?: number
+  space?: number
+  spaceOuter?: number
 }
 
-export const stretch: {
-  (track: Track, stretch: number): Track
-  (stretch: number): (track: Track) => Track
-} = dual(2, (track: Track, stretch: number) => {
-  const size = track.size ?? track.maxDefiniteOuterSize
+export function stack(
+  items: ReadonlyArray<StackTrackItemInput>,
+  options: StackOptions,
+): Track {
+  const trackItems: Array<StackTrackItem> = []
+  let maxSize = 0
+
+  for (const item of items) {
+    const trackItem = stackTrackItem(item)
+    trackItems.push(trackItem)
+
+    maxSize = Math.max(maxSize, trackItem.size)
+  }
+
+  const size = auto(options.size ?? Number.POSITIVE_INFINITY, maxSize)
+
+  const stretch = clamp(options.stretch ?? 0, 0, 1)
+  const place = clamp(options.place ?? 0, 0, 1)
+
+  applyStretch(trackItems, size, stretch)
 
   return new Track(
-    track.spans.map((span) => {
-      if (span.auto > 0) {
-        return span
+    Array.from(trackItems, (item) => {
+      const free = size - item.definiteOuterSize
+
+      if (item.autoOffsetCount > 0) {
+        return interval(
+          item.startIsAuto ? free / item.autoOffsetCount : 0,
+          Math.min(item.size, size),
+        )
       }
 
-      const free = size - span.definiteOuterSize
-      const stretchAmount = auto(span.stretch, stretch) * free
-      return setSize(span, span.size + stretchAmount)
+      return interval(
+        auto(item.place, place) * free + item.definiteStart,
+        item.size,
+      )
     }),
     size,
-    track.gap,
+  )
+}
+
+function processItems(items: ReadonlyArray<SequenceTrackItemInput>) {
+  const trackItems: Array<SequenceTrackItem> = []
+
+  let totalDefiniteOuterSize = 0
+
+  let totalAutoOffsetCount = 0
+
+  const growable = new Set<SequenceTrackItem>()
+  let totalGrow = 0
+
+  const shrinkable = new Set<SequenceTrackItem>()
+  let totalShrink = 0
+  let totalScaledShrink = 0
+
+  for (const item of items) {
+    const trackItem = sequenceTrackItem(item)
+    trackItems.push(trackItem)
+
+    totalDefiniteOuterSize += trackItem.definiteOuterSize
+
+    totalAutoOffsetCount += trackItem.autoOffsetCount
+
+    if (trackItem.grow > 0) {
+      growable.add(trackItem)
+      totalGrow += trackItem.grow
+    }
+
+    if (trackItem.shrink > 0) {
+      shrinkable.add(trackItem)
+      totalShrink += trackItem.shrink
+      totalScaledShrink += trackItem.shrink * trackItem.size
+    }
+  }
+
+  return {
+    trackItems,
+    totalDefiniteOuterSize,
+    totalAutoOffsetCount,
+    growable,
+    totalGrow,
+    shrinkable,
+    totalShrink,
+    totalScaledShrink,
+  }
+}
+
+export function sequence(
+  items: ReadonlyArray<SequenceTrackItemInput>,
+  options: SequenceOptions,
+) {
+  const processResult = processItems(items)
+  const {
+    trackItems,
+    growable,
+    shrinkable,
+    totalShrink,
+    totalScaledShrink,
+    totalGrow,
+    totalAutoOffsetCount,
+  } = processResult
+
+  let totalDefiniteOuterSize = processResult.totalDefiniteOuterSize
+
+  const size = auto(
+    options.size ?? Number.POSITIVE_INFINITY,
+    totalDefiniteOuterSize,
+  )
+
+  let start = 0
+  let between = options.gap ?? 0
+  let autoOffset = 0
+
+  if (totalAutoOffsetCount === 0) {
+    const delta = size - totalDefiniteOuterSize
+    const excess = Math.abs(delta)
+    if (delta > 0 && growable.size > 0) {
+      const growth = applyGrow(growable, excess, totalGrow)
+      totalDefiniteOuterSize += growth
+    } else if (delta < 0 && shrinkable.size > 0) {
+      const shrinkage = applyShrink(
+        shrinkable,
+        excess,
+        totalShrink,
+        totalScaledShrink,
+      )
+      totalDefiniteOuterSize -= shrinkage
+    }
+
+    const space = options.space ?? 0
+    const spaceOuter = options.spaceOuter ?? 1
+    const distributed = (size - totalDefiniteOuterSize) * space
+
+    start +=
+      (size - totalDefiniteOuterSize - distributed) * (options.place ?? 0)
+
+    if (distributed > 0 && trackItems.length > 1) {
+      const spacing = distributed / (trackItems.length + 1)
+      start += spacing * spaceOuter
+      between +=
+        spacing + (spacing * 2 * (1 - spaceOuter)) / (trackItems.length - 1)
+    }
+  } else {
+    autoOffset = (size - totalDefiniteOuterSize) / totalAutoOffsetCount
+  }
+
+  const intervals: Array<Interval> = []
+
+  for (const item of trackItems) {
+    start += autoOffset * Number(item.startIsAuto)
+    intervals.push(interval(start, item.size))
+    start += item.size + between + autoOffset * Number(item.endIsAuto)
+  }
+
+  return new Track(intervals, auto(size, start - between))
+}
+
+export const translate: {
+  (axis: Track, amount: number): Track
+  (amount: number): (axis: Track) => Track
+} = dual(
+  2,
+  (axis: Track, amount: number) =>
+    new Track(
+      axis.intervals.map((ival) => interval(ival.start + amount, ival.size)),
+      axis.size,
+    ),
+)
+
+export const scaleFrom: {
+  (axis: Track, scale: number, offset: number): Track
+  (scale: number, offset: number): (axis: Track) => Track
+} = dual(3, (axis: Track, scale: number, offset: number) => {
+  return new Track(
+    axis.intervals.map((ival) =>
+      interval((ival.start - offset) * scale, ival.size * scale),
+    ),
+    axis.size * scale,
   )
 })
+
+export const scale: {
+  (axis: Track, scale: number, origin?: number): Track
+  (scale: number, origin?: number): (axis: Track) => Track
+} = dual(
+  (args) => isTrack(args[0]),
+  (axis: Track, scale: number, origin = 0) =>
+    scaleFrom(axis, scale, normalize(origin, axis.start, axis.end)),
+)
+
+export const start: {
+  (axis: Track, start: number): Track
+  (start: number): (axis: Track) => Track
+} = dual(
+  2,
+  (axis: Track, start: number) =>
+    new Track(
+      axis.intervals.map((ival) => interval(start, ival.size)),
+      axis.size,
+    ),
+)
+
+export const size: {
+  (axis: Track, size: number): Track
+  (size: number): (axis: Track) => Track
+} = dual(2, (axis: Track, size: number) => new Track(axis.intervals, size))
+
+export const reverse = (axis: Track) => {
+  return new Track(
+    axis.intervals.map((ival) =>
+      interval(
+        remap(ival.start, axis.start, axis.end, axis.end, axis.start) -
+          ival.size,
+        ival.size,
+      ),
+    ),
+    axis.size,
+  )
+}
+
+console.log(
+  sequence([{ basis: 100, grow: 1, max: 200 }, { basis: 200 }], {
+    size: 500,
+    gap: 0,
+    place: 0,
+    space: 0,
+    spaceOuter: 0,
+  }),
+)
