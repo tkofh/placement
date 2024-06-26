@@ -1,16 +1,21 @@
 import { Pipeable } from './pipeable'
 import { dual } from './utils/function'
+import { roundTo } from './utils/math'
 
 const TypeBrand: unique symbol = Symbol('placement/interval')
 type TypeBrand = typeof TypeBrand
 
 class Interval extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
-  constructor(
-    readonly start: number,
-    readonly size: number,
-  ) {
+
+  readonly start: number
+  readonly size: number
+
+  constructor(start: number, size: number) {
     super()
+
+    this.start = roundTo(start, 4)
+    this.size = roundTo(size, 4)
   }
 
   get end(): number {

@@ -155,7 +155,6 @@ export function sequence(
   items: ReadonlyArray<SequenceTrackItemInput>,
   options: SequenceOptions,
 ) {
-  const processResult = processItems(items)
   const {
     trackItems,
     growable,
@@ -164,9 +163,10 @@ export function sequence(
     totalScaledShrink,
     totalGrow,
     totalAutoOffsetCount,
-  } = processResult
+    totalDefiniteOuterSize: initialTotalDefiniteOuterSize,
+  } = processItems(items)
 
-  let totalDefiniteOuterSize = processResult.totalDefiniteOuterSize
+  let totalDefiniteOuterSize = initialTotalDefiniteOuterSize
 
   const size = auto(
     options.size ?? Number.POSITIVE_INFINITY,
