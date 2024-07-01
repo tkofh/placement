@@ -1,9 +1,9 @@
+import { Pipeable } from './internal/pipeable'
 import {
   type SequenceTrackItem,
   type SequenceTrackItemInput,
-  applyGrow,
-  applyShrink,
-  sequenceTrackItem,
+  adjustSizes,
+  processItems,
 } from './internal/track/sequence'
 import {
   type StackTrackItem,
@@ -12,10 +12,9 @@ import {
   stackTrackItem,
 } from './internal/track/stack'
 import { type Interval, interval } from './interval'
-import { Pipeable } from './pipeable'
 import { auto } from './utils/arguments'
 import { dual } from './utils/function'
-import { clamp, normalize, remap } from './utils/math'
+import { normalize, remap } from './utils/math'
 
 const TypeBrand: unique symbol = Symbol('placement/track')
 type TypeBrand = typeof TypeBrand
@@ -80,8 +79,8 @@ export function stack(
 
   const size = auto(options.size ?? Number.POSITIVE_INFINITY, maxSize)
 
-  const stretch = clamp(options.stretch ?? 0, 0, 1)
-  const place = clamp(options.place ?? 0, 0, 1)
+  const stretch = options.stretch ?? 0
+  const place = options.place ?? 0
 
   applyStretch(trackItems, size, stretch)
 
@@ -105,120 +104,118 @@ export function stack(
   )
 }
 
-function processItems(items: ReadonlyArray<SequenceTrackItemInput>) {
-  const trackItems: Array<SequenceTrackItem> = []
+function sequenceWithAutoSize(
+  items: ReadonlyArray<SequenceTrackItem>,
+  gap: number,
+) {
+  const intervals: Array<Interval> = []
 
-  let totalDefiniteOuterSize = 0
-
-  let totalAutoOffsetCount = 0
-
-  const growable = new Set<SequenceTrackItem>()
-  let totalGrow = 0
-
-  const shrinkable = new Set<SequenceTrackItem>()
-  let totalShrink = 0
-  let totalScaledShrink = 0
+  let cursor = 0
 
   for (const item of items) {
-    const trackItem = sequenceTrackItem(item)
-    trackItems.push(trackItem)
-
-    totalDefiniteOuterSize += trackItem.definiteOuterSize
-
-    totalAutoOffsetCount += trackItem.autoOffsetCount
-
-    if (trackItem.grow > 0) {
-      growable.add(trackItem)
-      totalGrow += trackItem.grow
-    }
-
-    if (trackItem.shrink > 0) {
-      shrinkable.add(trackItem)
-      totalShrink += trackItem.shrink
-      totalScaledShrink += trackItem.shrink * trackItem.size
-    }
+    intervals.push(interval(cursor, item.size))
+    cursor += item.size + gap
   }
 
-  return {
-    trackItems,
-    totalDefiniteOuterSize,
-    totalAutoOffsetCount,
-    growable,
-    totalGrow,
-    shrinkable,
-    totalShrink,
-    totalScaledShrink,
+  return new Track(intervals, cursor - gap)
+}
+
+function sequenceWithAutoOffset(
+  items: ReadonlyArray<SequenceTrackItem>,
+  size: number,
+  gap: number,
+  definiteOuterSize: number,
+  autoOffsetCount: number,
+) {
+  const intervals: Array<Interval> = []
+
+  const autoOffset = (size - definiteOuterSize) / autoOffsetCount
+
+  let cursor = 0
+
+  for (const item of items) {
+    cursor += autoOffset * Number(item.startIsAuto)
+    intervals.push(interval(cursor, item.size))
+    cursor += item.size + gap + autoOffset * Number(item.endIsAuto)
   }
+
+  return new Track(intervals, size)
+}
+
+function sequenceWithFreeSpace(
+  items: ReadonlyArray<SequenceTrackItem>,
+  size: number,
+  used: number,
+  gap: number,
+  place: number,
+  space: number,
+  spaceOuter: number,
+) {
+  const intervals: Array<Interval> = []
+  const free = size - used
+
+  const distributed = free * space
+
+  let cursor = 0
+  let between = gap
+
+  cursor += (free - distributed) * place
+
+  if (Math.abs(distributed) > 0 && items.length > 1) {
+    const spacing = distributed / (items.length + 1)
+    cursor += spacing * spaceOuter
+    between += spacing + (spacing * 2 * (1 - spaceOuter)) / (items.length - 1)
+  }
+
+  for (const item of items) {
+    intervals.push(interval(cursor, item.size))
+    cursor += item.size + between
+  }
+
+  return new Track(intervals, size)
 }
 
 export function sequence(
   items: ReadonlyArray<SequenceTrackItemInput>,
   options: SequenceOptions,
 ) {
-  const {
+  const { trackItems, growable, shrinkable, totals } = processItems(items)
+
+  const gap = options.gap ?? 0
+
+  if (options.size == null || options.size === Number.POSITIVE_INFINITY) {
+    return sequenceWithAutoSize(trackItems, gap)
+  }
+
+  if (totals.autoOffsetCount > 0) {
+    return sequenceWithAutoOffset(
+      trackItems,
+      options.size,
+      gap,
+      totals.definiteOuterSize,
+      totals.autoOffsetCount,
+    )
+  }
+
+  const consumed =
+    totals.definiteOuterSize +
+    adjustSizes(
+      options.size - totals.definiteOuterSize,
+      growable,
+      totals.growthFactor,
+      shrinkable,
+      totals.scaledShrinkFactor,
+    )
+
+  return sequenceWithFreeSpace(
     trackItems,
-    growable,
-    shrinkable,
-    totalShrink,
-    totalScaledShrink,
-    totalGrow,
-    totalAutoOffsetCount,
-    totalDefiniteOuterSize: initialTotalDefiniteOuterSize,
-  } = processItems(items)
-
-  let totalDefiniteOuterSize = initialTotalDefiniteOuterSize
-
-  const size = auto(
-    options.size ?? Number.POSITIVE_INFINITY,
-    totalDefiniteOuterSize,
+    options.size,
+    consumed,
+    gap,
+    options.place ?? 0,
+    options.space ?? 0,
+    options.spaceOuter ?? 0,
   )
-
-  let start = 0
-  let between = options.gap ?? 0
-  let autoOffset = 0
-
-  if (totalAutoOffsetCount === 0) {
-    const delta = size - totalDefiniteOuterSize
-    const excess = Math.abs(delta)
-    if (delta > 0 && growable.size > 0) {
-      const growth = applyGrow(growable, excess, totalGrow)
-      totalDefiniteOuterSize += growth
-    } else if (delta < 0 && shrinkable.size > 0) {
-      const shrinkage = applyShrink(
-        shrinkable,
-        excess,
-        totalShrink,
-        totalScaledShrink,
-      )
-      totalDefiniteOuterSize -= shrinkage
-    }
-
-    const space = options.space ?? 0
-    const spaceOuter = options.spaceOuter ?? 1
-    const distributed = (size - totalDefiniteOuterSize) * space
-
-    start +=
-      (size - totalDefiniteOuterSize - distributed) * (options.place ?? 0)
-
-    if (distributed > 0 && trackItems.length > 1) {
-      const spacing = distributed / (trackItems.length + 1)
-      start += spacing * spaceOuter
-      between +=
-        spacing + (spacing * 2 * (1 - spaceOuter)) / (trackItems.length - 1)
-    }
-  } else {
-    autoOffset = (size - totalDefiniteOuterSize) / totalAutoOffsetCount
-  }
-
-  const intervals: Array<Interval> = []
-
-  for (const item of trackItems) {
-    start += autoOffset * Number(item.startIsAuto)
-    intervals.push(interval(start, item.size))
-    start += item.size + between + autoOffset * Number(item.endIsAuto)
-  }
-
-  return new Track(intervals, auto(size, start - between))
 }
 
 export const translate: {
@@ -283,13 +280,3 @@ export const reverse = (axis: Track) => {
     axis.size,
   )
 }
-
-console.log(
-  sequence([{ basis: 100, grow: 1, max: 200 }, { basis: 200 }], {
-    size: 500,
-    gap: 0,
-    place: 0,
-    space: 0,
-    spaceOuter: 0,
-  }),
-)

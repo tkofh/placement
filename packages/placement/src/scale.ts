@@ -1,4 +1,4 @@
-import { Pipeable } from './pipeable'
+import { Pipeable } from './internal/pipeable'
 import { dual } from './utils/function'
 
 const TypeBrand: unique symbol = Symbol('placement/scale')

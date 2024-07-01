@@ -1,7 +1,8 @@
 import { parse } from 'valued'
 import { allOf, oneOf } from 'valued/combinators'
 import { isKeywordValue, keyword } from 'valued/data/keyword'
-import { Pipeable } from './pipeable'
+import { inspect } from './internal/inspectable'
+import { Pipeable } from './internal/pipeable'
 import { normalizeTRBL, normalizeXYWH } from './utils/arguments'
 import { dual } from './utils/function'
 import { lerp } from './utils/math'
@@ -59,6 +60,10 @@ class Rect extends Pipeable implements RectLike {
 
   get centerY() {
     return roundTo(this.y + this.height / 2, this.precision)
+  }
+
+  [inspect]() {
+    return `Rect { x: ${this.x}, y: ${this.y}, width: ${this.width}, height: ${this.height} }`
   }
 }
 

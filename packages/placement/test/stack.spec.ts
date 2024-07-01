@@ -2,16 +2,6 @@ import { describe, expect, test } from 'vitest'
 import { interval } from '../src/interval'
 import { stack } from '../src/track'
 
-/**
- * things to test:
- * - basic cases
- * - with stretch
- * - with place
- * - with stretch and place
- * - with definite offsets
- * - with auto offsets
- */
-
 describe('basic', () => {
   test.each([
     {

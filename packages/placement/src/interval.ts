@@ -1,4 +1,5 @@
-import { Pipeable } from './pipeable'
+import { inspect } from './internal/inspectable'
+import { Pipeable } from './internal/pipeable'
 import { dual } from './utils/function'
 import { roundTo } from './utils/math'
 
@@ -20,6 +21,10 @@ class Interval extends Pipeable {
 
   get end(): number {
     return this.start + this.size
+  }
+
+  [inspect]() {
+    return `Interval [${this.start}, ${this.end}]`
   }
 }
 
