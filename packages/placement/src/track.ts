@@ -1,3 +1,4 @@
+import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
 import {
   type SequenceTrackItem,
@@ -14,7 +15,7 @@ import {
 import { type Interval, interval } from './interval'
 import { auto } from './utils/arguments'
 import { dual } from './utils/function'
-import { normalize, remap } from './utils/math'
+import { lerp } from './utils/math'
 
 const TypeBrand: unique symbol = Symbol('placement/track')
 type TypeBrand = typeof TypeBrand
@@ -22,24 +23,37 @@ type TypeBrand = typeof TypeBrand
 class Track extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
-  constructor(
-    readonly intervals: ReadonlyArray<Interval>,
-    readonly size: number,
-  ) {
+  readonly start: number
+  readonly end: number
+  readonly size: number
+
+  constructor(readonly intervals: ReadonlyArray<Interval>) {
     super()
+
+    if (this.intervals.length === 0) {
+      throw new RangeError('Track must contain at least one interval')
+    }
+
+    let start = Number.POSITIVE_INFINITY
+    let end = Number.NEGATIVE_INFINITY
+
+    for (const interval of intervals) {
+      start = Math.min(start, interval.start)
+      end = Math.max(end, interval.end)
+    }
+
+    this.start = start
+    this.end = end
+    this.size = end - start
   }
 
-  get start() {
-    return this.intervals[0].start
+  [inspect]() {
+    return `Track [${this.start}, ${this.end}] [ ${this.intervals.map((interval) => `[${interval.start}, ${interval.end}]`).join(', ')} ]`
   }
+}
 
-  get end() {
-    return this.intervals[this.intervals.length - 1].end
-  }
-
-  get innerSize(): number {
-    return Math.abs(this.end - this.start)
-  }
+export function track(intervals: ReadonlyArray<Interval>): Track {
+  return new Track(intervals)
 }
 
 export type { Track }
@@ -100,46 +114,26 @@ export function stack(
         item.size,
       )
     }),
-    size,
   )
 }
 
-function sequenceWithAutoSize(
+function sequenceWithoutFreeSpace(
   items: ReadonlyArray<SequenceTrackItem>,
   gap: number,
+  autoOffset: number,
+  start: number,
 ) {
   const intervals: Array<Interval> = []
 
-  let cursor = 0
+  let cursor = start
 
   for (const item of items) {
+    cursor += autoOffset * Number(item.startIsAuto) + item.start
     intervals.push(interval(cursor, item.size))
-    cursor += item.size + gap
+    cursor += item.size + gap + autoOffset * Number(item.endIsAuto) + item.end
   }
 
-  return new Track(intervals, cursor - gap)
-}
-
-function sequenceWithAutoOffset(
-  items: ReadonlyArray<SequenceTrackItem>,
-  size: number,
-  gap: number,
-  definiteOuterSize: number,
-  autoOffsetCount: number,
-) {
-  const intervals: Array<Interval> = []
-
-  const autoOffset = (size - definiteOuterSize) / autoOffsetCount
-
-  let cursor = 0
-
-  for (const item of items) {
-    cursor += autoOffset * Number(item.startIsAuto)
-    intervals.push(interval(cursor, item.size))
-    cursor += item.size + gap + autoOffset * Number(item.endIsAuto)
-  }
-
-  return new Track(intervals, size)
+  return new Track(intervals)
 }
 
 function sequenceWithFreeSpace(
@@ -168,11 +162,12 @@ function sequenceWithFreeSpace(
   }
 
   for (const item of items) {
+    cursor += item.start
     intervals.push(interval(cursor, item.size))
-    cursor += item.size + between
+    cursor += item.size + between + item.end
   }
 
-  return new Track(intervals, size)
+  return new Track(intervals)
 }
 
 export function sequence(
@@ -182,25 +177,33 @@ export function sequence(
   const { trackItems, growable, shrinkable, totals } = processItems(items)
 
   const gap = options.gap ?? 0
+  const place = options.place ?? 0
 
   if (options.size == null || options.size === Number.POSITIVE_INFINITY) {
-    return sequenceWithAutoSize(trackItems, gap)
+    return sequenceWithoutFreeSpace(
+      trackItems,
+      gap,
+      0,
+      place * -totals.definiteOuterSize,
+    )
   }
 
+  const deltaSize =
+    options.size - totals.definiteOuterSize - gap * (trackItems.length - 1)
+
   if (totals.autoOffsetCount > 0) {
-    return sequenceWithAutoOffset(
+    return sequenceWithoutFreeSpace(
       trackItems,
-      options.size,
       gap,
-      totals.definiteOuterSize,
-      totals.autoOffsetCount,
+      (options.size - totals.definiteOuterSize) / totals.autoOffsetCount,
+      place * -deltaSize,
     )
   }
 
   const consumed =
     totals.definiteOuterSize +
     adjustSizes(
-      options.size - totals.definiteOuterSize,
+      deltaSize,
       growable,
       totals.growthFactor,
       shrinkable,
@@ -212,7 +215,7 @@ export function sequence(
     options.size,
     consumed,
     gap,
-    options.place ?? 0,
+    place,
     options.space ?? 0,
     options.spaceOuter ?? 0,
   )
@@ -226,19 +229,17 @@ export const translate: {
   (axis: Track, amount: number) =>
     new Track(
       axis.intervals.map((ival) => interval(ival.start + amount, ival.size)),
-      axis.size,
     ),
 )
 
 export const scaleFrom: {
   (axis: Track, scale: number, offset: number): Track
   (scale: number, offset: number): (axis: Track) => Track
-} = dual(3, (axis: Track, scale: number, offset: number) => {
+} = dual(3, (axis: Track, scale: number, position: number) => {
   return new Track(
     axis.intervals.map((ival) =>
-      interval((ival.start - offset) * scale, ival.size * scale),
+      interval((ival.start - position) * scale, ival.size * scale),
     ),
-    axis.size * scale,
   )
 })
 
@@ -248,35 +249,46 @@ export const scale: {
 } = dual(
   (args) => isTrack(args[0]),
   (axis: Track, scale: number, origin = 0) =>
-    scaleFrom(axis, scale, normalize(origin, axis.start, axis.end)),
+    scaleFrom(axis, scale, lerp(origin, axis.start, axis.end)),
 )
 
-export const start: {
-  (axis: Track, start: number): Track
-  (start: number): (axis: Track) => Track
-} = dual(
-  2,
-  (axis: Track, start: number) =>
-    new Track(
-      axis.intervals.map((ival) => interval(start, ival.size)),
-      axis.size,
-    ),
-)
+/**
+ * operations
+ * - set start / end
+ * - set size w optional origin (default is 0%)
+ * - reverse
+ * - reflect w optional origin
+ * - reflectFrom
+ * - normalize
+ * - lerp
+ * - remap
+ * - distribute
+ * - distributeWithin
+ */
 
-export const size: {
-  (axis: Track, size: number): Track
-  (size: number): (axis: Track) => Track
-} = dual(2, (axis: Track, size: number) => new Track(axis.intervals, size))
+// export const start: {
+//   (axis: Track, start: number): Track
+//   (start: number): (axis: Track) => Track
+// } = dual(
+//   2,
+//   (axis: Track, start: number) =>
+//     new Track(axis.intervals.map((ival) => interval(start, ival.size))),
+// )
+//
+// export const size: {
+//   (axis: Track, size: number): Track
+//   (size: number): (axis: Track) => Track
+// } = dual(2, (axis: Track, size: number) => new Track(axis.intervals, size))
 
-export const reverse = (axis: Track) => {
-  return new Track(
-    axis.intervals.map((ival) =>
-      interval(
-        remap(ival.start, axis.start, axis.end, axis.end, axis.start) -
-          ival.size,
-        ival.size,
-      ),
-    ),
-    axis.size,
-  )
-}
+// export const reverse = (axis: Track) => {
+//   return new Track(
+//     axis.intervals.map((ival) =>
+//       interval(
+//         remap(ival.start, axis.start, axis.end, axis.end, axis.start) -
+//           ival.size,
+//         ival.size,
+//       ),
+//     ),
+//     axis.size,
+//   )
+// }

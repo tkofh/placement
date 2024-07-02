@@ -1,5 +1,4 @@
-import { auto, isAuto } from '../../utils/arguments'
-import { clamp } from '../../utils/math'
+import { auto } from '../../utils/arguments'
 import { TrackItem, type TrackItemInput } from './item'
 
 export interface StackTrackItemInput extends TrackItemInput {
@@ -24,8 +23,8 @@ class StackTrackItem extends TrackItem {
   ) {
     super(start, end, basis, min, max)
 
-    this.stretch = isAuto(stretch) ? stretch : clamp(stretch, 0, 1)
-    this.place = isAuto(place) ? place : clamp(place, 0, 1)
+    this.stretch = stretch
+    this.place = place
 
     this.stretchable = !(this.startIsAuto || this.endIsAuto)
   }

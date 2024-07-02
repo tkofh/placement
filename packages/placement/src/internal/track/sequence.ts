@@ -145,7 +145,7 @@ function applyShrink(
     totalScaledShrink -= totalScaledShrinkReduction
   }
 
-  return initialExcess - excess
+  return excess - initialExcess
 }
 
 export function adjustSizes(
