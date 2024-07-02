@@ -15,7 +15,7 @@ import {
 import { type Interval, interval } from './interval'
 import { auto } from './utils/arguments'
 import { dual } from './utils/function'
-import { lerp } from './utils/math'
+import { lerp, normalize } from './utils/math'
 
 const TypeBrand: unique symbol = Symbol('placement/track')
 type TypeBrand = typeof TypeBrand
@@ -48,7 +48,7 @@ class Track extends Pipeable {
   }
 
   [inspect]() {
-    return `Track [${this.start}, ${this.end}] [ ${this.intervals.map((interval) => `[${interval.start}, ${interval.end}]`).join(', ')} ]`
+    return `Track [${this.intervals.map((interval) => `[${interval.start}, ${interval.end}]`).join(', ')}]`
   }
 }
 
@@ -222,39 +222,52 @@ export function sequence(
 }
 
 export const translate: {
-  (axis: Track, amount: number): Track
-  (amount: number): (axis: Track) => Track
+  (track: Track, amount: number): Track
+  (amount: number): (track: Track) => Track
 } = dual(
   2,
-  (axis: Track, amount: number) =>
+  (track: Track, amount: number) =>
     new Track(
-      axis.intervals.map((ival) => interval(ival.start + amount, ival.size)),
+      track.intervals.map((ival) => interval(ival.start + amount, ival.size)),
     ),
 )
 
-export const scaleFrom: {
-  (axis: Track, scale: number, offset: number): Track
-  (scale: number, offset: number): (axis: Track) => Track
-} = dual(3, (axis: Track, scale: number, position: number) => {
-  return new Track(
-    axis.intervals.map((ival) =>
-      interval((ival.start - position) * scale, ival.size * scale),
-    ),
-  )
-})
-
-export const scale: {
-  (axis: Track, scale: number, origin?: number): Track
-  (scale: number, origin?: number): (axis: Track) => Track
+const internalScale: {
+  (track: Track, scale: number, origin?: number): Track
+  (scale: number, origin?: number): (track: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
-  (axis: Track, scale: number, origin = 0) =>
-    scaleFrom(axis, scale, lerp(origin, axis.start, axis.end)),
+  (track: Track, scale: number, origin) => {
+    const startShift = (track.size - track.size * scale) * (origin ?? 0)
+
+    return new Track(
+      track.intervals.map((ival) => {
+        let start = ival.start * scale + startShift
+        let size = ival.size * scale
+
+        if (size < 0) {
+          start += size
+          size = Math.abs(size)
+        }
+
+        return interval(start, size)
+      }),
+    )
+  },
+)
+
+export const scale = internalScale
+
+export const scaleFrom: {
+  (track: Track, scale: number, position: number): Track
+  (scale: number, position: number): (track: Track) => Track
+} = dual(3, (track: Track, scale: number, position: number) =>
+  internalScale(track, scale, normalize(position, track.start, track.end)),
 )
 
 /**
  * operations
- * - set start / end
+ * - align, alignAt
  * - set size w optional origin (default is 0%)
  * - reverse
  * - reflect w optional origin
@@ -266,29 +279,28 @@ export const scale: {
  * - distributeWithin
  */
 
-// export const start: {
-//   (axis: Track, start: number): Track
-//   (start: number): (axis: Track) => Track
-// } = dual(
-//   2,
-//   (axis: Track, start: number) =>
-//     new Track(axis.intervals.map((ival) => interval(start, ival.size))),
-// )
-//
-// export const size: {
-//   (axis: Track, size: number): Track
-//   (size: number): (axis: Track) => Track
-// } = dual(2, (axis: Track, size: number) => new Track(axis.intervals, size))
+export const alignTo: {
+  (track: Track, position: number, amount?: number): Track
+  (position: number, amount?: number): (track: Track) => Track
+} = dual(
+  (args) => isTrack(args[0]),
+  (track: Track, position: number, amount = 1) =>
+    new Track(
+      track.intervals.map((ival) =>
+        interval(lerp(amount, ival.start, position), ival.size),
+      ),
+    ),
+)
 
-// export const reverse = (axis: Track) => {
-//   return new Track(
-//     axis.intervals.map((ival) =>
-//       interval(
-//         remap(ival.start, axis.start, axis.end, axis.end, axis.start) -
-//           ival.size,
-//         ival.size,
-//       ),
-//     ),
-//     axis.size,
-//   )
-// }
+export const align: {
+  (track: Track, align: number, amount?: number): Track
+  (align: number, amount?: number): (track: Track) => Track
+} = dual(
+  (args) => isTrack(args[0]),
+  (track: Track, align: number, amount = 1) =>
+    alignTo(track, normalize(align, track.start, track.end), amount),
+)
+
+export const toInterval = (track: Track) => {
+  return interval(track.start, track.size)
+}
