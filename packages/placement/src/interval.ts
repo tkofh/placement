@@ -8,11 +8,18 @@ import {
   remap as remapNumber,
   roundTo,
 } from './utils/math'
+import { isRecord } from './utils/object'
 
 const TypeBrand: unique symbol = Symbol('placement/interval')
 type TypeBrand = typeof TypeBrand
 
-class Interval extends Pipeable {
+export interface IntervalLike {
+  readonly start: number
+  readonly size: number
+  readonly end: number
+}
+
+class Interval extends Pipeable implements IntervalLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
   readonly start: number
@@ -47,6 +54,9 @@ export const interval: {
 
 export const isInterval = (value: unknown): value is Interval => {
   return typeof value === 'object' && value !== null && TypeBrand in value
+}
+export const isIntervalLike = (value: unknown): value is IntervalLike => {
+  return isRecord(value) && 'start' in value && 'size' in value
 }
 
 export const setStart: {
@@ -105,14 +115,14 @@ export const scaleFrom: {
 )
 
 export const lerp: {
-  (interval: Interval, target: Interval): Interval
-  (target: Interval): (interval: Interval) => Interval
+  (interval: Interval, target: Interval, amount: number): Interval
+  (target: Interval, amount: number): (interval: Interval) => Interval
 } = dual(
-  2,
-  (interval: Interval, target: Interval) =>
+  3,
+  (interval: Interval, target: Interval, amount: number) =>
     new Interval(
-      lerpNumber(interval.start, target.start, target.end),
-      lerpNumber(interval.size, 0, target.size),
+      lerpNumber(amount, interval.start, target.start),
+      lerpNumber(amount, interval.size, target.size),
     ),
 )
 
@@ -155,4 +165,49 @@ export const alignTo: {
     (isInterval(args[1]) || (typeof args[1] === 'number' && args.length >= 3)),
   (interval: Interval, target: number, origin = 0) =>
     new Interval(target - interval.size * origin, interval.size),
+)
+
+export const avoid: {
+  (interval: IntervalLike, target: number | IntervalLike, gap: number): Interval
+  (
+    target: number | IntervalLike,
+    gap: number,
+  ): (interval: IntervalLike) => Interval
+} = dual(
+  3,
+  (source: IntervalLike, target: number | IntervalLike, gap: number) => {
+    const targetIsIntervalLike = isIntervalLike(target)
+
+    const start = (targetIsIntervalLike ? target.start : target) - gap
+    const end = (targetIsIntervalLike ? target.end : target) + gap
+
+    console.log(source, target, gap, start, end)
+
+    if (source.start > end || source.end < start) {
+      console.log('no overlap')
+      return source
+    }
+
+    if (
+      (source.start >= start && source.end <= end) ||
+      (source.start <= start && source.end >= end)
+    ) {
+      console.log('total overlap')
+      const deltaStart = source.start - start
+      const deltaEnd = end - source.end
+
+      const offset =
+        (Math.min(deltaStart, deltaEnd) + source.size) *
+        (deltaStart > deltaEnd ? 1 : -1)
+
+      return new Interval(source.start + offset, source.size)
+    }
+
+    console.log('partial overlap')
+
+    const offset =
+      Math.min(source.end, end) -
+      Math.max(source.start, start) * (source.start < start ? -1 : 1)
+    return new Interval(source.start + offset, source.size)
+  },
 )

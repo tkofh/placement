@@ -11,7 +11,6 @@ import {
   mapItemEnds,
   mapItemSizes,
   mapItemStarts,
-  mix,
   normalize,
   reflect,
   remap,
@@ -108,11 +107,6 @@ describeTrackOperation('scaleFrom', [
 describeTrackOperation('alignTo', [
   {
     input: track([interval(0, 100), interval(100, 100)]),
-    operation: alignTo(50),
-    output: track([interval(50, 100), interval(150, 100)]),
-  },
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
     operation: alignTo(50, 0),
     output: track([interval(50, 100), interval(150, 100)]),
   },
@@ -125,6 +119,11 @@ describeTrackOperation('alignTo', [
     input: track([interval(0, 100), interval(100, 100)]),
     operation: alignTo(50, 1),
     output: track([interval(-150, 100), interval(-50, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: alignTo(interval(100, 100), 0.5),
+    output: track([interval(50, 100), interval(150, 100)]),
   },
 ])
 
@@ -246,16 +245,26 @@ describeTrackOperation('normalize', [
   },
 ])
 
-describeTrackOperation('lerp', [
+describeTrackOperation('mix', [
   {
-    input: track([interval(0.25, 0.25), interval(0.75, 0.25)]),
-    operation: lerp(interval(0, 100)),
-    output: track([interval(25, 25), interval(75, 25)]),
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: lerp(track([interval(0, 100), interval(100, 100)]), 0),
+    output: track([interval(0, 100), interval(100, 100)]),
   },
   {
-    input: track([interval(0, 0.25), interval(1, 0.25)]),
-    operation: lerp(interval(0, 100)),
-    output: track([interval(0, 25), interval(100, 25)]),
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: lerp(track([interval(50, 100), interval(50, 100)]), 0.5),
+    output: track([interval(25, 100), interval(75, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: lerp(track([interval(100, 100), interval(0, 100)]), 1),
+    output: track([interval(100, 100), interval(0, 100)]),
+  },
+  {
+    input: track([interval(0, 100)]),
+    operation: lerp(track([interval(100, 100), interval(0, 100)]), 1),
+    output: track([interval(100, 100)]),
   },
 ])
 
@@ -325,29 +334,6 @@ describeTrackOperation('distributeWithin', [
     input: track([interval(0, 100), interval(0, 50), interval(0, 100)]),
     operation: distributeWithin(interval(100, 100)),
     output: track([interval(100, 100), interval(125, 50), interval(100, 100)]),
-  },
-])
-
-describeTrackOperation('mix', [
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: mix(track([interval(0, 100), interval(100, 100)]), 0),
-    output: track([interval(0, 100), interval(100, 100)]),
-  },
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: mix(track([interval(50, 100), interval(50, 100)]), 0.5),
-    output: track([interval(25, 100), interval(75, 100)]),
-  },
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: mix(track([interval(100, 100), interval(0, 100)]), 1),
-    output: track([interval(100, 100), interval(0, 100)]),
-  },
-  {
-    input: track([interval(0, 100)]),
-    operation: mix(track([interval(100, 100), interval(0, 100)]), 1),
-    output: track([interval(100, 100)]),
   },
 ])
 

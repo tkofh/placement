@@ -16,7 +16,7 @@ import {
   type Interval,
   alignTo as alignIntervalTo,
   interval,
-  lerp as lerpInterval,
+  isInterval,
   normalize as normalizeInterval,
   remap as remapInterval,
   setSize as setIntervalSize,
@@ -273,14 +273,21 @@ export const scaleFrom: {
 )
 
 export const alignTo: {
-  (track: Track, position: number): Track
-  (track: Track, position: number, origin: number): Track
-  (position: number): (track: Track) => Track
-  (position: number, origin: number): (track: Track) => Track
+  (track: Track, target: number | Interval | Track, origin: number): Track
+  (target: number | Interval | Track, origin: number): (track: Track) => Track
 } = dual(
-  (args) => isTrack(args[0]),
-  (track: Track, position: number, origin = 0) => {
-    const set = setStart(position - track.size * origin)
+  3,
+  (track: Track, target: number | Interval | Track, origin: number) => {
+    const isIntervalLike = isInterval(target) || isTrack(target)
+
+    const set = setStart(
+      lerpNumber(
+        origin,
+        isIntervalLike ? target.start : target,
+        isIntervalLike ? target.end : target,
+      ) -
+        track.size * origin,
+    )
     return map(track, (ival) =>
       ival.pipe(set, translateInterval(ival.start - track.start)),
     )
@@ -362,13 +369,6 @@ export const normalize: {
     map(track, normalizeInterval(target)),
 )
 
-export const lerp: {
-  (track: Track, interval: Interval): Track
-  (interval: Interval): (track: Track) => Track
-} = dual(2, (track: Track, targetInterval: Interval) =>
-  map(track, lerpInterval(targetInterval)),
-)
-
 export const remap: {
   (track: Track, target: Interval): Track
   (track: Track, source: Interval, target: Interval): Track
@@ -435,7 +435,7 @@ export const distributeWithin: {
   },
 )
 
-export const mix: {
+export const lerp: {
   (track: Track, other: Track, amount: number): Track
   (other: Track, amount: number): (track: Track) => Track
 } = dual(
