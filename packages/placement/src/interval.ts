@@ -71,6 +71,15 @@ export const setEnd: {
   (span: Interval, end: number) => new Interval(end - span.size, span.size),
 )
 
+export const translate: {
+  (interval: Interval, amount: number): Interval
+  (amount: number): (interval: Interval) => Interval
+} = dual(
+  2,
+  (interval: Interval, amount: number) =>
+    new Interval(interval.start + amount, interval.size),
+)
+
 export const scale: {
   (interval: Interval, scale: number, origin?: number): Interval
   (scale: number, origin?: number): (interval: Interval) => Interval
@@ -135,4 +144,15 @@ export const remap: {
       ),
       remapNumber(interval.size, 0, source.size, 0, target.size),
     ),
+)
+
+export const alignTo: {
+  (interval: Interval, target: number | Interval, origin?: number): Interval
+  (target: number | Interval, origin?: number): (interval: Interval) => Interval
+} = dual(
+  (args) =>
+    isInterval(args[0]) &&
+    (isInterval(args[1]) || (typeof args[1] === 'number' && args.length >= 3)),
+  (interval: Interval, target: number, origin = 0) =>
+    new Interval(target - interval.size * origin, interval.size),
 )

@@ -2,16 +2,23 @@ import { describe, expect, test } from 'vitest'
 import { interval } from '../src/interval'
 import {
   type Track,
-  align,
+  alignItems,
+  alignItemsTo,
   alignTo,
+  distribute,
+  distributeWithin,
   lerp,
+  mapItemEnds,
+  mapItemSizes,
+  mapItemStarts,
+  mix,
   normalize,
   reflect,
   remap,
   scale,
   scaleFrom,
+  setItemSizes,
   setSize,
-  setSizes,
   track,
   translate,
 } from '../src/track'
@@ -101,93 +108,76 @@ describeTrackOperation('scaleFrom', [
 describeTrackOperation('alignTo', [
   {
     input: track([interval(0, 100), interval(100, 100)]),
-    operation: alignTo(50, 1),
-    output: track([interval(50, 100), interval(50, 100)]),
-  },
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: alignTo(50, 2),
-    output: track([interval(50, 100), interval(50, 100)]),
+    operation: alignTo(50),
+    output: track([interval(50, 100), interval(150, 100)]),
   },
   {
     input: track([interval(0, 100), interval(100, 100)]),
     operation: alignTo(50, 0),
-    output: track([interval(0, 100), interval(100, 100)]),
+    output: track([interval(50, 100), interval(150, 100)]),
   },
   {
     input: track([interval(0, 100), interval(100, 100)]),
-    operation: alignTo(50, -1),
-    output: track([interval(0, 100), interval(100, 100)]),
+    operation: alignTo(50, 0.5),
+    output: track([interval(-50, 100), interval(50, 100)]),
   },
   {
     input: track([interval(0, 100), interval(100, 100)]),
-    operation: alignTo(200, 0.5),
-    output: track([interval(100, 100), interval(150, 100)]),
+    operation: alignTo(50, 1),
+    output: track([interval(-150, 100), interval(-50, 100)]),
   },
 ])
 
-describeTrackOperation('align', [
+describeTrackOperation('alignItemsTo', [
   {
     input: track([interval(0, 100), interval(100, 100)]),
-    operation: align(0.5),
+    operation: alignItemsTo(50),
     output: track([interval(50, 100), interval(50, 100)]),
   },
   {
     input: track([interval(0, 100), interval(100, 100)]),
-    operation: align(0.5, 0.5),
-    output: track([interval(25, 100), interval(75, 100)]),
+    operation: alignItemsTo(50, 0),
+    output: track([interval(50, 100), interval(50, 100)]),
   },
   {
     input: track([interval(0, 100), interval(100, 100)]),
-    operation: align(0.5, 0.5, 0),
-    output: track([interval(50, 100), interval(100, 100)]),
-  },
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: align(0.5, 0.5, 1),
-    output: track([interval(0, 100), interval(50, 100)]),
-  },
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: align(0),
+    operation: alignItemsTo(50, 0.5),
     output: track([interval(0, 100), interval(0, 100)]),
   },
   {
     input: track([interval(0, 100), interval(100, 100)]),
-    operation: align(0, 0.5),
-    output: track([interval(0, 100), interval(50, 100)]),
-  },
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: align(0, 0.5, 1),
-    output: track([interval(-50, 100), interval(0, 100)]),
-  },
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: align(1),
-    output: track([interval(100, 100), interval(100, 100)]),
-  },
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: align(1, 0.5),
-    output: track([interval(50, 100), interval(100, 100)]),
-  },
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: align(1, 0.5, 0.5),
-    output: track([interval(75, 100), interval(125, 100)]),
+    operation: alignItemsTo(50, 1),
+    output: track([interval(-50, 100), interval(-50, 100)]),
   },
 ])
 
-describeTrackOperation('setSizes', [
+describeTrackOperation('alignItems', [
   {
     input: track([interval(0, 100), interval(100, 100)]),
-    operation: setSizes(200),
+    operation: alignItems(0),
+    output: track([interval(0, 100), interval(0, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: alignItems(0.5),
+    output: track([interval(50, 100), interval(50, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: alignItems(1),
+    output: track([interval(100, 100), interval(100, 100)]),
+  },
+])
+
+describeTrackOperation('setItemSizes', [
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: setItemSizes(200),
     output: track([interval(0, 200), interval(100, 200)]),
   },
   {
     input: track([interval(0, 100), interval(100, 100)]),
-    operation: setSizes(200, 0.5),
+    operation: setItemSizes(200, 0.5),
     output: track([interval(-50, 200), interval(50, 200)]),
   },
 ])
@@ -262,6 +252,11 @@ describeTrackOperation('lerp', [
     operation: lerp(interval(0, 100)),
     output: track([interval(25, 25), interval(75, 25)]),
   },
+  {
+    input: track([interval(0, 0.25), interval(1, 0.25)]),
+    operation: lerp(interval(0, 100)),
+    output: track([interval(0, 25), interval(100, 25)]),
+  },
 ])
 
 describeTrackOperation('remap', [
@@ -269,5 +264,151 @@ describeTrackOperation('remap', [
     input: track([interval(0, 100), interval(100, 100)]),
     operation: remap(interval(0, 200), interval(100, 100)),
     output: track([interval(100, 50), interval(150, 50)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: remap(interval(-100, 100)),
+    output: track([interval(-100, 50), interval(-50, 50)]),
+  },
+])
+
+describeTrackOperation('distribute', [
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: distribute,
+    output: track([interval(0, 100), interval(100, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(0, 100)]),
+    operation: distribute,
+    output: track([interval(0, 100), interval(100, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(0, 100)]),
+    operation: distribute(0.5),
+    output: track([interval(-50, 100), interval(50, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(0, 100)]),
+    operation: distribute(1),
+    output: track([interval(-100, 100), interval(0, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(0, 100)]),
+    operation: distribute(0, 100),
+    output: track([interval(0, 100), interval(200, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: distribute(0, 100),
+    output: track([interval(0, 100), interval(200, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(0, 100)]),
+    operation: distribute(0.5, 100),
+    output: track([interval(-100, 100), interval(100, 100)]),
+  },
+])
+
+describeTrackOperation('distributeWithin', [
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: distributeWithin,
+    output: track([interval(0, 100), interval(100, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(0, 50), interval(0, 100)]),
+    operation: distributeWithin,
+    output: track([interval(0, 100), interval(25, 50), interval(0, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(0, 50), interval(0, 100)]),
+    operation: distributeWithin(interval(100, 100)),
+    output: track([interval(100, 100), interval(125, 50), interval(100, 100)]),
+  },
+])
+
+describeTrackOperation('mix', [
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mix(track([interval(0, 100), interval(100, 100)]), 0),
+    output: track([interval(0, 100), interval(100, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mix(track([interval(50, 100), interval(50, 100)]), 0.5),
+    output: track([interval(25, 100), interval(75, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mix(track([interval(100, 100), interval(0, 100)]), 1),
+    output: track([interval(100, 100), interval(0, 100)]),
+  },
+  {
+    input: track([interval(0, 100)]),
+    operation: mix(track([interval(100, 100), interval(0, 100)]), 1),
+    output: track([interval(100, 100)]),
+  },
+])
+
+describeTrackOperation('mapItemStarts', [
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mapItemStarts((ival, index) => ival.start + index),
+    output: track([interval(0, 100), interval(101, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mapItemStarts(() => 0),
+    output: track([interval(0, 100), interval(0, 100)]),
+  },
+])
+
+describeTrackOperation('mapItemEnds', [
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mapItemEnds((ival, index) => ival.end - index),
+    output: track([interval(0, 100), interval(99, 100)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mapItemEnds(() => 0),
+    output: track([interval(-100, 100), interval(-100, 100)]),
+  },
+])
+
+describeTrackOperation('mapItemSizes', [
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mapItemSizes((ival, index) => ival.size + index),
+    output: track([interval(0, 100), interval(100, 101)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mapItemSizes((ival, index) => ival.size + index * 2),
+    output: track([interval(0, 100), interval(100, 102)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mapItemSizes(() => 0),
+    output: track([interval(0, 0), interval(100, 0)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mapItemSizes(0),
+    output: track([interval(0, 0), interval(100, 0)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mapItemSizes((ival) => ival.size - 50, 0.5),
+    output: track([interval(25, 50), interval(125, 50)]),
+  },
+  {
+    input: track([interval(0, 100), interval(100, 100)]),
+    operation: mapItemSizes(
+      (ival) => ival.size + 50,
+      (_, index) => index,
+    ),
+    output: track([interval(0, 150), interval(50, 150)]),
   },
 ])
