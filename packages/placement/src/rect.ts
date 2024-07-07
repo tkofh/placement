@@ -1,9 +1,7 @@
-import { parse } from 'valued'
-import { allOf, oneOf } from 'valued/combinators'
-import { isKeywordValue, keyword } from 'valued/data/keyword'
 import { PRECISION } from './constants'
 import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
+import { type Point, isPoint } from './point'
 import { normalizeXYWH } from './utils/arguments'
 import { dual } from './utils/function'
 import { clamp, lerp } from './utils/math'
@@ -579,64 +577,45 @@ export const alignCenter: {
     ),
 )
 
-const parser = oneOf([
-  oneOf([
-    keyword('top'),
-    keyword('center'),
-    keyword('bottom'),
-    keyword('right'),
-    keyword('left'),
-  ]),
-  allOf([
-    oneOf([keyword('top'), keyword('center'), keyword('bottom')]),
-    oneOf([keyword('left'), keyword('center'), keyword('right')]),
-  ]),
-])
+export const alignX: {
+  (self: Rect, target: Rect, align: number): Rect
+  (target: Rect, align: number): (self: Rect) => Rect
+} = dual(3, (self: Rect, target: Rect, align: number) => {
+  return new Rect(
+    target.x + (target.width - self.width) * align,
+    self.y,
+    self.width,
+    self.height,
+    self.precision,
+  )
+})
 
-const parseAlign = (value: string) => parse(value, parser)
-
-type AlignY = 'top' | 'center' | 'bottom'
-type AlignX = 'left' | 'center' | 'right'
-type Align = AlignX | AlignY | `${AlignX} ${AlignY}` | `${AlignY} ${AlignX}`
+export const alignY: {
+  (self: Rect, target: Rect, align: number): Rect
+  (target: Rect, align: number): (self: Rect) => Rect
+} = dual(3, (self: Rect, target: Rect, align: number) => {
+  return new Rect(
+    self.x,
+    target.y + (target.height - self.height) * align,
+    self.width,
+    self.height,
+    self.precision,
+  )
+})
 
 export const align: {
-  (self: Rect, target: Rect, align: Align): Rect
-  (target: Rect, align: Align): (self: Rect) => Rect
-} = dual(3, (self: Rect, target: Rect, align: Align) => {
-  const alignment = parseAlign(align)
+  (self: Rect, target: Rect, align: number | Point): Rect
+  (target: Rect, align: number | Point): (self: Rect) => Rect
+} = dual(3, (self: Rect, target: Rect, align: number | Point) => {
+  const x = isPoint(align) ? align.x : align
+  const y = isPoint(align) ? align.y : align
 
-  if (!alignment.valid) {
-    throw new TypeError('Invalid alignment')
-  }
-
-  if (isKeywordValue(alignment.value)) {
-    switch (alignment.value.value) {
-      case 'top':
-        return alignTop(self, target)
-      case 'center':
-        return alignCenter(self, target)
-      case 'bottom':
-        return alignBottom(self, target)
-      case 'left':
-        return alignLeft(self, target)
-      case 'right':
-        return alignRight(self, target)
-    }
-  }
-
-  const [y, x] = alignment.value
-
-  return self.pipe(
-    {
-      top: () => alignTop(target),
-      center: () => alignCenterY(target),
-      bottom: () => alignBottom(target),
-    }[y.value](),
-    {
-      left: () => alignLeft(target),
-      center: () => alignCenterX(target),
-      right: () => alignRight(target),
-    }[x.value](),
+  return new Rect(
+    target.x + (target.width - self.width) * x,
+    target.y + (target.height - self.height) * y,
+    self.width,
+    self.height,
+    self.precision,
   )
 })
 
@@ -749,7 +728,7 @@ export const resizeX: {
     new Rect(
       lerp(origin, self.x, self.x - x),
       self.y,
-      self.width + x * 2,
+      self.width + x,
       self.height,
       self.precision,
     ),
@@ -765,37 +744,41 @@ export const resizeY: {
       self.x,
       lerp(origin, self.y, self.y - y),
       self.width,
-      self.height + y * 2,
+      self.height + y,
       self.precision,
     ),
 )
 
-// export const resize: {
-//   (self: Rect, size: number, origin?: number): Rect
-//   (size: number, origin?: number): (self: Rect) => Rect
-// } = dual(
-//   2,
-//   (self: Rect, size: number) =>
-//     new Rect(
-//
-//       self.precision,
-//     ),
-// )
+export const resize: {
+  (self: Rect, size: number | Point, origin?: number | Point): Rect
+  (size: number | Point, origin?: number | Point): (self: Rect) => Rect
+} = dual(
+  (args) => isRect(args[0]),
+  (self: Rect, size: number | Point, origin = 0) => {
+    const sizeX = isPoint(size) ? size.x : size
+    const sizeY = isPoint(size) ? size.y : size
+    const originX = isPoint(origin) ? origin.x : origin
+    const originY = isPoint(origin) ? origin.y : origin
+    return new Rect(
+      self.x - sizeX * originX,
+      self.y - sizeY * originY,
+      self.width + sizeX,
+      self.height + sizeY,
+      self.precision,
+    )
+  },
+)
 
 export const join: {
   (self: Rect, target: Rect): Rect
   (target: Rect): (self: Rect) => Rect
-} = dual(
-  2,
-  (self: Rect, target: Rect) =>
-    new Rect(
-      Math.min(self.x, target.x),
-      Math.min(self.y, target.y),
-      Math.max(self.right, target.right),
-      Math.max(self.bottom, target.bottom),
-      self.precision,
-    ),
-)
+} = dual(2, (self: Rect, target: Rect) => {
+  const x = Math.min(self.x, target.x)
+  const y = Math.min(self.y, target.y)
+  const width = Math.max(self.right, target.right) - x
+  const height = Math.max(self.bottom, target.bottom) - y
+  return new Rect(x, y, width, height, self.precision)
+})
 
 export const intersect: {
   (self: Rect, target: Rect): Rect
@@ -871,21 +854,6 @@ export const cover: {
   },
 )
 
-export const crop: {
-  (self: Rect, target: Rect): Rect
-  (target: Rect): (self: Rect) => Rect
-} = dual(2, (self: Rect, target: Rect) => {
-  const x = Math.max(self.x, target.x)
-  const y = Math.max(self.y, target.y)
-  return new Rect(
-    x,
-    y,
-    Math.min(self.right, target.right) - x,
-    Math.min(self.bottom, target.bottom) - y,
-    self.precision,
-  )
-})
-
 export const fit: {
   (self: Rect, target: Rect, fit: 'contain' | 'cover', origin?: number): Rect
   (self: Rect, target: Rect, fit: 'crop'): Rect
@@ -911,6 +879,6 @@ export const fit: {
       return cover(self, target, origin)
     }
 
-    return crop(self, target)
+    return intersect(self, target)
   },
 )
