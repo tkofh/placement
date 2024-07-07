@@ -1,3 +1,4 @@
+import { PRECISION } from './constants'
 import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
 import { dual } from './utils/function'
@@ -28,8 +29,8 @@ class Interval extends Pipeable implements IntervalLike {
   constructor(start: number, size: number) {
     super()
 
-    this.start = roundTo(start, 4)
-    this.size = roundTo(size, 4)
+    this.start = roundTo(start, PRECISION)
+    this.size = roundTo(size, PRECISION)
   }
 
   get end(): number {
@@ -181,10 +182,7 @@ export const avoid: {
     const start = (targetIsIntervalLike ? target.start : target) - gap
     const end = (targetIsIntervalLike ? target.end : target) + gap
 
-    console.log(source, target, gap, start, end)
-
     if (source.start > end || source.end < start) {
-      console.log('no overlap')
       return source
     }
 
@@ -192,7 +190,6 @@ export const avoid: {
       (source.start >= start && source.end <= end) ||
       (source.start <= start && source.end >= end)
     ) {
-      console.log('total overlap')
       const deltaStart = source.start - start
       const deltaEnd = end - source.end
 
@@ -203,11 +200,58 @@ export const avoid: {
       return new Interval(source.start + offset, source.size)
     }
 
-    console.log('partial overlap')
-
     const offset =
       Math.min(source.end, end) -
       Math.max(source.start, start) * (source.start < start ? -1 : 1)
     return new Interval(source.start + offset, source.size)
   },
 )
+//
+// export const proportionalOrigin: {
+//   (interval: IntervalLike, target: IntervalLike): number
+//   (target: IntervalLike): (interval: IntervalLike) => number
+// } = dual(2, (source: IntervalLike, target: IntervalLike): number => {
+//   if (source.size > target.size) {
+//     return proportionalOrigin(target, source)
+//   }
+//
+//   if (source.start >= target.start && source.end <= target.end) {
+//     const ratio = (target.size - source.size) / target.size
+//     const absolute = lerpNumber(ratio, target.start, target.end)
+//     return normalizeNumber(absolute, target.start, target.end)
+//   }
+//
+//   if (source.end === target.start) {
+//     return 1
+//   }
+//
+//   if (source.start === target.end) {
+//     return 0
+//   }
+//
+//   if (source.end < target.start) {
+//     return remapNumber(
+//       lerpNumber(0.5, source.end, target.start),
+//       source.start,
+//       source.end,
+//       0,
+//       1,
+//     )
+//   }
+//
+//   if (source.start > target.end) {
+//     return remapNumber(
+//       lerpNumber(0.5, source.start, target.end),
+//       source.start,
+//       source.end,
+//       0,
+//       1,
+//     )
+//   }
+//
+//   if (source.start < target.start) {
+//     return normalizeNumber(target.start, source.start, source.end)
+//   }
+//
+//   return normalizeNumber(target.end, source.start, source.end)
+// })

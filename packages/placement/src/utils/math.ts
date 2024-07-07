@@ -43,3 +43,7 @@ export function roundTo(value: number, precision: number) {
   const scale = 10 ** precision
   return Math.round(value * scale) / scale
 }
+
+export function normalizeZero(value: number) {
+  return value === 0 ? 0 : value
+}

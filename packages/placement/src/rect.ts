@@ -1,11 +1,12 @@
 import { parse } from 'valued'
 import { allOf, oneOf } from 'valued/combinators'
 import { isKeywordValue, keyword } from 'valued/data/keyword'
+import { PRECISION } from './constants'
 import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
-import { normalizeTRBL, normalizeXYWH } from './utils/arguments'
+import { normalizeXYWH } from './utils/arguments'
 import { dual } from './utils/function'
-import { lerp } from './utils/math'
+import { clamp, lerp } from './utils/math'
 import { roundTo } from './utils/math'
 
 const TypeBrand: unique symbol = Symbol('placement/rect')
@@ -20,14 +21,24 @@ export interface RectLike {
 
 class Rect extends Pipeable implements RectLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+
   constructor(
-    readonly x: number,
-    readonly y: number,
-    readonly width: number,
-    readonly height: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
     readonly precision: number,
   ) {
     super()
+
+    this.x = roundTo(x, this.precision)
+    this.y = roundTo(y, this.precision)
+    this.width = roundTo(width, this.precision)
+    this.height = roundTo(height, this.precision)
   }
 
   get top() {
@@ -63,13 +74,22 @@ class Rect extends Pipeable implements RectLike {
   }
 
   [inspect]() {
-    return `Rect { x: ${this.x}, y: ${this.y}, width: ${this.width}, height: ${this.height} }`
+    if (this.x === 0 && this.y === 0 && this.width === 0 && this.height === 0) {
+      return 'Rect[0]'
+    }
+
+    const position =
+      this.x === this.y ? `xy: ${this.x}` : `x: ${this.x}, y: ${this.y}`
+    const size =
+      this.width === this.height
+        ? `wh: ${this.width}`
+        : `w: ${this.width}, h: ${this.height}`
+
+    return `Rect[${position} ${size}]`
   }
 }
 
 export type { Rect }
-
-const defaultPrecision = 4
 
 export const rect: {
   (): Rect
@@ -79,7 +99,7 @@ export const rect: {
   (x: number, y: number, width: number, height: number): Rect
   (x: number, y: number, width: number, height: number, precision: number): Rect
 } = (a?: number, b?: number, c?: number, d?: number, p?: number): Rect => {
-  return new Rect(...normalizeXYWH(a, b, c, d), p ?? defaultPrecision)
+  return new Rect(...normalizeXYWH(a, b, c, d), p ?? PRECISION)
 }
 
 export function isRect(value: unknown): value is Rect {
@@ -151,6 +171,46 @@ export const setPrecision: {
   2,
   (self: Rect, precision: number) =>
     new Rect(self.x, self.y, self.width, self.height, precision),
+)
+
+export const setTop: {
+  (self: Rect, top: number): Rect
+  (top: number): (self: Rect) => Rect
+} = setY
+
+export const setLeft: {
+  (self: Rect, left: number): Rect
+  (left: number): (self: Rect) => Rect
+} = setX
+
+export const setRight: {
+  (self: Rect, right: number): Rect
+  (right: number): (self: Rect) => Rect
+} = dual(
+  2,
+  (self: Rect, right: number) =>
+    new Rect(
+      right - self.width,
+      self.y,
+      self.width,
+      self.height,
+      self.precision,
+    ),
+)
+
+export const setBottom: {
+  (self: Rect, bottom: number): Rect
+  (bottom: number): (self: Rect) => Rect
+} = dual(
+  2,
+  (self: Rect, bottom: number) =>
+    new Rect(
+      self.x,
+      bottom - self.height,
+      self.width,
+      self.height,
+      self.precision,
+    ),
 )
 
 export const translateX: {
@@ -225,14 +285,14 @@ export const scale: {
   (scalar: number, origin?: number): (self: Rect) => Rect
 } = dual(
   (args) => isRect(args[0]),
-  (self: Rect, scalar: number, origin?: number) => {
+  (self: Rect, scalar: number, origin?: number): Rect => {
     const scaledWidth = self.width * scalar
     const scaledHeight = self.height * scalar
 
     const deltaWidth = scaledWidth - self.width
     const deltaHeight = scaledHeight - self.height
 
-    new Rect(
+    return new Rect(
       self.x - (origin ?? 0) * deltaWidth,
       self.y - (origin ?? 0) * deltaHeight,
       scaledWidth,
@@ -280,7 +340,7 @@ export const clampX: {
   3,
   (self: Rect, min: number, max: number) =>
     new Rect(
-      Math.min(max, Math.max(min, self.x)),
+      clamp(self.x, min, max),
       self.y,
       self.width,
       self.height,
@@ -327,7 +387,7 @@ export const clampY: {
   (self: Rect, min: number, max: number) =>
     new Rect(
       self.x,
-      Math.min(max, Math.max(min, self.y)),
+      clamp(self.y, min, max),
       self.width,
       self.height,
       self.precision,
@@ -374,7 +434,7 @@ export const clampWidth: {
     new Rect(
       self.x,
       self.y,
-      Math.min(max, Math.max(min, self.width)),
+      clamp(self.width, min, max),
       self.height,
       self.precision,
     ),
@@ -421,7 +481,7 @@ export const clampHeight: {
       self.x,
       self.y,
       self.width,
-      Math.min(max, Math.max(min, self.height)),
+      clamp(self.height, min, max),
       self.precision,
     ),
 )
@@ -512,7 +572,7 @@ export const alignCenter: {
   (self: Rect, target: Rect) =>
     new Rect(
       target.x + (target.width - self.width) / 2,
-      target.y + (target.width - self.height) / 2,
+      target.y + (target.height - self.height) / 2,
       self.width,
       self.height,
       self.precision,
@@ -583,137 +643,6 @@ export const align: {
 export const adjustTop: {
   (self: Rect, top: number): Rect
   (top: number): (self: Rect) => Rect
-} = dual(2, (self: Rect, top: number) => {
-  const amount = Math.min(self.height, top)
-  return new Rect(
-    self.x,
-    self.y - amount,
-    self.width,
-    self.height + amount,
-    self.precision,
-  )
-})
-
-export const adjustBottom: {
-  (self: Rect, bottom: number): Rect
-  (bottom: number): (self: Rect) => Rect
-} = dual(2, (self: Rect, bottom: number) => {
-  const amount = Math.min(self.height, bottom)
-  return new Rect(
-    self.x,
-    self.y,
-    self.width,
-    self.height - amount,
-    self.precision,
-  )
-})
-
-export const adjustLeft: {
-  (self: Rect, left: number): Rect
-  (left: number): (self: Rect) => Rect
-} = dual(2, (self: Rect, left: number) => {
-  const amount = Math.min(self.width, left)
-  return new Rect(
-    self.x - amount,
-    self.y,
-    self.width + amount,
-    self.height,
-    self.precision,
-  )
-})
-
-export const adjustRight: {
-  (self: Rect, right: number): Rect
-  (right: number): (self: Rect) => Rect
-} = dual(2, (self: Rect, right: number) => {
-  const amount = Math.min(self.width, right)
-  return new Rect(
-    self.x,
-    self.y,
-    self.width - amount,
-    self.height,
-    self.precision,
-  )
-})
-
-export const adjustX: {
-  (self: Rect, amount: number): Rect
-  (self: Rect, left: number, right: number): Rect
-  (amount: number): (self: Rect) => Rect
-  (left: number, right: number): (self: Rect) => Rect
-} = dual(
-  (args) => isRect(args[0]),
-  (self: Rect, left: number, right?: number) => {
-    const amountLeft = Math.min(left, self.width * 0.5)
-    const amountRight = Math.min(right ?? left, self.width * 0.5)
-
-    return new Rect(
-      self.x - amountLeft,
-      self.y,
-      self.width + amountLeft + amountRight,
-      self.height,
-      self.precision,
-    )
-  },
-)
-
-export const adjustY: {
-  (self: Rect, amount: number): Rect
-  (self: Rect, top: number, bottom: number): Rect
-  (amount: number): (self: Rect) => Rect
-  (top: number, bottom: number): (self: Rect) => Rect
-} = dual(
-  (args) => isRect(args[0]),
-  (self: Rect, top: number, bottom?: number) => {
-    const amountTop = Math.min(top, self.height * 0.5)
-    const amountBottom = Math.min(bottom ?? top, self.height * 0.5)
-
-    return new Rect(
-      self.x,
-      self.y - amountTop,
-      self.width,
-      self.height + amountTop + amountBottom,
-      self.precision,
-    )
-  },
-)
-
-export const adjust: {
-  (self: Rect, amount: number): Rect
-  (self: Rect, y: number, x: number): Rect
-  (self: Rect, top: number, x: number, bottom: number): Rect
-  (self: Rect, top: number, right: number, bottom: number, left: number): Rect
-  (amount: number): (self: Rect) => Rect
-  (y: number, x: number): (self: Rect) => Rect
-  (top: number, x: number, bottom: number): (self: Rect) => Rect
-  (
-    top: number,
-    right: number,
-    bottom: number,
-    left: number,
-  ): (self: Rect) => Rect
-} = dual(
-  (args) => isRect(args[0]),
-  (self: Rect, t: number, r?: number, b?: number, l?: number) => {
-    const [top, left, bottom, right] = normalizeTRBL(t, r, b, l)
-    const amountTop = Math.max(top, self.height * -0.5)
-    const amountRight = Math.max(right, self.width * -0.5)
-    const amountBottom = Math.max(bottom, self.height * -0.5)
-    const amountLeft = Math.max(left, self.width * -0.5)
-
-    return new Rect(
-      self.x - amountLeft,
-      self.y - amountTop,
-      self.width + amountLeft + amountRight,
-      self.height + amountTop + amountBottom,
-      self.precision,
-    )
-  },
-)
-
-export const moveTop: {
-  (self: Rect, top: number): Rect
-  (top: number): (self: Rect) => Rect
 } = dual(
   2,
   (self: Rect, top: number) =>
@@ -726,37 +655,7 @@ export const moveTop: {
     ),
 )
 
-export const moveBottom: {
-  (self: Rect, bottom: number): Rect
-  (bottom: number): (self: Rect) => Rect
-} = dual(
-  2,
-  (self: Rect, bottom: number) =>
-    new Rect(
-      self.x,
-      Math.min(self.y, self.bottom + bottom),
-      self.width,
-      Math.abs(self.y - (self.bottom + bottom)),
-      self.precision,
-    ),
-)
-
-export const moveLeft: {
-  (self: Rect, left: number): Rect
-  (left: number): (self: Rect) => Rect
-} = dual(
-  2,
-  (self: Rect, left: number) =>
-    new Rect(
-      Math.min(self.right, self.x + left),
-      self.y,
-      Math.abs(self.right - (self.x + left)),
-      self.height,
-      self.precision,
-    ),
-)
-
-export const moveRight: {
+export const adjustRight: {
   (self: Rect, right: number): Rect
   (right: number): (self: Rect) => Rect
 } = dual(
@@ -771,25 +670,117 @@ export const moveRight: {
     ),
 )
 
-export const move: {
-  (self: Rect, top: number, right: number, bottom: number, left: number): Rect
-  (
-    top: number,
-    right: number,
-    bottom: number,
-    left: number,
-  ): (self: Rect) => Rect
+export const adjustBottom: {
+  (self: Rect, bottom: number): Rect
+  (bottom: number): (self: Rect) => Rect
 } = dual(
-  5,
-  (self: Rect, top: number, right: number, bottom: number, left: number) =>
+  2,
+  (self: Rect, bottom: number) =>
     new Rect(
-      Math.min(self.right + right, self.x + left),
-      Math.min(self.bottom + bottom, self.y + top),
-      Math.abs(self.right + right - (self.x + left)),
-      Math.abs(self.bottom + bottom - (self.y + top)),
+      self.x,
+      Math.min(self.y, self.bottom + bottom),
+      self.width,
+      Math.abs(self.y - (self.bottom + bottom)),
       self.precision,
     ),
 )
+
+export const adjustLeft: {
+  (self: Rect, left: number): Rect
+  (left: number): (self: Rect) => Rect
+} = dual(
+  2,
+  (self: Rect, left: number) =>
+    new Rect(
+      Math.min(self.right, self.x + left),
+      self.y,
+      Math.abs(self.right - (self.x + left)),
+      self.height,
+      self.precision,
+    ),
+)
+
+export const resizeTop: {
+  (self: Rect, top: number): Rect
+  (top: number): (self: Rect) => Rect
+} = dual(
+  2,
+  (self: Rect, top: number) =>
+    new Rect(
+      self.x,
+      Math.min(self.bottom, self.y - top),
+      self.width,
+      Math.abs(self.bottom - (self.y - top)),
+      self.precision,
+    ),
+)
+
+export const resizeLeft: {
+  (self: Rect, left: number): Rect
+  (left: number): (self: Rect) => Rect
+} = dual(
+  2,
+  (self: Rect, left: number) =>
+    new Rect(
+      Math.min(self.right, self.x - left),
+      self.y,
+      Math.abs(self.right - (self.x - left)),
+      self.height,
+      self.precision,
+    ),
+)
+
+export const resizeRight: {
+  (self: Rect, right: number): Rect
+  (right: number): (self: Rect) => Rect
+} = adjustRight
+
+export const resizeBottom: {
+  (self: Rect, bottom: number): Rect
+  (bottom: number): (self: Rect) => Rect
+} = adjustBottom
+
+export const resizeX: {
+  (self: Rect, x: number, origin?: number): Rect
+  (x: number, origin?: number): (self: Rect) => Rect
+} = dual(
+  (args) => isRect(args[0]),
+  (self: Rect, x: number, origin = 0) =>
+    new Rect(
+      lerp(origin, self.x, self.x - x),
+      self.y,
+      self.width + x * 2,
+      self.height,
+      self.precision,
+    ),
+)
+
+export const resizeY: {
+  (self: Rect, y: number, origin?: number): Rect
+  (y: number, origin?: number): (self: Rect) => Rect
+} = dual(
+  (args) => isRect(args[0]),
+  (self: Rect, y: number, origin = 0) =>
+    new Rect(
+      self.x,
+      lerp(origin, self.y, self.y - y),
+      self.width,
+      self.height + y * 2,
+      self.precision,
+    ),
+)
+
+// export const resize: {
+//   (self: Rect, size: number, origin?: number): Rect
+//   (size: number, origin?: number): (self: Rect) => Rect
+// } = dual(
+//   2,
+//   (self: Rect, size: number) =>
+//     new Rect(
+//
+//       self.precision,
+//     ),
+// )
 
 export const join: {
   (self: Rect, target: Rect): Rect
