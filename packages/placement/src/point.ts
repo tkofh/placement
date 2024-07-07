@@ -16,10 +16,17 @@ const twoPi = Math.PI * 2
 const inverseTwoPi = 1 / twoPi
 
 const radians = (radians: number) => Math.abs((radians + twoPi) % twoPi)
-const turns = (turns: number) => Math.abs(turns % 1)
+const turns = (turns: number) => Math.abs((turns + 1) % 1)
 
 const turnsToRadians = (turns: number) => radians(turns * twoPi)
 const radiansToTurns = (radians: number) => turns(radians * inverseTwoPi)
+
+export const r = (x: number, y: number) => Math.hypot(x, y)
+export const theta = (x: number, y: number) => radiansToTurns(Math.atan2(y, x))
+export const x = (r: number, turns: number) =>
+  r * Math.cos(turnsToRadians(turns))
+export const y = (r: number, turns: number) =>
+  r * Math.sin(turnsToRadians(turns))
 
 class Point extends Pipeable implements PointLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -28,8 +35,7 @@ class Point extends Pipeable implements PointLike {
 
   private _r: number | undefined
   private _theta: number | undefined
-
-  private _magnitude: number | undefined
+  private _arcLength: number | undefined
 
   constructor(
     x: number,
@@ -43,18 +49,18 @@ class Point extends Pipeable implements PointLike {
   }
 
   get r() {
-    this._r ||= Math.hypot(this.x, this.y)
+    this._r ||= r(this.x, this.y)
     return this._r
   }
 
   get theta() {
-    this._theta ||= radiansToTurns(twoPi + Math.atan2(this.y, this.x))
+    this._theta ||= theta(this.x, this.y)
     return this._theta
   }
 
-  get magnitude() {
-    this._magnitude ||= Math.hypot(this.x, this.y)
-    return this._magnitude
+  get arcLength() {
+    this._arcLength ||= Math.abs(turnsToRadians(this.theta) * this.r)
+    return this._arcLength
   }
 
   [inspect]() {
@@ -79,8 +85,7 @@ export const isPoint = (value: unknown): value is Point =>
   typeof value === 'object' && value !== null && TypeBrand in value
 
 export const fromPolar = (r: number, theta: number, precision = PRECISION) => {
-  const radians = turnsToRadians(theta)
-  return new Point(r * Math.cos(radians), r * Math.sin(radians), precision)
+  return new Point(x(r, theta), y(r, theta), precision)
 }
 
 export const center = (points: Iterable<PointLike>, precision = PRECISION) => {
@@ -162,6 +167,24 @@ export const setY: {
   (y: number): (self: Point) => Point
 } = dual(2, (self: Point, y: number) => new Point(self.x, y, self.precision))
 
+export const setR: {
+  (self: Point, r: number): Point
+  (r: number): (self: Point) => Point
+} = dual(
+  2,
+  (self: Point, r: number) =>
+    new Point(x(r, self.theta), y(r, self.theta), self.precision),
+)
+
+export const setTheta: {
+  (self: Point, theta: number): Point
+  (theta: number): (self: Point) => Point
+} = dual(
+  2,
+  (self: Point, theta: number) =>
+    new Point(x(self.r, theta), y(self.r, theta), self.precision),
+)
+
 export const translateX: {
   (self: Point, x: number): Point
   (x: number): (self: Point) => Point
@@ -176,6 +199,32 @@ export const translateY: {
 } = dual(
   2,
   (self: Point, y: number) => new Point(self.x, self.y + y, self.precision),
+)
+
+export const translateR: {
+  (self: Point, r: number): Point
+  (r: number): (self: Point) => Point
+} = dual(
+  2,
+  (self: Point, r: number) =>
+    new Point(
+      x(self.r + r, self.theta),
+      y(self.r + r, self.theta),
+      self.precision,
+    ),
+)
+
+export const translateTheta: {
+  (self: Point, theta: number): Point
+  (theta: number): (self: Point) => Point
+} = dual(
+  2,
+  (self: Point, theta: number) =>
+    new Point(
+      x(self.r, self.theta + theta),
+      y(self.r, self.theta + theta),
+      self.precision,
+    ),
 )
 
 export const translate: {
@@ -302,5 +351,26 @@ export const avoid: {
   return self
 })
 
-export const distance = (self: Point, target: Point) =>
-  Math.hypot(target.x - self.x, target.y - self.y)
+export const normalize = (self: Point) =>
+  new Point(x(1, self.theta), y(1, self.theta), self.precision)
+
+export const distance: {
+  (self: Point, target: Point): number
+  (target: Point): (self: Point) => number
+} = dual(2, (self: Point, target: Point) => {
+  return Math.hypot(target.x - self.x, target.y - self.y)
+})
+
+export const dot: {
+  (self: Point, target: Point): number
+  (target: Point): (self: Point) => number
+} = dual(2, (self: Point, target: Point) => {
+  return self.x * target.x + self.y * target.y
+})
+
+export const cross: {
+  (self: Point, target: Point): number
+  (target: Point): (self: Point) => number
+} = dual(2, (self: Point, target: Point) => {
+  return self.x * target.y - self.y * target.x
+})
