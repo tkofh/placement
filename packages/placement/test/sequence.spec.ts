@@ -120,6 +120,29 @@ describe('with grow', () => {
   })
 })
 
+describe('with grow ratio', () => {
+  test.each([
+    {
+      items: [{ basis: 100, grow: 1 }, { basis: 100 }],
+      options: { growRatio: 0, size: 300 },
+      result: track([interval(0, 100), interval(100, 100)]),
+    },
+    {
+      items: [{ basis: 100, grow: 1 }, { basis: 100 }],
+      options: { growRatio: 0.5, size: 300 },
+      result: track([interval(0, 150), interval(150, 100)]),
+    },
+    {
+      items: [{ basis: 100, grow: 1 }, { basis: 100 }],
+      options: { growRatio: 1, size: 300 },
+      result: track([interval(0, 200), interval(200, 100)]),
+    },
+  ])('sequence($items, $options): $result', ({ items, options, result }) => {
+    const track = sequence(items, options)
+    expect(track).toEqual(result)
+  })
+})
+
 describe('with shrink', () => {
   test.each([
     {
@@ -166,6 +189,29 @@ describe('with shrink', () => {
       ],
       options: { size: 100 },
       result: track([interval(0, 75), interval(75, 25)]),
+    },
+  ])('sequence($items, $options): $result', ({ items, options, result }) => {
+    const track = sequence(items, options)
+    expect(track).toEqual(result)
+  })
+})
+
+describe('with shrink ratio', () => {
+  test.each([
+    {
+      items: [{ basis: 100, shrink: 1 }, { basis: 100 }],
+      options: { shrinkRatio: 0, size: 100 },
+      result: track([interval(0, 100), interval(100, 100)]),
+    },
+    {
+      items: [{ basis: 100, shrink: 1 }, { basis: 100 }],
+      options: { shrinkRatio: 0.5, size: 100 },
+      result: track([interval(0, 50), interval(50, 100)]),
+    },
+    {
+      items: [{ basis: 100, shrink: 1 }, { basis: 100 }],
+      options: { shrinkRatio: 1, size: 100 },
+      result: track([interval(0, 0), interval(0, 100)]),
     },
   ])('sequence($items, $options): $result', ({ items, options, result }) => {
     const track = sequence(items, options)

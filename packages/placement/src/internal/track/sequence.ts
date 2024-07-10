@@ -1,11 +1,11 @@
 import { TrackItem, type TrackItemInput } from './item'
 
-export interface SequenceTrackItemInput extends TrackItemInput {
+export interface SequenceTrackItem extends TrackItemInput {
   grow?: number
   shrink?: number
 }
 
-class SequenceTrackItem extends TrackItem {
+class InternalSequenceTrackItem extends TrackItem {
   readonly definiteOuterSizeMin: number
   readonly definiteOuterSizeMax: number
 
@@ -37,21 +37,21 @@ class SequenceTrackItem extends TrackItem {
   }
 }
 
-export type { SequenceTrackItem }
+export type { InternalSequenceTrackItem }
 
-export function processItems(items: ReadonlyArray<SequenceTrackItemInput>) {
-  const trackItems: Array<SequenceTrackItem> = []
+export function processItems(items: ReadonlyArray<SequenceTrackItem>) {
+  const trackItems: Array<InternalSequenceTrackItem> = []
 
   let definiteOuterSize = 0
   let autoOffsetCount = 0
   let growthFactor = 0
   let scaledShrinkFactor = 0
 
-  const growable = new Set<SequenceTrackItem>()
-  const shrinkable = new Set<SequenceTrackItem>()
+  const growable = new Set<InternalSequenceTrackItem>()
+  const shrinkable = new Set<InternalSequenceTrackItem>()
 
   for (const input of items) {
-    const item = new SequenceTrackItem(
+    const item = new InternalSequenceTrackItem(
       input.start ?? 0,
       input.end ?? 0,
       input.basis ?? 0,
@@ -89,11 +89,18 @@ export function processItems(items: ReadonlyArray<SequenceTrackItemInput>) {
   }
 }
 
-function applyGrow(
-  growable: Set<SequenceTrackItem>,
+export function applyGrow(
+  initialGrowable: Set<InternalSequenceTrackItem>,
   initialFreeSpace: number,
   initialTotalGrow: number,
+  ratio: number,
 ): number {
+  if (initialFreeSpace <= 0 || ratio === 0 || initialGrowable.size === 0) {
+    return 0
+  }
+
+  const growable = new Set(initialGrowable)
+
   let freeSpace = initialFreeSpace
   let totalGrow = initialTotalGrow
 
@@ -107,19 +114,30 @@ function applyGrow(
         totalGrow -= item.grow
       }
 
-      item.size += growth
+      item.adjustment += growth
       freeSpace -= growth
     }
+  }
+
+  for (const item of initialGrowable) {
+    item.adjustment = item.adjustment * ratio
   }
 
   return initialFreeSpace - freeSpace
 }
 
-function applyShrink(
-  shrinkable: Set<SequenceTrackItem>,
+export function applyShrink(
+  initialShrinkable: Set<InternalSequenceTrackItem>,
   initialFreeSpace: number,
   initialTotalScaledShrink: number,
+  ratio: number,
 ): number {
+  if (initialFreeSpace >= 0 || ratio === 0 || initialShrinkable.size === 0) {
+    return 0
+  }
+
+  const shrinkable = new Set(initialShrinkable)
+
   const initialExcess = Math.abs(initialFreeSpace)
   let excess = initialExcess
   let totalScaledShrink = initialTotalScaledShrink
@@ -137,7 +155,7 @@ function applyShrink(
         totalScaledShrinkReduction += item.scaledShrinkFactor
       }
 
-      item.size -= shrink
+      item.adjustment -= shrink
       excessReduction += shrink
     }
 
@@ -145,22 +163,9 @@ function applyShrink(
     totalScaledShrink -= totalScaledShrinkReduction
   }
 
+  for (const item of initialShrinkable) {
+    item.adjustment = item.adjustment * ratio
+  }
+
   return excess - initialExcess
-}
-
-export function adjustSizes(
-  delta: number,
-  growable: Set<SequenceTrackItem>,
-  totalGrow: number,
-  shrinkable: Set<SequenceTrackItem>,
-  totalScaledShrink: number,
-): number {
-  if (delta > 0 && growable.size > 0) {
-    return applyGrow(growable, delta, totalGrow)
-  }
-  if (delta < 0 && shrinkable.size > 0) {
-    return applyShrink(shrinkable, delta, totalScaledShrink)
-  }
-
-  return 0
 }

@@ -1,14 +1,15 @@
 import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
 import {
+  type InternalSequenceTrackItem,
   type SequenceTrackItem,
-  type SequenceTrackItemInput,
-  adjustSizes,
+  applyGrow,
+  applyShrink,
   processItems,
 } from './internal/track/sequence'
 import {
+  type InternalStackTrackItem,
   type StackTrackItem,
-  type StackTrackItemInput,
   applyStretch,
   stackTrackItem,
 } from './internal/track/stack'
@@ -85,50 +86,55 @@ interface SequenceOptions extends BaseOptions {
   gap?: number
   space?: number
   spaceOuter?: number
+  growRatio?: number
+  shrinkRatio?: number
 }
 
-export function stack(
-  items: ReadonlyArray<StackTrackItemInput>,
-  options: StackOptions,
-): Track {
-  const trackItems: Array<StackTrackItem> = []
-  let maxSize = 0
+export const stack: {
+  (items: ReadonlyArray<StackTrackItem>, options: StackOptions): Track
+  (options: StackOptions): (items: ReadonlyArray<StackTrackItem>) => Track
+} = dual(
+  2,
+  (items: ReadonlyArray<StackTrackItem>, options: StackOptions): Track => {
+    const trackItems: Array<InternalStackTrackItem> = []
+    let maxSize = 0
 
-  for (const item of items) {
-    const trackItem = stackTrackItem(item)
-    trackItems.push(trackItem)
+    for (const item of items) {
+      const trackItem = stackTrackItem(item)
+      trackItems.push(trackItem)
 
-    maxSize = Math.max(maxSize, trackItem.size)
-  }
+      maxSize = Math.max(maxSize, trackItem.size)
+    }
 
-  const size = auto(options.size ?? Number.POSITIVE_INFINITY, maxSize)
+    const size = auto(options.size ?? Number.POSITIVE_INFINITY, maxSize)
 
-  const stretch = options.stretch ?? 0
-  const place = options.place ?? 0
+    const stretch = options.stretch ?? 0
+    const place = options.place ?? 0
 
-  applyStretch(trackItems, size, stretch)
+    applyStretch(trackItems, size, stretch)
 
-  return new Track(
-    Array.from(trackItems, (item) => {
-      const free = size - item.definiteOuterSize
+    return new Track(
+      Array.from(trackItems, (item) => {
+        const free = size - item.definiteOuterSize
 
-      if (item.autoOffsetCount > 0) {
+        if (item.autoOffsetCount > 0) {
+          return interval(
+            item.startIsAuto ? free / item.autoOffsetCount : 0,
+            Math.min(item.size, size),
+          )
+        }
+
         return interval(
-          item.startIsAuto ? free / item.autoOffsetCount : 0,
-          Math.min(item.size, size),
+          auto(item.place, place) * free + item.definiteStart,
+          item.size,
         )
-      }
-
-      return interval(
-        auto(item.place, place) * free + item.definiteStart,
-        item.size,
-      )
-    }),
-  )
-}
+      }),
+    )
+  },
+)
 
 function sequenceWithoutFreeSpace(
-  items: ReadonlyArray<SequenceTrackItem>,
+  items: ReadonlyArray<InternalSequenceTrackItem>,
   gap: number,
   autoOffset: number,
   start: number,
@@ -147,7 +153,7 @@ function sequenceWithoutFreeSpace(
 }
 
 function sequenceWithFreeSpace(
-  items: ReadonlyArray<SequenceTrackItem>,
+  items: ReadonlyArray<InternalSequenceTrackItem>,
   size: number,
   used: number,
   gap: number,
@@ -180,56 +186,67 @@ function sequenceWithFreeSpace(
   return new Track(intervals)
 }
 
-export function sequence(
-  items: ReadonlyArray<SequenceTrackItemInput>,
-  options: SequenceOptions,
-) {
-  const { trackItems, growable, shrinkable, totals } = processItems(items)
+export const sequence: {
+  (items: ReadonlyArray<SequenceTrackItem>, options: SequenceOptions): Track
+  (options: SequenceOptions): (items: ReadonlyArray<SequenceTrackItem>) => Track
+} = dual(
+  2,
+  (
+    items: ReadonlyArray<SequenceTrackItem>,
+    options: SequenceOptions,
+  ): Track => {
+    const { trackItems, growable, shrinkable, totals } = processItems(items)
 
-  const gap = options.gap ?? 0
-  const place = options.place ?? 0
+    const gap = options.gap ?? 0
+    const place = options.place ?? 0
 
-  if (options.size == null || options.size === Number.POSITIVE_INFINITY) {
-    return sequenceWithoutFreeSpace(
+    if (options.size == null || options.size === Number.POSITIVE_INFINITY) {
+      return sequenceWithoutFreeSpace(
+        trackItems,
+        gap,
+        0,
+        place * -totals.definiteOuterSize,
+      )
+    }
+
+    const deltaSize =
+      options.size - totals.definiteOuterSize - gap * (trackItems.length - 1)
+
+    if (totals.autoOffsetCount > 0) {
+      return sequenceWithoutFreeSpace(
+        trackItems,
+        gap,
+        (options.size - totals.definiteOuterSize) / totals.autoOffsetCount,
+        place * -deltaSize,
+      )
+    }
+
+    const consumed =
+      totals.definiteOuterSize +
+      applyGrow(
+        growable,
+        deltaSize,
+        totals.growthFactor,
+        options.growRatio ?? 1,
+      ) +
+      applyShrink(
+        shrinkable,
+        deltaSize,
+        totals.scaledShrinkFactor,
+        options.shrinkRatio ?? 1,
+      )
+
+    return sequenceWithFreeSpace(
       trackItems,
+      options.size,
+      consumed,
       gap,
-      0,
-      place * -totals.definiteOuterSize,
+      place,
+      options.space ?? 0,
+      options.spaceOuter ?? 0,
     )
-  }
-
-  const deltaSize =
-    options.size - totals.definiteOuterSize - gap * (trackItems.length - 1)
-
-  if (totals.autoOffsetCount > 0) {
-    return sequenceWithoutFreeSpace(
-      trackItems,
-      gap,
-      (options.size - totals.definiteOuterSize) / totals.autoOffsetCount,
-      place * -deltaSize,
-    )
-  }
-
-  const consumed =
-    totals.definiteOuterSize +
-    adjustSizes(
-      deltaSize,
-      growable,
-      totals.growthFactor,
-      shrinkable,
-      totals.scaledShrinkFactor,
-    )
-
-  return sequenceWithFreeSpace(
-    trackItems,
-    options.size,
-    consumed,
-    gap,
-    place,
-    options.space ?? 0,
-    options.spaceOuter ?? 0,
-  )
-}
+  },
+)
 
 export const toInterval = (track: Track) => {
   return interval(track.start, track.size)
@@ -304,22 +321,23 @@ export const setSize: {
 )
 
 export const map: {
-  (track: Track, fn: (interval: Interval, index: number) => Interval): Track
-  (fn: (interval: Interval, index: number) => Interval): (track: Track) => Track
+  (
+    track: Track,
+    fn: (interval: Interval, index: number, track: Track) => Interval,
+  ): Track
+  (
+    fn: (interval: Interval, index: number) => Interval,
+    track: Track,
+  ): (track: Track) => Track
 } = dual(
   2,
-  (track: Track, fn: (interval: Interval, index: number) => Interval): Track =>
-    new Track(Array.from(track.intervals, fn)),
-)
-
-export const setItemSizes: {
-  (track: Track, size: number, origin?: number): Track
-  (size: number, origin?: number): (track: Track) => Track
-} = dual(
-  (args) => isTrack(args[0]),
-  (track: Track, size: number, origin = 0) => {
-    return map(track, setIntervalSize(size, origin))
-  },
+  (
+    track: Track,
+    fn: (interval: Interval, index: number, track: Track) => Interval,
+  ): Track =>
+    new Track(
+      Array.from(track.intervals, (ival, index) => fn(ival, index, track)),
+    ),
 )
 
 export const alignItemsTo: {
@@ -473,27 +491,43 @@ export const mapItemEnds: {
 export const mapItemSizes: {
   (
     track: Track,
-    size: number | ((interval: Interval, index: number) => number),
-    origin?: number | ((interval: Interval, index: number) => number),
+    size:
+      | number
+      | ((interval: Interval, index: number, track: Track) => number),
+    origin?:
+      | number
+      | ((interval: Interval, index: number, track: Track) => number),
   ): Track
   (
-    size: number | ((interval: Interval, index: number) => number),
-    origin?: number | ((interval: Interval, index: number) => number),
+    size:
+      | number
+      | ((interval: Interval, index: number, track: Track) => number),
+    origin?:
+      | number
+      | ((interval: Interval, index: number, track: Track) => number),
   ): (track: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
   (
     track: Track,
-    size: number | ((interval: Interval, index: number) => number),
-    origin: number | ((interval: Interval, index: number) => number) = 0,
+    size:
+      | number
+      | ((interval: Interval, index: number, track: Track) => number),
+    origin:
+      | number
+      | ((interval: Interval, index: number, track: Track) => number) = 0,
   ) => {
+    if (typeof size === 'number' && typeof origin === 'number') {
+      return map(track, setIntervalSize(size, origin))
+    }
+
     const sizeFn = typeof size === 'number' ? () => size : size
     const originFn = typeof origin === 'number' ? () => origin : origin
 
-    return map(track, (ival, index) => {
-      const size = sizeFn(ival, index)
+    return map(track, (ival, index, track) => {
+      const size = sizeFn(ival, index, track)
       return interval(
-        ival.start + (ival.size - size) * originFn(ival, index),
+        ival.start + (ival.size - size) * originFn(ival, index, track),
         size,
       )
     })

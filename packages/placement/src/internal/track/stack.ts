@@ -1,12 +1,12 @@
 import { auto } from '../../utils/arguments'
 import { TrackItem, type TrackItemInput } from './item'
 
-export interface StackTrackItemInput extends TrackItemInput {
+export interface StackTrackItem extends TrackItemInput {
   stretch?: number
   place?: number
 }
 
-class StackTrackItem extends TrackItem {
+class InternalStackTrackItem extends TrackItem {
   readonly stretch: number
   readonly place: number
 
@@ -30,10 +30,12 @@ class StackTrackItem extends TrackItem {
   }
 }
 
-export type { StackTrackItem }
+export type { InternalStackTrackItem }
 
-export function stackTrackItem(options: StackTrackItemInput): StackTrackItem {
-  return new StackTrackItem(
+export function stackTrackItem(
+  options: StackTrackItem,
+): InternalStackTrackItem {
+  return new InternalStackTrackItem(
     options.start ?? 0,
     options.end ?? 0,
     options.basis ?? 0,
@@ -45,7 +47,7 @@ export function stackTrackItem(options: StackTrackItemInput): StackTrackItem {
 }
 
 export function applyStretch(
-  items: ReadonlyArray<StackTrackItem>,
+  items: ReadonlyArray<InternalStackTrackItem>,
   size: number,
   stretch: number,
 ) {
@@ -56,6 +58,6 @@ export function applyStretch(
 
     const free = size - item.definiteOuterSize
     const stretchAmount = auto(item.stretch, stretch) * free
-    item.size = item.size + stretchAmount
+    item.adjustment += stretchAmount
   }
 }

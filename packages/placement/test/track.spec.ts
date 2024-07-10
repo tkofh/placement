@@ -16,7 +16,6 @@ import {
   remap,
   scale,
   scaleFrom,
-  setItemSizes,
   setSize,
   track,
   translate,
@@ -165,19 +164,6 @@ describeTrackOperation('alignItems', [
     input: track([interval(0, 100), interval(100, 100)]),
     operation: alignItems(1),
     output: track([interval(100, 100), interval(100, 100)]),
-  },
-])
-
-describeTrackOperation('setItemSizes', [
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: setItemSizes(200),
-    output: track([interval(0, 200), interval(100, 200)]),
-  },
-  {
-    input: track([interval(0, 100), interval(100, 100)]),
-    operation: setItemSizes(200, 0.5),
-    output: track([interval(-50, 200), interval(50, 200)]),
   },
 ])
 

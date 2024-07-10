@@ -10,7 +10,9 @@ export interface TrackItemInput {
 }
 
 export class TrackItem {
-  private _size: number
+  readonly initialSize: number
+
+  adjustment = 0
 
   readonly basis: number
   readonly min: number
@@ -39,19 +41,15 @@ export class TrackItem {
     this.definiteStart = this.startIsAuto ? 0 : start
     this.definiteEnd = this.endIsAuto ? 0 : end
 
-    this._size = clamp(basis, min, max)
+    this.initialSize = clamp(basis, min, max)
   }
 
   get size(): number {
-    return this._size
-  }
-
-  set size(value: number) {
-    this._size = clamp(value, this.min, this.max)
+    return clamp(this.initialSize + this.adjustment, this.min, this.max)
   }
 
   get definiteOuterSize(): number {
-    return this._size + this.definiteStart + this.definiteEnd
+    return this.size + this.definiteStart + this.definiteEnd
   }
 
   get autoOffsetCount(): number {

@@ -1,7 +1,3 @@
-// type Mutable<T> = T extends object
-//   ? { -readonly [K in keyof T]: Mutable<T[K]> }
-//   : T
-
 export const direction = {
   row: 0,
   'row-reverse': 1,
@@ -88,8 +84,62 @@ class Flexbox {
   get crossGap(): number {
     return this.isRow ? this.columnGap : this.rowGap
   }
+
+  get mainDimension(): 'width' | 'height' {
+    return this.isRow ? 'width' : 'height'
+  }
+
+  get crossDimension(): 'width' | 'height' {
+    return this.isRow ? 'height' : 'width'
+  }
+
+  get mainDimensionMin(): 'minWidth' | 'minHeight' {
+    return this.isRow ? 'minWidth' : 'minHeight'
+  }
+
+  get crossDimensionMin(): 'minWidth' | 'minHeight' {
+    return this.isRow ? 'minHeight' : 'minWidth'
+  }
+
+  get mainDimensionMax(): 'maxWidth' | 'maxHeight' {
+    return this.isRow ? 'maxWidth' : 'maxHeight'
+  }
+
+  get crossDimensionMax(): 'maxWidth' | 'maxHeight' {
+    return this.isRow ? 'maxHeight' : 'maxWidth'
+  }
+
+  get mainCoordinate(): 'x' | 'y' {
+    return this.isRow ? 'x' : 'y'
+  }
+
+  get crossCoordinate(): 'x' | 'y' {
+    return this.isRow ? 'y' : 'x'
+  }
+
+  get crossOffsetStart(): 'offsetTop' | 'offsetLeft' {
+    return this.isRow ? 'offsetTop' : 'offsetLeft'
+  }
+
+  get crossOffsetEnd(): 'offsetBottom' | 'offsetRight' {
+    return this.isRow ? 'offsetBottom' : 'offsetRight'
+  }
+
+  get mainOffsetStart(): 'offsetTop' | 'offsetLeft' {
+    return this.isRow ? 'offsetLeft' : 'offsetTop'
+  }
+
+  get mainOffsetEnd(): 'offsetBottom' | 'offsetRight' {
+    return this.isRow ? 'offsetRight' : 'offsetBottom'
+  }
 }
+
+export type { Flexbox }
 
 export function flexbox(flexbox: FlexboxInput): Flexbox {
   return new Flexbox(flexbox)
+}
+
+export function isFlexbox(value: unknown): value is Flexbox {
+  return typeof value === 'object' && value !== null && TypeBrand in value
 }
