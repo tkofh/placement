@@ -7,29 +7,39 @@
   "license": "MIT",
   "sideEffects": false,
   "type": "module",
-  "main": "./dist/frame/index.cjs",
-  "module": "./dist/frame/index.mjs",
-  "types": "./dist/frame/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
-      "require": "./dist/frame/index.cjs",
-      "import": "./dist/frame/index.mjs",
-      "types": "./dist/frame/index.d.ts"
+    "./flexbox": {
+      "require": "./dist/flexbox.cjs",
+      "import": "./dist/flexbox.mjs",
+      "types": "./dist/flexbox.d.ts"
     },
     "./frame": {
-      "require": "./dist/frame/index.cjs",
-      "import": "./dist/frame/index.mjs",
-      "types": "./dist/frame/index.d.ts"
+      "require": "./dist/frame.cjs",
+      "import": "./dist/frame.mjs",
+      "types": "./dist/frame.d.ts"
     },
-    "./property": {
-      "require": "./dist/property/index.cjs",
-      "import": "./dist/property/index.mjs",
-      "types": "./dist/property/index.d.ts"
+    "./interval": {
+      "require": "./dist/interval.cjs",
+      "import": "./dist/interval.mjs",
+      "types": "./dist/interval.d.ts"
+    },
+    "./point": {
+      "require": "./dist/point.cjs",
+      "import": "./dist/point.mjs",
+      "types": "./dist/point.d.ts"
     },
     "./rect": {
-      "require": "./dist/rect/index.cjs",
-      "import": "./dist/rect/index.mjs",
-      "types": "./dist/rect/index.d.ts"
+      "require": "./dist/rect.cjs",
+      "import": "./dist/rect.mjs",
+      "types": "./dist/rect.d.ts"
+    },
+    "./track": {
+      "require": "./dist/track.cjs",
+      "import": "./dist/track.mjs",
+      "types": "./dist/track.d.ts"
     },
     "./utils": {
       "require": "./dist/utils.cjs",

@@ -1,8 +1,1 @@
-let inspect: symbol = Symbol('placement/inspect')
-
-try {
-  inspect = await import('node:util').then((m) => m.inspect.custom)
-} finally {
-}
-
-export { inspect }
+export const inspect = Symbol.for('nodejs.util.inspect.custom')
