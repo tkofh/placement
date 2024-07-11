@@ -78,11 +78,11 @@ interface BaseOptions {
   size?: number
 }
 
-interface StackOptions extends BaseOptions {
+export interface StackOptions extends BaseOptions {
   stretch?: number
 }
 
-interface SequenceOptions extends BaseOptions {
+export interface SequenceOptions extends BaseOptions {
   gap?: number
   space?: number
   spaceOuter?: number

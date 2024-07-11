@@ -1,14 +1,16 @@
+export { applyFlexbox } from './internal/flexbox'
+
 export const direction = {
   row: 0,
-  'row-reverse': 1,
+  rowReverse: 1,
   column: 2,
-  'column-reverse': 3,
+  columnReverse: 3,
 } as const
 
 export const wrap = {
   nowrap: 0,
   wrap: 1,
-  'wrap-reverse': 2,
+  wrapReverse: 2,
 } as const
 type FlexDirection = (typeof direction)[keyof typeof direction]
 type FlexWrap = (typeof wrap)[keyof typeof wrap]
@@ -77,12 +79,16 @@ class Flexbox {
     return this.direction <= 1
   }
 
+  get isReverse(): boolean {
+    return this.direction % 2 === 1
+  }
+
   get mainGap(): number {
-    return this.isRow ? this.rowGap : this.columnGap
+    return this.isRow ? this.columnGap : this.rowGap
   }
 
   get crossGap(): number {
-    return this.isRow ? this.columnGap : this.rowGap
+    return this.isRow ? this.rowGap : this.columnGap
   }
 
   get mainDimension(): 'width' | 'height' {

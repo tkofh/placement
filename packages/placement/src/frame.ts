@@ -1,5 +1,6 @@
+import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
-import { normalizeTRBL } from './utils/arguments'
+import { normalizeSizing, normalizeTRBL } from './utils/arguments'
 import { dual } from './utils/function'
 
 const TypeBrand: unique symbol = Symbol('placement/frame')
@@ -32,12 +33,13 @@ class Frame extends Pipeable {
   readonly offsetRight: number = 0
   readonly offsetBottom: number = 0
   readonly offsetLeft: number = 0
-  readonly width: number = 0
-  readonly height: number = 0
-  readonly minWidth: number = 0
-  readonly minHeight: number = 0
-  readonly maxWidth: number = Number.POSITIVE_INFINITY
-  readonly maxHeight: number = Number.POSITIVE_INFINITY
+  readonly aspectRatio: number
+  readonly width: number
+  readonly height: number
+  readonly minWidth: number
+  readonly minHeight: number
+  readonly maxWidth: number
+  readonly maxHeight: number
   readonly grow: number = 0
   readonly shrink: number = 0
   readonly align: number = 0
@@ -52,18 +54,100 @@ class Frame extends Pipeable {
     this.offsetRight = frame.offsetRight ?? this.offsetRight
     this.offsetBottom = frame.offsetBottom ?? this.offsetBottom
     this.offsetLeft = frame.offsetLeft ?? this.offsetLeft
-    this.width = Math.max(frame.width ?? this.width, 0)
-    this.height = Math.max(frame.height ?? this.height, 0)
-    this.minWidth = Math.max(frame.minWidth ?? this.minWidth, 0)
-    this.minHeight = Math.max(frame.minHeight ?? this.minHeight, 0)
-    this.maxWidth = Math.max(frame.maxWidth ?? this.maxWidth, 0)
-    this.maxHeight = Math.max(frame.maxHeight ?? this.maxHeight, 0)
+
+    const {
+      aspectRatio,
+      width,
+      height,
+      minWidth,
+      minHeight,
+      maxWidth,
+      maxHeight,
+    } = normalizeSizing(
+      frame.aspectRatio ?? 0,
+      frame.width ?? -1,
+      frame.height ?? -1,
+      frame.minWidth ?? 0,
+      frame.minHeight ?? 0,
+      frame.maxWidth ?? Number.POSITIVE_INFINITY,
+      frame.maxHeight ?? Number.POSITIVE_INFINITY,
+    )
+
+    this.aspectRatio = aspectRatio
+    this.width = width
+    this.height = height
+    this.minWidth = minWidth
+    this.minHeight = minHeight
+    this.maxWidth = maxWidth
+    this.maxHeight = maxHeight
     this.grow = frame.grow ?? this.grow
     this.shrink = frame.shrink ?? this.shrink
     this.align = frame.align ?? this.align
     this.justify = frame.justify ?? this.justify
     this.stretchMain = frame.stretchMain ?? this.stretchMain
     this.stretchCross = frame.stretchCross ?? this.stretchCross
+  }
+
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: inspect code does not need refactoring
+  [inspect]() {
+    const attributes: Array<string> = [
+      `width: ${this.width}`,
+      `height: ${this.height}`,
+    ]
+
+    const hasOffsetTop = this.offsetTop !== 0
+    const hasOffsetBottom = this.offsetBottom !== 0
+    const hasOffsetLeft = this.offsetLeft !== 0
+    const hasOffsetRight = this.offsetRight !== 0
+
+    const offsetXSymmetric =
+      hasOffsetLeft && this.offsetLeft === this.offsetRight
+    const offsetYSymmetric =
+      hasOffsetTop && this.offsetTop === this.offsetBottom
+
+    const offsetSymmetric =
+      offsetXSymmetric && offsetYSymmetric && this.offsetTop === this.offsetLeft
+
+    if (offsetSymmetric) {
+      attributes.push(`offset: ${this.offsetTop}`)
+    } else {
+      if (offsetXSymmetric) {
+        attributes.push(`offset-x: ${this.offsetLeft}`)
+      }
+      if (offsetYSymmetric) {
+        attributes.push(`offset-y: ${this.offsetTop}`)
+      }
+    }
+
+    if (!(offsetXSymmetric || offsetYSymmetric)) {
+      if (hasOffsetLeft) {
+        attributes.push(`offset-left: ${this.offsetLeft}`)
+      }
+      if (hasOffsetRight) {
+        attributes.push(`offset-right: ${this.offsetRight}`)
+      }
+      if (hasOffsetTop) {
+        attributes.push(`offset-top: ${this.offsetTop}`)
+      }
+      if (hasOffsetBottom) {
+        attributes.push(`offset-bottom: ${this.offsetBottom}`)
+      }
+    }
+
+    if (this.minWidth !== 0) {
+      attributes.push(`min-width: ${this.minWidth}`)
+    }
+    if (this.minHeight !== 0) {
+      attributes.push(`min-height: ${this.minHeight}`)
+    }
+    if (this.maxWidth !== Number.POSITIVE_INFINITY) {
+      attributes.push(`max-width: ${this.maxWidth}`)
+    }
+    if (this.maxHeight !== Number.POSITIVE_INFINITY) {
+      attributes.push(`max-height: ${this.maxHeight}`)
+    }
+
+    return `Frame[${attributes.join(', ')}]`
   }
 }
 
