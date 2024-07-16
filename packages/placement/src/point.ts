@@ -7,6 +7,18 @@ import { lerp, normalizeZero, roundTo } from './utils/math'
 const TypeBrand: unique symbol = Symbol('placement/point')
 type TypeBrand = typeof TypeBrand
 
+// export interface CartesianPointLike {
+//   readonly x: number
+//   readonly y: number
+// }
+//
+// export interface PolarPointLike {
+//   readonly r: number
+//   readonly theta: number
+// }
+//
+// export type PointLike = CartesianPointLike | PolarPointLike
+
 export interface PointLike {
   readonly x: number
   readonly y: number

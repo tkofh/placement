@@ -11,6 +11,11 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
+    "./dimensions": {
+      "require": "./dist/dimensions.cjs",
+      "import": "./dist/dimensions.mjs",
+      "types": "./dist/dimensions.d.ts"
+    },
     "./flexbox": {
       "require": "./dist/flexbox.cjs",
       "import": "./dist/flexbox.mjs",
@@ -56,7 +61,6 @@
     "url": "git+https://github.com/tkofh/placement.git"
   },
   "scripts": {
-    "run": "tsx ./src/flexbox.ts",
     "build": "unbuild",
     "test": "vitest",
     "test:run": "vitest run",
@@ -66,14 +70,14 @@
     "url": "https://github.com/tkofh/placement/issues"
   },
   "devDependencies": {
-    "@types/node": "^20.14.7",
-    "@vitest/coverage-v8": "^1.6.0",
-    "@vitest/ui": "^1.6.0",
-    "tsx": "^4.15.7",
+    "@types/node": "^20.14.10",
+    "@vitest/coverage-v8": "^2.0.2",
+    "@vitest/ui": "^2.0.2",
+    "tsx": "^4.16.2",
     "unbuild": "^2.0.0",
-    "vitest": "^1.6.0"
+    "vitest": "^2.0.2"
   },
   "dependencies": {
-    "valued": "^0.2.0"
+    "valued": "^0.4.3"
   }
 }

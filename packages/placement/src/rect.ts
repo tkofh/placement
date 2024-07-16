@@ -1,4 +1,5 @@
 import { PRECISION } from './constants'
+import type { Dimensions } from './dimensions'
 import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
 import { type Point, isPoint } from './point'
@@ -89,16 +90,47 @@ class Rect extends Pipeable implements RectLike {
 
 export type { Rect }
 
-export const rect: {
+interface RectConstructor {
   (): Rect
   (size: number): Rect
   (width: number, height: number): Rect
   (x: number, y: number, size: number): Rect
   (x: number, y: number, width: number, height: number): Rect
   (x: number, y: number, width: number, height: number, precision: number): Rect
-} = (a?: number, b?: number, c?: number, d?: number, p?: number): Rect => {
-  return new Rect(...normalizeXYWH(a, b, c, d), p ?? PRECISION)
+
+  fromDimensions: {
+    (dimensions: Dimensions): Rect
+    (dimensions: Dimensions, position: Point | number): Rect
+    (dimensions: Dimensions, x: number, y: number): Rect
+  }
 }
+
+const rect = ((
+  a?: number,
+  b?: number,
+  c?: number,
+  d?: number,
+  p?: number,
+): Rect =>
+  new Rect(...normalizeXYWH(a, b, c, d), p ?? PRECISION)) as RectConstructor
+
+rect.fromDimensions = ((
+  dimensions: Dimensions,
+  a?: Point | number,
+  b?: number,
+) => {
+  const x = isPoint(a) ? a.x : a ?? 0
+  const y = isPoint(a) ? a.y : b ?? 0
+  return new Rect(
+    x,
+    y,
+    dimensions.width,
+    dimensions.height,
+    dimensions.precision,
+  )
+}) as RectConstructor['fromDimensions']
+
+export { rect }
 
 export function isRect(value: unknown): value is Rect {
   return typeof value === 'object' && value !== null && TypeBrand in value

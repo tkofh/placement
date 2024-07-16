@@ -10,7 +10,7 @@ import type {
   OriginXInput,
   OriginYInput,
 } from '../composables/properties/origin'
-import { useDomRect } from '../composables/useDomRect'
+import { useDomDimensions } from '../composables/useDomDimensions'
 import { useFrame } from '../composables/useFrame'
 import { useParentRect } from '../composables/useParentRect'
 import { useRootRect } from '../composables/useRootRect'
@@ -33,7 +33,7 @@ export const GraphicText = defineComponent({
   setup(props, { slots }) {
     const text = shallowRef<SVGElement>()
     const frameRect = useFrame('absolute', props, true)
-    const textRect = useDomRect(text)
+    const textRect = useDomDimensions(text)
 
     console.log(textRect, frameRect, props)
 

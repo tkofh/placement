@@ -1,23 +1,20 @@
-import { type ReadonlyRect, createRect } from 'placement/rect'
+import { type Dimensions, dimensions } from 'placement/dimensions'
 import {
   type MaybeRefOrGetter,
   type ShallowRef,
   shallowRef,
   toValue,
-  triggerRef,
   watch,
 } from 'vue'
 
-export function useDomRect(
+export function useDomDimensions(
   element: MaybeRefOrGetter<Element | undefined>,
-): Readonly<ShallowRef<ReadonlyRect>> {
-  const rect = shallowRef(createRect())
+): Readonly<ShallowRef<Dimensions>> {
+  const self = shallowRef(dimensions())
 
   if (typeof ResizeObserver !== 'undefined') {
     const observer = new ResizeObserver(([entry]) => {
-      rect.value.width = entry.contentRect.width
-      rect.value.height = entry.contentRect.height
-      triggerRef(rect)
+      self.value = dimensions(entry.contentRect.width, entry.contentRect.height)
     })
 
     watch(
@@ -32,5 +29,5 @@ export function useDomRect(
     )
   }
 
-  return rect
+  return self
 }

@@ -51,10 +51,7 @@ describe('basic cases', () => {
     { input: () => point(100, 100, 100), output: () => point(100, 100, 100) },
     { input: () => fromPolar(0, 0), output: () => point(0, 0) },
     { input: () => fromPolar(100, 0), output: () => point(100, 0) },
-
-    // this one
     { input: () => fromPolar(100, 0.25), output: () => point(0, 100) },
-
     { input: () => fromPolar(100, 0.5), output: () => point(-100, 0) },
     { input: () => fromPolar(100, 0.75), output: () => point(0, -100) },
     { input: () => fromPolar(100, 1), output: () => point(100, 0) },
