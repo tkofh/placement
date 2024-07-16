@@ -1,4 +1,4 @@
-import { type Dimensions, dimensions } from 'placement/dimensions'
+import { type Rect, rect } from 'placement/rect'
 import {
   type MaybeRefOrGetter,
   type ShallowRef,
@@ -7,14 +7,14 @@ import {
   watch,
 } from 'vue'
 
-export function useDomDimensions(
+export function useDomRect(
   element: MaybeRefOrGetter<Element | undefined>,
-): Readonly<ShallowRef<Dimensions>> {
-  const self = shallowRef(dimensions())
+): Readonly<ShallowRef<Rect>> {
+  const self = shallowRef(rect())
 
   if (typeof ResizeObserver !== 'undefined') {
     const observer = new ResizeObserver(([entry]) => {
-      self.value = dimensions(entry.contentRect.width, entry.contentRect.height)
+      self.value = rect.from(entry.contentRect)
     })
 
     watch(

@@ -2,7 +2,12 @@ import { PRECISION } from './constants'
 import { Pipeable } from './internal/pipeable'
 import type { Rect } from './rect'
 import { dual } from './utils/function'
-import { clamp as clampNumber, lerp, roundTo } from './utils/math'
+import {
+  clamp as clampNumber,
+  aspectRatio as getAspectRatio,
+  lerp,
+  roundTo,
+} from './utils/math'
 
 const TypeBrand: unique symbol = Symbol('placement/dimension')
 type TypeBrand = typeof TypeBrand
@@ -30,7 +35,7 @@ class Dimensions extends Pipeable implements DimensionsLike {
     this.width = roundTo(Math.abs(width), precision)
     this.height = roundTo(Math.abs(height), precision)
     this.area = roundTo(this.width * this.height, precision)
-    this.aspectRatio = roundTo(this.width / this.height, precision)
+    this.aspectRatio = getAspectRatio(this.width, this.height, precision)
   }
 
   protected [Symbol.for('nodejs.util.inspect.custom')]() {

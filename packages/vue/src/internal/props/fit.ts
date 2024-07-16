@@ -1,7 +1,7 @@
 import { type ParserInput, parse } from 'valued'
 import { keywords } from 'valued/data/keyword'
 
-const fitParser = keywords(['contain', 'cover', 'crop', 'fill'])
+const fitParser = keywords(['contain', 'cover', 'crop'])
 
 type FitParser = typeof fitParser
 

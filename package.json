@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "dev": "turbo run dev",
     "test": "turbo run test:run",
     "check": "biome check --write --unsafe .",
     "check:report": "biome check .",

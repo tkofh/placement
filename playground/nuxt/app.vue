@@ -1,26 +1,7 @@
 <template>
-  <RootFrame aspect-ratio="16/9" fit="cover">
-    <FlexFrame
-      width="100%"
-      height="100%"
-      gap="10px"
-      flex-direction="row"
-      flex-wrap="wrap"
-    >
-      <FlexFrame
-        width="100px"
-        height="100px"
-        grow="1"
-        stroke-width="3px"
-        stroke="black"
-        min-width="600px"
-      />
-      <AbsoluteFrame width="200px" height="100px">
-        <AbsoluteFrame width="100%" height="100%" fill="blue" />
-        <GraphicText width="200px" height="100px">Hello World</GraphicText>
-      </AbsoluteFrame>
-    </FlexFrame>
-  </RootFrame>
+  <GraphicRoot size="fill">
+    <rect x="0" y="0" width="100" height="100" fill="red" />
+  </GraphicRoot>
 </template>
 
 <script setup lang="ts">

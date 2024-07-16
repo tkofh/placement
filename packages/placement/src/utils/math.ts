@@ -1,3 +1,5 @@
+import { PRECISION } from '../constants'
+
 export function minMax(min: number, max: number) {
   return {
     min: Math.min(min, max),
@@ -46,4 +48,16 @@ export function roundTo(value: number, precision: number) {
 
 export function normalizeZero(value: number) {
   return value === 0 ? 0 : value
+}
+
+export function aspectRatio(
+  width: number,
+  height: number,
+  precision = PRECISION,
+) {
+  return width === 0
+    ? 0
+    : height === 0
+      ? Number.POSITIVE_INFINITY
+      : roundTo(width / height, precision)
 }

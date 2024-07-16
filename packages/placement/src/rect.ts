@@ -6,7 +6,7 @@ import { type Point, isPoint } from './point'
 import { normalizeXYWH } from './utils/arguments'
 import { dual } from './utils/function'
 import { clamp, lerp } from './utils/math'
-import { roundTo } from './utils/math'
+import { aspectRatio as getAspectRatio, roundTo } from './utils/math'
 
 const TypeBrand: unique symbol = Symbol('placement/rect')
 type TypeBrand = typeof TypeBrand
@@ -61,7 +61,7 @@ class Rect extends Pipeable implements RectLike {
   }
 
   get aspectRatio() {
-    return roundTo(this.width / this.height, this.precision)
+    return getAspectRatio(this.width, this.height, this.precision)
   }
 
   get centerX() {
@@ -98,6 +98,8 @@ interface RectConstructor {
   (x: number, y: number, width: number, height: number): Rect
   (x: number, y: number, width: number, height: number, precision: number): Rect
 
+  from: (rect: RectLike) => Rect
+
   fromDimensions: {
     (dimensions: Dimensions): Rect
     (dimensions: Dimensions, position: Point | number): Rect
@@ -114,6 +116,14 @@ const rect = ((
 ): Rect =>
   new Rect(...normalizeXYWH(a, b, c, d), p ?? PRECISION)) as RectConstructor
 
+rect.from = ((input: RectLike) =>
+  rect(
+    input.x,
+    input.y,
+    input.width,
+    input.height,
+  )) satisfies RectConstructor['from']
+
 rect.fromDimensions = ((
   dimensions: Dimensions,
   a?: Point | number,
@@ -128,7 +138,7 @@ rect.fromDimensions = ((
     dimensions.height,
     dimensions.precision,
   )
-}) as RectConstructor['fromDimensions']
+}) satisfies RectConstructor['fromDimensions']
 
 export { rect }
 

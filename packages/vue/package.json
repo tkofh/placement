@@ -16,35 +16,10 @@
       "import": "./dist/index.mjs",
       "types": "./dist/index.d.ts"
     },
-    "./AbsoluteFrame": {
-      "require": "./dist/components/AbsoluteFrame.cjs",
-      "import": "./dist/components/AbsoluteFrame.mjs",
-      "types": "./dist/components/AbsoluteFrame.d.ts"
-    },
-    "./FlexFrame": {
-      "require": "./dist/components/FlexFrame.cjs",
-      "import": "./dist/components/FlexFrame.mjs",
-      "types": "./dist/components/FlexFrame.d.ts"
-    },
-    "./RootFrame": {
-      "require": "./dist/components/RootFrame.cjs",
-      "import": "./dist/components/RootFrame.mjs",
-      "types": "./dist/components/RootFrame.d.ts"
-    },
-    "./GraphicText": {
-      "require": "./dist/components/GraphicText.cjs",
-      "import": "./dist/components/GraphicText.mjs",
-      "types": "./dist/components/GraphicText.d.ts"
-    },
-    "./useFrame": {
-      "require": "./dist/composables/useFrame.cjs",
-      "import": "./dist/composables/useFrame.mjs",
-      "types": "./dist/composables/useFrame.d.ts"
-    },
-    "./useRootRect": {
-      "require": "./dist/composables/useRootRect.cjs",
-      "import": "./dist/composables/useRootRect.mjs",
-      "types": "./dist/composables/useRootRect.d.ts"
+    "./GraphicRoot": {
+      "require": "./dist/components/GraphicRoot.cjs",
+      "import": "./dist/components/GraphicRoot.mjs",
+      "types": "./dist/components/GraphicRoot.d.ts"
     },
     "./nuxt": {
       "require": "./dist/nuxt.cjs",

@@ -1,8 +1,9 @@
 import { type Dimensions, clamp, dimensions } from 'placement/dimensions'
 import { isDimensions } from 'placement/dimensions'
 import { type Point, isPoint, point } from 'placement/point'
-import { computed, defineComponent, h, shallowRef } from 'vue'
-import { useDomDimensions } from '../composables/useDomDimensions'
+import { type Rect, align, contain, cover, rect } from 'placement/rect'
+import { computed, defineComponent, h, shallowRef, watchEffect } from 'vue'
+import { useDomRect } from '../composables/useDomRect'
 import {
   type AspectRatioInput,
   parseAspectRatio,
@@ -29,7 +30,7 @@ export interface GraphicRootProps {
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: todo: make better
 function resolveSize(
-  domDimensions: Dimensions,
+  domRect: Rect,
   auto: number,
   size: Size2DInput | Dimensions | number | undefined,
   width: Size1DInput | number | undefined,
@@ -43,8 +44,8 @@ function resolveSize(
       : parseSize2D(
           (size as string) ?? '',
           Number.POSITIVE_INFINITY,
-          domDimensions,
-          domDimensions,
+          domRect,
+          domRect,
         )
 
   if (
@@ -61,8 +62,8 @@ function resolveSize(
           (width as string) ?? '',
           'width',
           Number.POSITIVE_INFINITY,
-          domDimensions,
-          domDimensions,
+          domRect,
+          domRect,
         )
 
   const heightProp =
@@ -72,8 +73,8 @@ function resolveSize(
           (height as string) ?? '',
           'height',
           Number.POSITIVE_INFINITY,
-          domDimensions,
-          domDimensions,
+          domRect,
+          domRect,
         )
 
   if (
@@ -109,13 +110,13 @@ function resolveSize(
 }
 
 export const GraphicRoot = defineComponent(
-  (props: GraphicRootProps) => {
+  (props: GraphicRootProps, { slots }) => {
     const svg = shallowRef<SVGElement>()
-    const domDimensions = useDomDimensions(svg)
+    const domRect = useDomRect(svg)
 
-    const declaredSize = computed(() =>
+    const size = computed(() =>
       resolveSize(
-        domDimensions.value,
+        domRect.value,
         0,
         props.size,
         props.width,
@@ -125,7 +126,7 @@ export const GraphicRoot = defineComponent(
     )
     const minSize = computed(() =>
       resolveSize(
-        domDimensions.value,
+        domRect.value,
         0,
         props.minSize,
         props.minWidth,
@@ -135,7 +136,7 @@ export const GraphicRoot = defineComponent(
     )
     const maxSize = computed(() =>
       resolveSize(
-        domDimensions.value,
+        domRect.value,
         Number.POSITIVE_INFINITY,
         props.maxSize,
         props.maxWidth,
@@ -144,11 +145,11 @@ export const GraphicRoot = defineComponent(
       ),
     )
 
-    const _size = computed(() =>
-      clamp(declaredSize.value, minSize.value, maxSize.value),
+    const rootRect = computed(() =>
+      rect.fromDimensions(clamp(size.value, minSize.value, maxSize.value)),
     )
 
-    const _origin = computed(() =>
+    const origin = computed(() =>
       props.origin == null
         ? point(0)
         : isPoint(props.origin)
@@ -158,10 +159,41 @@ export const GraphicRoot = defineComponent(
             : parseOrigin(props.origin),
     )
 
-    const _viewBox = computed(() => {})
+    const fit = computed(() => props.fit ?? 'contain')
+
+    const viewBox = computed(() => {
+      let viewBoxRect!: Rect
+      if (fit.value === 'crop') {
+        viewBoxRect = domRect.value.pipe(align(rootRect.value, origin.value))
+      } else {
+        const contentSpaceDomRect = domRect.value.pipe(
+          fit.value === 'contain'
+            ? contain(rootRect.value)
+            : cover(rootRect.value),
+        )
+        viewBoxRect = rootRect.value.pipe(
+          align(contentSpaceDomRect, origin.value),
+        )
+      }
+
+      return `${viewBoxRect.x} ${viewBoxRect.y} ${viewBoxRect.width} ${viewBoxRect.height}`
+    })
+
+    watchEffect(() => {
+      console.log({
+        domRect: domRect.value,
+        size: size.value,
+        minSize: minSize.value,
+        maxSize: maxSize.value,
+        rootRect: rootRect.value,
+        origin: origin.value,
+        fit: fit.value,
+        viewBox: viewBox.value,
+      })
+    })
 
     return () => {
-      return h('svg', { ref: svg })
+      return h('svg', { ref: svg, viewBox: viewBox.value }, slots.default?.())
     }
   },
   {
