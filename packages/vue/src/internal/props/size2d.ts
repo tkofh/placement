@@ -32,7 +32,6 @@ export type Size2DInput = ParserInput<Size2D>
 export type Size2DValue = ParserValue<Size2D>
 
 const cache = new Map<string, Dimensions>()
-const zero = dimensions(0)
 const infinity = dimensions(Number.POSITIVE_INFINITY)
 
 function toDimensions(
@@ -95,19 +94,20 @@ export function parseSize2D(
   parent: Dimensions | Rect,
   root: Dimensions | Rect,
 ): Dimensions {
-  const cached = cache.get(input)
+  const key = `${input}:${String(auto)}:${String(parent.width)}:${String(parent.height)}:${String(root.width)}:${String(root.height)}`
+  const cached = cache.get(key)
   if (cached !== undefined) {
     return cached
   }
 
   const parsed = parse(input, size2d)
-  let value: Dimensions = zero
+  let value: Dimensions = infinity
 
   if (parsed.valid) {
     value = toDimensions(parsed.value, auto, parent, root)
   }
 
-  cache.set(input, value)
+  cache.set(key, value)
 
   return value
 }

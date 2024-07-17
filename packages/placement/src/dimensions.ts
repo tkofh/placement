@@ -38,8 +38,16 @@ class Dimensions extends Pipeable implements DimensionsLike {
     this.aspectRatio = getAspectRatio(this.width, this.height, precision)
   }
 
-  protected [Symbol.for('nodejs.util.inspect.custom')]() {
+  [Symbol.for('nodejs.util.inspect.custom')]() {
     return `Dimension [${this.width}x${this.height}]`
+  }
+
+  toJSON() {
+    return {
+      width: this.width,
+      height: this.height,
+      precision: this.precision,
+    }
   }
 }
 

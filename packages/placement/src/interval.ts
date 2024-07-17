@@ -1,5 +1,4 @@
 import { PRECISION } from './constants'
-import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
 import { dual } from './utils/function'
 import {
@@ -37,9 +36,16 @@ class Interval extends Pipeable implements IntervalLike {
     return this.start + this.size
   }
 
-  [inspect]() {
+  [Symbol.for('nodejs.util.inspect.custom')]() {
     const { min, max } = minMax(this.start, this.end)
     return `Interval [${min}, ${max}]`
+  }
+
+  toJSON() {
+    return {
+      start: this.start,
+      size: this.size,
+    }
   }
 }
 

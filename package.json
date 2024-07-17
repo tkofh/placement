@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "build:watch": "turbo watch build",
     "dev": "turbo run dev",
     "test": "turbo run test:run",
     "check": "biome check --write --unsafe .",
@@ -15,9 +16,9 @@
     "@changesets/cli": "^2.27.7",
     "@tsconfig/node20": "^20.1.4",
     "lefthook": "^1.7.2",
-    "turbo": "^2.0.6",
+    "turbo": "^2.0.7",
     "typescript": "^5.5.3",
-    "vitest": "^2.0.2"
+    "vitest": "^2.0.3"
   },
   "packageManager": "pnpm@9.4.0",
   "engines": {

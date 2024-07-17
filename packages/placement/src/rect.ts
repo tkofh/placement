@@ -1,6 +1,5 @@
 import { PRECISION } from './constants'
 import type { Dimensions } from './dimensions'
-import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
 import { type Point, isPoint } from './point'
 import { normalizeXYWH } from './utils/arguments'
@@ -72,7 +71,7 @@ class Rect extends Pipeable implements RectLike {
     return roundTo(this.y + this.height / 2, this.precision)
   }
 
-  [inspect]() {
+  [Symbol.for('nodejs.util.inspect.custom')]() {
     if (this.x === 0 && this.y === 0 && this.width === 0 && this.height === 0) {
       return 'Rect[0]'
     }
@@ -85,6 +84,16 @@ class Rect extends Pipeable implements RectLike {
         : `w: ${this.width}, h: ${this.height}`
 
     return `Rect[${position} ${size}]`
+  }
+
+  toJSON() {
+    return {
+      x: this.x,
+      y: this.y,
+      width: this.width,
+      height: this.height,
+      precision: this.precision,
+    }
   }
 }
 
@@ -857,6 +866,10 @@ export const contain: {
 } = dual(
   (args) => isRect(args[1]),
   (self: Rect, target: Rect, origin = 0.5) => {
+    if (self.area === 0) {
+      return target
+    }
+
     const scale = Math.min(
       target.width / self.width,
       target.height / self.height,
@@ -880,6 +893,10 @@ export const cover: {
 } = dual(
   (args) => isRect(args[1]),
   (self: Rect, target: Rect, origin = 0.5) => {
+    if (self.area === 0) {
+      return target
+    }
+
     const scale = Math.max(
       target.width / self.width,
       target.height / self.height,

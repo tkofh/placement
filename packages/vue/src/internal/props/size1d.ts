@@ -1,4 +1,5 @@
-import type { DimensionsLike } from 'placement/dimensions'
+import type { Dimensions } from 'placement/dimensions'
+import type { Rect } from 'placement/rect'
 import { type ParserInput, type ParserValue, parse } from 'valued'
 import { oneOf } from 'valued/combinators'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
@@ -20,8 +21,8 @@ export function toPixels(
   value: Size1DValue,
   basis: 'width' | 'height',
   auto: number,
-  parent: DimensionsLike,
-  root: DimensionsLike,
+  parent: Dimensions | Rect,
+  root: Dimensions | Rect,
 ): number {
   if (isKeywordValue(value)) {
     return auto
@@ -59,10 +60,10 @@ export function parseSize1D(
   input: string,
   basis: 'width' | 'height',
   auto: number,
-  root: DimensionsLike,
-  parent: DimensionsLike,
+  parent: Dimensions | Rect,
+  root: Dimensions | Rect,
 ): number {
-  const key = `${basis}:${input}:${root.width}:${root.height}:${parent.width}:${parent.height}`
+  const key = `${input}:${basis}:${auto}:${root.width}:${root.height}:${parent.width}:${parent.height}`
   const cached = cache.get(key)
   if (cached !== undefined) {
     return cached

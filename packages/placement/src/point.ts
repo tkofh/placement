@@ -1,5 +1,4 @@
 import { PRECISION } from './constants'
-import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
 import { dual } from './utils/function'
 import { lerp, normalizeZero, roundTo } from './utils/math'
@@ -75,8 +74,16 @@ class Point extends Pipeable implements PointLike {
     return this._arcLength
   }
 
-  [inspect]() {
+  [Symbol.for('nodejs.util.inspect.custom')]() {
     return `Point (${this.x}, ${this.y})`
+  }
+
+  toJSON() {
+    return {
+      x: this.x,
+      y: this.y,
+      precision: this.precision,
+    }
   }
 }
 
