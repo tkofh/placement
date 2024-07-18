@@ -80,12 +80,9 @@
     {
       "include": ["*.vue"],
       "linter": {
-        "rules": {
-          "style": {
-            "useFilenamingConvention": "off"
-          }
-        }
-      }
+        "enabled": false
+      },
+      "formatter": {}
     },
     {
       "include": ["utils/function.ts"],

@@ -1,7 +1,7 @@
 import type { Dimensions } from 'placement/dimensions'
 import type { Rect } from 'placement/rect'
 import { type ParserInput, type ParserValue, parse } from 'valued'
-import { oneOf } from 'valued/combinators'
+import { oneOf } from 'valued/combinators/oneOf'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { lengthPercentage } from 'valued/data/length-percentage'
 import { createCache } from '../cache'

@@ -1,5 +1,5 @@
 import { type ParserInput, parse } from 'valued'
-import { oneOf } from 'valued/combinators'
+import { oneOf } from 'valued/combinators/oneOf'
 import { keyword } from 'valued/data/keyword'
 import { isRatioValue, ratio } from 'valued/data/ratio'
 import { createCache } from '../cache'

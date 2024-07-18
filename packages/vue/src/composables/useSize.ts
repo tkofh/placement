@@ -14,16 +14,16 @@ import { type Size1DInput, parseSize1D } from '../internal/props/size1d'
 import { type Size2DInput, parseSize2D } from '../internal/props/size2d'
 
 export interface Sizeable {
-  size?: Size2DInput | Dimensions | number
-  minSize?: Size2DInput | Dimensions | number
-  maxSize?: Size2DInput | Dimensions | number
-  width?: Size1DInput | number
-  height?: Size1DInput | number
-  aspectRatio?: AspectRatioInput | number
-  minWidth?: Size1DInput | number
-  minHeight?: Size1DInput | number
-  maxWidth?: Size1DInput | number
-  maxHeight?: Size1DInput | number
+  size?: Size2DInput | Dimensions | number | undefined
+  minSize?: Size2DInput | Dimensions | number | undefined
+  maxSize?: Size2DInput | Dimensions | number | undefined
+  width?: Size1DInput | number | undefined
+  height?: Size1DInput | number | undefined
+  aspectRatio?: AspectRatioInput | number | undefined
+  minWidth?: Size1DInput | number | undefined
+  minHeight?: Size1DInput | number | undefined
+  maxWidth?: Size1DInput | number | undefined
+  maxHeight?: Size1DInput | number | undefined
 }
 
 function resolveSize1D(
@@ -118,7 +118,7 @@ export interface Sizeable {
   maxHeight?: Size1DInput | number
 }
 
-export function useSize(
+export function useUnconstrainedSizes(
   input: MaybeRefOrGetter<Sizeable>,
   parent: MaybeRefOrGetter<Rect | Dimensions>,
   root: MaybeRefOrGetter<Rect | Dimensions>,
@@ -164,6 +164,16 @@ export function useSize(
       Number.POSITIVE_INFINITY,
     )
   })
+
+  return { size, minSize, maxSize }
+}
+
+export function useSize(
+  input: MaybeRefOrGetter<Sizeable>,
+  parent: MaybeRefOrGetter<Rect | Dimensions>,
+  root: MaybeRefOrGetter<Rect | Dimensions>,
+) {
+  const { size, minSize, maxSize } = useUnconstrainedSizes(input, parent, root)
 
   return computed(() => clamp(size.value, minSize.value, maxSize.value))
 }

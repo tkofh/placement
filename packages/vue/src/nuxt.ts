@@ -1,13 +1,8 @@
 import { addComponent, defineNuxtModule } from '@nuxt/kit'
+// noinspection ES6UnusedImports
 import type {} from '@nuxt/schema'
 
-const components = [
-  // 'AbsoluteFrame',
-  // 'BasicFrame',
-  // 'FlexFrame',
-  'GraphicRoot',
-  // 'GraphicText',
-]
+const components = ['GraphicRoot', 'FlexLayout', 'FlexItem']
 // const composables = ['useFrame', 'useRootRect']
 
 // const pluginTemplate = `export default definePayloadPlugin(() => {

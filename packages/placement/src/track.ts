@@ -1,4 +1,3 @@
-import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
 import {
   type InternalSequenceTrackItem,
@@ -58,7 +57,7 @@ class Track extends Pipeable {
     this.size = end - start
   }
 
-  [inspect]() {
+  [Symbol.for('nodejs.util.inspect.custom')]() {
     return `Track [${this.intervals.map((interval) => `[${interval.start}, ${interval.end}]`).join(', ')}]`
   }
 }
@@ -200,29 +199,31 @@ export const sequence: {
     const gap = options.gap ?? 0
     const place = options.place ?? 0
 
+    const definiteOuterSize =
+      totals.definiteOuterSize + (items.length - 1) * gap
+
     if (options.size == null || options.size === Number.POSITIVE_INFINITY) {
       return sequenceWithoutFreeSpace(
         trackItems,
         gap,
         0,
-        place * -totals.definiteOuterSize,
+        place * -definiteOuterSize,
       )
     }
 
-    const deltaSize =
-      options.size - totals.definiteOuterSize - gap * (trackItems.length - 1)
+    const deltaSize = options.size - definiteOuterSize
 
     if (totals.autoOffsetCount > 0) {
       return sequenceWithoutFreeSpace(
         trackItems,
         gap,
-        (options.size - totals.definiteOuterSize) / totals.autoOffsetCount,
+        (options.size - definiteOuterSize) / totals.autoOffsetCount,
         place * -deltaSize,
       )
     }
 
     const consumed =
-      totals.definiteOuterSize +
+      definiteOuterSize +
       applyGrow(
         growable,
         deltaSize,

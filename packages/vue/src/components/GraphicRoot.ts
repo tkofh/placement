@@ -2,6 +2,8 @@ import { type Point, isPoint, point } from 'placement/point'
 import { type Rect, align, contain, cover, rect } from 'placement/rect'
 import { computed, defineComponent, h, shallowRef } from 'vue'
 import { useDomRect } from '../composables/useDomRect'
+import { provideParentRect } from '../composables/useParentRect'
+import { provideRootRect } from '../composables/useRootRect'
 import { type Sizeable, useSize } from '../composables/useSize'
 import type { FitInput } from '../internal/props/fit'
 import { type OriginInput, parseOrigin } from '../internal/props/origin'
@@ -49,6 +51,9 @@ export const GraphicRoot = defineComponent(
 
       return `${viewBoxRect.x} ${viewBoxRect.y} ${viewBoxRect.width} ${viewBoxRect.height}`
     })
+
+    provideRootRect(rootRect)
+    provideParentRect(rootRect)
 
     return () => {
       return h(

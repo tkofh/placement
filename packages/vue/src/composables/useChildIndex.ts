@@ -2,6 +2,7 @@ import {
   type ComponentInternalInstance,
   type InjectionKey,
   type Ref,
+  customRef,
   getCurrentInstance,
   inject,
   onUnmounted,
@@ -50,29 +51,35 @@ function compareVmNodes(
 }
 
 class OrderedInstanceStorage {
-  readonly #storage = new Map<ComponentInternalInstance, Ref<number>>()
-  readonly #order: Array<ComponentInternalInstance> = []
+  readonly storage = new Map<ComponentInternalInstance, Ref<number>>()
+  readonly order: Array<ComponentInternalInstance> = []
 
   #nextIndex = 0
 
+  constructor(readonly trigger: (value: number) => void) {}
+
   insert(vm: ComponentInternalInstance) {
     const index = ref(this.#nextIndex++)
-    this.#storage.set(vm, index)
-    this.#order.push(vm)
+    this.storage.set(vm, index)
+    this.order.push(vm)
+
+    this.trigger(this.order.length)
 
     return index
   }
 
   remove(vm: ComponentInternalInstance) {
-    this.#order.splice(this.#order.indexOf(vm), 1)
-    this.#storage.delete(vm)
+    this.order.splice(this.order.indexOf(vm), 1)
+    this.storage.delete(vm)
+
+    this.trigger(this.order.length)
   }
 
   update() {
-    this.#order.sort(compareVmNodes)
+    this.order.sort(compareVmNodes)
 
-    for (const [index, vm] of this.#order.entries()) {
-      const indexRef = this.#storage.get(vm)
+    for (const [index, vm] of this.order.entries()) {
+      const indexRef = this.storage.get(vm)
       if (indexRef === undefined) {
         throw new Error('No index ref')
       }
@@ -83,7 +90,25 @@ class OrderedInstanceStorage {
 }
 
 export function useIndexParent() {
-  const storage = new OrderedInstanceStorage()
+  let storage: OrderedInstanceStorage
+  const length = customRef((track, trigger) => {
+    storage = new OrderedInstanceStorage(trigger)
+
+    return {
+      get() {
+        track()
+        return storage.order.length
+      },
+      set(newValue) {
+        if (newValue < storage.order.length) {
+          const removed = storage.order.splice(newValue)
+          for (const vm of removed) {
+            storage.storage.delete(vm)
+          }
+        }
+      },
+    }
+  })
 
   provide(injection, (vm) => {
     onUnmounted(() => {
@@ -96,6 +121,8 @@ export function useIndexParent() {
   onUpdated(() => {
     storage.update()
   })
+
+  return length
 }
 
 export function useChildIndex(): Readonly<Ref<number>> {
@@ -103,7 +130,7 @@ export function useChildIndex(): Readonly<Ref<number>> {
   const vm = getCurrentInstance()
 
   if (register === null || vm === null) {
-    console.warn('no parent or vm')
+    console.warn('no parent or no vm')
     return ref(-1)
   }
 

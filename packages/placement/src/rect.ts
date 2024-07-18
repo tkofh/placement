@@ -1,11 +1,12 @@
 import { PRECISION } from './constants'
-import type { Dimensions } from './dimensions'
+import { type Dimensions, isDimensions } from './dimensions'
 import { Pipeable } from './internal/pipeable'
 import { type Point, isPoint } from './point'
 import { normalizeXYWH } from './utils/arguments'
 import { dual } from './utils/function'
 import { clamp, lerp } from './utils/math'
 import { aspectRatio as getAspectRatio, roundTo } from './utils/math'
+import { isRecord } from './utils/object'
 
 const TypeBrand: unique symbol = Symbol('placement/rect')
 type TypeBrand = typeof TypeBrand
@@ -819,6 +820,103 @@ export const resize: {
     )
   },
 )
+
+// todo: turn into proper data type
+interface Offset {
+  readonly top: number
+  readonly right: number
+  readonly bottom: number
+  readonly left: number
+}
+function isOffset(input: unknown): input is Offset {
+  return (
+    isRecord(input) &&
+    'top' in input &&
+    'right' in input &&
+    'bottom' in input &&
+    'left' in input
+  )
+}
+
+export const grow: {
+  (self: Rect, amount: number | Dimensions | Point | Offset): Rect
+  (amount: number | Dimensions | Point | Offset): (self: Rect) => Rect
+} = dual(2, (self: Rect, amount: number | Dimensions | Point | Offset) => {
+  let amountTop: number
+  let amountRight: number
+  let amountBottom: number
+  let amountLeft: number
+
+  if (isDimensions(amount)) {
+    amountTop = amount.height * 0.5
+    amountRight = amount.width * 0.5
+    amountBottom = amount.height * 0.5
+    amountLeft = amount.width * 0.5
+  } else if (isPoint(amount)) {
+    amountTop = amount.y
+    amountRight = amount.x
+    amountBottom = amount.y
+    amountLeft = amount.x
+  } else if (isOffset(amount)) {
+    amountTop = amount.top
+    amountRight = amount.right
+    amountBottom = amount.bottom
+    amountLeft = amount.left
+  } else {
+    amountTop = amount
+    amountRight = amount
+    amountBottom = amount
+    amountLeft = amount
+  }
+
+  return new Rect(
+    self.x - amountLeft,
+    self.y - amountTop,
+    self.width + amountLeft + amountRight,
+    self.height + amountTop + amountBottom,
+    self.precision,
+  )
+})
+
+export const shrink: {
+  (self: Rect, amount: number | Dimensions | Point | Offset): Rect
+  (amount: number | Dimensions | Point | Offset): (self: Rect) => Rect
+} = dual(2, (self: Rect, amount: number | Dimensions | Point | Offset) => {
+  let amountTop: number
+  let amountRight: number
+  let amountBottom: number
+  let amountLeft: number
+
+  if (isDimensions(amount)) {
+    amountTop = amount.height * 0.5
+    amountRight = amount.width * 0.5
+    amountBottom = amount.height * 0.5
+    amountLeft = amount.width * 0.5
+  } else if (isPoint(amount)) {
+    amountTop = amount.y
+    amountRight = amount.x
+    amountBottom = amount.y
+    amountLeft = amount.x
+  } else if (isOffset(amount)) {
+    amountTop = amount.top
+    amountRight = amount.right
+    amountBottom = amount.bottom
+    amountLeft = amount.left
+  } else {
+    amountTop = amount
+    amountRight = amount
+    amountBottom = amount
+    amountLeft = amount
+  }
+
+  return new Rect(
+    self.x + amountLeft,
+    self.y + amountTop,
+    self.width - amountLeft - amountRight,
+    self.height - amountTop - amountBottom,
+    self.precision,
+  )
+})
 
 export const join: {
   (self: Rect, target: Rect): Rect

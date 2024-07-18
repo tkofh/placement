@@ -1,4 +1,3 @@
-import { inspect } from './internal/inspectable'
 import { Pipeable } from './internal/pipeable'
 import { normalizeSizing, normalizeTRBL } from './utils/arguments'
 import { dual } from './utils/function'
@@ -42,8 +41,8 @@ class Frame extends Pipeable {
   readonly maxHeight: number
   readonly grow: number = 0
   readonly shrink: number = 0
-  readonly align: number = 0
-  readonly justify: number = 0
+  readonly align: number = Number.POSITIVE_INFINITY
+  readonly justify: number = Number.POSITIVE_INFINITY
   readonly stretchMain: number = 0
   readonly stretchCross: number = 0
 
@@ -89,7 +88,7 @@ class Frame extends Pipeable {
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: inspect code does not need refactoring
-  [inspect]() {
+  [Symbol.for('nodejs.util.inspect.custom')]() {
     const attributes: Array<string> = [
       `width: ${this.width}`,
       `height: ${this.height}`,

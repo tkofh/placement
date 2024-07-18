@@ -239,3 +239,75 @@ describe('gap', () => {
     ),
   )
 })
+
+test(
+  ...c(
+    flexbox({
+      direction: direction.row,
+      columnGap: 10,
+      rowGap: 10,
+      wrap: wrap.wrap,
+      alignItems: 0.5,
+      alignContent: 0.5,
+      justifyContent: 0.5,
+    }),
+    rect(1000),
+    Array.from({ length: 10 }, () => square(100)),
+    [
+      rect(10, 395, 100),
+      rect(120, 395, 100),
+      rect(230, 395, 100),
+      rect(340, 395, 100),
+      rect(450, 395, 100),
+      rect(560, 395, 100),
+      rect(670, 395, 100),
+      rect(780, 395, 100),
+      rect(890, 395, 100),
+      rect(450, 505, 100),
+    ],
+  ),
+)
+
+test(
+  ...c(
+    flexbox({
+      direction: direction.row,
+      columnGap: 10,
+      rowGap: 10,
+      wrap: wrap.wrap,
+      alignItems: 0.5,
+      alignContent: 0.5,
+      justifyContent: 0.5,
+    }),
+    rect(1000),
+    Array.from({ length: 9 }, () => square(100)),
+    [
+      rect(10, 450, 100),
+      rect(120, 450, 100),
+      rect(230, 450, 100),
+      rect(340, 450, 100),
+      rect(450, 450, 100),
+      rect(560, 450, 100),
+      rect(670, 450, 100),
+      rect(780, 450, 100),
+      rect(890, 450, 100),
+    ],
+  ),
+)
+
+test(
+  ...c(
+    flexbox({
+      direction: direction.row,
+      wrap: wrap.wrap,
+    }),
+    rect(10, 10, 1000),
+    [square(100), square(100), square(100), square(100)],
+    [
+      rect(10, 10, 100),
+      rect(110, 10, 100),
+      rect(210, 10, 100),
+      rect(310, 10, 100),
+    ],
+  ),
+)

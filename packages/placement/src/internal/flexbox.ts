@@ -70,7 +70,7 @@ function computeCrossTrack(
   isSolo: boolean,
 ) {
   return stack(items, {
-    place: flexbox.alignContent,
+    place: flexbox.alignItems,
     stretch: flexbox.stretchContent,
     size: isSolo ? parent[flexbox.crossDimension] : Number.POSITIVE_INFINITY,
   })
@@ -93,9 +93,7 @@ function computeTracks(
   let crossItems: Array<StackTrackItem> = []
   const lineItems: Array<SequenceTrackItem> = []
 
-  const lastIndex = frames.length - 1
-
-  for (const [index, frame] of frames.entries()) {
+  for (const frame of frames) {
     const { mainItem, crossItem, outerHypotheticalSize } = computeItem(
       frame,
       flexbox,
@@ -116,7 +114,7 @@ function computeTracks(
         crossItems.length === 0 ? [crossItem] : crossItems,
         flexbox,
         parent,
-        index === lastIndex,
+        false,
       )
       mainItems = []
       crossItems = []
@@ -144,7 +142,12 @@ function computeTracks(
 
   if (mainItems.length > 0) {
     mainTracks.push(computeMainTrack(mainItems, flexbox, parent))
-    const crossTrack = computeCrossTrack(crossItems, flexbox, parent, false)
+    const crossTrack = computeCrossTrack(
+      crossItems,
+      flexbox,
+      parent,
+      crossTracks.length === 0,
+    )
     crossTracks.push(crossTrack)
     lineItems.push({
       min: minCrossSize,
@@ -184,6 +187,9 @@ export function applyFlexbox(
   const xTracks = flexbox.isRow ? mainTracks : crossTracks
   const yTracks = flexbox.isRow ? crossTracks : mainTracks
 
+  const parentX = parent.x
+  const parentY = parent.y
+
   if (xTracks.length === 1) {
     const [xTrack] = xTracks
     const [yTrack] = yTracks
@@ -194,7 +200,12 @@ export function applyFlexbox(
       const yInterval = yTrack.intervals[i]
 
       rects.push(
-        rect(xInterval.start, yInterval.start, xInterval.size, yInterval.size),
+        rect(
+          parentX + xInterval.start,
+          parentY + yInterval.start,
+          xInterval.size,
+          yInterval.size,
+        ),
       )
     }
 
@@ -217,9 +228,6 @@ export function applyFlexbox(
   }
 
   const lineIntervals = lineTrack.intervals
-
-  const parentX = parent.x
-  const parentY = parent.y
 
   const tracksLen = xTracks.length
   for (let t = 0; t < tracksLen; t++) {
