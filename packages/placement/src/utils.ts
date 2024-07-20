@@ -8,3 +8,4 @@ export {
   minMax,
 } from './utils/math'
 export { dual, pipe } from './utils/function'
+export { auto } from './utils/arguments'

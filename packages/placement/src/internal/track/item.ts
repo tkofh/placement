@@ -1,4 +1,3 @@
-import { isAuto } from '../../utils/arguments'
 import { clamp } from '../../utils/math'
 
 export interface TrackItemInput {
@@ -35,8 +34,8 @@ export class TrackItem {
     this.min = Math.max(min, 0)
     this.max = Math.max(max, 0)
 
-    this.startIsAuto = isAuto(start)
-    this.endIsAuto = isAuto(end)
+    this.startIsAuto = !Number.isFinite(start)
+    this.endIsAuto = !Number.isFinite(end)
 
     this.definiteStart = this.startIsAuto ? 0 : start
     this.definiteEnd = this.endIsAuto ? 0 : end

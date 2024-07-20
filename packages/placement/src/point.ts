@@ -89,16 +89,18 @@ class Point extends Pipeable implements PointLike {
 
 export type { Point }
 
-export const zero = new Point(0, 0, PRECISION)
+type PointConstructor = {
+  (x: number, y?: number, precision?: number): Point
 
-export const point: {
-  (): Point
-  (x: number): Point
-  (x: number, y: number): Point
-  (x: number, y: number, precision: number): Point
-} = (a?: number, b?: number, precision?: number) => {
-  return new Point(a ?? 0, b ?? a ?? 0, precision ?? PRECISION)
+  readonly zero: Point
 }
+
+const point = ((a?: number, b?: number, precision?: number) => {
+  return new Point(a ?? 0, b ?? a ?? 0, precision ?? PRECISION)
+}) as PointConstructor
+;(point as { zero: Point }).zero = new Point(0, 0, PRECISION)
+
+export { point }
 
 export const isPoint = (value: unknown): value is Point =>
   typeof value === 'object' && value !== null && TypeBrand in value

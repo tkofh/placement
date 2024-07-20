@@ -1,12 +1,13 @@
 import { PRECISION } from './constants'
-import { type Dimensions, isDimensions } from './dimensions'
+import type { Dimensions } from './dimensions'
 import { Pipeable } from './internal/pipeable'
+import { type Interval, isInterval } from './interval'
+import type { Offset } from './offset'
 import { type Point, isPoint } from './point'
 import { normalizeXYWH } from './utils/arguments'
 import { dual } from './utils/function'
 import { clamp, lerp } from './utils/math'
 import { aspectRatio as getAspectRatio, roundTo } from './utils/math'
-import { isRecord } from './utils/object'
 
 const TypeBrand: unique symbol = Symbol('placement/rect')
 type TypeBrand = typeof TypeBrand
@@ -115,6 +116,11 @@ interface RectConstructor {
     (dimensions: Dimensions, position: Point | number): Rect
     (dimensions: Dimensions, x: number, y: number): Rect
   }
+
+  fromInterval: {
+    (ival: Interval, precision?: number): Rect
+    (x: Interval, y: Interval, precision?: number): Rect
+  }
 }
 
 const rect = ((
@@ -149,6 +155,15 @@ rect.fromDimensions = ((
     dimensions.precision,
   )
 }) satisfies RectConstructor['fromDimensions']
+
+rect.fromInterval = ((a: Interval, b?: Interval | number, c?: number): Rect =>
+  new Rect(
+    a.start,
+    (isInterval(b) ? b : a).start,
+    a.size,
+    (isInterval(b) ? b : a).size,
+    c ?? (typeof b === 'number' ? b : PRECISION),
+  )) satisfies RectConstructor['fromInterval']
 
 export { rect }
 
@@ -821,103 +836,6 @@ export const resize: {
   },
 )
 
-// todo: turn into proper data type
-interface Offset {
-  readonly top: number
-  readonly right: number
-  readonly bottom: number
-  readonly left: number
-}
-function isOffset(input: unknown): input is Offset {
-  return (
-    isRecord(input) &&
-    'top' in input &&
-    'right' in input &&
-    'bottom' in input &&
-    'left' in input
-  )
-}
-
-export const grow: {
-  (self: Rect, amount: number | Dimensions | Point | Offset): Rect
-  (amount: number | Dimensions | Point | Offset): (self: Rect) => Rect
-} = dual(2, (self: Rect, amount: number | Dimensions | Point | Offset) => {
-  let amountTop: number
-  let amountRight: number
-  let amountBottom: number
-  let amountLeft: number
-
-  if (isDimensions(amount)) {
-    amountTop = amount.height * 0.5
-    amountRight = amount.width * 0.5
-    amountBottom = amount.height * 0.5
-    amountLeft = amount.width * 0.5
-  } else if (isPoint(amount)) {
-    amountTop = amount.y
-    amountRight = amount.x
-    amountBottom = amount.y
-    amountLeft = amount.x
-  } else if (isOffset(amount)) {
-    amountTop = amount.top
-    amountRight = amount.right
-    amountBottom = amount.bottom
-    amountLeft = amount.left
-  } else {
-    amountTop = amount
-    amountRight = amount
-    amountBottom = amount
-    amountLeft = amount
-  }
-
-  return new Rect(
-    self.x - amountLeft,
-    self.y - amountTop,
-    self.width + amountLeft + amountRight,
-    self.height + amountTop + amountBottom,
-    self.precision,
-  )
-})
-
-export const shrink: {
-  (self: Rect, amount: number | Dimensions | Point | Offset): Rect
-  (amount: number | Dimensions | Point | Offset): (self: Rect) => Rect
-} = dual(2, (self: Rect, amount: number | Dimensions | Point | Offset) => {
-  let amountTop: number
-  let amountRight: number
-  let amountBottom: number
-  let amountLeft: number
-
-  if (isDimensions(amount)) {
-    amountTop = amount.height * 0.5
-    amountRight = amount.width * 0.5
-    amountBottom = amount.height * 0.5
-    amountLeft = amount.width * 0.5
-  } else if (isPoint(amount)) {
-    amountTop = amount.y
-    amountRight = amount.x
-    amountBottom = amount.y
-    amountLeft = amount.x
-  } else if (isOffset(amount)) {
-    amountTop = amount.top
-    amountRight = amount.right
-    amountBottom = amount.bottom
-    amountLeft = amount.left
-  } else {
-    amountTop = amount
-    amountRight = amount
-    amountBottom = amount
-    amountLeft = amount
-  }
-
-  return new Rect(
-    self.x + amountLeft,
-    self.y + amountTop,
-    self.width - amountLeft - amountRight,
-    self.height - amountTop - amountBottom,
-    self.precision,
-  )
-})
-
 export const join: {
   (self: Rect, target: Rect): Rect
   (target: Rect): (self: Rect) => Rect
@@ -1038,4 +956,34 @@ export const fit: {
 
     return intersect(self, target)
   },
+)
+
+export const shrinkByOffset: {
+  (self: Rect, offset: Offset): Rect
+  (offset: Offset): (self: Rect) => Rect
+} = dual(
+  2,
+  (self: Rect, offset: Offset) =>
+    new Rect(
+      self.x + offset.left,
+      self.y + offset.top,
+      Math.max(0, self.width - offset.left - offset.right),
+      Math.max(0, self.height - offset.top - offset.bottom),
+      self.precision,
+    ),
+)
+
+export const growByOffset: {
+  (self: Rect, offset: Offset): Rect
+  (offset: Offset): (self: Rect) => Rect
+} = dual(
+  2,
+  (self: Rect, offset: Offset) =>
+    new Rect(
+      self.x - offset.left,
+      self.y - offset.top,
+      self.width + offset.left + offset.right,
+      self.height + offset.top + offset.bottom,
+      self.precision,
+    ),
 )

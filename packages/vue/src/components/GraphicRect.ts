@@ -1,19 +1,58 @@
-import { defineComponent, h } from 'vue'
-import type { Sizeable } from '../composables/useSize'
+import type { Dimensions } from 'placement/dimensions'
+import { type Point, isPoint, point } from 'placement/point'
+import type { Rect } from 'placement/rect'
+import { computed, defineComponent, h, toRef, toValue } from 'vue'
+import type { Paintable } from '../composables/usePaint'
+import { useParentRect } from '../composables/useParentRect'
+import { type Positionable, useRect } from '../composables/useRect'
+import { useRootRect } from '../composables/useRootRect'
+import { type RadiusInput, parseRadius } from '../internal/props/radius'
 
-export interface GraphicRectProps extends Sizeable {
-  // need to extend Paintable as well
-  // parse stroke-width etc and use units
+export interface GraphicRectProps extends Paintable, Positionable {
+  r?: RadiusInput | Point | number
+}
+
+function resolveRadius(
+  r: RadiusInput | Point | number | undefined,
+  parent: Dimensions | Rect,
+  root: Dimensions | Rect,
+): Point {
+  if (r === undefined) {
+    return point.zero
+  }
+
+  if (typeof r === 'number') {
+    return point(r, r)
+  }
+
+  if (isPoint(r)) {
+    return r
+  }
+
+  return parseRadius(r, parent, root)
 }
 
 export const GraphicRect = defineComponent(
-  (_props: GraphicRectProps, { slots }) => {
+  (props: GraphicRectProps, { slots }) => {
+    const parentRect = useParentRect()
+    const rootRect = useRootRect()
+
+    const self = useRect(props, parentRect, rootRect)
+
+    const radiusProp = toRef(props, 'r')
+    const radius = computed(() =>
+      resolveRadius(radiusProp.value, toValue(parentRect), toValue(rootRect)),
+    )
     return () => {
       return h(
         'rect',
         {
-          x: 0,
-          y: 0,
+          x: self.value.x,
+          y: self.value.y,
+          width: self.value.width,
+          height: self.value.height,
+          rx: radius.value.x,
+          ry: radius.value.y,
         },
         slots.default?.(),
       )
@@ -32,6 +71,13 @@ export const GraphicRect = defineComponent(
       'minSize',
       'minWidth',
       'minHeight',
+      'opacity',
+      'r',
+      'top',
+      'right',
+      'bottom',
+      'left',
+      'inset',
     ],
   },
 )

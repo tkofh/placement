@@ -31,6 +31,11 @@
       "import": "./dist/interval.mjs",
       "types": "./dist/interval.d.ts"
     },
+    "./offset": {
+      "require": "./dist/offset.cjs",
+      "import": "./dist/offset.mjs",
+      "types": "./dist/offset.d.ts"
+    },
     "./point": {
       "require": "./dist/point.cjs",
       "import": "./dist/point.mjs",
@@ -64,7 +69,7 @@
     "build": "unbuild",
     "test": "vitest",
     "test:run": "vitest run",
-    "prepublish": "bun run build"
+    "prepublish": "unbuild"
   },
   "bugs": {
     "url": "https://github.com/tkofh/placement/issues"

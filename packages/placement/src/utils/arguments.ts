@@ -50,28 +50,39 @@ export function normalizeTRBL(
   return [a ?? 0, a ?? 0, a ?? 0, a ?? 0]
 }
 
-export function auto(input: number, fallback: number): number
 export function auto(
-  input: number,
-  negativeFallback: number,
-  positiveFallback: number,
-): number
-export function auto(
-  input: number,
-  negativeFallback: number,
-  positiveFallback: number = negativeFallback,
+  a: number,
+  b?: number,
+  c?: number,
+  ...tail: ReadonlyArray<number>
 ): number {
-  return input === Number.NEGATIVE_INFINITY
-    ? negativeFallback
-    : input === Number.POSITIVE_INFINITY
-      ? positiveFallback
-      : input
-}
+  if (Number.isFinite(a)) {
+    return a
+  }
+  let last = a
 
-export function isAuto(value: number): boolean {
-  return (
-    value === Number.NEGATIVE_INFINITY || value === Number.POSITIVE_INFINITY
-  )
+  if (b !== undefined) {
+    if (Number.isFinite(b)) {
+      return b
+    }
+    last = b
+  }
+
+  if (c !== undefined) {
+    if (Number.isFinite(c)) {
+      return c
+    }
+    last = c
+  }
+
+  for (const value of tail) {
+    if (Number.isFinite(value)) {
+      return value
+    }
+    last = value
+  }
+
+  return last
 }
 
 function safeDivide(a: number, b: number) {

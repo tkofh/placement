@@ -16,11 +16,6 @@
       "import": "./dist/index.mjs",
       "types": "./dist/index.d.ts"
     },
-    "./GraphicRoot": {
-      "require": "./dist/components/GraphicRoot.cjs",
-      "import": "./dist/components/GraphicRoot.mjs",
-      "types": "./dist/components/GraphicRoot.d.ts"
-    },
     "./FlexLayout": {
       "require": "./dist/components/FlexLayout.cjs",
       "import": "./dist/components/FlexLayout.mjs",
@@ -30,6 +25,16 @@
       "require": "./dist/components/FlexItem.cjs",
       "import": "./dist/components/FlexItem.mjs",
       "types": "./dist/components/FlexItem.d.ts"
+    },
+    "./GraphicRect": {
+      "require": "./dist/components/GraphicRect.cjs",
+      "import": "./dist/components/GraphicRect.mjs",
+      "types": "./dist/components/GraphicRect.d.ts"
+    },
+    "./GraphicRoot": {
+      "require": "./dist/components/GraphicRoot.cjs",
+      "import": "./dist/components/GraphicRoot.mjs",
+      "types": "./dist/components/GraphicRoot.d.ts"
     },
     "./nuxt": {
       "require": "./dist/nuxt.cjs",

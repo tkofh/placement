@@ -1,48 +1,29 @@
 import { type Dimensions, isDimensions } from 'placement/dimensions'
+import { type Offset, offset } from 'placement/offset'
 import { type Point, isPoint } from 'placement/point'
 import type { Rect } from 'placement/rect'
-import {
-  type OffsetInput,
-  type OffsetValue,
-  ZERO_OFFSET,
-  parseOffset,
-} from './props/offset'
+import { type OffsetInput, parseOffset } from './props/offset'
 
 export function resolveOffset(
   input: OffsetInput | Dimensions | Point | number | undefined,
   allowNegative: boolean,
   parent: Dimensions | Rect,
   root: Dimensions | Rect,
-): OffsetValue {
+): Offset {
   if (input === undefined) {
-    return ZERO_OFFSET
+    return offset.zero
   }
 
   if (typeof input === 'number') {
-    return {
-      top: input,
-      right: input,
-      bottom: input,
-      left: input,
-    }
+    return offset(input)
   }
 
   if (isDimensions(input)) {
-    return {
-      top: input.height * 0.5,
-      right: input.width * 0.5,
-      bottom: input.height * 0.5,
-      left: input.width * 0.5,
-    }
+    return offset.fromDimensions(input)
   }
 
   if (isPoint(input)) {
-    return {
-      top: input.y,
-      right: input.x,
-      bottom: input.y,
-      left: input.x,
-    }
+    return offset.fromPoint(input)
   }
 
   return parseOffset(input, allowNegative, parent, root)

@@ -1,4 +1,5 @@
 import type { Dimensions } from 'placement/dimensions'
+import { type Offset, offset } from 'placement/offset'
 import type { Rect } from 'placement/rect'
 import { type ParserInput, parse } from 'valued'
 import { lengthPercentage } from 'valued/data/length-percentage'
@@ -7,12 +8,12 @@ import { createCache } from '../cache'
 import { SIZE_UNITS } from './constants'
 import { toPixels } from './size1d'
 
-const offset = between(lengthPercentage.subset(SIZE_UNITS), {
+const offsetParser = between(lengthPercentage.subset(SIZE_UNITS), {
   minLength: 1,
   maxLength: 4,
 })
 
-const positiveOffset = between(
+const positiveOffsetParser = between(
   lengthPercentage.subset(SIZE_UNITS, { minValue: 0 }),
   {
     minLength: 1,
@@ -20,32 +21,18 @@ const positiveOffset = between(
   },
 )
 
-export type Offset = typeof offset
+type OffsetParser = typeof offsetParser
 
-export type OffsetInput = ParserInput<Offset>
+export type OffsetInput = ParserInput<OffsetParser>
 
-export interface OffsetValue {
-  readonly top: number
-  readonly right: number
-  readonly bottom: number
-  readonly left: number
-}
-
-const cache = createCache<string, OffsetValue>(512)
-
-export const ZERO_OFFSET: OffsetValue = {
-  top: 0,
-  right: 0,
-  bottom: 0,
-  left: 0,
-}
+const cache = createCache<string, Offset>(512)
 
 export function parseOffset(
   input: string,
   allowNegative: boolean,
   parent: Dimensions | Rect,
   root: Dimensions | Rect,
-): OffsetValue {
+): Offset {
   const key = `${input}:${parent.width}:${parent.height}:${root.width}:${root.height}`
 
   const cached = cache.get(key)
@@ -53,29 +40,22 @@ export function parseOffset(
     return cached
   }
 
-  const parsed = parse(input, allowNegative ? offset : positiveOffset)
+  const parsed = parse(
+    input,
+    allowNegative ? offsetParser : positiveOffsetParser,
+  )
 
-  const result = {
-    ...ZERO_OFFSET,
-  } as Record<keyof OffsetValue, number>
+  let result = offset.zero
 
   if (parsed.valid) {
-    const [topValue, rightValue, bottomValue, leftValue] = parsed.value
+    const [a, b, c, d] = parsed.value
 
-    result.top =
-      topValue == null ? 0 : toPixels(topValue, 'height', 0, parent, root)
-    result.right =
-      rightValue == null
-        ? result.top
-        : toPixels(rightValue, 'width', 0, parent, root)
-    result.bottom =
-      bottomValue == null
-        ? result.top
-        : toPixels(bottomValue, 'height', 0, parent, root)
-    result.left =
-      leftValue == null
-        ? result.right
-        : toPixels(leftValue, 'width', 0, parent, root)
+    const top = toPixels(a, 'height', 0, parent, root)
+    const right = b !== undefined ? toPixels(b, 'width', 0, parent, root) : top
+    const bottom =
+      c !== undefined ? toPixels(c, 'height', 0, parent, root) : top
+    const left = d !== undefined ? toPixels(d, 'width', 0, parent, root) : right
+    result = offset.trbl(top, right, bottom, left)
   }
 
   cache.set(key, result)

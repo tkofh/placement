@@ -5,33 +5,23 @@
       gap="10px"
       place="center"
       size="fill"
-      padding="10px"
+      gutter="10px"
     >
-      <!--      <FlexItem :width="value" height="100px" #default="{ rect }">-->
-      <!--        <rect-->
-      <!--          :x="rect.x"-->
-      <!--          :y="rect.y"-->
-      <!--          :width="rect.width"-->
-      <!--          :height="rect.height"-->
-      <!--          fill="#f00"-->
-      <!--        />-->
-      <!--      </FlexItem>-->
       <FlexItem
         v-for="i in count"
         :key="`item-${i}`"
         width="100px"
         height="100px"
-        #default="{ rect }"
       >
-        <rect
-          :x="rect.x"
-          :y="rect.y"
-          :width="rect.width"
-          :height="rect.height"
+        <GraphicRect
+          size="fill"
+          r="1vmin"
           :fill="`rgba(255,0,0, ${remap(i, 0, count - 1, 0.1, 1)})`"
         />
       </FlexItem>
     </FlexLayout>
+
+    <GraphicRect top="50%" right="10px" width="100px" height="25%" fill="red" />
   </GraphicRoot>
 </template>
 
@@ -39,7 +29,7 @@
 import { useSpring } from '@coily/vue'
 import { remap } from 'placement/utils'
 
-const count = 10
+const count = 3
 
 const animate = ref(true)
 const isLeft = ref(false)

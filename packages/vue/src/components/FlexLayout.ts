@@ -1,8 +1,7 @@
 import type { Dimensions } from 'placement/dimensions'
 import { type Flexbox, flexbox, isFlexbox } from 'placement/flexbox'
 import type { Point } from 'placement/point'
-import { rect, shrink } from 'placement/rect'
-import type { Rect } from 'placement/rect'
+import { type Rect, rect, shrinkByOffset } from 'placement/rect'
 import {
   type SlotsType,
   type VNode,
@@ -44,7 +43,7 @@ export interface FlexLayoutProps extends Sizeable {
   gap?: GapInput | number
   justifyContent?: JustifyContentInput
   place?: PlaceInput
-  padding?: OffsetInput | Dimensions | Point | number
+  gutter?: OffsetInput | Dimensions | Point | number
 }
 
 function resolveFlexbox(
@@ -110,17 +109,12 @@ export const FlexLayout = defineComponent(
 
     const size = useSize(props, parentRect, rootRect)
 
-    const padding = computed(() =>
-      resolveOffset(
-        props.padding,
-        false,
-        toValue(parentRect),
-        toValue(rootRect),
-      ),
+    const gutter = computed(() =>
+      resolveOffset(props.gutter, true, toValue(parentRect), toValue(rootRect)),
     )
 
     const innerRect = computed(() =>
-      rect.fromDimensions(size.value).pipe(shrink(padding.value)),
+      rect.fromDimensions(size.value).pipe(shrinkByOffset(gutter.value)),
     )
 
     provideParentRect(innerRect)
@@ -132,7 +126,7 @@ export const FlexLayout = defineComponent(
     useFlexLayout(layout, innerRect)
 
     expose({
-      padding,
+      gutter,
       rect: innerRect,
     })
 
@@ -159,7 +153,7 @@ export const FlexLayout = defineComponent(
       'gap',
       'justifyContent',
       'place',
-      'padding',
+      'gutter',
     ],
     slots: {} as SlotsType<{
       default: (props: { rect: Rect }) => Array<VNode>
