@@ -1,12 +1,13 @@
-import { type Point, isPoint, point } from 'placement/point'
+import type { Point } from 'placement/point'
 import { type Rect, align, contain, cover, rect } from 'placement/rect'
 import { computed, defineComponent, h, shallowRef } from 'vue'
 import { useDomRect } from '../composables/useDomRect'
+import { useOrigin } from '../composables/useOrigin'
 import { provideParentRect } from '../composables/useParentRect'
 import { provideRootRect } from '../composables/useRootRect'
 import { type Sizeable, useSize } from '../composables/useSize'
 import type { FitInput } from '../internal/props/fit'
-import { type OriginInput, parseOrigin } from '../internal/props/origin'
+import type { OriginInput } from '../internal/props/origin'
 
 export interface GraphicRootProps extends Sizeable {
   origin?: OriginInput | Point | number
@@ -22,15 +23,7 @@ export const GraphicRoot = defineComponent(
 
     const rootRect = computed(() => rect.fromDimensions(size.value))
 
-    const origin = computed(() =>
-      props.origin == null
-        ? point(0)
-        : isPoint(props.origin)
-          ? props.origin
-          : typeof props.origin === 'number'
-            ? point(props.origin)
-            : parseOrigin(props.origin),
-    )
+    const origin = useOrigin(() => props.origin)
 
     const viewBox = computed(() => {
       const fit = props.fit ?? 'crop'

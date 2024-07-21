@@ -2,7 +2,7 @@ import type { Dimensions } from 'placement/dimensions'
 import { interval } from 'placement/interval'
 import { type Offset, offset } from 'placement/offset'
 import { type Point, isPoint } from 'placement/point'
-import { type Rect, isRect, rect } from 'placement/rect'
+import { type Rect, isRect, rect, translateX, translateY } from 'placement/rect'
 import { auto, clamp } from 'placement/utils'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 import { type InsetInput, parseInset } from '../internal/props/inset'
@@ -18,6 +18,8 @@ export interface Positionable extends Sizeable {
   bottom?: Size1DInput | number
   left?: Size1DInput | number
   inset?: InsetInput | Point | number
+  x?: Size1DInput | number
+  y?: Size1DInput | number
 }
 
 function resolveInset(
@@ -55,6 +57,23 @@ function resolveEdgeInset(
   }
 
   return parseSize1D(edge, basis, Number.POSITIVE_INFINITY, parent, root)
+}
+
+function resolveTranslation(
+  axis: Size1DInput | number | undefined,
+  basis: 'width' | 'height',
+  self: Rect,
+  root: Rect | Dimensions,
+): number {
+  if (axis === undefined) {
+    return 0
+  }
+
+  if (typeof axis === 'number') {
+    return axis
+  }
+
+  return parseSize1D(axis, basis, 0, self, root)
 }
 
 export function useRect(
@@ -153,5 +172,20 @@ export function useRect(
     )
   })
 
-  return computed(() => rect.fromInterval(x.value, y.value))
+  const initialRect = computed(() => rect.fromInterval(x.value, y.value))
+
+  const translationX = computed(() =>
+    translateX(
+      resolveTranslation(props.x, 'width', initialRect.value, toValue(root)),
+    ),
+  )
+  const translationY = computed(() =>
+    translateY(
+      resolveTranslation(props.y, 'height', initialRect.value, toValue(root)),
+    ),
+  )
+
+  return computed(() =>
+    initialRect.value.pipe(translationX.value, translationY.value),
+  )
 }

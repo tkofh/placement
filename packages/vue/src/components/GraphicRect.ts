@@ -85,6 +85,8 @@ export const GraphicRect = defineComponent(
       'left',
       'inset',
       'origin',
+      'x',
+      'y',
     ],
   },
 )
