@@ -26,7 +26,11 @@ class InternalStackTrackItem extends TrackItem {
     this.stretch = stretch
     this.place = place
 
-    this.stretchable = !(this.startIsAuto || this.endIsAuto)
+    this.stretchable = !(
+      this.startIsAuto ||
+      this.endIsAuto ||
+      !Number.isFinite(this.initialSize)
+    )
   }
 }
 

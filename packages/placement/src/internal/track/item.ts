@@ -1,3 +1,4 @@
+import { auto } from '../../utils'
 import { clamp } from '../../utils/math'
 
 export interface TrackItemInput {
@@ -44,7 +45,11 @@ export class TrackItem {
   }
 
   get size(): number {
-    return clamp(this.initialSize + this.adjustment, this.min, this.max)
+    return clamp(
+      auto(this.initialSize, 0) + this.adjustment,
+      this.min,
+      this.max,
+    )
   }
 
   get definiteOuterSize(): number {

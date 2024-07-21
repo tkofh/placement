@@ -1,64 +1,89 @@
 <template>
   <GraphicRoot size="fill" fit="contain" origin="center">
+    <GraphicRect size="fill" fill="color(display-p3 0.008 0.008 0.165 / 0.15)" />
     <FlexLayout
-      flow="row wrap"
-      :gap="value"
-      place="center"
       size="fill"
-      gutter="10px"
+      flow="row nowrap"
+      justify-content="center"
+      :align-items="`place ${valueC}%`"
+      :gap="`${valueA}vmin`"
     >
-      <FlexItem
-        v-for="i in count"
-        :key="`item-${i}`"
-        width="100px"
-        height="100px"
-      >
-        <GraphicRect
-          size="fill"
-          r="1vmin"
-          :fill="`rgb(255 0 0 / ${remap(i, 1, count, 10, 100)}%)`"
-          opacity="0.5"
-        />
-      </FlexItem>
+      <template v-for="i in count" :key="`item-${i}`">
+        <FlexItem :size="`${valueD}vw ${valueB}vh`">
+          <GraphicRect size="fill" r="1vmin" fill="color(display-p3 0.298 0 0.639 / 0.683)" />
+        </FlexItem>
+      </template>
     </FlexLayout>
-
-    <GraphicRect
-      inset="top 50% right 10px"
-      size="100px 25%"
-      fill="none"
-      stroke="black 10px dashed 4 2 5 7"
-    />
+    <FlexLayout
+      size="fill"
+      flow="column nowrap"
+      justify-content="center"
+      :align-items="`place ${valueC}%`"
+      :gap="`${valueA}vmin`"
+    >
+      <template v-for="i in count" :key="`item-${i}`">
+        <FlexItem :size="`${valueB}vw ${valueD}vh`">
+          <GraphicRect size="fill" r="1vmin" fill="color(display-p3 0 0.482 0.675 / 0.718)" />
+        </FlexItem>
+      </template>
+    </FlexLayout>
   </GraphicRoot>
 </template>
 
 <script setup lang="ts">
 import { useSpring } from '@coily/vue'
-import { remap } from 'placement/utils'
 
-const count = 30
+const count = 5
 
-const animate = ref(true)
-const isLeft = ref(false)
+const toggleA = ref(false)
+const toggleB = ref(false)
+const toggleC = ref(false)
+const toggleD = ref(false)
 
-const { value } = useSpring(() => (isLeft.value ? 10 : 20), {
-  tension: 100,
-  damping: 10,
+const { value: valueA } = useSpring(() => (toggleA.value ? 2 : 8), {
+  tension: 120,
+  damping: 20,
   mass: 1,
   precision: 2,
 })
 
-onMounted(() => {
-  let ival: number | null = null
+const { value: valueB } = useSpring(() => (toggleB.value ? 40 : 70), {
+  tension: 120,
+  damping: 20,
+  mass: 1,
+  precision: 2,
+})
 
-  watchEffect(() => {
-    if (animate.value) {
-      ival = window.setInterval(() => {
-        isLeft.value = !isLeft.value
-      }, 2000)
-    } else if (ival) {
-      window.clearInterval(ival)
-    }
-  })
+const { value: valueC } = useSpring(() => (toggleC.value ? 0 : 100), {
+  tension: 50,
+  damping: 40,
+  mass: 0.5,
+  precision: 8,
+})
+
+const { value: valueD } = useSpring(() => (toggleD.value ? 6 : 8), {
+  tension: 200,
+  damping: 40,
+  mass: 1.5,
+  precision: 8,
+})
+
+onMounted(() => {
+  setInterval(() => {
+    toggleA.value = !toggleA.value
+  }, 2300)
+
+  setInterval(() => {
+    toggleB.value = !toggleB.value
+  }, 1500)
+
+  setInterval(() => {
+    toggleC.value = !toggleC.value
+  }, 4000)
+
+  setInterval(() => {
+    toggleD.value = !toggleD.value
+  }, 3400)
 })
 </script>
 

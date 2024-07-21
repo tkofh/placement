@@ -129,7 +129,7 @@ export function useUnconstrainedSizes(
     return calculateSize(
       toValue(parent),
       toValue(root),
-      0,
+      Number.POSITIVE_INFINITY,
       size,
       width,
       height,

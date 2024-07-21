@@ -1,7 +1,7 @@
 import type { Dimensions } from 'placement/dimensions'
 import { type Flexbox, flexbox, isFlexbox } from 'placement/flexbox'
 import type { Point } from 'placement/point'
-import { type Rect, rect, shrinkByOffset } from 'placement/rect'
+import type { Rect } from 'placement/rect'
 import {
   type SlotsType,
   type VNode,
@@ -11,9 +11,8 @@ import {
 } from 'vue'
 import { useFlexLayout } from '../composables/useFlex'
 import { provideParentRect, useParentRect } from '../composables/useParentRect'
+import { type Positionable, useRect } from '../composables/useRect'
 import { useRootRect } from '../composables/useRootRect'
-import { type Sizeable, useSize } from '../composables/useSize'
-import { resolveOffset } from '../internal/offset'
 import {
   type AlignContentInput,
   parseAlignContent,
@@ -35,7 +34,7 @@ import {
   parsePlace,
 } from '../internal/props/place'
 
-export interface FlexLayoutProps extends Sizeable {
+export interface FlexLayoutProps extends Positionable {
   layout?: Flexbox
   alignContent?: AlignContentInput
   alignItems?: AlignItemsInput
@@ -112,31 +111,22 @@ export const FlexLayout = defineComponent(
     const parentRect = useParentRect()
     const rootRect = useRootRect()
 
-    const size = useSize(props, parentRect, rootRect)
+    const rect = useRect(props, parentRect, rootRect)
 
-    const gutter = computed(() =>
-      resolveOffset(props.gutter, true, toValue(parentRect), toValue(rootRect)),
-    )
-
-    const innerRect = computed(() =>
-      rect.fromDimensions(size.value).pipe(shrinkByOffset(gutter.value)),
-    )
-
-    provideParentRect(innerRect)
+    provideParentRect(rect)
 
     const layout = computed(() =>
       resolveFlexbox(props, toValue(parentRect), toValue(rootRect)),
     )
 
-    useFlexLayout(layout, innerRect)
+    useFlexLayout(layout, rect)
 
     expose({
-      gutter,
-      rect: innerRect,
+      rect: rect,
     })
 
     return () => {
-      return slots.default?.({ rect: innerRect.value })
+      return slots.default?.({ rect: rect.value })
     }
   },
   {
@@ -158,7 +148,11 @@ export const FlexLayout = defineComponent(
       'gap',
       'justifyContent',
       'place',
-      'gutter',
+      'inset',
+      'top',
+      'right',
+      'bottom',
+      'left',
     ],
     slots: {} as SlotsType<{
       default: (props: { rect: Rect }) => Array<VNode>

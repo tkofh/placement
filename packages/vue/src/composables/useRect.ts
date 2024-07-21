@@ -3,11 +3,11 @@ import { interval } from 'placement/interval'
 import { type Offset, offset } from 'placement/offset'
 import { type Point, isPoint } from 'placement/point'
 import { type Rect, isRect, rect } from 'placement/rect'
-import { auto } from 'placement/utils'
+import { auto, clamp } from 'placement/utils'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 import { type InsetInput, parseInset } from '../internal/props/inset'
 import { type Size1DInput, parseSize1D } from '../internal/props/size1d'
-import { type Sizeable, useSize } from './useSize'
+import { type Sizeable, useUnconstrainedSizes } from './useSize'
 
 export interface Positionable extends Sizeable {
   top?: Size1DInput | number
@@ -59,7 +59,7 @@ export function useRect(
   parent: MaybeRefOrGetter<Rect | Dimensions>,
   root: MaybeRefOrGetter<Rect | Dimensions>,
 ): ComputedRef<Rect> {
-  const size = useSize(props, parent, root)
+  const { size, minSize, maxSize } = useUnconstrainedSizes(props, parent, root)
 
   const top = computed(() =>
     resolveEdgeInset(props.top, 'height', toValue(parent), toValue(root)),
@@ -97,7 +97,7 @@ export function useRect(
     const widthIsFinite = Number.isFinite(width)
 
     let x = isRect(parentRect) ? parentRect.x : 0
-    let w = widthIsFinite ? width : 0
+    let w = width
 
     if (leftIsFinite && widthIsFinite) {
       x += left
@@ -110,7 +110,10 @@ export function useRect(
       w = parentRect.width - left - right
     }
 
-    return interval(x, w)
+    return interval(
+      x,
+      clamp(auto(w, 0), minSize.value.width, maxSize.value.width),
+    )
   })
 
   const y = computed(() => {
@@ -124,7 +127,7 @@ export function useRect(
     const heightIsFinite = Number.isFinite(height)
 
     let y = isRect(parentRect) ? parentRect.y : 0
-    let h = heightIsFinite ? height : 0
+    let h = height
 
     if (topIsFinite && heightIsFinite) {
       y += top
@@ -137,7 +140,10 @@ export function useRect(
       h = parentRect.height - top - bottom
     }
 
-    return interval(y, h)
+    return interval(
+      y,
+      clamp(auto(h, 0), minSize.value.height, maxSize.value.height),
+    )
   })
 
   return computed(() => rect.fromInterval(x.value, y.value))
