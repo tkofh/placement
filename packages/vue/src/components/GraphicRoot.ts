@@ -2,14 +2,21 @@ import type { Point } from 'placement/point'
 import { type Rect, align, contain, cover, rect } from 'placement/rect'
 import { computed, defineComponent, h, shallowRef } from 'vue'
 import { useDomRect } from '../composables/useDomRect'
-import { useOrigin } from '../composables/useOrigin'
 import { provideParentRect } from '../composables/useParentRect'
+import {
+  ORIGIN_PROP_KEYS,
+  SIZE_PROP_KEYS,
+  type SizeProps,
+  type TransformProps,
+  useOrigin,
+  useSize,
+  useXYTranslation,
+} from '../composables/useRect'
 import { provideRootRect } from '../composables/useRootRect'
-import { type Sizeable, useSize } from '../composables/useSize'
 import type { FitInput } from '../internal/props/fit'
 import type { OriginInput } from '../internal/props/origin'
 
-export interface GraphicRootProps extends Sizeable {
+export interface GraphicRootProps extends SizeProps, TransformProps {
   origin?: OriginInput | Point | number
   fit?: FitInput
 }
@@ -23,7 +30,8 @@ export const GraphicRoot = defineComponent(
 
     const rootRect = computed(() => rect.fromDimensions(size.value))
 
-    const origin = useOrigin(() => props.origin)
+    const origin = useOrigin(props)
+    const translation = useXYTranslation(props, domRect)
 
     const viewBox = computed(() => {
       const fit = props.fit ?? 'crop'
@@ -42,6 +50,8 @@ export const GraphicRoot = defineComponent(
         )
       }
 
+      viewBoxRect = translation.value(viewBoxRect)
+
       return `${viewBoxRect.x} ${viewBoxRect.y} ${viewBoxRect.width} ${viewBoxRect.height}`
     })
 
@@ -58,19 +68,6 @@ export const GraphicRoot = defineComponent(
   },
   {
     name: 'GraphicRoot',
-    props: [
-      'aspectRatio',
-      'width',
-      'height',
-      'minWidth',
-      'minHeight',
-      'maxWidth',
-      'maxHeight',
-      'minSize',
-      'maxSize',
-      'size',
-      'origin',
-      'fit',
-    ],
+    props: [...SIZE_PROP_KEYS, ...ORIGIN_PROP_KEYS, 'fit'],
   },
 )

@@ -671,15 +671,18 @@ export const alignY: {
 })
 
 export const align: {
-  (self: Rect, target: Rect, align: number | Point): Rect
-  (target: Rect, align: number | Point): (self: Rect) => Rect
-} = dual(3, (self: Rect, target: Rect, align: number | Point) => {
+  (self: Rect, target: Rect | Point, align: number | Point): Rect
+  (target: Rect | Point, align: number | Point): (self: Rect) => Rect
+} = dual(3, (self: Rect, target: Rect | Point, align: number | Point) => {
   const x = isPoint(align) ? align.x : align
   const y = isPoint(align) ? align.y : align
 
+  const targetWidth = isPoint(target) ? 0 : target.width
+  const targetHeight = isPoint(target) ? 0 : target.height
+
   return new Rect(
-    target.x + (target.width - self.width) * x,
-    target.y + (target.height - self.height) * y,
+    target.x + (targetWidth - self.width) * x,
+    target.y + (targetHeight - self.height) * y,
     self.width,
     self.height,
     self.precision,

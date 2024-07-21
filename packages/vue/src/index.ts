@@ -1,4 +1,5 @@
 export { GraphicRoot } from './components/GraphicRoot'
+export { GraphicCircle } from './components/GraphicCircle'
 export { GraphicRect } from './components/GraphicRect'
 export { FlexLayout } from './components/FlexLayout'
 export { FlexItem } from './components/FlexItem'

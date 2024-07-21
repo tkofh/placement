@@ -93,12 +93,18 @@ type PointConstructor = {
   (x: number, y?: number, precision?: number): Point
 
   readonly zero: Point
+  readonly infinity: Point
 }
 
 const point = ((a?: number, b?: number, precision?: number) => {
   return new Point(a ?? 0, b ?? a ?? 0, precision ?? PRECISION)
 }) as PointConstructor
 ;(point as { zero: Point }).zero = new Point(0, 0, PRECISION)
+;(point as { infinity: Point }).infinity = new Point(
+  Number.POSITIVE_INFINITY,
+  Number.POSITIVE_INFINITY,
+  PRECISION,
+)
 
 export { point }
 

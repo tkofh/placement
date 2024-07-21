@@ -1,34 +1,40 @@
 <template>
   <GraphicRoot size="fill" fit="contain" origin="center">
-    <GraphicRect size="fill" fill="color(display-p3 0.008 0.008 0.165 / 0.15)" />
-    <FlexLayout
+    <GraphicRect
       size="fill"
-      flow="row nowrap"
-      justify-content="center"
-      :align-items="`place ${valueC}%`"
-      :gap="`${valueA}vmin`"
-    >
-      <template v-for="i in count" :key="`item-${i}`">
-        <FlexItem :size="`${valueD}vw ${valueB}vh`">
-          <GraphicRect size="fill" r="1vmin" fill="color(display-p3 0.298 0 0.639 / 0.683)" />
-          <GraphicRect size="50%" inset="50%" origin="50%" r="1vmin" fill="color(display-p3 0.298 0 0.639 / 0.683)" x="20px" y="10%" />
-        </FlexItem>
-      </template>
-    </FlexLayout>
-    <FlexLayout
-      size="fill"
-      flow="column nowrap"
-      justify-content="center"
-      :align-items="`place ${valueC}%`"
-      :gap="`${valueA}vmin`"
-    >
-      <template v-for="i in count" :key="`item-${i}`">
-        <FlexItem :size="`${valueB}vw ${valueD}vh`">
-          <GraphicRect size="fill" r="1vmin" fill="color(display-p3 0 0.482 0.675 / 0.718)" />
-          <GraphicRect inset="2vmin" r="1vmin" fill="color(display-p3 0 0.482 0.675 / 0.718)" />
-        </FlexItem>
-      </template>
-    </FlexLayout>
+      fill="color(display-p3 0.012 0.012 0.184 / 0.091)"
+    />
+    <GraphicCircle
+      inset="top 50% left 50%"
+      r="30vmin"
+      fill="none"
+      stroke="color(display-p3 0.008 0.027 0.184 / 0.197) 10px dashed 10 5"
+    />
+    <GraphicCircle
+      inset="top 50% left 50%"
+      r="30vmax"
+      fill="none"
+      stroke="color(display-p3 0.008 0.027 0.184 / 0.197) 10px dashed 10 5"
+    />
+    <template v-for="item of layers" :key="item[0]">
+      <FlexLayout
+        size="fill"
+        :flow="item[0]"
+        justify-content="center"
+        :align-items="`place ${valueC}%`"
+        :gap="`${valueA}vmin`"
+      >
+        <template v-for="i in count" :key="`item-${i}`">
+          <FlexItem
+            :size="
+              item[2] ? `${valueB}vw ${valueD}vh` : `${valueD}vw ${valueB}vh`
+            "
+          >
+            <GraphicRect size="fill" r="1vmin" :fill="item[1]" />
+          </FlexItem>
+        </template>
+      </FlexLayout>
+    </template>
   </GraphicRoot>
 </template>
 
@@ -37,10 +43,22 @@ import { useSpring } from '@coily/vue'
 
 const count = 5
 
+const layers = [
+  ['row nowrap', 'color(display-p3 0.298 0 0.639 / 0.683)', false],
+  ['column nowrap', 'color(display-p3 0 0.482 0.675 / 0.718)', true],
+] as const
+
 const toggleA = ref(false)
 const toggleB = ref(false)
 const toggleC = ref(false)
 const toggleD = ref(false)
+
+const timeScale = 1
+
+const delayA = 1200 * timeScale
+const delayB = 2020 * timeScale
+const delayC = 3300 * timeScale
+const delayD = 5005 * timeScale
 
 const { value: valueA } = useSpring(() => (toggleA.value ? 2 : 8), {
   tension: 120,
@@ -71,21 +89,28 @@ const { value: valueD } = useSpring(() => (toggleD.value ? 6 : 8), {
 })
 
 onMounted(() => {
+  let mounted = false
   setInterval(() => {
+    if (!mounted) return
     toggleA.value = !toggleA.value
-  }, 2300)
+  }, delayA)
 
   setInterval(() => {
+    if (!mounted) return
     toggleB.value = !toggleB.value
-  }, 1500)
+  }, delayB)
 
   setInterval(() => {
+    if (!mounted) return
     toggleC.value = !toggleC.value
-  }, 4000)
+  }, delayC)
 
   setInterval(() => {
+    if (!mounted) return
     toggleD.value = !toggleD.value
-  }, 3400)
+  }, delayD)
+
+  mounted = true
 })
 </script>
 

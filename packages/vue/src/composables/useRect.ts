@@ -1,25 +1,171 @@
-import type { Dimensions } from 'placement/dimensions'
+import {
+  type Dimensions,
+  clamp as clampDimensions,
+  dimensions,
+  isDimensions,
+} from 'placement/dimensions'
 import { interval } from 'placement/interval'
 import { type Offset, offset } from 'placement/offset'
-import { type Point, isPoint } from 'placement/point'
-import { type Rect, isRect, rect, translateX, translateY } from 'placement/rect'
+import { type Point, isPoint, point } from 'placement/point'
+import { type Rect, align, isRect, rect, translate } from 'placement/rect'
 import { auto, clamp } from 'placement/utils'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
+import {
+  type AspectRatioInput,
+  parseAspectRatio,
+} from '../internal/props/aspectRatio'
 import { type InsetInput, parseInset } from '../internal/props/inset'
-import type { OriginInput } from '../internal/props/origin'
+import { type OriginInput, parseOrigin } from '../internal/props/origin'
 import { type Size1DInput, parseSize1D } from '../internal/props/size1d'
-import { useOrigin } from './useOrigin'
-import { type Sizeable, useUnconstrainedSizes } from './useSize'
+import { type Size2DInput, parseSize2D } from '../internal/props/size2d'
 
-export interface Positionable extends Sizeable {
-  origin?: OriginInput | Point | number
+export interface SizeProps {
+  size?: Size2DInput | Dimensions | number | undefined
+  minSize?: Size2DInput | Dimensions | number | undefined
+  maxSize?: Size2DInput | Dimensions | number | undefined
+  width?: Size1DInput | number | undefined
+  height?: Size1DInput | number | undefined
+  aspectRatio?: AspectRatioInput | number | undefined
+  minWidth?: Size1DInput | number | undefined
+  minHeight?: Size1DInput | number | undefined
+  maxWidth?: Size1DInput | number | undefined
+  maxHeight?: Size1DInput | number | undefined
+}
+
+export const SIZE_PROP_KEYS = [
+  'size',
+  'minSize',
+  'maxSize',
+  'width',
+  'height',
+  'aspectRatio',
+  'minWidth',
+  'minHeight',
+  'maxWidth',
+  'maxHeight',
+] as const
+
+export interface PositionProps {
   top?: Size1DInput | number
   right?: Size1DInput | number
   bottom?: Size1DInput | number
   left?: Size1DInput | number
   inset?: InsetInput | Point | number
+}
+
+export const POSITION_PROP_KEYS = [
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'inset',
+] as const
+
+export interface OriginProps {
+  origin?: OriginInput | Point | number
+}
+
+export const ORIGIN_PROP_KEYS = ['origin'] as const
+
+export interface TranslateProps {
   x?: Size1DInput | number
   y?: Size1DInput | number
+}
+
+export const TRANSLATE_PROP_KEYS = ['x', 'y'] as const
+
+export interface TransformProps extends OriginProps, TranslateProps {}
+
+export const TRANSFORM_PROP_KEYS = [
+  ...ORIGIN_PROP_KEYS,
+  ...TRANSLATE_PROP_KEYS,
+] as const
+
+export interface RectProps extends PositionProps, SizeProps, TransformProps {}
+
+export const RECT_PROP_KEYS = [
+  ...SIZE_PROP_KEYS,
+  ...POSITION_PROP_KEYS,
+  ...TRANSFORM_PROP_KEYS,
+] as const
+
+function resolveSize1D(
+  input: Size1DInput | number | undefined,
+  basis: 'width' | 'height',
+  auto: number,
+  parent: Dimensions | Rect,
+  root: Dimensions | Rect,
+) {
+  return typeof input === 'number'
+    ? input
+    : parseSize1D(input ?? '', basis, auto, parent, root)
+}
+
+function resolveSize2D(
+  input: Size2DInput | Dimensions | number | undefined,
+  auto: number,
+  parent: Dimensions | Rect,
+  root: Dimensions | Rect,
+) {
+  return isDimensions(input)
+    ? input
+    : typeof input === 'number'
+      ? dimensions(input)
+      : parseSize2D(input ?? '', auto, parent, root)
+}
+
+function calculateSize(
+  parent: Rect | Dimensions,
+  root: Rect | Dimensions,
+  auto: number,
+  size: Size2DInput | Dimensions | number | undefined,
+  width: Size1DInput | number | undefined,
+  height: Size1DInput | number | undefined,
+  aspectRatio: AspectRatioInput | number | undefined,
+) {
+  const sizeProp = resolveSize2D(size, Number.POSITIVE_INFINITY, parent, root)
+
+  if (Number.isFinite(sizeProp.width) && Number.isFinite(sizeProp.height)) {
+    return sizeProp
+  }
+
+  const widthProp = resolveSize1D(
+    width,
+    'width',
+    Number.POSITIVE_INFINITY,
+    parent,
+    root,
+  )
+
+  const heightProp = resolveSize1D(
+    height,
+    'height',
+    Number.POSITIVE_INFINITY,
+    parent,
+    root,
+  )
+
+  if (Number.isFinite(widthProp) && Number.isFinite(heightProp)) {
+    return dimensions(widthProp, heightProp)
+  }
+
+  const aspectRatioProp =
+    typeof aspectRatio === 'number'
+      ? aspectRatio
+      : parseAspectRatio((aspectRatio as string) ?? '')
+
+  if (Number.isFinite(widthProp) && Number.isFinite(aspectRatioProp)) {
+    return dimensions(widthProp, widthProp / aspectRatioProp)
+  }
+
+  if (Number.isFinite(aspectRatioProp) && Number.isFinite(heightProp)) {
+    return dimensions(heightProp * aspectRatioProp, heightProp)
+  }
+
+  return dimensions(
+    Number.isFinite(widthProp) ? widthProp : auto,
+    Number.isFinite(heightProp) ? heightProp : auto,
+  )
 }
 
 function resolveInset(
@@ -76,15 +222,73 @@ function resolveTranslation(
   return parseSize1D(axis, basis, 0, self, root)
 }
 
-export function useRect(
-  props: Positionable,
+export function useUnconstrainedSizes(
+  input: MaybeRefOrGetter<SizeProps>,
   parent: MaybeRefOrGetter<Rect | Dimensions>,
   root: MaybeRefOrGetter<Rect | Dimensions>,
-): ComputedRef<Rect> {
-  const origin = useOrigin(() => props.origin)
+) {
+  const size = computed(() => {
+    const { size, width, height, aspectRatio } = toValue(input)
 
-  const { size, minSize, maxSize } = useUnconstrainedSizes(props, parent, root)
+    return calculateSize(
+      toValue(parent),
+      toValue(root),
+      Number.POSITIVE_INFINITY,
+      size,
+      width,
+      height,
+      aspectRatio,
+    )
+  })
 
+  const minSize = computed(() => {
+    const { minSize, minWidth, minHeight } = toValue(input)
+
+    return calculateSize(
+      toValue(parent),
+      toValue(root),
+      0,
+      minSize,
+      minWidth,
+      minHeight,
+      Number.POSITIVE_INFINITY,
+    )
+  })
+
+  const maxSize = computed(() => {
+    const { maxSize, maxWidth, maxHeight } = toValue(input)
+
+    return calculateSize(
+      toValue(parent),
+      toValue(root),
+      Number.POSITIVE_INFINITY,
+      maxSize,
+      maxWidth,
+      maxHeight,
+      Number.POSITIVE_INFINITY,
+    )
+  })
+
+  return { size, minSize, maxSize }
+}
+
+export function useSize(
+  input: MaybeRefOrGetter<SizeProps>,
+  parent: MaybeRefOrGetter<Rect | Dimensions>,
+  root: MaybeRefOrGetter<Rect | Dimensions>,
+) {
+  const { size, minSize, maxSize } = useUnconstrainedSizes(input, parent, root)
+
+  return computed(() =>
+    clampDimensions(size.value, minSize.value, maxSize.value),
+  )
+}
+
+export function useInset(
+  props: PositionProps,
+  parent: MaybeRefOrGetter<Rect | Dimensions>,
+  root: MaybeRefOrGetter<Rect | Dimensions>,
+): ComputedRef<Offset> {
   const top = computed(() =>
     resolveEdgeInset(props.top, 'height', toValue(parent), toValue(root)),
   )
@@ -101,7 +305,7 @@ export function useRect(
     resolveInset(props.inset, toValue(parent), toValue(root)),
   )
 
-  const position = computed(() =>
+  return computed(() =>
     offset.trbl(
       auto(top.value, inset.value.top, Number.POSITIVE_INFINITY),
       auto(right.value, inset.value.right, Number.POSITIVE_INFINITY),
@@ -109,83 +313,156 @@ export function useRect(
       auto(left.value, inset.value.left, Number.POSITIVE_INFINITY),
     ),
   )
+}
 
-  const x = computed(() => {
-    const originX = origin.value.x
-    const left = position.value.left
-    const right = position.value.right
-    const width = size.value.width
-    const parentRect = toValue(parent)
+export function useXYTranslation(
+  props: TranslateProps,
+  root: MaybeRefOrGetter<Rect | Dimensions>,
+) {
+  return computed(() => {
+    const rectValue = toValue(rect)
+    const rootValue = toValue(root)
+    const x = resolveTranslation(props.x, 'width', rectValue, rootValue)
+    const y = resolveTranslation(props.y, 'height', rectValue, rootValue)
 
-    const leftIsFinite = Number.isFinite(left)
-    const rightIsFinite = Number.isFinite(right)
-    const widthIsFinite = Number.isFinite(width)
+    return translate(x, y)
+  })
+}
 
-    let x = isRect(parentRect) ? parentRect.x : 0
-    let w = width
+export function useOrigin(
+  props: OriginProps,
+  defaultOrigin: MaybeRefOrGetter<Point | number> = 0,
+): ComputedRef<Point> {
+  return computed(() => {
+    const input = props.origin
 
-    if (leftIsFinite && widthIsFinite) {
-      x += left - originX * width
-      w = width
-    } else if (rightIsFinite && widthIsFinite) {
-      x += parentRect.width - right - originX * width
-      w = width
-    } else if (leftIsFinite && rightIsFinite) {
-      x += left
-      w = parentRect.width - left - right
+    let origin: Point
+
+    if (input == null) {
+      const defaultOriginValue = toValue(defaultOrigin)
+      origin = isPoint(defaultOriginValue)
+        ? defaultOriginValue
+        : point(defaultOriginValue)
+    } else if (isPoint(input)) {
+      origin = input
+    } else if (typeof input === 'number') {
+      origin = point(input)
+    } else {
+      origin = parseOrigin(input)
     }
 
-    return interval(
-      x,
-      clamp(auto(w, 0), minSize.value.width, maxSize.value.width),
-    )
+    return origin
   })
+}
 
-  const y = computed(() => {
-    const originY = origin.value.y
-    const top = position.value.top
-    const bottom = position.value.bottom
-    const height = size.value.height
-    const parentRect = toValue(parent)
-
-    const topIsFinite = Number.isFinite(top)
-    const bottomIsFinite = Number.isFinite(bottom)
-    const heightIsFinite = Number.isFinite(height)
-
-    let y = isRect(parentRect) ? parentRect.y : 0
-    let h = height
-
-    if (topIsFinite && heightIsFinite) {
-      y += top - originY * height
-      h = height
-    } else if (bottomIsFinite && heightIsFinite) {
-      y += parentRect.height - bottom - originY * height
-      h = height
-    } else if (topIsFinite && bottomIsFinite) {
-      y += top
-      h = parentRect.height - top - bottom
-    }
-
-    return interval(
-      y,
-      clamp(auto(h, 0), minSize.value.height, maxSize.value.height),
-    )
-  })
-
-  const initialRect = computed(() => rect.fromInterval(x.value, y.value))
-
-  const translationX = computed(() =>
-    translateX(
-      resolveTranslation(props.x, 'width', initialRect.value, toValue(root)),
-    ),
+export function useOriginTranslation(
+  props: OriginProps,
+  defaultOrigin: MaybeRefOrGetter<Point | number> = 0,
+): ComputedRef<(self: Rect) => Rect> {
+  const origin = useOrigin(props, defaultOrigin)
+  return computed(
+    () => (self: Rect) => align(self, point(self.x, self.y), origin.value),
   )
-  const translationY = computed(() =>
-    translateY(
-      resolveTranslation(props.y, 'height', initialRect.value, toValue(root)),
-    ),
-  )
+}
+
+export function useTransformedRect(
+  rect: MaybeRefOrGetter<Rect>,
+  props: TransformProps,
+  root: MaybeRefOrGetter<Rect | Dimensions>,
+) {
+  const originTranslation = useOriginTranslation(props)
+  const translation = useXYTranslation(props, root)
 
   return computed(() =>
-    initialRect.value.pipe(translationX.value, translationY.value),
+    toValue(rect).pipe(originTranslation.value, translation.value),
+  )
+}
+
+export function useAxisInterval(
+  start: MaybeRefOrGetter<number>,
+  end: MaybeRefOrGetter<number>,
+  size: MaybeRefOrGetter<number>,
+  parentStart: MaybeRefOrGetter<number>,
+  parentSize: MaybeRefOrGetter<number>,
+  defaultSize: MaybeRefOrGetter<number>,
+  minSize: MaybeRefOrGetter<number>,
+  maxSize: MaybeRefOrGetter<number>,
+) {
+  return computed(() => {
+    const startValue = toValue(start)
+    const endValue = toValue(end)
+    const sizeValue = toValue(size)
+
+    const startIsFinite = Number.isFinite(startValue)
+    const sizeIsFinite = Number.isFinite(sizeValue)
+
+    let resultStart = toValue(parentStart)
+    let resultSize = sizeValue
+
+    if (startIsFinite && sizeIsFinite) {
+      resultStart += startValue
+    } else {
+      const endIsFinite = Number.isFinite(endValue)
+
+      if (endIsFinite && sizeIsFinite) {
+        resultStart += toValue(parentSize) - endValue - sizeValue
+      } else if (startIsFinite && endIsFinite) {
+        resultStart += startValue
+        resultSize = toValue(parentSize) - startValue - endValue
+      }
+    }
+
+    return interval(
+      resultStart,
+      clamp(
+        auto(resultSize, toValue(defaultSize)),
+        toValue(minSize),
+        toValue(maxSize),
+      ),
+    )
+  })
+}
+
+export function useRect(
+  props: RectProps,
+  parent: MaybeRefOrGetter<Rect | Dimensions>,
+  root: MaybeRefOrGetter<Rect | Dimensions>,
+): ComputedRef<Rect> {
+  const { size, minSize, maxSize } = useUnconstrainedSizes(props, parent, root)
+
+  const position = useInset(props, parent, root)
+
+  const x = useAxisInterval(
+    () => position.value.left,
+    () => position.value.right,
+    () => size.value.width,
+    () => {
+      const value = toValue(parent)
+      return isRect(value) ? value.x : 0
+    },
+    () => toValue(parent).width,
+    0,
+    () => minSize.value.width,
+    () => maxSize.value.width,
+  )
+
+  const y = useAxisInterval(
+    () => position.value.top,
+    () => position.value.bottom,
+    () => size.value.height,
+    () => {
+      const value = toValue(parent)
+      return isRect(value) ? value.y : 0
+    },
+    () => toValue(parent).height,
+    0,
+    () => minSize.value.height,
+    () => maxSize.value.height,
+  )
+
+  return useTransformedRect(
+    () => rect.fromInterval(x.value, y.value),
+    props,
+    root,
   )
 }

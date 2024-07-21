@@ -9,14 +9,16 @@ import {
 } from '../internal/props/opacity'
 import { Stroke, type StrokeInput, parseStroke } from '../internal/props/stroke'
 
-export interface Paintable {
+export interface PaintProps {
   fill?: FillInput
   opacity?: OpacityInput
   stroke?: StrokeInput
 }
 
+export const PAINT_PROP_KEYS = ['fill', 'opacity', 'stroke'] as const
+
 export function usePaint(
-  props: Paintable,
+  props: PaintProps,
   parent: MaybeRefOrGetter<Rect | Dimensions>,
   root: MaybeRefOrGetter<Rect | Dimensions>,
 ) {

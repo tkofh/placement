@@ -11,7 +11,7 @@ import {
 } from 'vue'
 import { useFlexLayout } from '../composables/useFlex'
 import { provideParentRect, useParentRect } from '../composables/useParentRect'
-import { type Positionable, useRect } from '../composables/useRect'
+import { type RectProps, useRect } from '../composables/useRect'
 import { useRootRect } from '../composables/useRootRect'
 import {
   type AlignContentInput,
@@ -34,7 +34,7 @@ import {
   parsePlace,
 } from '../internal/props/place'
 
-export interface FlexLayoutProps extends Positionable {
+export interface FlexLayoutProps extends RectProps {
   layout?: Flexbox
   alignContent?: AlignContentInput
   alignItems?: AlignItemsInput

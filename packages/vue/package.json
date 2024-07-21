@@ -26,6 +26,11 @@
       "import": "./dist/components/FlexItem.mjs",
       "types": "./dist/components/FlexItem.d.ts"
     },
+    "./GraphicCircle": {
+      "require": "./dist/components/GraphicCircle.cjs",
+      "import": "./dist/components/GraphicCircle.mjs",
+      "types": "./dist/components/GraphicCircle.d.ts"
+    },
     "./GraphicRect": {
       "require": "./dist/components/GraphicRect.cjs",
       "import": "./dist/components/GraphicRect.mjs",

@@ -1,36 +1,19 @@
-import type { Dimensions } from 'placement/dimensions'
-import { type Point, isPoint, point } from 'placement/point'
-import type { Rect } from 'placement/rect'
-import { computed, defineComponent, h, toRef, toValue } from 'vue'
-import { type Paintable, usePaint } from '../composables/usePaint'
+import { defineComponent, h } from 'vue'
+import {
+  PAINT_PROP_KEYS,
+  type PaintProps,
+  usePaint,
+} from '../composables/usePaint'
 import { useParentRect } from '../composables/useParentRect'
-import { type Positionable, useRect } from '../composables/useRect'
+import {
+  RADIUS_PROP_KEYS,
+  type RadiusProps,
+  useRadius,
+} from '../composables/useRadius'
+import { RECT_PROP_KEYS, type RectProps, useRect } from '../composables/useRect'
 import { useRootRect } from '../composables/useRootRect'
-import { type RadiusInput, parseRadius } from '../internal/props/radius'
 
-export interface GraphicRectProps extends Paintable, Positionable {
-  r?: RadiusInput | Point | number
-}
-
-function resolveRadius(
-  r: RadiusInput | Point | number | undefined,
-  parent: Dimensions | Rect,
-  root: Dimensions | Rect,
-): Point {
-  if (r === undefined) {
-    return point.zero
-  }
-
-  if (typeof r === 'number') {
-    return point(r, r)
-  }
-
-  if (isPoint(r)) {
-    return r
-  }
-
-  return parseRadius(r, parent, root)
-}
+export interface GraphicRectProps extends PaintProps, RectProps, RadiusProps {}
 
 export const GraphicRect = defineComponent(
   (props: GraphicRectProps, { slots }) => {
@@ -39,23 +22,22 @@ export const GraphicRect = defineComponent(
 
     const self = useRect(props, parentRect, rootRect)
 
-    const radiusProp = toRef(props, 'r')
-    const radius = computed(() =>
-      resolveRadius(radiusProp.value, toValue(parentRect), toValue(rootRect)),
-    )
+    const radius = useRadius(props, parentRect, rootRect)
 
     const paint = usePaint(props, parentRect, rootRect)
 
     return () => {
+      const { x, y, width, height } = self.value
+      const { x: rx, y: ry } = radius.value
       return h(
         'rect',
         {
-          x: self.value.x,
-          y: self.value.y,
-          width: self.value.width,
-          height: self.value.height,
-          rx: radius.value.x,
-          ry: radius.value.y,
+          x,
+          y,
+          width,
+          height,
+          rx,
+          ry,
           ...paint.value,
         },
         slots.default?.(),
@@ -64,29 +46,30 @@ export const GraphicRect = defineComponent(
   },
   {
     name: 'GraphicRect',
-    props: [
-      'width',
-      'height',
-      'aspectRatio',
-      'size',
-      'maxSize',
-      'maxWidth',
-      'maxHeight',
-      'minSize',
-      'minWidth',
-      'minHeight',
-      'opacity',
-      'fill',
-      'stroke',
-      'r',
-      'top',
-      'right',
-      'bottom',
-      'left',
-      'inset',
-      'origin',
-      'x',
-      'y',
-    ],
+    props: [...RECT_PROP_KEYS, ...RADIUS_PROP_KEYS, ...PAINT_PROP_KEYS],
+    // props: [
+    //   'width',
+    //   'height',
+    //   'aspectRatio',
+    //   'size',
+    //   'maxSize',
+    //   'maxWidth',
+    //   'maxHeight',
+    //   'minSize',
+    //   'minWidth',
+    //   'minHeight',
+    //   'opacity',
+    //   'fill',
+    //   'stroke',
+    //   'r',
+    //   'top',
+    //   'right',
+    //   'bottom',
+    //   'left',
+    //   'inset',
+    //   'origin',
+    //   'x',
+    //   'y',
+    // ],
   },
 )

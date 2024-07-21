@@ -11,8 +11,8 @@ import {
 } from 'vue'
 import { useFlexItem } from '../composables/useFlex'
 import { provideParentRect, useParentRect } from '../composables/useParentRect'
+import { type SizeProps, useUnconstrainedSizes } from '../composables/useRect'
 import { useRootRect } from '../composables/useRootRect'
-import { type Sizeable, useUnconstrainedSizes } from '../composables/useSize'
 import { resolveOffset } from '../internal/offset'
 import {
   type AlignSelfInput,
@@ -25,7 +25,7 @@ import {
 } from '../internal/props/justifySelf'
 import type { OffsetInput } from '../internal/props/offset'
 
-export interface FlexItemProps extends Sizeable {
+export interface FlexItemProps extends SizeProps {
   margin?: OffsetInput | Dimensions | Point | number
   grow?: number
   shrink?: number
