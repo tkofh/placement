@@ -6,10 +6,13 @@ import { type Rect, isRect, rect } from 'placement/rect'
 import { auto, clamp } from 'placement/utils'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 import { type InsetInput, parseInset } from '../internal/props/inset'
+import type { OriginInput } from '../internal/props/origin'
 import { type Size1DInput, parseSize1D } from '../internal/props/size1d'
+import { useOrigin } from './useOrigin'
 import { type Sizeable, useUnconstrainedSizes } from './useSize'
 
 export interface Positionable extends Sizeable {
+  origin?: OriginInput | Point | number
   top?: Size1DInput | number
   right?: Size1DInput | number
   bottom?: Size1DInput | number
@@ -59,6 +62,8 @@ export function useRect(
   parent: MaybeRefOrGetter<Rect | Dimensions>,
   root: MaybeRefOrGetter<Rect | Dimensions>,
 ): ComputedRef<Rect> {
+  const origin = useOrigin(() => props.origin)
+
   const { size, minSize, maxSize } = useUnconstrainedSizes(props, parent, root)
 
   const top = computed(() =>
@@ -87,6 +92,7 @@ export function useRect(
   )
 
   const x = computed(() => {
+    const originX = origin.value.x
     const left = position.value.left
     const right = position.value.right
     const width = size.value.width
@@ -100,10 +106,10 @@ export function useRect(
     let w = width
 
     if (leftIsFinite && widthIsFinite) {
-      x += left
+      x += left - originX * width
       w = width
     } else if (rightIsFinite && widthIsFinite) {
-      x += parentRect.width - right - width
+      x += parentRect.width - right - originX * width
       w = width
     } else if (leftIsFinite && rightIsFinite) {
       x += left
@@ -117,6 +123,7 @@ export function useRect(
   })
 
   const y = computed(() => {
+    const originY = origin.value.y
     const top = position.value.top
     const bottom = position.value.bottom
     const height = size.value.height
@@ -130,10 +137,10 @@ export function useRect(
     let h = height
 
     if (topIsFinite && heightIsFinite) {
-      y += top
+      y += top - originY * height
       h = height
     } else if (bottomIsFinite && heightIsFinite) {
-      y += parentRect.height - bottom - height
+      y += parentRect.height - bottom - originY * height
       h = height
     } else if (topIsFinite && bottomIsFinite) {
       y += top

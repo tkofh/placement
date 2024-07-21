@@ -11,6 +11,7 @@
       <template v-for="i in count" :key="`item-${i}`">
         <FlexItem :size="`${valueD}vw ${valueB}vh`">
           <GraphicRect size="fill" r="1vmin" fill="color(display-p3 0.298 0 0.639 / 0.683)" />
+          <GraphicRect size="50%" inset="50%" origin="50%" r="1vmin" fill="color(display-p3 0.298 0 0.639 / 0.683)" />
         </FlexItem>
       </template>
     </FlexLayout>
@@ -24,6 +25,7 @@
       <template v-for="i in count" :key="`item-${i}`">
         <FlexItem :size="`${valueB}vw ${valueD}vh`">
           <GraphicRect size="fill" r="1vmin" fill="color(display-p3 0 0.482 0.675 / 0.718)" />
+          <GraphicRect inset="2vmin" r="1vmin" fill="color(display-p3 0 0.482 0.675 / 0.718)" />
         </FlexItem>
       </template>
     </FlexLayout>

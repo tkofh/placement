@@ -81,10 +81,13 @@ function toDimensions(
   }
 
   const width = toPixels(a as Size1DValue, 'width', auto, parent, root)
-  const height =
-    b === undefined
-      ? width
-      : toPixels(b as Size1DValue, 'height', auto, parent, root)
+  const height = toPixels(
+    (b === undefined ? a : b) as Size1DValue,
+    'height',
+    auto,
+    parent,
+    root,
+  )
 
   return dimensions(width, height)
 }
