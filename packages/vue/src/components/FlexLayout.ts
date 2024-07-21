@@ -95,9 +95,14 @@ function resolveFlexbox(
       parsedJustifyContent.justifyContentSpace
   }
 
+  const gapValue =
+    typeof props.gap === 'number'
+      ? { rowGap: props.gap, columnGap: props.gap }
+      : parseGap(props.gap?.toString() ?? '', parent, root)
+
   return flexbox({
     ...parseFlow(props.flow ?? ''),
-    ...parseGap(props.gap?.toString() ?? '', parent, root),
+    ...gapValue,
     ...placeValue,
   })
 }
