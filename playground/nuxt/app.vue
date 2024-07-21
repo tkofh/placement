@@ -2,7 +2,7 @@
   <GraphicRoot size="fill" fit="contain" origin="center">
     <FlexLayout
       flow="row wrap"
-      gap="10px"
+      :gap="value"
       place="center"
       size="fill"
       gutter="10px"
@@ -16,12 +16,18 @@
         <GraphicRect
           size="fill"
           r="1vmin"
-          :fill="`rgba(255,0,0, ${remap(i, 0, count - 1, 0.1, 1)})`"
+          :fill="`rgb(255 0 0 / ${remap(i, 1, count, 10, 100)}%)`"
+          opacity="0.5"
         />
       </FlexItem>
     </FlexLayout>
 
-    <GraphicRect top="50%" right="10px" width="100px" height="25%" fill="red" />
+    <GraphicRect
+      inset="top 50% right 10px"
+      size="100px 25%"
+      fill="none"
+      stroke="black 10px dashed 4 2 5 7"
+    />
   </GraphicRoot>
 </template>
 
@@ -29,12 +35,12 @@
 import { useSpring } from '@coily/vue'
 import { remap } from 'placement/utils'
 
-const count = 3
+const count = 30
 
 const animate = ref(true)
 const isLeft = ref(false)
 
-const { value } = useSpring(() => (isLeft.value ? 100 : 600), {
+const { value } = useSpring(() => (isLeft.value ? 10 : 20), {
   tension: 100,
   damping: 10,
   mass: 1,

@@ -45,14 +45,14 @@ export function toPixels(
       return Math.min(root.width, root.height) * normalized
     case 'vmax':
       return Math.max(root.width, root.height) * normalized
-    case 'cqw':
-      return parent.width * normalized
-    case 'cqh':
-      return parent.height * normalized
-    case 'cqmin':
-      return Math.min(parent.width, parent.height) * normalized
-    case 'cqmax':
-      return Math.max(parent.width, parent.height) * normalized
+    // case 'cqw':
+    //   return parent.width * normalized
+    // case 'cqh':
+    //   return parent.height * normalized
+    // case 'cqmin':
+    //   return Math.min(parent.width, parent.height) * normalized
+    // case 'cqmax':
+    //   return Math.max(parent.width, parent.height) * normalized
   }
 }
 

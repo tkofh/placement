@@ -54,11 +54,12 @@
     "build": "unbuild"
   },
   "dependencies": {
-    "@nuxt/kit": "^3.12.3",
-    "@nuxt/schema": "^3.12.3",
+    "@nuxt/kit": "^3.12.4",
+    "@nuxt/schema": "^3.12.4",
+    "colorjs.io": "^0.5.2",
     "placement": "workspace:^",
-    "valued": "^0.4.4",
-    "vue": "^3.4.31"
+    "valued": "^0.4.7",
+    "vue": "^3.4.33"
   },
   "devDependencies": {
     "@types/node": "^20.14.11",

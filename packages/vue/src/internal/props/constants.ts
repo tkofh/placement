@@ -5,10 +5,10 @@ export const SIZE_UNITS = [
   'vh',
   'vmin',
   'vmax',
-  'cqw',
-  'cqh',
-  'cqmin',
-  'cqmax',
+  // 'cqw',
+  // 'cqh',
+  // 'cqmin',
+  // 'cqmax',
 ] as const
 
 export type SizeUnit = (typeof SIZE_UNITS)[number]

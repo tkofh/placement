@@ -2,7 +2,7 @@ import type { Dimensions } from 'placement/dimensions'
 import { type Point, isPoint, point } from 'placement/point'
 import type { Rect } from 'placement/rect'
 import { computed, defineComponent, h, toRef, toValue } from 'vue'
-import type { Paintable } from '../composables/usePaint'
+import { type Paintable, usePaint } from '../composables/usePaint'
 import { useParentRect } from '../composables/useParentRect'
 import { type Positionable, useRect } from '../composables/useRect'
 import { useRootRect } from '../composables/useRootRect'
@@ -43,6 +43,9 @@ export const GraphicRect = defineComponent(
     const radius = computed(() =>
       resolveRadius(radiusProp.value, toValue(parentRect), toValue(rootRect)),
     )
+
+    const paint = usePaint(props, parentRect, rootRect)
+
     return () => {
       return h(
         'rect',
@@ -53,6 +56,7 @@ export const GraphicRect = defineComponent(
           height: self.value.height,
           rx: radius.value.x,
           ry: radius.value.y,
+          ...paint.value,
         },
         slots.default?.(),
       )
@@ -72,6 +76,8 @@ export const GraphicRect = defineComponent(
       'minWidth',
       'minHeight',
       'opacity',
+      'fill',
+      'stroke',
       'r',
       'top',
       'right',
