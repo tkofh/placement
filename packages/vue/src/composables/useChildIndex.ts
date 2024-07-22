@@ -2,159 +2,137 @@ import {
   type ComponentInternalInstance,
   type InjectionKey,
   type Ref,
-  type VNode,
   customRef,
   getCurrentInstance,
   inject,
-  onBeforeUnmount,
+  onUnmounted,
+  onUpdated,
   provide,
+  ref,
 } from 'vue'
 
-interface ChildIndexAPI {
-  register: (uid: number) => Readonly<Ref<number>>
-  remove: (uid: number) => void
+type ChildIndexAPI = (vm: ComponentInternalInstance) => Readonly<Ref<number>>
+
+const injection = Symbol.for('ChildIndexRoot') as InjectionKey<ChildIndexAPI>
+
+function isRecordOrArray(
+  input: unknown,
+): input is Record<string, unknown> | Array<unknown> {
+  return typeof input === 'object' && input !== null
+}
+function isNode(node: unknown): node is Node {
+  return isRecordOrArray(node) && 'nodeType' in node
+}
+function getVmNode(vm: ComponentInternalInstance) {
+  if (!isNode(vm.vnode.el)) {
+    throw new Error('No vnode.el')
+  }
+
+  return vm.vnode.el
 }
 
-const ParentSymbol = Symbol('Parent') as InjectionKey<ChildIndexAPI>
-
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: necessary tree traversal
-function updateIndexes(
-  states: Map<number, IndexInternalState>,
-  vm: ComponentInternalInstance,
+function compareVmNodes(
+  a: ComponentInternalInstance,
+  b: ComponentInternalInstance,
 ) {
-  const subtree = vm.subTree
+  const aNode = getVmNode(a)
+  const bNode = getVmNode(b)
 
-  const found = new Set<number>()
+  const comparison = bNode.compareDocumentPosition(aNode)
 
-  let index = 0
-
-  const vnodes: Array<VNode> = [subtree]
-  while (vnodes.length > 0) {
-    const vnode = vnodes.pop() as VNode
-
-    if (vnode.component !== null) {
-      const uid = vnode.component.uid
-      if (found.has(uid)) {
-        continue
-      }
-
-      const state = states.get(uid)
-      if (state == null) {
-        continue
-      }
-
-      found.add(uid)
-      if (state.value !== index) {
-        state.value = index
-        state.trigger()
-      }
-      index++
-    }
-
-    if (found.size === states.size) {
-      break
-    }
-
-    if (Array.isArray(vnode.children)) {
-      for (const child of vnode.children.flat()) {
-        if (
-          typeof child === 'object' &&
-          child != null &&
-          !Array.isArray(child)
-        ) {
-          vnodes.unshift(child)
-        }
-      }
-    }
+  if (comparison & Node.DOCUMENT_POSITION_PRECEDING) {
+    return -1
+  }
+  if (comparison & Node.DOCUMENT_POSITION_FOLLOWING) {
+    return 1
   }
 
-  for (const [uid, state] of states) {
-    if (!found.has(uid)) {
-      state.value = -1
-      state.trigger()
-      states.delete(uid)
-    }
-  }
+  throw new Error('non-comparable nodes')
 }
 
-interface IndexInternalState {
-  trigger: () => void
-  value: number
-}
+class OrderedInstanceStorage {
+  readonly storage = new Map<ComponentInternalInstance, Ref<number>>()
+  readonly order: Array<ComponentInternalInstance> = []
 
-export function registerIndexParent() {
-  const vm = getCurrentInstance()
+  #nextIndex = 0
 
-  if (vm == null) {
-    throw new Error(
-      'registerIndexParent must be called within a setup function',
-    )
-  }
+  constructor(readonly trigger: (value: number) => void) {}
 
-  const triggers = new Map<number, IndexInternalState>()
+  insert(vm: ComponentInternalInstance) {
+    const index = ref(this.#nextIndex++)
+    this.storage.set(vm, index)
+    this.order.push(vm)
 
-  const register = (uid: number) => {
-    const index = customRef((track, trigger) => {
-      const state: IndexInternalState = {
-        trigger,
-        value: -1,
-      }
-      triggers.set(uid, state)
-
-      return {
-        get() {
-          track()
-          return state.value
-        },
-        set() {
-          throw new Error('Readonly')
-        },
-      }
-    })
-
-    updateIndexes(triggers, vm)
+    this.trigger(this.order.length)
 
     return index
   }
 
-  const remove = (uid: number) => {
-    const removed = triggers.get(uid)
-    if (removed == null) {
-      return
-    }
+  remove(vm: ComponentInternalInstance) {
+    this.order.splice(this.order.indexOf(vm), 1)
+    this.storage.delete(vm)
 
-    triggers.delete(uid)
-
-    for (const state of triggers.values()) {
-      if (state.value > removed.value) {
-        state.value--
-        state.trigger()
-      }
-    }
+    this.trigger(this.order.length)
   }
 
-  provide(ParentSymbol, { register, remove })
+  update() {
+    this.order.sort(compareVmNodes)
+
+    for (const [index, vm] of this.order.entries()) {
+      const indexRef = this.storage.get(vm)
+      if (indexRef === undefined) {
+        throw new Error('No index ref')
+      }
+
+      indexRef.value = index
+    }
+  }
 }
 
-export function useChildIndex() {
-  const vm = getCurrentInstance()
+export function useIndexParent() {
+  let storage: OrderedInstanceStorage
+  const length = customRef((track, trigger) => {
+    storage = new OrderedInstanceStorage(trigger)
 
-  if (vm == null) {
-    throw new Error('useChildIndex must be called within a setup function')
-  }
-
-  const api = inject(ParentSymbol, null)
-
-  if (api === null) {
-    throw new Error('No parent index found')
-  }
-
-  const uid = vm.uid
-  const index = api.register(uid)
-
-  onBeforeUnmount(() => {
-    api.remove(uid)
+    return {
+      get() {
+        track()
+        return storage.order.length
+      },
+      set(newValue) {
+        if (newValue < storage.order.length) {
+          const removed = storage.order.splice(newValue)
+          for (const vm of removed) {
+            storage.storage.delete(vm)
+          }
+        }
+      },
+    }
   })
 
-  return index
+  provide(injection, (vm) => {
+    onUnmounted(() => {
+      storage.remove(vm)
+    }, vm)
+
+    return storage.insert(vm)
+  })
+
+  onUpdated(() => {
+    storage.update()
+  })
+
+  return length
+}
+
+export function useChildIndex(): Readonly<Ref<number>> {
+  const register = inject(injection, null)
+  const vm = getCurrentInstance()
+
+  if (register === null || vm === null) {
+    console.warn('no parent or no vm')
+    return ref(-1)
+  }
+
+  return register(vm)
 }

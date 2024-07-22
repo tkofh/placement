@@ -1,7 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["**/.env.*local"],
-  "pipeline": {
+  "ui": "tui",
+  "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
@@ -9,6 +10,12 @@
     "test:run": {
       "dependsOn": ["^build"],
       "cache": true
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "outputs": [".nuxt/**", ".output/**"],
+      "persistent": true,
+      "cache": false
     }
   }
 }

@@ -1,35 +1,55 @@
 {
   "name": "placement",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Layout algorithms",
   "author": "Tim Morris <timthewebguy@gmail.com>",
   "homepage": "https://github.com/tkofh/placement#readme",
   "license": "MIT",
   "sideEffects": false,
   "type": "module",
-  "main": "./dist/frame/index.cjs",
-  "module": "./dist/frame/index.mjs",
-  "types": "./dist/frame/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
-      "require": "./dist/frame/index.cjs",
-      "import": "./dist/frame/index.mjs",
-      "types": "./dist/frame/index.d.ts"
+    "./dimensions": {
+      "require": "./dist/dimensions.cjs",
+      "import": "./dist/dimensions.mjs",
+      "types": "./dist/dimensions.d.ts"
+    },
+    "./flexbox": {
+      "require": "./dist/flexbox.cjs",
+      "import": "./dist/flexbox.mjs",
+      "types": "./dist/flexbox.d.ts"
     },
     "./frame": {
-      "require": "./dist/frame/index.cjs",
-      "import": "./dist/frame/index.mjs",
-      "types": "./dist/frame/index.d.ts"
+      "require": "./dist/frame.cjs",
+      "import": "./dist/frame.mjs",
+      "types": "./dist/frame.d.ts"
     },
-    "./property": {
-      "require": "./dist/property/index.cjs",
-      "import": "./dist/property/index.mjs",
-      "types": "./dist/property/index.d.ts"
+    "./interval": {
+      "require": "./dist/interval.cjs",
+      "import": "./dist/interval.mjs",
+      "types": "./dist/interval.d.ts"
+    },
+    "./offset": {
+      "require": "./dist/offset.cjs",
+      "import": "./dist/offset.mjs",
+      "types": "./dist/offset.d.ts"
+    },
+    "./point": {
+      "require": "./dist/point.cjs",
+      "import": "./dist/point.mjs",
+      "types": "./dist/point.d.ts"
     },
     "./rect": {
-      "require": "./dist/rect/index.cjs",
-      "import": "./dist/rect/index.mjs",
-      "types": "./dist/rect/index.d.ts"
+      "require": "./dist/rect.cjs",
+      "import": "./dist/rect.mjs",
+      "types": "./dist/rect.d.ts"
+    },
+    "./track": {
+      "require": "./dist/track.cjs",
+      "import": "./dist/track.mjs",
+      "types": "./dist/track.d.ts"
     },
     "./utils": {
       "require": "./dist/utils.cjs",
@@ -49,18 +69,20 @@
     "build": "unbuild",
     "test": "vitest",
     "test:run": "vitest run",
-    "prepublish": "bun run build"
+    "prepublish": "unbuild"
   },
   "bugs": {
     "url": "https://github.com/tkofh/placement/issues"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^1.5.0",
-    "@vitest/ui": "^1.5.0",
+    "@types/node": "^20.14.11",
+    "@vitest/coverage-v8": "^2.0.3",
+    "@vitest/ui": "^2.0.3",
+    "tsx": "^4.16.2",
     "unbuild": "^2.0.0",
-    "vitest": "^1.5.0"
+    "vitest": "^2.0.3"
   },
   "dependencies": {
-    "gpds": "^0.0.12"
+    "valued": "^0.4.8"
   }
 }

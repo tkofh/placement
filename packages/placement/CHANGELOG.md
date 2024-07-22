@@ -1,5 +1,11 @@
 # placement
 
+## 0.2.0
+
+### Minor Changes
+
+- initial vue api, solidified flex api
+
 ## 0.1.2
 
 ### Patch Changes

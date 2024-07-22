@@ -3,22 +3,25 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "build:watch": "turbo watch build",
+    "build:any": "turbo run build --continue",
+    "dev": "turbo run dev",
     "test": "turbo run test:run",
-    "check": "biome check --apply-unsafe .",
+    "check": "biome check --write --unsafe .",
     "check:report": "biome check .",
     "prepare": "lefthook install",
     "publish-packages": "pnpm check:report && turbo run build test:run && changeset version && changeset publish && pnpm check"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.7.0",
-    "@changesets/cli": "^2.27.1",
+    "@biomejs/biome": "^1.8.3",
+    "@changesets/cli": "^2.27.7",
     "@tsconfig/node20": "^20.1.4",
-    "lefthook": "^1.6.10",
-    "turbo": "^1.13.2",
-    "typescript": "^5.4.5",
-    "vitest": "^1.5.0"
+    "lefthook": "^1.7.4",
+    "turbo": "^2.0.9",
+    "typescript": "^5.5.3",
+    "vitest": "^2.0.3"
   },
-  "packageManager": "pnpm@8.15.5",
+  "packageManager": "pnpm@9.4.0",
   "engines": {
     "node": ">=20"
   }

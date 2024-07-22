@@ -1,21 +1,94 @@
 {
   "name": "@placement/vue",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Vue components for Placement",
   "author": "Tim Morris <timthewebguy@gmail.com>",
   "homepage": "https://github.com/tkofh/placement#readme",
   "license": "MIT",
   "sideEffects": false,
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./FlexLayout": {
+      "require": "./dist/components/FlexLayout.cjs",
+      "import": "./dist/components/FlexLayout.mjs",
+      "types": "./dist/components/FlexLayout.d.ts"
+    },
+    "./FlexItem": {
+      "require": "./dist/components/FlexItem.cjs",
+      "import": "./dist/components/FlexItem.mjs",
+      "types": "./dist/components/FlexItem.d.ts"
+    },
+    "./GraphicCircle": {
+      "require": "./dist/components/GraphicCircle.cjs",
+      "import": "./dist/components/GraphicCircle.mjs",
+      "types": "./dist/components/GraphicCircle.d.ts"
+    },
+    "./GraphicGroup": {
+      "require": "./dist/components/GraphicGroup.cjs",
+      "import": "./dist/components/GraphicGroup.mjs",
+      "types": "./dist/components/GraphicGroup.d.ts"
+    },
+    "./GraphicLine": {
+      "require": "./dist/components/GraphicLine.cjs",
+      "import": "./dist/components/GraphicLine.mjs",
+      "types": "./dist/components/GraphicLine.d.ts"
+    },
+    "./GraphicPoint": {
+      "require": "./dist/components/GraphicPoint.cjs",
+      "import": "./dist/components/GraphicPoint.mjs",
+      "types": "./dist/components/GraphicPoint.d.ts"
+    },
+    "./GraphicRect": {
+      "require": "./dist/components/GraphicRect.cjs",
+      "import": "./dist/components/GraphicRect.mjs",
+      "types": "./dist/components/GraphicRect.d.ts"
+    },
+    "./GraphicRoot": {
+      "require": "./dist/components/GraphicRoot.cjs",
+      "import": "./dist/components/GraphicRoot.mjs",
+      "types": "./dist/components/GraphicRoot.d.ts"
+    },
+    "./GraphicText": {
+      "require": "./dist/components/GraphicText.cjs",
+      "import": "./dist/components/GraphicText.mjs",
+      "types": "./dist/components/GraphicText.d.ts"
+    },
+    "./nuxt": {
+      "require": "./dist/nuxt.cjs",
+      "import": "./dist/nuxt.mjs",
+      "types": "./dist/nuxt.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tkofh/placement.git"
+  },
   "scripts": {
-    "build": "build"
+    "build": "unbuild"
   },
   "dependencies": {
+    "@nuxt/kit": "^3.12.4",
+    "@nuxt/schema": "^3.12.4",
+    "colorjs.io": "^0.5.2",
     "placement": "workspace:^",
-    "vue": "^3.4.23"
+    "valued": "^0.4.8",
+    "vue": "^3.4.33"
   },
   "devDependencies": {
-    "typescript": "^5.4.5",
+    "@types/node": "^20.14.11",
+    "typescript": "^5.5.3",
     "unbuild": "^2.0.0"
   }
 }

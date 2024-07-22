@@ -1,65 +1,84 @@
-import type { ReadonlyRect } from 'placement/Box'
-import {
-  type PropType,
-  type SlotsType,
-  computed,
-  defineComponent,
-  h,
-  shallowRef,
-} from 'vue'
+import { type Rect, align, contain, cover, rect } from 'placement/rect'
+import { computed, defineComponent, h, shallowRef } from 'vue'
 import { useDomRect } from '../composables/useDomRect'
-import { useRootFrame } from '../composables/useRootFrame'
-import { useViewportRect } from '../composables/useViewportRect'
+import {
+  ORIGIN_PROP_KEYS,
+  type OriginProps,
+  SIZE_PROP_KEYS,
+  type SizeProps,
+  type TransformProps,
+  useBasisSize,
+  useConstrainedSize,
+  useMaxSize,
+  useMinSize,
+  useOrigin,
+  useXYTranslation,
+} from '../composables/useRect'
+import { useSizingContextRoot } from '../composables/useSizingContext'
+import { provideShouldRenderGroups } from '../internal/debug'
+import type { FitInput } from '../internal/props/fit'
+import { boolProp } from '../internal/utils'
 
-export const GraphicRoot = defineComponent({
-  name: 'RootFrame',
-  slots: Object as SlotsType<{
-    default: Readonly<ReadonlyRect>
-  }>,
-  props: {
-    width: { type: [String, Number], required: false },
-    height: { type: [String, Number], required: false },
-    aspectRatio: { type: [String, Number], required: false },
-    fit: {
-      type: String as PropType<'fill' | 'cover' | 'contain'>,
-      default: 'contain',
-    },
-    originX: { type: [String, Number], default: '50%' },
-    originY: { type: [String, Number], default: '50%' },
-  },
-  setup(props, { slots }) {
+export interface GraphicRootProps
+  extends SizeProps,
+    TransformProps,
+    OriginProps {
+  fit?: FitInput
+  debugGroups?: boolean
+}
+
+export const GraphicRoot = defineComponent(
+  (props: GraphicRootProps, { slots }) => {
     const svg = shallowRef<SVGElement>()
-
     const domRect = useDomRect(svg)
 
-    const root = useRootFrame(() => ({
-      width: props.width,
-      height: props.height,
-      aspectRatio: props.aspectRatio,
-    }))
+    const basisSize = useBasisSize(props, domRect, domRect)
+    const minSize = useMinSize(props, domRect, domRect)
+    const maxSize = useMaxSize(props, domRect, domRect)
 
-    const viewportRect = useViewportRect(
-      domRect,
-      root,
-      () => props.fit,
-      () => props.originX,
-      () => props.originY,
-    )
-    const viewBox = computed(
-      () =>
-        `${viewportRect.value.x} ${viewportRect.value.y} ${viewportRect.value.width} ${viewportRect.value.height}`,
-    )
+    const size = useConstrainedSize(basisSize, minSize, maxSize)
+
+    const rootRect = computed(() => rect.fromDimensions(size.value))
+
+    const origin = useOrigin(props)
+    const translation = useXYTranslation(props, domRect, domRect)
+
+    const viewBox = computed(() => {
+      const fit = props.fit ?? 'crop'
+      let viewBoxRect: Rect
+      if (fit === 'crop') {
+        viewBoxRect = domRect.value.pipe(align(rootRect.value, origin.value))
+      } else {
+        viewBoxRect = domRect.value.pipe(
+          // these are reversed (cover vs contain) because the viewBox is
+          // the "parent" rect in this context. when the viewBox "covers"
+          // the rootRect, then the rootRect is "contained" by the viewBox
+          fit === 'cover'
+            ? contain(rootRect.value, 0)
+            : cover(rootRect.value, 0),
+          align(rootRect.value, origin.value),
+        )
+      }
+
+      viewBoxRect = translation.value(viewBoxRect)
+
+      return `${viewBoxRect.x} ${viewBoxRect.y} ${viewBoxRect.width} ${viewBoxRect.height}`
+    })
+
+    useSizingContextRoot(rootRect)
+
+    provideShouldRenderGroups(() => boolProp(props.debugGroups))
 
     return () => {
       return h(
         'svg',
-        {
-          ref: svg,
-          preserveAspectRatio: 'none',
-          viewBox: viewBox.value,
-        },
-        slots.default?.(root.value),
+        { ref: svg, viewBox: viewBox.value, preserveAspectRatio: 'none' },
+        slots.default?.(),
       )
     }
   },
-})
+  {
+    name: 'GraphicRoot',
+    props: [...SIZE_PROP_KEYS, ...ORIGIN_PROP_KEYS, 'fit'],
+  },
+)
