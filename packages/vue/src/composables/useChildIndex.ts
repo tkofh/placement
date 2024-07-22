@@ -15,7 +15,7 @@ type ChildIndexAPI = (vm: ComponentInternalInstance) => Readonly<Ref<number>>
 
 const injection = Symbol.for('ChildIndexRoot') as InjectionKey<ChildIndexAPI>
 
-export function isRecordOrArray(
+function isRecordOrArray(
   input: unknown,
 ): input is Record<string, unknown> | Array<unknown> {
   return typeof input === 'object' && input !== null

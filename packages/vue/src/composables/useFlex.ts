@@ -14,13 +14,9 @@ import {
 } from 'vue'
 import { useChildIndex, useIndexParent } from './useChildIndex'
 
-const FLEX_FRAMES = Symbol('placement/vue/flex-frames') as InjectionKey<
-  Ref<ReadonlyArray<Frame>>
->
+const FLEX_FRAMES = Symbol() as InjectionKey<Ref<ReadonlyArray<Frame>>>
 
-const FLEX_RECTS = Symbol('placement/vue/flex-rects') as InjectionKey<
-  Ref<ReadonlyArray<Rect>>
->
+const FLEX_RECTS = Symbol() as InjectionKey<Ref<ReadonlyArray<Rect>>>
 
 export function useFlexLayout(
   flexbox: MaybeRefOrGetter<Flexbox>,

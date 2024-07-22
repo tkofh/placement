@@ -63,27 +63,28 @@
             <GraphicRect size="fill" fill="blue" />
           </FlexItem>
           <FlexItem width="100%" grow="1">
-            <FlexLayout
-              gutter="10px"
-              size="fill"
-              flow="column nowrap"
-              align-items="center"
-            >
-              <FlexItem width="100%" height="10px">
-                <GraphicRect size="fill" fill="purple" />
-              </FlexItem>
-              <FlexItem width="10px" height="auto" grow="1">
-                <GraphicRect size="fill" fill="purple" />
-              </FlexItem>
-              <FlexItem width="100%" height="10px">
-                <GraphicRect size="fill" fill="purple" />
-              </FlexItem>
-            </FlexLayout>
-            <!--            <FlexLayout flow="column nowrap" inset="10px">-->
-            <!--              <FlexLayout width="100%" height="30px">-->
-            <!--                <GraphicRect size="fill" fill="grey" r="15px" />-->
-            <!--              </FlexLayout>-->
-            <!--            </FlexLayout>-->
+            <GraphicGroup left="20px" size="fill" debug>
+              <GraphicLine stroke="5px pink">
+                <GraphicPoint x="0" y="0" />
+                <GraphicPoint x="100%" y="100%" />
+              </GraphicLine>
+              <FlexLayout
+                gutter="10px"
+                size="fill"
+                flow="column nowrap"
+                align-items="center"
+              >
+                <FlexItem width="100%" height="4px">
+                  <GraphicRect size="fill" fill="purple" />
+                </FlexItem>
+                <FlexItem width="4px" height="auto" grow="1">
+                  <GraphicRect size="fill" fill="purple" />
+                </FlexItem>
+                <FlexItem width="100%" height="4px">
+                  <GraphicRect size="fill" fill="purple" />
+                </FlexItem>
+              </FlexLayout>
+            </GraphicGroup>
           </FlexItem>
         </FlexLayout>
       </FlexItem>

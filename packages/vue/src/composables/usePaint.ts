@@ -12,11 +12,19 @@ import {
 } from '../internal/props/stroke'
 import { useParentWidth, useRootHeight, useRootWidth } from './useSizingContext'
 
-export interface PaintProps {
+export interface StrokeProps {
+  stroke?: StrokeInput
+  opacity?: OpacityInput
+}
+export const STROKE_PROP_KEYS = ['opacity', 'stroke'] as const
+
+export interface FillProps {
   fill?: FillInput
   opacity?: OpacityInput
-  stroke?: StrokeInput
 }
+export const FILL_PROP_KEYS = ['opacity', 'fill'] as const
+
+export interface PaintProps extends FillProps, StrokeProps {}
 
 export const PAINT_PROP_KEYS = ['fill', 'opacity', 'stroke'] as const
 

@@ -31,6 +31,21 @@
       "import": "./dist/components/GraphicCircle.mjs",
       "types": "./dist/components/GraphicCircle.d.ts"
     },
+    "./GraphicGroup": {
+      "require": "./dist/components/GraphicGroup.cjs",
+      "import": "./dist/components/GraphicGroup.mjs",
+      "types": "./dist/components/GraphicGroup.d.ts"
+    },
+    "./GraphicLine": {
+      "require": "./dist/components/GraphicLine.cjs",
+      "import": "./dist/components/GraphicLine.mjs",
+      "types": "./dist/components/GraphicLine.d.ts"
+    },
+    "./GraphicPoint": {
+      "require": "./dist/components/GraphicPoint.cjs",
+      "import": "./dist/components/GraphicPoint.mjs",
+      "types": "./dist/components/GraphicPoint.d.ts"
+    },
     "./GraphicRect": {
       "require": "./dist/components/GraphicRect.cjs",
       "import": "./dist/components/GraphicRect.mjs",

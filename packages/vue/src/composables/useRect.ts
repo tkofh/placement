@@ -65,21 +65,25 @@ export const SIZE_PROP_KEYS = [
   ...BASIS_SIZE_PROP_KEYS,
 ] as const
 
-export interface InsetProps {
+export interface IndividualInsetProps {
   top?: Size1DInput | number
   right?: Size1DInput | number
   bottom?: Size1DInput | number
   left?: Size1DInput | number
-  inset?: InsetInput | Point | number
 }
 
-export const INSET_PROP_KEYS = [
+export const INDIVIDUAL_INSET_PROP_KEYS = [
   'top',
   'right',
   'bottom',
   'left',
-  'inset',
 ] as const
+
+export interface InsetProps extends IndividualInsetProps {
+  inset?: InsetInput | Point | number
+}
+
+export const INSET_PROP_KEYS = [...INDIVIDUAL_INSET_PROP_KEYS, 'inset'] as const
 
 export interface OriginProps {
   origin?: OriginInput | Point | number

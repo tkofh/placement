@@ -15,13 +15,16 @@ import {
   useXYTranslation,
 } from '../composables/useRect'
 import { useSizingContextRoot } from '../composables/useSizingContext'
+import { provideShouldRenderGroups } from '../internal/debug'
 import type { FitInput } from '../internal/props/fit'
+import { boolProp } from '../internal/utils'
 
 export interface GraphicRootProps
   extends SizeProps,
     TransformProps,
     OriginProps {
   fit?: FitInput
+  debugGroups?: boolean
 }
 
 export const GraphicRoot = defineComponent(
@@ -63,6 +66,8 @@ export const GraphicRoot = defineComponent(
     })
 
     useSizingContextRoot(rootRect)
+
+    provideShouldRenderGroups(() => boolProp(props.debugGroups))
 
     return () => {
       return h(
