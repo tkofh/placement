@@ -83,6 +83,6 @@
     "vitest": "^2.0.3"
   },
   "dependencies": {
-    "valued": "^0.4.7"
+    "valued": "^0.4.8"
   }
 }

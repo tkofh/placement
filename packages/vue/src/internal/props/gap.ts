@@ -1,11 +1,9 @@
-import type { Dimensions } from 'placement/dimensions'
-import type { Rect } from 'placement/rect'
 import { type ParserInput, parse } from 'valued'
 import { lengthPercentage } from 'valued/data/length-percentage'
 import { between } from 'valued/multipliers/between'
 import { createCache } from '../cache'
 import { SIZE_UNITS } from './constants'
-import { toPixels } from './size1d'
+import { resolveSize1D } from './size1d'
 
 const gap = between(lengthPercentage.subset(SIZE_UNITS), {
   minLength: 1,
@@ -14,7 +12,7 @@ const gap = between(lengthPercentage.subset(SIZE_UNITS), {
 
 export type Gap = typeof gap
 
-export type GapInput = ParserInput<Gap>
+export type GapInput = ParserInput<Gap> | number | undefined
 
 export interface GapValue {
   readonly rowGap: number
@@ -23,34 +21,49 @@ export interface GapValue {
 
 const cache = createCache<string, GapValue>(512)
 
-export function parseGap(
-  input: string,
-  parent: Dimensions | Rect,
-  root: Dimensions | Rect,
+export function resolveGap(
+  input: GapInput,
+  auto: number,
+  parentWidth: number,
+  parentHeight: number,
+  rootWidth: number,
+  rootHeight: number,
 ): GapValue {
-  const key = `${input}:${parent.width}:${parent.height}:${root.width}:${root.height}`
-  const cached = cache.get(key)
-  if (cached !== undefined) {
-    return cached
+  if (typeof input === 'number' || input === undefined) {
+    return {
+      rowGap: input ?? auto,
+      columnGap: input ?? auto,
+    }
   }
 
-  const parsed = parse(input, gap)
+  return cache(
+    `${input}:${auto}:${parentWidth}:${parentHeight}:${rootWidth}:${rootHeight}`,
+    () => {
+      const parsed = parse(input, gap)
+      if (!parsed.valid) {
+        return {
+          rowGap: auto,
+          columnGap: auto,
+        }
+      }
 
-  let rowGap = 0
-  let columnGap = 0
+      const [row, column] = parsed.value
+      const rowGap = resolveSize1D(
+        row,
+        auto,
+        parentHeight,
+        rootWidth,
+        rootHeight,
+      )
+      const columnGap =
+        column === undefined
+          ? rowGap
+          : resolveSize1D(column, auto, parentWidth, rootWidth, rootHeight)
 
-  if (parsed.valid) {
-    const [row, column] = parsed.value
-    rowGap = toPixels(row, 'height', 0, parent, root)
-    columnGap =
-      column === undefined ? rowGap : toPixels(column, 'width', 0, parent, root)
-  }
-
-  const result = {
-    rowGap,
-    columnGap,
-  }
-  cache.set(key, result)
-
-  return result
+      return {
+        rowGap,
+        columnGap,
+      }
+    },
+  )
 }

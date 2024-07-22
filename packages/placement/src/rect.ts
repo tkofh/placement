@@ -121,6 +121,8 @@ interface RectConstructor {
     (ival: Interval, precision?: number): Rect
     (x: Interval, y: Interval, precision?: number): Rect
   }
+
+  zero: Rect
 }
 
 const rect = ((
@@ -164,6 +166,8 @@ rect.fromInterval = ((a: Interval, b?: Interval | number, c?: number): Rect =>
     (isInterval(b) ? b : a).size,
     c ?? (typeof b === 'number' ? b : PRECISION),
   )) satisfies RectConstructor['fromInterval']
+
+rect.zero = new Rect(0, 0, 0, 0, PRECISION)
 
 export { rect }
 

@@ -53,17 +53,28 @@ class Dimensions extends Pipeable implements DimensionsLike {
 
 export type { Dimensions }
 
-export function dimensions(): Dimensions
-export function dimensions(size: number): Dimensions
-export function dimensions(width: number, height: number): Dimensions
-export function dimensions(
-  width: number,
-  height: number,
-  precision: number,
-): Dimensions
-export function dimensions(a?: number, b?: number, c?: number): Dimensions {
-  return new Dimensions(a ?? 0, b ?? a ?? 0, c ?? PRECISION)
+interface DimensionsConstructor {
+  (): Dimensions
+  (size: number): Dimensions
+  (width: number, height: number): Dimensions
+  (width: number, height: number, precision: number): Dimensions
+
+  zero: Dimensions
+  infinity: Dimensions
 }
+
+const dimensions = ((a?: number, b?: number, c?: number): Dimensions => {
+  return new Dimensions(a ?? 0, b ?? a ?? 0, c ?? PRECISION)
+}) as DimensionsConstructor
+
+dimensions.zero = new Dimensions(0, 0, PRECISION)
+dimensions.infinity = new Dimensions(
+  Number.POSITIVE_INFINITY,
+  Number.POSITIVE_INFINITY,
+  PRECISION,
+)
+
+export { dimensions }
 
 export function isDimensions(value: unknown): value is Dimensions {
   return typeof value === 'object' && value !== null && TypeBrand in value

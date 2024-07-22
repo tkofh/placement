@@ -16,6 +16,7 @@ export type FillInput =
   | `${'evenodd' | 'nonzero'} ${string}`
   | `${string} ${'evenodd' | 'nonzero'}`
   | (string & {})
+  | undefined
 
 export class Fill {
   constructor(
@@ -27,28 +28,26 @@ export class Fill {
 }
 
 const cache = createCache<string, Fill>(512)
-export function parseFill(input: string): Fill {
-  const cached = cache.get(input)
-  if (cached !== undefined) {
-    return cached
+
+export function resolveFill(input: FillInput, auto = Fill.empty): Fill {
+  if (input === undefined) {
+    return auto
   }
 
-  const parsed = parse(input, fillParser)
+  return cache(`${input}:${auto.fill}:${auto.fillRule}`, () => {
+    const parsed = parse(input, fillParser)
 
-  let fill = Fill.empty
+    if (!parsed.valid) {
+      return auto
+    }
 
-  if (parsed.valid) {
     if (Array.isArray(parsed.value)) {
       const [fillColor, fillRule] = parsed.value
-      fill = new Fill(fillColor?.serialize('color'), fillRule?.value)
-    } else if (isKeywordValue(parsed.value)) {
-      fill = new Fill('transparent')
-    } else {
-      fill = new Fill(parsed.value.serialize('color'))
+      return new Fill(fillColor?.serialize('color'), fillRule?.value)
     }
-  }
-
-  cache.set(input, fill)
-
-  return fill
+    if (isKeywordValue(parsed.value)) {
+      return new Fill('transparent')
+    }
+    return new Fill(parsed.value.serialize('color'))
+  })
 }

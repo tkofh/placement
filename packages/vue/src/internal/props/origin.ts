@@ -1,4 +1,4 @@
-import { type Point, point } from 'placement/point'
+import { type Point, isPoint, point } from 'placement/point'
 import { type ParserInput, type ParserValue, parse } from 'valued'
 import { allOf } from 'valued/combinators/allOf'
 import { juxtapose } from 'valued/combinators/juxtapose'
@@ -40,7 +40,7 @@ const origin = oneOf([
 
 export type Origin = typeof origin
 
-export type OriginInput = ParserInput<Origin>
+export type OriginInput = ParserInput<Origin> | Point | number | undefined
 
 export type OriginValue = ParserValue<Origin>
 
@@ -119,21 +119,29 @@ function normalize(value: OriginValue) {
   return point(x, y)
 }
 
-export function parseOrigin(input: OriginInput): Point {
-  const cached = cache.get(input)
-  if (cached !== undefined) {
-    return cached
+export function resolveOrigin(
+  input: OriginInput,
+  auto: Point = point.zero,
+): Point {
+  if (isPoint(input)) {
+    return input
   }
 
-  const parsed = parse(input, origin)
-
-  let result = point(0.5)
-
-  if (parsed.valid) {
-    result = normalize(parsed.value)
+  if (typeof input === 'number') {
+    return point(input, input)
   }
 
-  cache.set(input, result)
+  if (input === undefined) {
+    return auto
+  }
 
-  return result
+  return cache(`${input.toString()}:${auto.x}:${auto.y}`, () => {
+    const parsed = parse(input, origin)
+
+    if (!parsed.valid) {
+      return auto
+    }
+
+    return normalize(parsed.value)
+  })
 }

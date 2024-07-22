@@ -8,26 +8,31 @@ const aspectRatio = oneOf([ratio(), keyword('auto')])
 
 export type AspectRatio = typeof aspectRatio
 
-export type AspectRatioInput = ParserInput<AspectRatio>
+export type AspectRatioInput = ParserInput<AspectRatio> | number | undefined
 
 const cache = createCache<string, number>(512)
 
-export function parseAspectRatio(input: string): number {
-  const cached = cache.get(input)
-  if (cached !== undefined) {
-    return cached
+export function resolveAspectRatio(
+  input: AspectRatioInput,
+  auto = Number.POSITIVE_INFINITY,
+): number {
+  if (typeof input === 'number' || input === undefined) {
+    return input ?? auto
   }
 
-  const parsed = parse(input, aspectRatio)
-  let value: number = Number.POSITIVE_INFINITY
+  return cache(`${input}:${auto}`, () => {
+    const parsed = parse(input, aspectRatio)
 
-  if (
-    parsed.valid &&
-    isRatioValue(parsed.value) &&
-    !parsed.value.isDegenerate
-  ) {
-    value = parsed.value.value
-  }
+    if (!parsed.valid) {
+      return auto
+    }
 
-  return value
+    const value = parsed.value
+
+    if (isRatioValue(value) && !value.isDegenerate) {
+      return value.value
+    }
+
+    return auto
+  })
 }

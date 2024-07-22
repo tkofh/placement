@@ -37,7 +37,7 @@ const placeParser = oneOf([
 
 export type Place = typeof placeParser
 
-export type PlaceInput = ParserInput<Place>
+export type PlaceInput = ParserInput<Place> | undefined
 
 export interface PlaceValue {
   justifyContent: number
@@ -192,18 +192,18 @@ function toValue(value: ParserValue<typeof placeParser>): PlaceValue {
   }
 }
 
-export function parsePlace(input: string): PlaceValue {
-  const cached = cache.get(input)
-  if (cached !== undefined) {
-    return cached
+export function resolvePlace(input: PlaceInput): PlaceValue {
+  if (input === undefined) {
+    return keywordResults.start
   }
 
-  const value = parse(input, placeParser)
-  let result: PlaceValue = keywordResults.start
-  if (value.valid) {
-    result = toValue(value.value)
-  }
-  cache.set(input, result)
+  return cache(input, () => {
+    const value = parse(input, placeParser)
+    let result: PlaceValue = keywordResults.start
+    if (value.valid) {
+      result = toValue(value.value)
+    }
 
-  return result
+    return result
+  })
 }

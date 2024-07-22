@@ -1,6 +1,4 @@
-import type { Dimensions } from 'placement/dimensions'
-import { type Point, point } from 'placement/point'
-import type { Rect } from 'placement/rect'
+import { type Point, isPoint, point } from 'placement/point'
 import { type ParserInput, parse } from 'valued'
 import { oneOf } from 'valued/combinators/oneOf'
 import { keywords } from 'valued/data/keyword'
@@ -8,7 +6,7 @@ import { lengthPercentage } from 'valued/data/length-percentage'
 import { between } from 'valued/multipliers/between'
 import { createCache } from '../cache'
 import { SIZE_UNITS } from './constants'
-import { toPixels } from './size1d'
+import { resolveSize1D } from './size1d'
 
 const radius = between(
   oneOf([lengthPercentage.subset(SIZE_UNITS), keywords(['auto'])]),
@@ -17,35 +15,49 @@ const radius = between(
 
 export type Radius = typeof radius
 
-export type RadiusInput = ParserInput<Radius>
+export type RadiusInput = ParserInput<Radius> | Point | number | undefined
 
 const cache = createCache<string, Point>(512)
 
-export function parseRadius(
-  input: string,
-  parent: Dimensions | Rect,
-  root: Dimensions | Rect,
+export function resolveRadius(
+  input: RadiusInput,
+  auto: Point,
+  parentWidth: number,
+  parentHeight: number,
+  rootWidth: number,
+  rootHeight: number,
 ): Point {
-  const key = `${input}:${parent.width}:${parent.height}:${root.width}:${root.height}`
-  const cached = cache.get(key)
-  if (cached) {
-    return cached
+  if (typeof input === 'number') {
+    return point(input, input)
   }
 
-  const value = parse(input, radius)
-
-  let x = 0
-  let y = 0
-
-  if (value.valid) {
-    const [rx, ry] = value.value
-
-    x = toPixels(rx, 'width', 0, parent, root)
-    y = ry != null ? toPixels(ry, 'height', 0, parent, root) : x
+  if (isPoint(input)) {
+    return input
   }
 
-  const result = point(x, y)
-  cache.set(key, result)
+  if (input === undefined) {
+    return auto
+  }
 
-  return result
+  return cache(
+    `${input}:${parentWidth}:${parentHeight}:${rootWidth}:${rootHeight}`,
+    () => {
+      const value = parse(input, radius)
+
+      if (!value.valid) {
+        return auto
+      }
+
+      const [rx, ry] = value.value
+
+      const x = resolveSize1D(rx, 0, parentWidth, rootWidth, rootHeight)
+
+      return point(
+        x,
+        ry != null
+          ? resolveSize1D(ry, 0, parentHeight, rootWidth, rootHeight)
+          : x,
+      )
+    },
+  )
 }

@@ -51,6 +51,10 @@ class LRUCache<K, V> {
     return value
   }
 
+  get size(): number {
+    return this.#cache.size
+  }
+
   #addNode(node: Node<K, V>) {
     node.next = this.#head
     node.prev = null
@@ -95,6 +99,18 @@ class LRUCache<K, V> {
   }
 }
 
-export function createCache<K, V>(maxSize: number): LRUCache<K, V> {
-  return new LRUCache(maxSize)
+export type CacheHandler<K, V> = (key: K, value: () => V) => V
+
+export function createCache<K, V>(maxSize: number): CacheHandler<K, V> {
+  const cache = new LRUCache<K, V>(maxSize)
+
+  return (key: K, value: () => V) => {
+    const cached = cache.get(key)
+    if (cached !== undefined) {
+      return cached
+    }
+    const result = value()
+    cache.set(key, result)
+    return result
+  }
 }

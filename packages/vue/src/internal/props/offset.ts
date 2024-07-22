@@ -1,12 +1,11 @@
-import type { Dimensions } from 'placement/dimensions'
 import { type Offset, offset } from 'placement/offset'
-import type { Rect } from 'placement/rect'
+import { type Point, isPoint } from 'placement/point'
 import { type ParserInput, parse } from 'valued'
 import { lengthPercentage } from 'valued/data/length-percentage'
 import { between } from 'valued/multipliers/between'
 import { createCache } from '../cache'
 import { SIZE_UNITS } from './constants'
-import { toPixels } from './size1d'
+import { resolveSize1D } from './size1d'
 
 const offsetParser = between(lengthPercentage.subset(SIZE_UNITS), {
   minLength: 1,
@@ -23,42 +22,58 @@ const positiveOffsetParser = between(
 
 type OffsetParser = typeof offsetParser
 
-export type OffsetInput = ParserInput<OffsetParser>
+export type OffsetInput = ParserInput<OffsetParser> | Point | number | undefined
 
 const cache = createCache<string, Offset>(512)
 
-export function parseOffset(
-  input: string,
+export function resolveOffset(
+  input: OffsetInput,
+  auto: Offset,
   allowNegative: boolean,
-  parent: Dimensions | Rect,
-  root: Dimensions | Rect,
+  parentWidth: number,
+  parentHeight: number,
+  rootWidth: number,
+  rootHeight: number,
 ): Offset {
-  const key = `${input}:${parent.width}:${parent.height}:${root.width}:${root.height}`
-
-  const cached = cache.get(key)
-  if (cached !== undefined) {
-    return cached
+  if (input === undefined) {
+    return auto
   }
 
-  const parsed = parse(
-    input,
-    allowNegative ? offsetParser : positiveOffsetParser,
+  if (typeof input === 'number') {
+    return offset(input)
+  }
+
+  if (isPoint(input)) {
+    return offset.xy(input.x, input.y)
+  }
+
+  return cache(
+    `${input.toString()}:${auto.top}:${auto.right}:${auto.bottom}:${auto.left}:${parentWidth}:${parentHeight}:${rootWidth}:${rootHeight}`,
+    () => {
+      const parsed = parse(
+        input,
+        allowNegative ? offsetParser : positiveOffsetParser,
+      )
+      if (!parsed.valid) {
+        return auto
+      }
+
+      const [a, b, c, d] = parsed.value
+
+      const top = resolveSize1D(a, 0, parentHeight, rootWidth, rootHeight)
+      const right =
+        b !== undefined
+          ? resolveSize1D(b, 0, parentWidth, rootWidth, rootHeight)
+          : top
+      const bottom =
+        c !== undefined
+          ? resolveSize1D(c, 0, parentHeight, rootWidth, rootHeight)
+          : top
+      const left =
+        d !== undefined
+          ? resolveSize1D(d, 0, parentWidth, rootWidth, rootHeight)
+          : right
+      return offset.trbl(top, right, bottom, left)
+    },
   )
-
-  let result = offset.zero
-
-  if (parsed.valid) {
-    const [a, b, c, d] = parsed.value
-
-    const top = toPixels(a, 'height', 0, parent, root)
-    const right = b !== undefined ? toPixels(b, 'width', 0, parent, root) : top
-    const bottom =
-      c !== undefined ? toPixels(c, 'height', 0, parent, root) : top
-    const left = d !== undefined ? toPixels(d, 'width', 0, parent, root) : right
-    result = offset.trbl(top, right, bottom, left)
-  }
-
-  cache.set(key, result)
-
-  return result
 }

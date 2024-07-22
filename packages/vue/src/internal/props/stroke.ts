@@ -1,6 +1,4 @@
-import type { Dimensions } from 'placement/dimensions'
-import type { Rect } from 'placement/rect'
-import { type ParserInput, type ParserValue, parse } from 'valued'
+import { type ParserValue, parse } from 'valued'
 import { juxtapose } from 'valued/combinators/juxtapose'
 import { oneOf } from 'valued/combinators/oneOf'
 import { someOf } from 'valued/combinators/someOf'
@@ -12,7 +10,7 @@ import { oneOrMore } from 'valued/multipliers/oneOrMore'
 import { optional } from 'valued/multipliers/optional'
 import { createCache } from '../cache'
 import { SIZE_UNITS } from './constants'
-import { toPixels } from './size1d'
+import { resolveSize1D } from './size1d'
 
 const strokeParser = someOf([
   color(),
@@ -35,7 +33,7 @@ const strokeParser = someOf([
 
 type StrokeParser = typeof strokeParser
 
-export type StrokeInput = ParserInput<StrokeParser>
+export type StrokeInput = string
 
 type StrokeValue = ParserValue<StrokeParser>
 
@@ -72,8 +70,9 @@ const cache = createCache<string, Stroke>(512)
 
 function normalizeStroke(
   value: StrokeValue,
-  parent: Rect | Dimensions,
-  root: Rect | Dimensions,
+  parentWidth: number,
+  rootWidth: number,
+  rootHeight: number,
 ) {
   let result = Stroke.empty
 
@@ -96,7 +95,9 @@ function normalizeStroke(
 
     result = new Stroke(
       stroke,
-      b ? `${toPixels(b, 'width', 0, parent, root)}px` : undefined,
+      b
+        ? `${resolveSize1D(b, 0, parentWidth, rootWidth, rootHeight)}px`
+        : undefined,
       strokeDasharray,
       strokeDashoffset,
       d?.[0].value,
@@ -108,26 +109,20 @@ function normalizeStroke(
   return result
 }
 
-export function parseStroke(
-  input: string,
-  parent: Rect | Dimensions,
-  root: Rect | Dimensions,
+export function resolveStroke(
+  input: StrokeInput,
+  parentWidth: number,
+  rootWidth: number,
+  rootHeight: number,
 ): Stroke {
-  const key = `${input}:${parent.width}:${parent.height}:${root.width}:${root.height}`
-  const cached = cache.get(key)
-  if (cached !== undefined) {
-    return cached
-  }
+  return cache(`${input}:${parentWidth}:${rootWidth}:${rootHeight}`, () => {
+    const parsed = parse(input, strokeParser)
+    let result = Stroke.empty
 
-  const parsed = parse(input, strokeParser)
+    if (parsed.valid) {
+      result = normalizeStroke(parsed.value, parentWidth, rootWidth, rootHeight)
+    }
 
-  let result = Stroke.empty
-
-  if (parsed.valid) {
-    result = normalizeStroke(parsed.value, parent, root)
-  }
-
-  cache.set(key, result)
-
-  return result
+    return result
+  })
 }

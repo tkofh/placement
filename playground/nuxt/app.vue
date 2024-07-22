@@ -55,10 +55,10 @@ const toggleD = ref(false)
 
 const timeScale = 1
 
-const delayA = 1200 * timeScale
-const delayB = 2020 * timeScale
-const delayC = 3300 * timeScale
-const delayD = 5005 * timeScale
+const delayA = 1101 * timeScale
+const delayB = 2022 * timeScale
+const delayC = 3303 * timeScale
+const delayD = 5055 * timeScale
 
 const { value: valueA } = useSpring(() => (toggleA.value ? 2 : 8), {
   tension: 120,

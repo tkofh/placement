@@ -30,7 +30,7 @@ const alignContentParser = oneOf([
 
 export type AlignContent = typeof alignContentParser
 
-export type AlignContentInput = ParserInput<AlignContent>
+export type AlignContentInput = ParserInput<AlignContent> | number | undefined
 
 export interface AlignContentValue {
   alignContent: number
@@ -128,18 +128,31 @@ function toValue(
   }
 }
 
-export function parseAlignContent(input: AlignContentInput): AlignContentValue {
-  const cached = cache.get(input)
-  if (cached !== undefined) {
-    return cached
+export function resolveAlignContent(
+  input: AlignContentInput,
+  auto = 0,
+): AlignContentValue {
+  if (typeof input === 'number' || input === undefined) {
+    return {
+      alignContent: input ?? auto,
+      alignContentSpace: 0,
+      alignContentSpaceOuter: 0,
+      stretchContent: 0,
+    }
   }
 
-  const value = parse(input, alignContentParser)
-  let result: AlignContentValue = keywordResults.start
-  if (value.valid) {
-    result = toValue(value.value)
-  }
-  cache.set(input, result)
+  return cache(`${input}:${auto}`, () => {
+    const parsed = parse(input, alignContentParser)
 
-  return result
+    if (!parsed.valid) {
+      return {
+        alignContent: auto,
+        alignContentSpace: 0,
+        alignContentSpaceOuter: 0,
+        stretchContent: 0,
+      }
+    }
+
+    return toValue(parsed.value)
+  })
 }

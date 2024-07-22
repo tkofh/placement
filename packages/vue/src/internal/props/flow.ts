@@ -12,16 +12,30 @@ export type Flow = typeof flow
 
 export type FlowInput = ParserInput<Flow>
 
+type Direction = (typeof direction)[keyof typeof direction]
+type Wrap = (typeof wrap)[keyof typeof wrap]
+
 export interface ParsedFlow {
-  readonly direction: (typeof direction)[keyof typeof direction]
-  readonly wrap: (typeof wrap)[keyof typeof wrap]
+  readonly direction: Direction
+  readonly wrap: Wrap
 }
 
-export function parseFlow(input: string): ParsedFlow {
+export function resolveFlow(
+  input: string | undefined,
+  autoDirection: Direction = 0,
+  autoWrap: Wrap = 0,
+): ParsedFlow {
+  if (input == null) {
+    return {
+      direction: autoDirection,
+      wrap: autoWrap,
+    }
+  }
+
   const result = parse(input, flow)
 
-  let directionResult: ParsedFlow['direction'] = direction.row
-  let wrapResult: ParsedFlow['wrap'] = wrap.nowrap
+  let directionResult: Direction = autoDirection
+  let wrapResult: Wrap = autoWrap
 
   if (result.valid) {
     const [directionValue, wrapValue] = result.value

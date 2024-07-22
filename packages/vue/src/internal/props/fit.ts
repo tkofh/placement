@@ -7,8 +7,6 @@ type FitParser = typeof fitParser
 
 export type FitInput = ParserInput<FitParser>
 
-// const cache = new Map<string, ParseResult<FitValue>>()
-
 export const fit = {
   contain: 0,
   cover: 1,
@@ -18,11 +16,10 @@ export const fit = {
 
 export type Fit = (typeof fit)[keyof typeof fit]
 
-export function parseFit(input: string): Fit {
-  // const cached = cache.get(input)
-  // if (cached !== undefined) {
-  //   return cached
-  // }
+export function resolveFit(input: string | undefined, auto: Fit): Fit {
+  if (input === undefined) {
+    return auto
+  }
 
   const parsed = parse(input, fitParser)
 

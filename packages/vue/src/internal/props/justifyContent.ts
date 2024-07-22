@@ -1,4 +1,4 @@
-import { type ParserInput, type ParserValue, parse } from 'valued'
+import { type ParserInput, parse } from 'valued'
 import { juxtapose } from 'valued/combinators/juxtapose'
 import { oneOf } from 'valued/combinators/oneOf'
 import { someOf } from 'valued/combinators/someOf'
@@ -28,7 +28,10 @@ const justifyContentParser = oneOf([
 
 export type JustifyContent = typeof justifyContentParser
 
-export type JustifyContentInput = ParserInput<JustifyContent>
+export type JustifyContentInput =
+  | ParserInput<JustifyContent>
+  | number
+  | undefined
 
 export interface JustifyContentValue {
   justifyContent: number
@@ -78,49 +81,67 @@ function toNormalized(input: NumberValue | PercentageValue): number {
   return input.value / 100
 }
 
-function toValue(
-  value: ParserValue<typeof justifyContentParser>,
-): JustifyContentValue {
-  if (isKeywordValue(value)) {
-    return keywordResults[value.value]
-  }
-
-  const [placeValue, spaceValue] = value
-
-  let place = 0
-  let space = 0
-  let spaceOuter = 0
-
-  if (placeValue !== null) {
-    place = toNormalized(placeValue[0])
-  }
-
-  if (spaceValue !== null) {
-    space = toNormalized(spaceValue[0][0])
-    spaceOuter = spaceValue[0].length === 1 ? 0 : toNormalized(spaceValue[0][1])
-  }
-
-  return {
-    justifyContent: place,
-    justifyContentSpace: space,
-    justifyContentSpaceOuter: spaceOuter,
-  }
-}
-
-export function parseJustifyContent(
+export function resolveJustifyContent(
   input: JustifyContentInput,
+  autoContent = 0,
+  autoContentSpace = 0,
+  autoContentSpaceOuter = 0,
 ): JustifyContentValue {
-  const cached = cache.get(input)
-  if (cached !== undefined) {
-    return cached
+  if (typeof input === 'number') {
+    return {
+      ...keywordResults.start,
+      justifyContent: input,
+    }
   }
 
-  const value = parse(input, justifyContentParser)
-  let result: JustifyContentValue = keywordResults.start
-  if (value.valid) {
-    result = toValue(value.value)
+  if (input === undefined) {
+    return {
+      justifyContent: autoContent,
+      justifyContentSpace: autoContentSpace,
+      justifyContentSpaceOuter: autoContentSpaceOuter,
+    }
   }
-  cache.set(input, result)
 
-  return result
+  return cache(
+    `${input}:${autoContent}:${autoContentSpace}:${autoContentSpaceOuter}`,
+    () => {
+      const parsed = parse(input, justifyContentParser)
+
+      if (!parsed.valid) {
+        return {
+          justifyContent: autoContent,
+          justifyContentSpace: autoContentSpace,
+          justifyContentSpaceOuter: autoContentSpaceOuter,
+        }
+      }
+
+      const value = parsed.value
+
+      if (isKeywordValue(value)) {
+        return keywordResults[value.value]
+      }
+
+      const [placeValue, spaceValue] = value
+
+      let place = 0
+      let space = 0
+      let spaceOuter = 0
+
+      if (placeValue !== null) {
+        place = toNormalized(placeValue[0])
+      }
+
+      if (spaceValue !== null) {
+        space = toNormalized(spaceValue[0][0])
+        spaceOuter =
+          spaceValue[0].length === 1 ? 0 : toNormalized(spaceValue[0][1])
+      }
+
+      return {
+        justifyContent: place,
+        justifyContentSpace: space,
+        justifyContentSpaceOuter: spaceOuter,
+      }
+    },
+  )
 }

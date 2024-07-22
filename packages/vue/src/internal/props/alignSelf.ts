@@ -17,7 +17,7 @@ const alignSelfParser = oneOf([
 
 export type AlignSelf = typeof alignSelfParser
 
-export type AlignSelfInput = ParserInput<AlignSelf>
+export type AlignSelfInput = ParserInput<AlignSelf> | number | undefined
 
 export interface AlignSelfValue {
   align: number
@@ -80,18 +80,26 @@ function toValue(value: ParserValue<typeof alignSelfParser>): AlignSelfValue {
   }
 }
 
-export function parseAlignSelf(input: string): AlignSelfValue {
-  const cached = cache.get(input)
-  if (cached !== undefined) {
-    return cached
+export function resolveAlignSelf(
+  input: AlignSelfInput,
+  auto = Number.POSITIVE_INFINITY,
+): AlignSelfValue {
+  if (typeof input === 'number' || input === undefined) {
+    return {
+      align: input ?? auto,
+      stretchCross: 0,
+    }
   }
 
-  const value = parse(input, alignSelfParser)
-  let result: AlignSelfValue = keywordResults.auto
-  if (value.valid) {
-    result = toValue(value.value)
-  }
-  cache.set(input, result)
+  return cache(`${input}:${auto}`, () => {
+    const parsed = parse(input, alignSelfParser)
+    if (!parsed.valid) {
+      return {
+        align: auto,
+        stretchCross: 0,
+      }
+    }
 
-  return result
+    return toValue(parsed.value)
+  })
 }

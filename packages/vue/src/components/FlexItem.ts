@@ -1,74 +1,67 @@
-import type { Dimensions } from 'placement/dimensions'
 import { frame } from 'placement/frame'
+import { offset } from 'placement/offset'
 import type { Point } from 'placement/point'
 import type { Rect } from 'placement/rect'
-import {
-  type SlotsType,
-  type VNode,
-  computed,
-  defineComponent,
-  toValue,
-} from 'vue'
+import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
 import { useFlexItem } from '../composables/useFlex'
-import { provideParentRect, useParentRect } from '../composables/useParentRect'
-import { type SizeProps, useUnconstrainedSizes } from '../composables/useRect'
-import { useRootRect } from '../composables/useRootRect'
-import { resolveOffset } from '../internal/offset'
+import {
+  type SizeProps,
+  useBasisSize,
+  useMaxSize,
+  useMinSize,
+} from '../composables/useRect'
+import {
+  useParentHeight,
+  useParentRectRegistration,
+  useParentWidth,
+  useRootHeight,
+  useRootWidth,
+} from '../composables/useSizingContext'
 import {
   type AlignSelfInput,
-  type AlignSelfValue,
-  parseAlignSelf,
+  resolveAlignSelf,
 } from '../internal/props/alignSelf'
 import {
   type JustifySelfInput,
-  parseJustifySelf,
+  resolveJustifySelf,
 } from '../internal/props/justifySelf'
-import type { OffsetInput } from '../internal/props/offset'
+import { type OffsetInput, resolveOffset } from '../internal/props/offset'
 
 export interface FlexItemProps extends SizeProps {
-  margin?: OffsetInput | Dimensions | Point | number
+  margin?: OffsetInput | Point | number
   grow?: number
   shrink?: number
   alignSelf?: AlignSelfInput | number
   justifySelf?: JustifySelfInput | number
 }
 
-function resolveAlignSelf(
-  input: AlignSelfInput | number | undefined,
-): AlignSelfValue {
-  return typeof input === 'number'
-    ? {
-        align: input,
-        stretchCross: 0,
-      }
-    : parseAlignSelf(input ?? '')
-}
-
-function resolveJustifySelf(
-  input: JustifySelfInput | number | undefined,
-): number {
-  return typeof input === 'number' ? input : parseJustifySelf(input ?? '')
-}
-
 export const FlexItem = defineComponent(
   (props: FlexItemProps, { slots }) => {
-    const parentRect = useParentRect()
-    const rootRect = useRootRect()
+    const basisSize = useBasisSize(props)
+    const minSize = useMinSize(props)
+    const maxSize = useMaxSize(props)
 
-    const { size, minSize, maxSize } = useUnconstrainedSizes(
-      props,
-      parentRect,
-      rootRect,
-    )
+    const parentWidth = useParentWidth()
+    const parentHeight = useParentHeight()
+    const rootWidth = useRootWidth()
+    const rootHeight = useRootHeight()
 
     const margin = computed(() =>
-      resolveOffset(props.margin, true, toValue(parentRect), toValue(rootRect)),
+      resolveOffset(
+        props.margin,
+        offset.zero,
+        true,
+        parentWidth.value,
+        parentHeight.value,
+        rootWidth.value,
+        rootHeight.value,
+      ),
     )
 
     const self = computed(() =>
       frame({
-        width: size.value.width,
-        height: size.value.height,
+        width: basisSize.value.width,
+        height: basisSize.value.height,
         minWidth: minSize.value.width,
         minHeight: minSize.value.height,
         maxWidth: maxSize.value.width,
@@ -86,7 +79,7 @@ export const FlexItem = defineComponent(
 
     const rect = useFlexItem(self)
 
-    provideParentRect(rect)
+    useParentRectRegistration(rect)
 
     return () => {
       return slots.default?.({ rect: rect.value })

@@ -1,4 +1,4 @@
-import { type ParserInput, type ParserValue, parse } from 'valued'
+import { type ParserInput, parse } from 'valued'
 import { juxtapose } from 'valued/combinators/juxtapose'
 import { oneOf } from 'valued/combinators/oneOf'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
@@ -13,7 +13,7 @@ const justifySelfParser = oneOf([
 
 export type JustifySelf = typeof justifySelfParser
 
-export type JustifySelfInput = ParserInput<JustifySelf>
+export type JustifySelfInput = ParserInput<JustifySelf> | number | undefined
 
 export type JustifySelfValue = number
 
@@ -32,36 +32,37 @@ function toNormalized(input: NumberValue | PercentageValue): number {
   return input.value / 100
 }
 
-function toValue(
-  value: ParserValue<typeof justifySelfParser>,
-): JustifySelfValue {
-  if (isKeywordValue(value)) {
-    return keywordResults[value.value]
+export function resolveJustifySelf(
+  input: JustifySelfInput,
+  auto = Number.POSITIVE_INFINITY,
+): number {
+  if (input === undefined) {
+    return auto
+  }
+  if (typeof input === 'number') {
+    return input
   }
 
-  const [placeValue] = value
+  return cache(`${input}:${auto}`, () => {
+    const parsed = parse(input, justifySelfParser)
+    if (!parsed.valid) {
+      return auto
+    }
 
-  let place = 0
+    const value = parsed.value
 
-  if (placeValue !== null) {
-    place = toNormalized(placeValue)
-  }
+    if (isKeywordValue(value)) {
+      return keywordResults[value.value]
+    }
 
-  return place
-}
+    const [placeValue] = value
 
-export function parseJustifySelf(input: string): JustifySelfValue {
-  const cached = cache.get(input)
-  if (cached !== undefined) {
-    return cached
-  }
+    let place = 0
 
-  const value = parse(input, justifySelfParser)
-  let result: JustifySelfValue = keywordResults.start
-  if (value.valid) {
-    result = toValue(value.value)
-  }
-  cache.set(input, result)
+    if (placeValue !== null) {
+      place = toNormalized(placeValue)
+    }
 
-  return result
+    return place
+  })
 }

@@ -1,23 +1,26 @@
-import type { Point } from 'placement/point'
 import { type Rect, align, contain, cover, rect } from 'placement/rect'
 import { computed, defineComponent, h, shallowRef } from 'vue'
 import { useDomRect } from '../composables/useDomRect'
-import { provideParentRect } from '../composables/useParentRect'
 import {
   ORIGIN_PROP_KEYS,
+  type OriginProps,
   SIZE_PROP_KEYS,
   type SizeProps,
   type TransformProps,
+  useBasisSize,
+  useConstrainedSize,
+  useMaxSize,
+  useMinSize,
   useOrigin,
-  useSize,
   useXYTranslation,
 } from '../composables/useRect'
-import { provideRootRect } from '../composables/useRootRect'
+import { useSizingContextRoot } from '../composables/useSizingContext'
 import type { FitInput } from '../internal/props/fit'
-import type { OriginInput } from '../internal/props/origin'
 
-export interface GraphicRootProps extends SizeProps, TransformProps {
-  origin?: OriginInput | Point | number
+export interface GraphicRootProps
+  extends SizeProps,
+    TransformProps,
+    OriginProps {
   fit?: FitInput
 }
 
@@ -26,12 +29,16 @@ export const GraphicRoot = defineComponent(
     const svg = shallowRef<SVGElement>()
     const domRect = useDomRect(svg)
 
-    const size = useSize(props, domRect, domRect)
+    const basisSize = useBasisSize(props, domRect, domRect)
+    const minSize = useMinSize(props, domRect, domRect)
+    const maxSize = useMaxSize(props, domRect, domRect)
+
+    const size = useConstrainedSize(basisSize, minSize, maxSize)
 
     const rootRect = computed(() => rect.fromDimensions(size.value))
 
     const origin = useOrigin(props)
-    const translation = useXYTranslation(props, domRect)
+    const translation = useXYTranslation(props, domRect, domRect)
 
     const viewBox = computed(() => {
       const fit = props.fit ?? 'crop'
@@ -55,8 +62,7 @@ export const GraphicRoot = defineComponent(
       return `${viewBoxRect.x} ${viewBoxRect.y} ${viewBoxRect.width} ${viewBoxRect.height}`
     })
 
-    provideRootRect(rootRect)
-    provideParentRect(rootRect)
+    useSizingContextRoot(rootRect)
 
     return () => {
       return h(

@@ -29,7 +29,11 @@ const opacityParser = oneOf([
 
 type OpacityParser = typeof opacityParser
 
-export type OpacityInput = ParserInput<OpacityParser>
+export type OpacityInput =
+  | ParserInput<OpacityParser>
+  | number
+  | string
+  | undefined
 
 export class Opacity {
   constructor(
@@ -49,30 +53,37 @@ function toOpacityValue(input: NumberValue | PercentageValue): number {
 }
 
 const cache = createCache<string, Opacity>(512)
-export function parseOpacity(input: string): Opacity {
-  const cached = cache.get(input)
-  if (cached !== undefined) {
-    return cached
+
+export function resolveOpacity(
+  input: OpacityInput,
+  auto: Opacity = Opacity.empty,
+): Opacity {
+  if (typeof input === 'number') {
+    return new Opacity(input, input)
   }
 
-  const parsed = parse(input, opacityParser)
+  if (input === undefined) {
+    return auto
+  }
 
-  let opacity = Opacity.empty
+  return cache(
+    `${input.toString()}:${auto.fillOpacity}:${auto.strokeOpacity}`,
+    () => {
+      const parsed = parse(input, opacityParser)
 
-  if (parsed.valid) {
-    if (Array.isArray(parsed.value)) {
-      const [first, second] = parsed.value
-      opacity = new Opacity(
-        first !== null ? toOpacityValue(first[0]) : undefined,
-        second !== null ? toOpacityValue(second[0]) : undefined,
-      )
-    } else {
+      if (!parsed.valid) {
+        return auto
+      }
+
+      if (Array.isArray(parsed.value)) {
+        const [first, second] = parsed.value
+        return new Opacity(
+          first !== null ? toOpacityValue(first[0]) : undefined,
+          second !== null ? toOpacityValue(second[0]) : undefined,
+        )
+      }
       const value = toOpacityValue(parsed.value)
-      opacity = new Opacity(value, value)
-    }
-  }
-
-  cache.set(input, opacity)
-
-  return opacity
+      return new Opacity(value, value)
+    },
+  )
 }

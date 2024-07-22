@@ -17,7 +17,7 @@ const alignItemsParser = oneOf([
 
 export type AlignItems = typeof alignItemsParser
 
-export type AlignItemsInput = ParserInput<AlignItems>
+export type AlignItemsInput = ParserInput<AlignItems> | number | undefined
 
 export interface AlignItemsValue {
   alignItems: number
@@ -76,18 +76,26 @@ function toValue(value: ParserValue<typeof alignItemsParser>): AlignItemsValue {
   }
 }
 
-export function parseAlignItems(input: AlignItemsInput): AlignItemsValue {
-  const cached = cache.get(input)
-  if (cached !== undefined) {
-    return cached
+export function resolveAlignItems(
+  input: AlignItemsInput,
+  auto = 0,
+): AlignItemsValue {
+  if (typeof input === 'number' || input === undefined) {
+    return {
+      alignItems: input ?? auto,
+      stretchItems: 0,
+    }
   }
 
-  const value = parse(input, alignItemsParser)
-  let result: AlignItemsValue = keywordResults.start
-  if (value.valid) {
-    result = toValue(value.value)
-  }
-  cache.set(input, result)
+  return cache(`${input}:${auto}`, () => {
+    const parsed = parse(input, alignItemsParser)
+    if (!parsed.valid) {
+      return {
+        alignItems: auto,
+        stretchItems: 0,
+      }
+    }
 
-  return result
+    return toValue(parsed.value)
+  })
 }

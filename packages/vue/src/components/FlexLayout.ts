@@ -2,36 +2,40 @@ import type { Dimensions } from 'placement/dimensions'
 import { type Flexbox, flexbox, isFlexbox } from 'placement/flexbox'
 import type { Point } from 'placement/point'
 import type { Rect } from 'placement/rect'
-import {
-  type SlotsType,
-  type VNode,
-  computed,
-  defineComponent,
-  toValue,
-} from 'vue'
+import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
 import { useFlexLayout } from '../composables/useFlex'
-import { provideParentRect, useParentRect } from '../composables/useParentRect'
-import { type RectProps, useRect } from '../composables/useRect'
-import { useRootRect } from '../composables/useRootRect'
+import {
+  INSET_PROP_KEYS,
+  type RectProps,
+  SIZE_PROP_KEYS,
+  useRect,
+} from '../composables/useRect'
+import {
+  useParentHeight,
+  useParentRectRegistration,
+  useParentWidth,
+  useRootHeight,
+  useRootWidth,
+} from '../composables/useSizingContext'
 import {
   type AlignContentInput,
-  parseAlignContent,
+  resolveAlignContent,
 } from '../internal/props/alignContent'
 import {
   type AlignItemsInput,
-  parseAlignItems,
+  resolveAlignItems,
 } from '../internal/props/alignItems'
-import { type FlowInput, parseFlow } from '../internal/props/flow'
-import { type GapInput, parseGap } from '../internal/props/gap'
+import { type FlowInput, resolveFlow } from '../internal/props/flow'
+import { type GapInput, resolveGap } from '../internal/props/gap'
 import {
   type JustifyContentInput,
-  parseJustifyContent,
+  resolveJustifyContent,
 } from '../internal/props/justifyContent'
 import type { OffsetInput } from '../internal/props/offset'
 import {
   type PlaceInput,
   type PlaceValue,
-  parsePlace,
+  resolvePlace,
 } from '../internal/props/place'
 
 export interface FlexLayoutProps extends RectProps {
@@ -47,8 +51,10 @@ export interface FlexLayoutProps extends RectProps {
 
 function resolveFlexbox(
   props: FlexLayoutProps,
-  parent: Dimensions | Rect,
-  root: Dimensions | Rect,
+  parentWidth: number,
+  parentHeight: number,
+  rootWidth: number,
+  rootHeight: number,
 ): Flexbox {
   if (isFlexbox(props.layout)) {
     return props.layout
@@ -59,7 +65,7 @@ function resolveFlexbox(
   const placeValue: Partial<PlaceValue> = {}
 
   if (place !== undefined) {
-    const parsedPlace = parsePlace(place)
+    const parsedPlace = resolvePlace(place)
     placeValue.justifyContent = parsedPlace.justifyContent
     placeValue.justifyContentSpace = parsedPlace.justifyContentSpace
     placeValue.justifyContentSpaceOuter = parsedPlace.justifyContentSpaceOuter
@@ -72,7 +78,7 @@ function resolveFlexbox(
   }
 
   if (alignContent !== undefined) {
-    const parsedAlignContent = parseAlignContent(alignContent)
+    const parsedAlignContent = resolveAlignContent(alignContent)
     placeValue.alignContent = parsedAlignContent.alignContent
     placeValue.alignContentSpace = parsedAlignContent.alignContentSpace
     placeValue.alignContentSpaceOuter =
@@ -81,26 +87,30 @@ function resolveFlexbox(
   }
 
   if (alignItems !== undefined) {
-    const parsedAlignItems = parseAlignItems(alignItems)
+    const parsedAlignItems = resolveAlignItems(alignItems)
     placeValue.alignItems = parsedAlignItems.alignItems
     placeValue.stretchItems = parsedAlignItems.stretchItems
   }
 
   if (justifyContent !== undefined) {
-    const parsedJustifyContent = parseJustifyContent(justifyContent)
+    const parsedJustifyContent = resolveJustifyContent(justifyContent)
     placeValue.justifyContent = parsedJustifyContent.justifyContent
     placeValue.justifyContentSpace = parsedJustifyContent.justifyContentSpace
     placeValue.justifyContentSpaceOuter =
       parsedJustifyContent.justifyContentSpace
   }
 
-  const gapValue =
-    typeof props.gap === 'number'
-      ? { rowGap: props.gap, columnGap: props.gap }
-      : parseGap(props.gap?.toString() ?? '', parent, root)
+  const gapValue = resolveGap(
+    props.gap,
+    0,
+    parentWidth,
+    parentHeight,
+    rootWidth,
+    rootHeight,
+  )
 
   return flexbox({
-    ...parseFlow(props.flow ?? ''),
+    ...resolveFlow(props.flow ?? ''),
     ...gapValue,
     ...placeValue,
   })
@@ -108,15 +118,21 @@ function resolveFlexbox(
 
 export const FlexLayout = defineComponent(
   (props: FlexLayoutProps, { slots, expose }) => {
-    const parentRect = useParentRect()
-    const rootRect = useRootRect()
+    const rect = useRect(props)
 
-    const rect = useRect(props, parentRect, rootRect)
-
-    provideParentRect(rect)
+    const parentWidth = useParentWidth()
+    const parentHeight = useParentHeight()
+    const rootWidth = useRootWidth()
+    const rootHeight = useRootHeight()
 
     const layout = computed(() =>
-      resolveFlexbox(props, toValue(parentRect), toValue(rootRect)),
+      resolveFlexbox(
+        props,
+        parentWidth.value,
+        parentHeight.value,
+        rootWidth.value,
+        rootHeight.value,
+      ),
     )
 
     useFlexLayout(layout, rect)
@@ -125,6 +141,8 @@ export const FlexLayout = defineComponent(
       rect: rect,
     })
 
+    useParentRectRegistration(rect)
+
     return () => {
       return slots.default?.({ rect: rect.value })
     }
@@ -132,27 +150,14 @@ export const FlexLayout = defineComponent(
   {
     name: 'FlexLayout',
     props: [
-      'aspectRatio',
-      'width',
-      'height',
-      'minWidth',
-      'minHeight',
-      'maxWidth',
-      'maxHeight',
-      'minSize',
-      'maxSize',
-      'size',
+      ...SIZE_PROP_KEYS,
+      ...INSET_PROP_KEYS,
       'alignContent',
       'alignItems',
       'flow',
       'gap',
       'justifyContent',
       'place',
-      'inset',
-      'top',
-      'right',
-      'bottom',
-      'left',
     ],
     slots: {} as SlotsType<{
       default: (props: { rect: Rect }) => Array<VNode>

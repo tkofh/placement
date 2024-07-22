@@ -63,7 +63,7 @@
     "@nuxt/schema": "^3.12.4",
     "colorjs.io": "^0.5.2",
     "placement": "workspace:^",
-    "valued": "^0.4.7",
+    "valued": "^0.4.8",
     "vue": "^3.4.33"
   },
   "devDependencies": {
