@@ -4,7 +4,7 @@ import { Pipeable } from './internal/pipeable'
 import { type Interval, isInterval } from './interval'
 import type { Offset } from './offset'
 import { type Point, isPoint } from './point'
-import { normalizeXYWH } from './utils/arguments'
+import { normalizeTRBL, normalizeXYWH } from './utils/arguments'
 import { dual } from './utils/function'
 import { clamp, lerp } from './utils/math'
 import { aspectRatio as getAspectRatio, roundTo } from './utils/math'
@@ -122,6 +122,19 @@ interface RectConstructor {
     (x: Interval, y: Interval, precision?: number): Rect
   }
 
+  trbl: {
+    (all: number): Rect
+    (y: number, x: number): Rect
+    (top: number, x: number, bottom: number): Rect
+    (
+      top: number,
+      right: number,
+      bottom: number,
+      left: number,
+      precision?: number,
+    ): Rect
+  }
+
   zero: Rect
 }
 
@@ -166,6 +179,10 @@ rect.fromInterval = ((a: Interval, b?: Interval | number, c?: number): Rect =>
     (isInterval(b) ? b : a).size,
     c ?? (typeof b === 'number' ? b : PRECISION),
   )) satisfies RectConstructor['fromInterval']
+
+rect.trbl = ((a: number, b?: number, c?: number, d?: number, e?: number) => {
+  return new Rect(...normalizeTRBL(a, b, c, d), e ?? PRECISION)
+}) satisfies RectConstructor['trbl']
 
 rect.zero = new Rect(0, 0, 0, 0, PRECISION)
 

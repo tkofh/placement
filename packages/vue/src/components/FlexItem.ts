@@ -2,6 +2,8 @@ import { frame } from 'placement/frame'
 import { offset } from 'placement/offset'
 import type { Point } from 'placement/point'
 import type { Rect } from 'placement/rect'
+import { parse } from 'valued'
+import { number } from 'valued/data/number'
 import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
 import { useFlexItem } from '../composables/useFlex'
 import {
@@ -29,10 +31,18 @@ import { type OffsetInput, resolveOffset } from '../internal/props/offset'
 
 export interface FlexItemProps extends SizeProps {
   margin?: OffsetInput | Point | number
-  grow?: number
-  shrink?: number
+  grow?: number | `${number}`
+  shrink?: number | `${number}`
   alignSelf?: AlignSelfInput | number
   justifySelf?: JustifySelfInput | number
+}
+
+function resolveNumber(value: number | `${number}` | undefined): number {
+  if (typeof value === 'number') {
+    return value
+  }
+  const parsed = parse(value ?? '', number())
+  return parsed.valid ? parsed.value.value : 0
 }
 
 export const FlexItem = defineComponent(
@@ -66,12 +76,12 @@ export const FlexItem = defineComponent(
         minHeight: minSize.value.height,
         maxWidth: maxSize.value.width,
         maxHeight: maxSize.value.height,
-        offsetTop: margin.value.top,
+        offsetTop: margin.value.bottom,
         offsetRight: margin.value.right,
-        offsetBottom: margin.value.bottom,
+        offsetBottom: margin.value.top,
         offsetLeft: margin.value.left,
-        grow: props.grow,
-        shrink: props.shrink,
+        grow: resolveNumber(props.grow),
+        shrink: resolveNumber(props.shrink),
         justify: resolveJustifySelf(props.justifySelf),
         ...resolveAlignSelf(props.alignSelf),
       }),
@@ -98,6 +108,11 @@ export const FlexItem = defineComponent(
       'minSize',
       'maxSize',
       'size',
+      'alignSelf',
+      'grow',
+      'justifySelf',
+      'margin',
+      'shrink',
     ],
     slots: {} as SlotsType<{
       default: (props: { rect: Rect }) => Array<VNode>

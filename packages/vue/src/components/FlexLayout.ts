@@ -1,9 +1,8 @@
-import type { Dimensions } from 'placement/dimensions'
 import { type Flexbox, flexbox, isFlexbox } from 'placement/flexbox'
-import type { Point } from 'placement/point'
-import type { Rect } from 'placement/rect'
-import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
+import { type Rect, shrinkByOffset } from 'placement/rect'
+import { type SlotsType, type VNode, computed, defineComponent, h } from 'vue'
 import { useFlexLayout } from '../composables/useFlex'
+import { useOffset } from '../composables/useOffset'
 import {
   INSET_PROP_KEYS,
   type RectProps,
@@ -46,7 +45,7 @@ export interface FlexLayoutProps extends RectProps {
   gap?: GapInput | number
   justifyContent?: JustifyContentInput
   place?: PlaceInput
-  gutter?: OffsetInput | Dimensions | Point | number
+  gutter?: OffsetInput
 }
 
 function resolveFlexbox(
@@ -120,6 +119,12 @@ export const FlexLayout = defineComponent(
   (props: FlexLayoutProps, { slots, expose }) => {
     const rect = useRect(props)
 
+    const gutter = useOffset(() => props.gutter)
+
+    const innerRect = computed(() =>
+      rect.value.pipe(shrinkByOffset(gutter.value)),
+    )
+
     const parentWidth = useParentWidth()
     const parentHeight = useParentHeight()
     const rootWidth = useRootWidth()
@@ -135,16 +140,25 @@ export const FlexLayout = defineComponent(
       ),
     )
 
-    useFlexLayout(layout, rect)
+    useFlexLayout(layout, innerRect)
 
     expose({
       rect: rect,
     })
 
-    useParentRectRegistration(rect)
+    useParentRectRegistration(innerRect)
 
     return () => {
-      return slots.default?.({ rect: rect.value })
+      return h(
+        'g',
+        {
+          x: innerRect.value.x,
+          y: innerRect.value.y,
+          width: innerRect.value.width,
+          height: innerRect.value.height,
+        },
+        slots.default?.({ rect: rect.value }),
+      )
     }
   },
   {
@@ -158,6 +172,7 @@ export const FlexLayout = defineComponent(
       'gap',
       'justifyContent',
       'place',
+      'gutter',
     ],
     slots: {} as SlotsType<{
       default: (props: { rect: Rect }) => Array<VNode>

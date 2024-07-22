@@ -87,29 +87,6 @@ export const GraphicCircle = defineComponent(
       () => y.value.start + _ry.value - origin.value.y * y.value.size,
     )
 
-    console.log({
-      basisSize: basisSize.value,
-      minSize: minSize.value,
-      maxSize: maxSize.value,
-      top: top.value,
-      right: right.value,
-      bottom: bottom.value,
-      left: left.value,
-      radius: radius.value,
-      parentX: parentX.value,
-      parentY: parentY.value,
-      parentWidth: parentWidth.value,
-      parentHeight: parentHeight.value,
-      size: size.value,
-      x: x.value,
-      y: y.value,
-      origin: origin.value,
-      _rx: _rx.value,
-      _cx: _cx.value,
-      _ry: _ry.value,
-      _cy: _cy.value,
-    })
-
     const paint = usePaint(props)
 
     return () => {

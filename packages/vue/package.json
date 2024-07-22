@@ -41,6 +41,11 @@
       "import": "./dist/components/GraphicRoot.mjs",
       "types": "./dist/components/GraphicRoot.d.ts"
     },
+    "./GraphicText": {
+      "require": "./dist/components/GraphicText.cjs",
+      "import": "./dist/components/GraphicText.mjs",
+      "types": "./dist/components/GraphicText.d.ts"
+    },
     "./nuxt": {
       "require": "./dist/nuxt.cjs",
       "import": "./dist/nuxt.mjs",

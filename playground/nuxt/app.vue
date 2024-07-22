@@ -1,40 +1,93 @@
 <template>
   <GraphicRoot size="fill" fit="contain" origin="center">
-    <GraphicRect
-      size="fill"
-      fill="color(display-p3 0.012 0.012 0.184 / 0.091)"
-    />
-    <GraphicCircle
-      inset="top 50% left 50%"
-      r="30vmin"
-      fill="none"
-      stroke="color(display-p3 0.008 0.027 0.184 / 0.197) 10px dashed 10 5"
-    />
-    <GraphicCircle
-      inset="top 50% left 50%"
-      r="30vmax"
-      fill="none"
-      stroke="color(display-p3 0.008 0.027 0.184 / 0.197) 10px dashed 10 5"
-    />
-    <template v-for="item of layers" :key="item[0]">
-      <FlexLayout
-        size="fill"
-        :flow="item[0]"
-        justify-content="center"
-        :align-items="`place ${valueC}%`"
-        :gap="`${valueA}vmin`"
-      >
-        <template v-for="i in count" :key="`item-${i}`">
-          <FlexItem
-            :size="
-              item[2] ? `${valueB}vw ${valueD}vh` : `${valueD}vw ${valueB}vh`
-            "
-          >
-            <GraphicRect size="fill" r="1vmin" :fill="item[1]" />
+    <FlexLayout flow="row nowrap" gap="10px" align-items="end" size="fill">
+      <FlexItem height="100%" width="100px">
+        <FlexLayout flow="column-reverse" size="fill">
+          <FlexItem width="100%" height="40px">
+            <GraphicRect size="fill" fill="grey" r="10px" />
+            <GraphicText
+              top="50%"
+              left="50%"
+              origin="center"
+              style="line-height: 1cap"
+              y="-3.5px"
+            >
+              January
+            </GraphicText>
           </FlexItem>
-        </template>
-      </FlexLayout>
-    </template>
+          <FlexItem width="100%" :height="valueA * 50 + valueB * 0.5">
+            <GraphicRect size="fill" fill="blue" />
+          </FlexItem>
+        </FlexLayout>
+      </FlexItem>
+
+      <FlexItem height="100%" width="100px">
+        <FlexLayout flow="column-reverse" size="fill">
+          <FlexItem width="100%" height="40px">
+            <GraphicRect size="fill" fill="grey" r="10px" />
+            <GraphicText
+              top="50%"
+              left="50%"
+              origin="center"
+              style="line-height: 1cap"
+              y="-3.5px"
+            >
+              February
+            </GraphicText>
+          </FlexItem>
+          <FlexItem width="100%" height="500px">
+            <GraphicRect size="fill" fill="blue" />
+          </FlexItem>
+        </FlexLayout>
+      </FlexItem>
+
+      <FlexItem height="100%" width="100px">
+        <FlexLayout flow="column-reverse" size="fill">
+          <FlexItem
+            width="100%"
+            :height="valueB"
+            :margin="`${valueB - 40}px 0% 0%`"
+          >
+            <GraphicRect size="fill" fill="grey" r="10px" />
+            <GraphicText
+              top="50%"
+              left="50%"
+              origin="center"
+              style="line-height: 1cap"
+              y="-3.5px"
+            >
+              March
+            </GraphicText>
+          </FlexItem>
+          <FlexItem width="100%" height="300px">
+            <GraphicRect size="fill" fill="blue" />
+          </FlexItem>
+          <FlexItem width="100%" grow="1">
+            <FlexLayout
+              gutter="10px"
+              size="fill"
+              flow="column nowrap"
+              align-items="center"
+            >
+              <FlexItem width="100%" height="10px">
+                <GraphicRect size="fill" fill="purple" />
+              </FlexItem>
+              <FlexItem width="10px" height="auto" grow="1">
+                <GraphicRect size="fill" fill="purple" />
+              </FlexItem>
+              <FlexItem width="100%" height="10px">
+                <GraphicRect size="fill" fill="purple" />
+              </FlexItem>
+            </FlexLayout>
+            <!--            <FlexLayout flow="column nowrap" inset="10px">-->
+            <!--              <FlexLayout width="100%" height="30px">-->
+            <!--                <GraphicRect size="fill" fill="grey" r="15px" />-->
+            <!--              </FlexLayout>-->
+            <!--            </FlexLayout>-->
+          </FlexItem>
+        </FlexLayout>
+      </FlexItem>
+    </FlexLayout>
   </GraphicRoot>
 </template>
 

@@ -107,8 +107,12 @@ export function resolveInset(
   rootWidth: number,
   rootHeight: number,
 ): Offset {
-  if (typeof input === 'number' || input === undefined) {
-    return offset(input ?? 0)
+  if (input == null) {
+    return auto
+  }
+
+  if (typeof input === 'number') {
+    return offset(input)
   }
 
   if (isOffset(input)) {

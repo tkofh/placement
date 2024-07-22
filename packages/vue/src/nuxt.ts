@@ -3,11 +3,12 @@ import { addComponent, defineNuxtModule } from '@nuxt/kit'
 import type {} from '@nuxt/schema'
 
 const components = [
-  'GraphicRoot',
-  'FlexLayout',
   'FlexItem',
-  'GraphicRect',
+  'FlexLayout',
   'GraphicCircle',
+  'GraphicRect',
+  'GraphicRoot',
+  'GraphicText',
 ]
 // const composables = ['useFrame', 'useRootRect']
 
