@@ -16,7 +16,6 @@ import {
   useRootHeight,
   useRootWidth,
 } from '../composables/useSizingContext'
-import { useGroupRenderer } from '../internal/debug'
 import {
   type AlignContentInput,
   resolveAlignContent,
@@ -37,6 +36,7 @@ import {
   type PlaceValue,
   resolvePlace,
 } from '../internal/props/place'
+import { useGroupRenderer } from '../internal/render'
 import { boolProp } from '../internal/utils'
 
 export interface FlexLayoutProps extends RectProps {

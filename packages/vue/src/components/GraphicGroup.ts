@@ -2,7 +2,7 @@ import type { Rect } from 'placement/rect'
 import { type SlotsType, type VNode, defineComponent } from 'vue'
 import { RECT_PROP_KEYS, type RectProps, useRect } from '../composables/useRect'
 import { useParentRectRegistration } from '../composables/useSizingContext'
-import { useGroupRenderer } from '../internal/debug'
+import { useGroupRenderer } from '../internal/render'
 import { boolProp } from '../internal/utils'
 
 export interface GraphicRectProps extends RectProps {
@@ -20,6 +20,7 @@ export const GraphicGroup = defineComponent(
   {
     name: 'GraphicGroup',
     props: [...RECT_PROP_KEYS, 'debug'],
+    inheritAttrs: false,
     slots: {} as SlotsType<{
       default: (props: { rect: Rect }) => Array<VNode>
     }>,

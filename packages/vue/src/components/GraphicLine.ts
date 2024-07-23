@@ -11,7 +11,7 @@ import { useParentX, useParentY } from '../composables/useSizingContext'
 interface GraphicLineProps extends StrokeProps {}
 
 export const GraphicLine = defineComponent(
-  (props: GraphicLineProps, { slots }) => {
+  (props: GraphicLineProps, { slots, attrs }) => {
     const points = usePointList()
 
     const parentX = useParentX()
@@ -36,6 +36,7 @@ export const GraphicLine = defineComponent(
           y1: start.value.y,
           x2: end.value.x,
           y2: end.value.y,
+          ...attrs,
           ...paint.value,
         }),
       ])
@@ -44,5 +45,6 @@ export const GraphicLine = defineComponent(
   {
     name: 'GraphicLine',
     props: [...STROKE_PROP_KEYS],
+    inheritAttrs: false,
   },
 )

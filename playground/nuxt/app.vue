@@ -1,5 +1,5 @@
 <template>
-  <GraphicRoot size="fill" fit="contain" origin="center">
+  <GraphicRoot size="fill" fit="contain" origin="center" debug-groups>
     <!--    <FlexLayout flow="row nowrap" gap="10px" align-items="end" size="fill">-->
     <!--      <FlexItem height="100%" width="100px">-->
     <!--        <FlexLayout flow="column-reverse" size="fill">-->
@@ -99,17 +99,11 @@
     <!--      </FlexItem>-->
     <!--    </FlexLayout>-->
 
-    <GraphicGroup bottom="50" left="50">
-      <FlexLayout flow="column" gutter="20px 0" justify-content="space-between">
-        <template v-for="i in 10" :key="i">
-          <FlexItem size="100% 20px">
-            <GraphicLine stroke="1px solid black">
-              <GraphicPoint x="0" y="50%" />
-              <GraphicPoint x="100%" y="50%" />
-            </GraphicLine>
-          </FlexItem>
-        </template>
-      </FlexLayout>
+    <GraphicGroup>
+      <GraphicLine class="foo">
+        <GraphicPoint x="0" y="0" />
+        <GraphicPoint x="0" y="100" />
+      </GraphicLine>
     </GraphicGroup>
   </GraphicRoot>
 </template>
@@ -163,6 +157,8 @@ const { value: valueD } = useSpring(() => (toggleD.value ? 6 : 8), {
   mass: 1.5,
   precision: 8,
 })
+
+const show = ref(false)
 
 onMounted(() => {
   let mounted = false

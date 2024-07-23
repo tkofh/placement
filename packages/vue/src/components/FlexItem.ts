@@ -7,6 +7,7 @@ import { number } from 'valued/data/number'
 import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
 import { useFlexItem } from '../composables/useFlex'
 import {
+  SIZE_PROP_KEYS,
   type SizeProps,
   useBasisSize,
   useMaxSize,
@@ -28,6 +29,8 @@ import {
   resolveJustifySelf,
 } from '../internal/props/justifySelf'
 import { type OffsetInput, resolveOffset } from '../internal/props/offset'
+import { useGroupRenderer } from '../internal/render'
+import { boolProp } from '../internal/utils'
 
 export interface FlexItemProps extends SizeProps {
   margin?: OffsetInput | Point | number
@@ -35,6 +38,7 @@ export interface FlexItemProps extends SizeProps {
   shrink?: number | `${number}`
   alignSelf?: AlignSelfInput | number
   justifySelf?: JustifySelfInput | number
+  debug?: boolean
 }
 
 function resolveNumber(value: number | `${number}` | undefined): number {
@@ -46,7 +50,7 @@ function resolveNumber(value: number | `${number}` | undefined): number {
 }
 
 export const FlexItem = defineComponent(
-  (props: FlexItemProps, { slots }) => {
+  (props: FlexItemProps) => {
     const basisSize = useBasisSize(props)
     const minSize = useMinSize(props)
     const maxSize = useMaxSize(props)
@@ -91,29 +95,20 @@ export const FlexItem = defineComponent(
 
     useParentRectRegistration(rect)
 
-    return () => {
-      return slots.default?.({ rect: rect.value })
-    }
+    return useGroupRenderer(rect, () => boolProp(props.debug))
   },
   {
     name: 'FlexItem',
     props: [
-      'aspectRatio',
-      'width',
-      'height',
-      'minWidth',
-      'minHeight',
-      'maxWidth',
-      'maxHeight',
-      'minSize',
-      'maxSize',
-      'size',
-      'alignSelf',
-      'grow',
-      'justifySelf',
+      ...SIZE_PROP_KEYS,
       'margin',
+      'grow',
       'shrink',
+      'alignSelf',
+      'justifySelf',
+      'debug',
     ],
+    inheritAttrs: false,
     slots: {} as SlotsType<{
       default: (props: { rect: Rect }) => Array<VNode>
     }>,
