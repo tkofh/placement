@@ -17,18 +17,27 @@ export interface RectGetters {
   readonly height: RectComponentGetter
 }
 
-const ROOT_RECT_X: InjectionKey<RectComponentGetter> = Symbol('root/x')
-const ROOT_RECT_Y: InjectionKey<RectComponentGetter> = Symbol('root/y')
-const ROOT_RECT_WIDTH: InjectionKey<RectComponentGetter> = Symbol('root/width')
-const ROOT_RECT_HEIGHT: InjectionKey<RectComponentGetter> =
-  Symbol('root/height')
+const ROOT_RECT_X: InjectionKey<RectComponentGetter> =
+  Symbol.for('placement/root/x')
+const ROOT_RECT_Y: InjectionKey<RectComponentGetter> =
+  Symbol.for('placement/root/y')
+const ROOT_RECT_WIDTH: InjectionKey<RectComponentGetter> = Symbol.for(
+  'placement/root/width',
+)
+const ROOT_RECT_HEIGHT: InjectionKey<RectComponentGetter> = Symbol.for(
+  'placement/root/height',
+)
 
-const PARENT_RECT_X: InjectionKey<RectComponentGetter> = Symbol('parent/x')
-const PARENT_RECT_Y: InjectionKey<RectComponentGetter> = Symbol('parent/y')
-const PARENT_RECT_WIDTH: InjectionKey<RectComponentGetter> =
-  Symbol('parent/width')
-const PARENT_RECT_HEIGHT: InjectionKey<RectComponentGetter> =
-  Symbol('parent/height')
+const PARENT_RECT_X: InjectionKey<RectComponentGetter> =
+  Symbol.for('placement/parent/x')
+const PARENT_RECT_Y: InjectionKey<RectComponentGetter> =
+  Symbol.for('placement/parent/y')
+const PARENT_RECT_WIDTH: InjectionKey<RectComponentGetter> = Symbol.for(
+  'placement/parent/width',
+)
+const PARENT_RECT_HEIGHT: InjectionKey<RectComponentGetter> = Symbol.for(
+  'placement/parent/height',
+)
 
 class RectGetterStorage {
   private _x?: ComputedRef<number>
@@ -80,6 +89,11 @@ function useRectGetters(rect: MaybeRefOrGetter<Rect>): RectGetters {
 
 export function useSizingContextRoot(root: MaybeRefOrGetter<Rect>) {
   const { x, y, width, height } = useRectGetters(root)
+
+  x()
+  y()
+  width()
+  height()
 
   provide(ROOT_RECT_X, x)
   provide(ROOT_RECT_Y, y)

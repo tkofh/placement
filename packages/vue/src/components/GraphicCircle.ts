@@ -58,7 +58,6 @@ export const GraphicCircle = defineComponent(
       () => size.value.width,
       parentX,
       parentWidth,
-      0,
       () => minSize.value.width,
       () => maxSize.value.width,
     )
@@ -69,7 +68,6 @@ export const GraphicCircle = defineComponent(
       () => size.value.height,
       parentY,
       parentHeight,
-      0,
       () => minSize.value.height,
       () => maxSize.value.height,
     )

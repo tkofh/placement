@@ -206,7 +206,7 @@ export function useBasisSize(
       parentHeight.value,
       rootWidth.value,
       rootHeight.value,
-      0,
+      Number.POSITIVE_INFINITY,
       size,
       width,
       height,
@@ -392,7 +392,6 @@ export function useAxisInterval(
   size: MaybeRefOrGetter<number>,
   parentStart: MaybeRefOrGetter<number>,
   parentSize: MaybeRefOrGetter<number>,
-  defaultSize: MaybeRefOrGetter<number>,
   minSize: MaybeRefOrGetter<number>,
   maxSize: MaybeRefOrGetter<number>,
 ) {
@@ -401,32 +400,37 @@ export function useAxisInterval(
     const endValue = toValue(end)
     const sizeValue = toValue(size)
 
+    const parentStartValue = toValue(parentStart)
+    const parentSizeValue = toValue(parentSize)
+
     const startIsFinite = Number.isFinite(startValue)
     const sizeIsFinite = Number.isFinite(sizeValue)
+    const endIsFinite = Number.isFinite(endValue)
 
-    let resultStart = toValue(parentStart)
-    let resultSize = sizeValue
+    let resultStart: number = parentStartValue
+    let resultSize: number = sizeValue
 
-    if (startIsFinite && sizeIsFinite) {
+    if (startIsFinite) {
       resultStart += startValue
-    } else {
-      const endIsFinite = Number.isFinite(endValue)
+    } else if (sizeIsFinite && endIsFinite) {
+      resultStart += parentSizeValue - sizeValue - endValue
+    }
 
-      if (endIsFinite && sizeIsFinite) {
-        resultStart += toValue(parentSize) - endValue - sizeValue
-      } else if (startIsFinite && endIsFinite) {
-        resultStart += startValue
-        resultSize = toValue(parentSize) - startValue - endValue
+    if (!sizeIsFinite) {
+      resultSize = parentSizeValue
+
+      if (startIsFinite) {
+        resultSize -= startValue
+      }
+
+      if (endIsFinite) {
+        resultSize -= endValue
       }
     }
 
     return interval(
       resultStart,
-      clamp(
-        auto(resultSize, toValue(defaultSize)),
-        toValue(minSize),
-        toValue(maxSize),
-      ),
+      clamp(resultSize, toValue(minSize), toValue(maxSize)),
     )
   })
 }
@@ -513,7 +517,6 @@ export function useRect(props: RectProps): ComputedRef<Rect> {
     () => basisSize.value.width,
     parentX,
     parentWidth,
-    0,
     () => minSize.value.width,
     () => maxSize.value.width,
   )
@@ -524,7 +527,6 @@ export function useRect(props: RectProps): ComputedRef<Rect> {
     () => basisSize.value.height,
     parentY,
     parentHeight,
-    0,
     () => minSize.value.height,
     () => maxSize.value.height,
   )

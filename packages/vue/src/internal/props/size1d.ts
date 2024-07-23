@@ -2,10 +2,15 @@ import { type ParserInput, type ParserValue, parse } from 'valued'
 import { oneOf } from 'valued/combinators/oneOf'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { lengthPercentage } from 'valued/data/length-percentage'
+import { isNumberValue, number } from 'valued/data/number'
 import { createCache } from '../cache'
 import { SIZE_UNITS } from './constants'
 
-const size1d = oneOf([lengthPercentage.subset(SIZE_UNITS), keywords(['auto'])])
+const size1d = oneOf([
+  lengthPercentage.subset(SIZE_UNITS),
+  number({ min: 0 }),
+  keywords(['auto']),
+])
 
 export type Size1D = typeof size1d
 
@@ -37,6 +42,10 @@ export function normalizeSize1DValue(
         return auto
       }
 
+      if (isNumberValue(value)) {
+        return value.value
+      }
+
       switch (value.unit) {
         case 'px':
           return value.value
@@ -54,50 +63,6 @@ export function normalizeSize1DValue(
     },
   )
 }
-
-// export function toPixels(
-//   value: Size1DValue,
-//   basis: 'width' | 'height',
-//   auto: number,
-//   parentWidth: number,
-//   parentHeight: number,
-//   rootWidth: number,
-//   rootHeight: number,
-// ): number {
-//   if (isKeywordValue(value)) {
-//     return auto
-//   }
-//
-//   const normalized = value.value / 100
-//
-//   switch (value.unit) {
-//     case '%':
-//       return basis === 'width'
-//         ? parentWidth * normalized
-//         : parentHeight * normalized
-//     case 'px':
-//       return value.value
-//     case 'vw':
-//       return rootWidth * normalized
-//     case 'vh':
-//       return rootHeight * normalized
-//     case 'vmin':
-//       return Math.min(rootWidth, rootHeight) * normalized
-//     case 'vmax':
-//       return Math.max(rootWidth, rootHeight) * normalized
-//     // case 'cqw':
-//     //   return parentWidth * normalized
-//     // case 'cqh':
-//     //   return parentHeight * normalized
-//     // case 'cqmin':
-//     //   return Math.min(parentWidth, parentHeight) * normalized
-//     // case 'cqmax':
-//     //   return Math.max(parentWidth, parentHeight) * normalized
-//   }
-// }
-//
-// export const BASIS_WIDTH = 0
-// export const BASIS_HEIGHT = 1
 
 export function resolveSize1D(
   input: Size1DInput,
@@ -123,38 +88,3 @@ export function resolveSize1D(
 
   return normalizeSize1DValue(parsed, auto, percentBasis, rootWidth, rootHeight)
 }
-//
-// export function parseSize1D(
-//   input: string,
-//   basis: typeof BASIS_WIDTH | typeof BASIS_HEIGHT,
-//   auto: number,
-//   parentWidth: number,
-//   parentHeight: number,
-//   rootWidth: number,
-//   rootHeight: number,
-// ): number {
-//   const key = `${input}:${basis}:${auto}:${parentWidth}:${parentHeight}:${rootWidth}:${rootHeight}`
-//   const cached = cache.get(key)
-//   if (cached !== undefined) {
-//     return cached
-//   }
-//
-//   const parsed = parse(input, size1d)
-//   let value: number = Number.POSITIVE_INFINITY
-//
-//   if (parsed.valid) {
-//     value = toPixels(
-//       parsed.value,
-//       basis,
-//       auto,
-//       parentWidth,
-//       parentHeight,
-//       rootWidth,
-//       rootHeight,
-//     )
-//   }
-//
-//   cache.set(key, value)
-//
-//   return value
-// }

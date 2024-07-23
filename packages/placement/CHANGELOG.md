@@ -1,5 +1,17 @@
 # placement
 
+## 0.3.1
+
+### Patch Changes
+
+- fix sizing issues
+
+## 0.3.0
+
+### Minor Changes
+
+- 47c28ef: overhaul everything, new functional api, new components
+
 ## 0.2.0
 
 ### Minor Changes

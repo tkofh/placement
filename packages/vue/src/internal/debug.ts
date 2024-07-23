@@ -28,8 +28,8 @@ export function useGroupRenderer(
   const slots = useSlots()
 
   return () => {
+    const rectValue = toValue(rect)
     if (shouldRender.value) {
-      const rectValue = toValue(rect)
       const { x, y, width, height } = rectValue
       return h(
         'g',
@@ -43,7 +43,7 @@ export function useGroupRenderer(
       )
     }
 
-    return slots[slot]?.()
+    return slots[slot]?.({ rect: rectValue })
   }
 }
 

@@ -45,7 +45,6 @@ export const GraphicText = defineComponent(
       parentX,
       parentWidth,
       0,
-      0,
       Number.POSITIVE_INFINITY,
     )
 
@@ -55,7 +54,6 @@ export const GraphicText = defineComponent(
       () => domRect.value.height,
       parentY,
       parentHeight,
-      0,
       0,
       Number.POSITIVE_INFINITY,
     )

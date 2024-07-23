@@ -3,13 +3,18 @@ import { type ParserInput, parse } from 'valued'
 import { oneOf } from 'valued/combinators/oneOf'
 import { keywords } from 'valued/data/keyword'
 import { lengthPercentage } from 'valued/data/length-percentage'
+import { number } from 'valued/data/number'
 import { between } from 'valued/multipliers/between'
 import { createCache } from '../cache'
 import { SIZE_UNITS } from './constants'
 import { resolveSize1D } from './size1d'
 
 const radius = between(
-  oneOf([lengthPercentage.subset(SIZE_UNITS), keywords(['auto'])]),
+  oneOf([
+    lengthPercentage.subset(SIZE_UNITS),
+    number({ min: 0 }),
+    keywords(['auto']),
+  ]),
   { minLength: 1, maxLength: 2 },
 )
 

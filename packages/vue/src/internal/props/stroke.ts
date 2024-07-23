@@ -88,7 +88,7 @@ function normalizeStroke(
       strokeDashoffset = dashOffset?.[0].value.toString()
       strokeDasharray = ''
       for (const value of dashArray) {
-        strokeDasharray += ` ${value.value.toString()}`
+        strokeDasharray += ` ${Math.abs(value.value).toString()}`
       }
       strokeDasharray = strokeDasharray.slice(1)
     }

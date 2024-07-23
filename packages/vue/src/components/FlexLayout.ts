@@ -99,7 +99,7 @@ function resolveFlexbox(
     placeValue.justifyContent = parsedJustifyContent.justifyContent
     placeValue.justifyContentSpace = parsedJustifyContent.justifyContentSpace
     placeValue.justifyContentSpaceOuter =
-      parsedJustifyContent.justifyContentSpace
+      parsedJustifyContent.justifyContentSpaceOuter
   }
 
   const gapValue = resolveGap(
@@ -147,6 +147,7 @@ export const FlexLayout = defineComponent(
 
     expose({
       rect: innerRect,
+      layout,
     })
 
     useParentRectRegistration(innerRect)
@@ -166,6 +167,7 @@ export const FlexLayout = defineComponent(
       'place',
       'gutter',
       'debug',
+      'layout',
     ],
     slots: {} as SlotsType<{
       default: (props: { rect: Rect }) => Array<VNode>

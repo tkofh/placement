@@ -1,6 +1,6 @@
 {
   "name": "placement",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "description": "Layout algorithms",
   "author": "Tim Morris <timthewebguy@gmail.com>",
   "homepage": "https://github.com/tkofh/placement#readme",
