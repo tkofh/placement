@@ -11,7 +11,7 @@ import { resolveSize1D } from './size1d'
 
 const radius = between(
   oneOf([
-    lengthPercentage.subset(SIZE_UNITS),
+    lengthPercentage.subset(SIZE_UNITS, { minValue: 0 }),
     number({ min: 0 }),
     keywords(['auto']),
   ]),

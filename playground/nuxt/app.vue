@@ -99,13 +99,18 @@
     <!--      </FlexItem>-->
     <!--    </FlexLayout>-->
 
-    <GraphicRect
-      top="20px"
-      height="20px"
-      left="20px"
-      right="20px"
-      fill="black"
-    />
+    <GraphicGroup bottom="50" left="50">
+      <FlexLayout flow="column" gutter="20px 0" justify-content="space-between">
+        <template v-for="i in 10" :key="i">
+          <FlexItem size="100% 20px">
+            <GraphicLine stroke="1px solid black">
+              <GraphicPoint x="0" y="50%" />
+              <GraphicPoint x="100%" y="50%" />
+            </GraphicLine>
+          </FlexItem>
+        </template>
+      </FlexLayout>
+    </GraphicGroup>
   </GraphicRoot>
 </template>
 

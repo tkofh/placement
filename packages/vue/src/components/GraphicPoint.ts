@@ -58,8 +58,8 @@ export const GraphicPoint = defineComponent(
     )
 
     usePoint(() => {
-      const x = auto(left.value, parentHeight.value - right.value, 0)
-      const y = auto(top.value, parentWidth.value - bottom.value, 0)
+      const x = auto(left.value, parentWidth.value - right.value, 0)
+      const y = auto(top.value, parentHeight.value - bottom.value, 0)
 
       return point(
         x + offsetX.value + translateX.value,

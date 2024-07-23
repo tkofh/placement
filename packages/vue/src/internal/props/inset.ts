@@ -9,24 +9,25 @@ import {
   type LengthPercentageValue,
   lengthPercentage,
 } from 'valued/data/length-percentage'
+import { number } from 'valued/data/number'
 import { between } from 'valued/multipliers/between'
 import { createCache } from '../cache'
 import { SIZE_UNITS } from './constants'
 import { resolveSize1D } from './size1d'
 
 const inset = oneOf([
-  between(lengthPercentage.subset(SIZE_UNITS), {
+  between(oneOf([lengthPercentage.subset(SIZE_UNITS), number()]), {
     minLength: 1,
     maxLength: 4,
   }),
   allOf([
     juxtapose([
       keywords(['top', 'bottom']),
-      lengthPercentage.subset(SIZE_UNITS),
+      oneOf([lengthPercentage.subset(SIZE_UNITS), number()]),
     ]),
     juxtapose([
       keywords(['left', 'right']),
-      lengthPercentage.subset(SIZE_UNITS),
+      oneOf([lengthPercentage.subset(SIZE_UNITS), number()]),
     ]),
   ]),
 ])

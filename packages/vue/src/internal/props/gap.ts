@@ -1,11 +1,13 @@
 import { type ParserInput, parse } from 'valued'
+import { oneOf } from 'valued/combinators/oneOf'
 import { lengthPercentage } from 'valued/data/length-percentage'
+import { number } from 'valued/data/number'
 import { between } from 'valued/multipliers/between'
 import { createCache } from '../cache'
 import { SIZE_UNITS } from './constants'
 import { resolveSize1D } from './size1d'
 
-const gap = between(lengthPercentage.subset(SIZE_UNITS), {
+const gap = between(oneOf([lengthPercentage.subset(SIZE_UNITS), number()]), {
   minLength: 1,
   maxLength: 2,
 })

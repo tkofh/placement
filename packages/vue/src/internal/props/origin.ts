@@ -11,7 +11,7 @@ import { createCache } from '../cache'
 const origin = oneOf([
   keywords(['top', 'right', 'bottom', 'left', 'center']),
   percentage(),
-  number({ min: 0, max: 1 }),
+  number(),
   allOf([
     keywords(['left', 'center', 'right']),
     keywords(['top', 'center', 'bottom']),
@@ -19,22 +19,16 @@ const origin = oneOf([
   juxtapose([
     oneOf([
       keywords(['left', 'center', 'right']),
-      oneOf([percentage(), number({ min: 0, max: 1 })]),
+      oneOf([percentage(), number()]),
     ]),
     oneOf([
       keywords(['top', 'center', 'bottom']),
-      oneOf([percentage(), number({ min: 0, max: 1 })]),
+      oneOf([percentage(), number()]),
     ]),
   ]),
   allOf([
-    juxtapose([
-      keywords(['left', 'right']),
-      oneOf([percentage(), number({ min: 0, max: 1 })]),
-    ]),
-    juxtapose([
-      keywords(['top', 'bottom']),
-      oneOf([percentage(), number({ min: 0, max: 1 })]),
-    ]),
+    juxtapose([keywords(['left', 'right']), oneOf([percentage(), number()])]),
+    juxtapose([keywords(['top', 'bottom']), oneOf([percentage(), number()])]),
   ]),
 ])
 

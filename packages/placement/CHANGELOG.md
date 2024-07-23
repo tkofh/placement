@@ -1,5 +1,17 @@
 # placement
 
+## 0.3.3
+
+### Patch Changes
+
+- fix point bugs, loosen props
+
+## 0.3.2
+
+### Patch Changes
+
+- fix some bugs
+
 ## 0.3.1
 
 ### Patch Changes

@@ -1,19 +1,27 @@
 import { type Offset, offset } from 'placement/offset'
 import { type Point, isPoint } from 'placement/point'
 import { type ParserInput, parse } from 'valued'
+import { oneOf } from 'valued/combinators/oneOf'
 import { lengthPercentage } from 'valued/data/length-percentage'
+import { number } from 'valued/data/number'
 import { between } from 'valued/multipliers/between'
 import { createCache } from '../cache'
 import { SIZE_UNITS } from './constants'
 import { resolveSize1D } from './size1d'
 
-const offsetParser = between(lengthPercentage.subset(SIZE_UNITS), {
-  minLength: 1,
-  maxLength: 4,
-})
+const offsetParser = between(
+  oneOf([lengthPercentage.subset(SIZE_UNITS), number()]),
+  {
+    minLength: 1,
+    maxLength: 4,
+  },
+)
 
 const positiveOffsetParser = between(
-  lengthPercentage.subset(SIZE_UNITS, { minValue: 0 }),
+  oneOf([
+    lengthPercentage.subset(SIZE_UNITS, { minValue: 0 }),
+    number({ min: 0 }),
+  ]),
   {
     minLength: 1,
     maxLength: 4,
