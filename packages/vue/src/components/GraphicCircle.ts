@@ -16,10 +16,8 @@ import {
   type RectProps,
   useAxisInterval,
   useBasisSize,
-  useInset,
   useMaxSize,
   useMinSize,
-  useOrigin,
 } from '../composables/useRect'
 import {
   useParentHeight,
@@ -27,6 +25,8 @@ import {
   useParentX,
   useParentY,
 } from '../composables/useSizingContext'
+import { useLengthPercentage } from '../props/lengthPercentage'
+import { useOrigin } from '../props/origin'
 
 export interface GraphicCircleProps
   extends PaintProps,
@@ -38,7 +38,28 @@ export const GraphicCircle = defineComponent(
     const basisSize = useBasisSize(props)
     const minSize = useMinSize(props)
     const maxSize = useMaxSize(props)
-    const { top, right, bottom, left } = useInset(props)
+
+    const top = useLengthPercentage(
+      () => props.top,
+      Number.POSITIVE_INFINITY,
+      'height',
+    )
+    const right = useLengthPercentage(
+      () => props.right,
+      Number.POSITIVE_INFINITY,
+      'width',
+    )
+    const bottom = useLengthPercentage(
+      () => props.bottom,
+      Number.POSITIVE_INFINITY,
+      'height',
+    )
+    const left = useLengthPercentage(
+      () => props.left,
+      Number.POSITIVE_INFINITY,
+      'width',
+    )
+
     const radius = useRadius(props, point.infinity)
 
     const parentX = useParentX()
@@ -72,8 +93,9 @@ export const GraphicCircle = defineComponent(
       () => maxSize.value.height,
     )
 
-    const origin = useOrigin(props, () =>
-      radius.value === point.infinity ? 0 : 0.5,
+    const origin = useOrigin(
+      () => props.origin,
+      () => (radius.value === point.infinity ? point.zero : point.half),
     )
 
     const _rx = computed(() => x.value.size * 0.5)

@@ -32,11 +32,9 @@ export function normalizeSize1DValue(
   value: Size1DValue,
   auto: number,
   percentBasis: number,
-  rootWidth: number,
-  rootHeight: number,
 ): number {
   return normalizationCache(
-    `${auto}:${percentBasis}:${rootWidth}:${rootHeight}:${value.toString()}`,
+    `${auto}:${percentBasis}:${value.toString()}`,
     () => {
       if (value === null || isKeywordValue(value)) {
         return auto
@@ -51,14 +49,6 @@ export function normalizeSize1DValue(
           return value.value
         case '%':
           return percentBasis * value.value * 0.01
-        case 'vw':
-          return rootWidth * value.value * 0.01
-        case 'vh':
-          return rootHeight * value.value * 0.01
-        case 'vmin':
-          return Math.min(rootWidth, rootHeight) * value.value * 0.01
-        case 'vmax':
-          return Math.max(rootWidth, rootHeight) * value.value * 0.01
       }
     },
   )
@@ -68,8 +58,6 @@ export function resolveSize1D(
   input: Size1DInput,
   auto: number,
   percentBasis: number,
-  rootWidth: number,
-  rootHeight: number,
 ) {
   if (typeof input === 'number') {
     return input
@@ -86,5 +74,5 @@ export function resolveSize1D(
     return auto
   }
 
-  return normalizeSize1DValue(parsed, auto, percentBasis, rootWidth, rootHeight)
+  return normalizeSize1DValue(parsed, auto, percentBasis)
 }

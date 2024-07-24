@@ -68,12 +68,7 @@ export class Stroke {
 
 const cache = createCache<string, Stroke>(512)
 
-function normalizeStroke(
-  value: StrokeValue,
-  parentWidth: number,
-  rootWidth: number,
-  rootHeight: number,
-) {
+function normalizeStroke(value: StrokeValue, parentWidth: number) {
   let result = Stroke.empty
 
   const [a, b, c, d, e] = value
@@ -95,9 +90,7 @@ function normalizeStroke(
 
     result = new Stroke(
       stroke,
-      b
-        ? `${resolveSize1D(b, 0, parentWidth, rootWidth, rootHeight)}px`
-        : undefined,
+      b ? `${resolveSize1D(b, 0, parentWidth)}px` : undefined,
       strokeDasharray,
       strokeDashoffset,
       d?.[0].value,
@@ -109,18 +102,13 @@ function normalizeStroke(
   return result
 }
 
-export function resolveStroke(
-  input: StrokeInput,
-  parentWidth: number,
-  rootWidth: number,
-  rootHeight: number,
-): Stroke {
-  return cache(`${input}:${parentWidth}:${rootWidth}:${rootHeight}`, () => {
+export function resolveStroke(input: StrokeInput, parentWidth: number): Stroke {
+  return cache(`${input}:${parentWidth}`, () => {
     const parsed = parse(input, strokeParser)
     let result = Stroke.empty
 
     if (parsed.valid) {
-      result = normalizeStroke(parsed.value, parentWidth, rootWidth, rootHeight)
+      result = normalizeStroke(parsed.value, parentWidth)
     }
 
     return result

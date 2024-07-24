@@ -93,6 +93,8 @@ type PointConstructor = {
   (x: number, y?: number, precision?: number): Point
 
   readonly zero: Point
+  readonly half: Point
+  readonly one: Point
   readonly infinity: Point
 }
 
@@ -100,6 +102,8 @@ const point = ((a?: number, b?: number, precision?: number) => {
   return new Point(a ?? 0, b ?? a ?? 0, precision ?? PRECISION)
 }) as PointConstructor
 ;(point as { zero: Point }).zero = new Point(0, 0, PRECISION)
+;(point as { half: Point }).half = new Point(0.5, 0.5, PRECISION)
+;(point as { one: Point }).one = new Point(1, 1, PRECISION)
 ;(point as { infinity: Point }).infinity = new Point(
   Number.POSITIVE_INFINITY,
   Number.POSITIVE_INFINITY,

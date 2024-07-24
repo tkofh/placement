@@ -1,3 +1,4 @@
+import { point } from 'placement/point'
 import { type Rect, align, contain, cover, rect } from 'placement/rect'
 import { computed, defineComponent, h, shallowRef } from 'vue'
 import { useDomRect } from '../composables/useDomRect'
@@ -11,13 +12,14 @@ import {
   useConstrainedSize,
   useMaxSize,
   useMinSize,
-  useOrigin,
   useXYTranslation,
 } from '../composables/useRect'
 import { useSizingContextRoot } from '../composables/useSizingContext'
+import { autoDimensions, computedDimensions } from '../data/dimensions'
 import type { FitInput } from '../internal/props/fit'
 import { provideShouldRenderGroups } from '../internal/render'
 import { boolProp } from '../internal/utils'
+import { useOrigin } from '../props/origin'
 
 export interface GraphicRootProps
   extends SizeProps,
@@ -31,17 +33,23 @@ export const GraphicRoot = defineComponent(
   (props: GraphicRootProps, { slots }) => {
     const svg = shallowRef<SVGElement>()
     const domRect = useDomRect(svg)
+    const domDimensions = computedDimensions(
+      () => domRect.value.width,
+      () => domRect.value.height,
+    )
 
-    const basisSize = useBasisSize(props, domRect, domRect)
-    const minSize = useMinSize(props, domRect, domRect)
-    const maxSize = useMaxSize(props, domRect, domRect)
+    const basisSize = useBasisSize(props, domDimensions)
+    const minSize = useMinSize(props, domDimensions)
+    const maxSize = useMaxSize(props, domDimensions)
 
     const size = useConstrainedSize(basisSize, minSize, maxSize)
 
-    const rootRect = computed(() => rect.fromDimensions(size.value))
+    const rootRect = computed(() =>
+      rect.fromDimensions(autoDimensions(size.value, domDimensions.value)),
+    )
 
-    const origin = useOrigin(props)
-    const translation = useXYTranslation(props, domRect, domRect)
+    const origin = useOrigin(() => props.origin, point.half)
+    const translation = useXYTranslation(props, domRect)
 
     const viewBox = computed(() => {
       const fit = props.fit ?? 'crop'

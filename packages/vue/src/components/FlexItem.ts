@@ -1,6 +1,4 @@
 import { frame } from 'placement/frame'
-import { offset } from 'placement/offset'
-import type { Point } from 'placement/point'
 import type { Rect } from 'placement/rect'
 import { parse } from 'valued'
 import { number } from 'valued/data/number'
@@ -13,13 +11,8 @@ import {
   useMaxSize,
   useMinSize,
 } from '../composables/useRect'
-import {
-  useParentHeight,
-  useParentRectRegistration,
-  useParentWidth,
-  useRootHeight,
-  useRootWidth,
-} from '../composables/useSizingContext'
+import { useParentRectRegistration } from '../composables/useSizingContext'
+import { computedTRBLOffset } from '../data/offset'
 import {
   type AlignSelfInput,
   resolveAlignSelf,
@@ -28,12 +21,18 @@ import {
   type JustifySelfInput,
   resolveJustifySelf,
 } from '../internal/props/justifySelf'
-import { type OffsetInput, resolveOffset } from '../internal/props/offset'
 import { useGroupRenderer } from '../internal/render'
 import { boolProp } from '../internal/utils'
+import {
+  type LengthPercentageInput,
+  useLengthPercentage,
+} from '../props/lengthPercentage'
 
 export interface FlexItemProps extends SizeProps {
-  margin?: OffsetInput | Point | number
+  marginTop?: LengthPercentageInput
+  marginRight?: LengthPercentageInput
+  marginBottom?: LengthPercentageInput
+  marginLeft?: LengthPercentageInput
   grow?: number | `${number}`
   shrink?: number | `${number}`
   alignSelf?: AlignSelfInput | number
@@ -55,21 +54,20 @@ export const FlexItem = defineComponent(
     const minSize = useMinSize(props)
     const maxSize = useMaxSize(props)
 
-    const parentWidth = useParentWidth()
-    const parentHeight = useParentHeight()
-    const rootWidth = useRootWidth()
-    const rootHeight = useRootHeight()
+    const marginTop = useLengthPercentage(() => props.marginTop, 0, 'height')
+    const marginRight = useLengthPercentage(() => props.marginRight, 0, 'width')
+    const marginBottom = useLengthPercentage(
+      () => props.marginBottom,
+      0,
+      'height',
+    )
+    const marginLeft = useLengthPercentage(() => props.marginLeft, 0, 'width')
 
-    const margin = computed(() =>
-      resolveOffset(
-        props.margin,
-        offset.zero,
-        true,
-        parentWidth.value,
-        parentHeight.value,
-        rootWidth.value,
-        rootHeight.value,
-      ),
+    const margin = computedTRBLOffset(
+      marginTop,
+      marginRight,
+      marginBottom,
+      marginLeft,
     )
 
     const self = computed(() =>
@@ -101,7 +99,10 @@ export const FlexItem = defineComponent(
     name: 'FlexItem',
     props: [
       ...SIZE_PROP_KEYS,
-      'margin',
+      'marginTop',
+      'marginRight',
+      'marginBottom',
+      'marginLeft',
       'grow',
       'shrink',
       'alignSelf',

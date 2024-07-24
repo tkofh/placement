@@ -31,11 +31,12 @@ function useResizeObserver<T extends Element>(
 
 export function useDomRect(
   element: MaybeRefOrGetter<Element | undefined>,
+  precision = 4,
 ): Readonly<ShallowRef<Rect>> {
   const self = shallowRef(rect())
 
   useResizeObserver(element, (entry) => {
-    self.value = rect.from(entry.contentRect)
+    self.value = rect.from(entry.contentRect, precision)
   })
 
   return self
@@ -43,6 +44,7 @@ export function useDomRect(
 
 export function useTextRect(
   element: MaybeRefOrGetter<SVGTextElement | undefined>,
+  precision = 4,
 ): Readonly<ShallowRef<Rect>> {
   const self = shallowRef(rect())
 
@@ -61,7 +63,7 @@ export function useTextRect(
     //   maxY = Math.max(maxY, charRect.y + charRect.height)
     // }
     // self.value = rect(0, 0, maxX - minX, maxY - minY)
-    self.value = rect.from(entry.contentRect)
+    self.value = rect.from(entry.contentRect, precision)
   })
 
   return self

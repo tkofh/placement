@@ -25,42 +25,35 @@ const cache = createCache<string, GapValue>(512)
 
 export function resolveGap(
   input: GapInput,
-  auto: number,
+  autoRow: number,
+  autoColumn: number,
   parentWidth: number,
   parentHeight: number,
-  rootWidth: number,
-  rootHeight: number,
 ): GapValue {
   if (typeof input === 'number' || input === undefined) {
     return {
-      rowGap: input ?? auto,
-      columnGap: input ?? auto,
+      rowGap: input ?? autoRow,
+      columnGap: input ?? autoColumn,
     }
   }
 
   return cache(
-    `${input}:${auto}:${parentWidth}:${parentHeight}:${rootWidth}:${rootHeight}`,
+    `${input}:${autoRow}:${autoColumn}:${parentWidth}:${parentHeight}`,
     () => {
       const parsed = parse(input, gap)
       if (!parsed.valid) {
         return {
-          rowGap: auto,
-          columnGap: auto,
+          rowGap: autoRow,
+          columnGap: autoColumn,
         }
       }
 
       const [row, column] = parsed.value
-      const rowGap = resolveSize1D(
-        row,
-        auto,
-        parentHeight,
-        rootWidth,
-        rootHeight,
-      )
+      const rowGap = resolveSize1D(row, autoRow, parentHeight)
       const columnGap =
         column === undefined
           ? rowGap
-          : resolveSize1D(column, auto, parentWidth, rootWidth, rootHeight)
+          : resolveSize1D(column, autoColumn, parentWidth)
 
       return {
         rowGap,

@@ -26,7 +26,7 @@ export interface AlignItemsValue {
 
 const cache = createCache<string, AlignItemsValue>(512)
 
-const keywordResults = {
+export const keywordResults = {
   start: {
     alignItems: 0,
     stretchItems: 0,
@@ -78,21 +78,22 @@ function toValue(value: ParserValue<typeof alignItemsParser>): AlignItemsValue {
 
 export function resolveAlignItems(
   input: AlignItemsInput,
-  auto = 0,
+  autoAlign = 0,
+  autoStretch = 0,
 ): AlignItemsValue {
   if (typeof input === 'number' || input === undefined) {
     return {
-      alignItems: input ?? auto,
-      stretchItems: 0,
+      alignItems: input ?? autoAlign,
+      stretchItems: autoStretch,
     }
   }
 
-  return cache(`${input}:${auto}`, () => {
+  return cache(`${input}:${autoAlign}:${autoStretch}`, () => {
     const parsed = parse(input, alignItemsParser)
     if (!parsed.valid) {
       return {
-        alignItems: auto,
-        stretchItems: 0,
+        alignItems: autoAlign,
+        stretchItems: autoStretch,
       }
     }
 

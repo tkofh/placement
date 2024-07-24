@@ -12,57 +12,102 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "require": "./dist/index.cjs",
       "import": "./dist/index.mjs",
       "types": "./dist/index.d.ts"
     },
     "./FlexLayout": {
-      "require": "./dist/components/FlexLayout.cjs",
       "import": "./dist/components/FlexLayout.mjs",
       "types": "./dist/components/FlexLayout.d.ts"
     },
     "./FlexItem": {
-      "require": "./dist/components/FlexItem.cjs",
       "import": "./dist/components/FlexItem.mjs",
       "types": "./dist/components/FlexItem.d.ts"
     },
     "./GraphicCircle": {
-      "require": "./dist/components/GraphicCircle.cjs",
       "import": "./dist/components/GraphicCircle.mjs",
       "types": "./dist/components/GraphicCircle.d.ts"
     },
     "./GraphicGroup": {
-      "require": "./dist/components/GraphicGroup.cjs",
       "import": "./dist/components/GraphicGroup.mjs",
       "types": "./dist/components/GraphicGroup.d.ts"
     },
     "./GraphicLine": {
-      "require": "./dist/components/GraphicLine.cjs",
       "import": "./dist/components/GraphicLine.mjs",
       "types": "./dist/components/GraphicLine.d.ts"
     },
     "./GraphicPoint": {
-      "require": "./dist/components/GraphicPoint.cjs",
       "import": "./dist/components/GraphicPoint.mjs",
       "types": "./dist/components/GraphicPoint.d.ts"
     },
     "./GraphicRect": {
-      "require": "./dist/components/GraphicRect.cjs",
       "import": "./dist/components/GraphicRect.mjs",
       "types": "./dist/components/GraphicRect.d.ts"
     },
     "./GraphicRoot": {
-      "require": "./dist/components/GraphicRoot.cjs",
       "import": "./dist/components/GraphicRoot.mjs",
       "types": "./dist/components/GraphicRoot.d.ts"
     },
     "./GraphicText": {
-      "require": "./dist/components/GraphicText.cjs",
       "import": "./dist/components/GraphicText.mjs",
       "types": "./dist/components/GraphicText.d.ts"
     },
+    "./data/dimensions": {
+      "import": "./dist/data/dimensions.mjs",
+      "types": "./dist/data/dimensions.d.ts"
+    },
+    "./data/offset": {
+      "import": "./dist/data/offset.mjs",
+      "types": "./dist/data/offset.d.ts"
+    },
+    "./data/point": {
+      "import": "./dist/data/point.mjs",
+      "types": "./dist/data/point.d.ts"
+    },
+    "./props/alignContent": {
+      "import": "./dist/props/alignContent.mjs",
+      "types": "./dist/props/alignContent.d.ts"
+    },
+    "./props/alignItems": {
+      "import": "./dist/props/alignItems.mjs",
+      "types": "./dist/props/alignItems.d.ts"
+    },
+    "./props/alignSelf": {
+      "import": "./dist/props/alignSelf.mjs",
+      "types": "./dist/props/alignSelf.d.ts"
+    },
+    "./props/aspectRatio": {
+      "import": "./dist/props/aspectRatio.mjs",
+      "types": "./dist/props/aspectRatio.d.ts"
+    },
+    "./props/flow": {
+      "import": "./dist/props/flow.mjs",
+      "types": "./dist/props/flow.d.ts"
+    },
+    "./props/gap": {
+      "import": "./dist/props/gap.mjs",
+      "types": "./dist/props/gap.d.ts"
+    },
+    "./props/justifyContent": {
+      "import": "./dist/props/justifyContent.mjs",
+      "types": "./dist/props/justifyContent.d.ts"
+    },
+    "./props/justifySelf": {
+      "import": "./dist/props/justifySelf.mjs",
+      "types": "./dist/props/justifySelf.d.ts"
+    },
+    "./props/lengthPercentage": {
+      "import": "./dist/props/lengthPercentage.mjs",
+      "types": "./dist/props/lengthPercentage.d.ts"
+    },
+    "./props/origin": {
+      "import": "./dist/props/origin.mjs",
+      "types": "./dist/props/origin.d.ts"
+    },
+    "./props/size": {
+      "import": "./dist/props/size.mjs",
+      "types": "./dist/props/size.d.ts"
+    },
     "./nuxt": {
-      "require": "./dist/nuxt.cjs",
       "import": "./dist/nuxt.mjs",
       "types": "./dist/nuxt.d.ts"
     }

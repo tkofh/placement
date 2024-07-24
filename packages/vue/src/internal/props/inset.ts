@@ -49,8 +49,6 @@ function toOffset(
   value: InsetValue,
   parentWidth: number,
   parentHeight: number,
-  rootWidth: number,
-  rootHeight: number,
 ): Offset {
   const [a, b, c, d] = value
 
@@ -59,14 +57,8 @@ function toOffset(
     const [xEdge, xValue] = b
 
     return offset.infinity.pipe(
-      set(
-        yEdge.value,
-        resolveSize1D(yValue, 0, parentHeight, rootWidth, rootHeight),
-      ),
-      set(
-        xEdge.value,
-        resolveSize1D(xValue, 0, parentWidth, rootWidth, rootHeight),
-      ),
+      set(yEdge.value, resolveSize1D(yValue, 0, parentHeight)),
+      set(xEdge.value, resolveSize1D(xValue, 0, parentWidth)),
     )
   }
 
@@ -74,15 +66,11 @@ function toOffset(
     a as LengthPercentageValue<(typeof SIZE_UNITS)[number]>,
     0,
     parentHeight,
-    rootWidth,
-    rootHeight,
   )
   const right = resolveSize1D(
     (b ?? a) as LengthPercentageValue<(typeof SIZE_UNITS)[number]>,
     0,
     parentWidth,
-    rootWidth,
-    rootHeight,
   )
   if (b === undefined) {
     return offset.xy(right, top)
@@ -91,12 +79,8 @@ function toOffset(
   return offset.trbl(
     top,
     right,
-    c === undefined
-      ? top
-      : resolveSize1D(c, 0, parentHeight, rootWidth, rootHeight),
-    d === undefined
-      ? right
-      : resolveSize1D(d, 0, parentWidth, rootWidth, rootHeight),
+    c === undefined ? top : resolveSize1D(c, 0, parentHeight),
+    d === undefined ? right : resolveSize1D(d, 0, parentWidth),
   )
 }
 
@@ -105,8 +89,6 @@ export function resolveInset(
   auto: Offset,
   parentWidth: number,
   parentHeight: number,
-  rootWidth: number,
-  rootHeight: number,
 ): Offset {
   if (input == null) {
     return auto
@@ -125,7 +107,7 @@ export function resolveInset(
   }
 
   return cache(
-    `${input}:${auto.top}:${auto.right}:${auto.bottom}:${auto.left}:${parentWidth}:${parentHeight}:${rootWidth}:${rootHeight}`,
+    `${input}:${auto.top}:${auto.right}:${auto.bottom}:${auto.left}:${parentWidth}:${parentHeight}`,
     () => {
       const parsed = parse(input, inset)
       if (!parsed.valid) {
@@ -133,7 +115,7 @@ export function resolveInset(
       }
 
       const value = parsed.value
-      return toOffset(value, parentWidth, parentHeight, rootWidth, rootHeight)
+      return toOffset(value, parentWidth, parentHeight)
     },
   )
 }

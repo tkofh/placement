@@ -17,16 +17,16 @@ export interface RectGetters {
   readonly height: RectComponentGetter
 }
 
-const ROOT_RECT_X: InjectionKey<RectComponentGetter> =
-  Symbol.for('placement/root/x')
-const ROOT_RECT_Y: InjectionKey<RectComponentGetter> =
-  Symbol.for('placement/root/y')
-const ROOT_RECT_WIDTH: InjectionKey<RectComponentGetter> = Symbol.for(
-  'placement/root/width',
-)
-const ROOT_RECT_HEIGHT: InjectionKey<RectComponentGetter> = Symbol.for(
-  'placement/root/height',
-)
+// const ROOT_RECT_X: InjectionKey<RectComponentGetter> =
+//   Symbol.for('placement/root/x')
+// const ROOT_RECT_Y: InjectionKey<RectComponentGetter> =
+//   Symbol.for('placement/root/y')
+// const ROOT_RECT_WIDTH: InjectionKey<RectComponentGetter> = Symbol.for(
+//   'placement/root/width',
+// )
+// const ROOT_RECT_HEIGHT: InjectionKey<RectComponentGetter> = Symbol.for(
+//   'placement/root/height',
+// )
 
 const PARENT_RECT_X: InjectionKey<RectComponentGetter> =
   Symbol.for('placement/parent/x')
@@ -95,10 +95,10 @@ export function useSizingContextRoot(root: MaybeRefOrGetter<Rect>) {
   width()
   height()
 
-  provide(ROOT_RECT_X, x)
-  provide(ROOT_RECT_Y, y)
-  provide(ROOT_RECT_WIDTH, width)
-  provide(ROOT_RECT_HEIGHT, height)
+  // provide(ROOT_RECT_X, x)
+  // provide(ROOT_RECT_Y, y)
+  // provide(ROOT_RECT_WIDTH, width)
+  // provide(ROOT_RECT_HEIGHT, height)
 
   provide(PARENT_RECT_X, x)
   provide(PARENT_RECT_Y, y)
@@ -106,41 +106,41 @@ export function useSizingContextRoot(root: MaybeRefOrGetter<Rect>) {
   provide(PARENT_RECT_HEIGHT, height)
 }
 
-export function useRootX(): ComputedRef<number> {
-  const value = inject(ROOT_RECT_X)
-  if (!value) {
-    throw new Error('useRootX() was called outside of a sizing context')
-  }
-
-  return value()
-}
-
-export function useRootY(): ComputedRef<number> {
-  const value = inject(ROOT_RECT_Y)
-  if (!value) {
-    throw new Error('useRootY() was called outside of a sizing context')
-  }
-
-  return value()
-}
-
-export function useRootWidth(): ComputedRef<number> {
-  const value = inject(ROOT_RECT_WIDTH)
-  if (!value) {
-    throw new Error('useRootWidth() was called outside of a sizing context')
-  }
-
-  return value()
-}
-
-export function useRootHeight(): ComputedRef<number> {
-  const value = inject(ROOT_RECT_HEIGHT)
-  if (!value) {
-    throw new Error('useRootHeight() was called outside of a sizing context')
-  }
-
-  return value()
-}
+// export function useRootX(): ComputedRef<number> {
+//   const value = inject(ROOT_RECT_X)
+//   if (!value) {
+//     throw new Error('useRootX() was called outside of a sizing context')
+//   }
+//
+//   return value()
+// }
+//
+// export function useRootY(): ComputedRef<number> {
+//   const value = inject(ROOT_RECT_Y)
+//   if (!value) {
+//     throw new Error('useRootY() was called outside of a sizing context')
+//   }
+//
+//   return value()
+// }
+//
+// export function useRootWidth(): ComputedRef<number> {
+//   const value = inject(ROOT_RECT_WIDTH)
+//   if (!value) {
+//     throw new Error('useRootWidth() was called outside of a sizing context')
+//   }
+//
+//   return value()
+// }
+//
+// export function useRootHeight(): ComputedRef<number> {
+//   const value = inject(ROOT_RECT_HEIGHT)
+//   if (!value) {
+//     throw new Error('useRootHeight() was called outside of a sizing context')
+//   }
+//
+//   return value()
+// }
 
 export function useParentX(): ComputedRef<number> {
   const value = inject(PARENT_RECT_X)

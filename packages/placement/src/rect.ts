@@ -109,12 +109,12 @@ interface RectConstructor {
   (x: number, y: number, width: number, height: number): Rect
   (x: number, y: number, width: number, height: number, precision: number): Rect
 
-  from: (rect: RectLike) => Rect
+  from: (rect: RectLike, precision?: number) => Rect
 
   fromDimensions: {
-    (dimensions: Dimensions): Rect
-    (dimensions: Dimensions, position: Point | number): Rect
-    (dimensions: Dimensions, x: number, y: number): Rect
+    (dimensions: Dimensions, precision?: number): Rect
+    (dimensions: Dimensions, position: Point | number, precision?: number): Rect
+    (dimensions: Dimensions, x: number, y: number, precision?: number): Rect
   }
 
   fromInterval: {
@@ -147,28 +147,27 @@ const rect = ((
 ): Rect =>
   new Rect(...normalizeXYWH(a, b, c, d), p ?? PRECISION)) as RectConstructor
 
-rect.from = ((input: RectLike) =>
+rect.from = ((input: RectLike, precision = PRECISION) =>
   rect(
     input.x,
     input.y,
     input.width,
     input.height,
+    precision,
   )) satisfies RectConstructor['from']
 
 rect.fromDimensions = ((
   dimensions: Dimensions,
   a?: Point | number,
   b?: number,
+  c?: number,
 ) => {
-  const x = isPoint(a) ? a.x : a ?? 0
-  const y = isPoint(a) ? a.y : b ?? 0
-  return new Rect(
-    x,
-    y,
-    dimensions.width,
-    dimensions.height,
-    dimensions.precision,
-  )
+  const aIsPoint = isPoint(a)
+  const x = aIsPoint ? a.x : a ?? 0
+  const y = aIsPoint ? a.y : b ?? 0
+  const precision =
+    typeof a === 'number' && b == null ? a : c ?? dimensions.precision
+  return new Rect(x, y, dimensions.width, dimensions.height, precision)
 }) satisfies RectConstructor['fromDimensions']
 
 rect.fromInterval = ((a: Interval, b?: Interval | number, c?: number): Rect =>

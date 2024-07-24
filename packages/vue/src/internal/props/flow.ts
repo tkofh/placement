@@ -10,12 +10,12 @@ const flow = someOf([
 
 export type Flow = typeof flow
 
-export type FlowInput = ParserInput<Flow>
+export type FlowInput = ParserInput<Flow> | undefined
 
 type Direction = (typeof direction)[keyof typeof direction]
 type Wrap = (typeof wrap)[keyof typeof wrap]
 
-export interface ParsedFlow {
+export interface FlowValue {
   readonly direction: Direction
   readonly wrap: Wrap
 }
@@ -24,7 +24,7 @@ export function resolveFlow(
   input: string | undefined,
   autoDirection: Direction = 0,
   autoWrap: Wrap = 0,
-): ParsedFlow {
+): FlowValue {
   if (input == null) {
     return {
       direction: autoDirection,

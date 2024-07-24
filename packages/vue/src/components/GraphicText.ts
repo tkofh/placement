@@ -7,11 +7,11 @@ import {
   usePaint,
 } from '../composables/usePaint'
 import {
+  INSET_PROP_KEYS,
   type InsetProps,
   TRANSFORM_PROP_KEYS,
   type TransformProps,
   useAxisInterval,
-  useInset,
   useTransformedRect,
 } from '../composables/useRect'
 import {
@@ -20,10 +20,11 @@ import {
   useParentX,
   useParentY,
 } from '../composables/useSizingContext'
+import { useLengthPercentage } from '../props/lengthPercentage'
 
 export interface GraphicTextProps
   extends PaintProps,
-    Omit<InsetProps, 'inset'>,
+    InsetProps,
     TransformProps {}
 
 export const GraphicText = defineComponent(
@@ -31,7 +32,26 @@ export const GraphicText = defineComponent(
     const text = ref<SVGTextElement>()
     const domRect = useTextRect(text)
 
-    const { top, right, bottom, left } = useInset(props)
+    const top = useLengthPercentage(
+      () => props.top,
+      Number.POSITIVE_INFINITY,
+      'height',
+    )
+    const right = useLengthPercentage(
+      () => props.right,
+      Number.POSITIVE_INFINITY,
+      'width',
+    )
+    const bottom = useLengthPercentage(
+      () => props.bottom,
+      Number.POSITIVE_INFINITY,
+      'height',
+    )
+    const left = useLengthPercentage(
+      () => props.left,
+      Number.POSITIVE_INFINITY,
+      'width',
+    )
 
     const parentX = useParentX()
     const parentY = useParentY()
@@ -83,13 +103,6 @@ export const GraphicText = defineComponent(
   },
   {
     name: 'GraphicText',
-    props: [
-      'top',
-      'right',
-      'bottom',
-      'left',
-      ...TRANSFORM_PROP_KEYS,
-      ...PAINT_PROP_KEYS,
-    ],
+    props: [...INSET_PROP_KEYS, ...TRANSFORM_PROP_KEYS, ...PAINT_PROP_KEYS],
   },
 )

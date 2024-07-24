@@ -54,11 +54,9 @@ function normalizeSize2DValue(
   auto: Dimensions,
   parentWidth: number,
   parentHeight: number,
-  rootWidth: number,
-  rootHeight: number,
 ): Dimensions {
   return normalizationCache(
-    `${auto.width}:${auto.height}:${parentWidth}:${parentHeight}:${rootWidth}:${rootHeight}:${value.toString()}`,
+    `${auto.width}:${auto.height}:${parentWidth}:${parentHeight}:${value.toString()}`,
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: it is what it is
     () => {
       if (isKeywordValue(value)) {
@@ -77,13 +75,7 @@ function normalizeSize2DValue(
         const percentBasis =
           dimension.value === 'width' ? parentWidth : parentHeight
 
-        const pixels = resolveSize1D(
-          length,
-          0,
-          percentBasis,
-          rootWidth,
-          rootHeight,
-        )
+        const pixels = resolveSize1D(length, 0, percentBasis)
 
         return dimensions(
           dimension.value === 'width' ? pixels : ratio.heightToWidth(pixels),
@@ -108,13 +100,11 @@ function normalizeSize2DValue(
       }
 
       return dimensions(
-        resolveSize1D(a as Size1DValue, 0, parentWidth, rootWidth, rootHeight),
+        resolveSize1D(a as Size1DValue, 0, parentWidth),
         resolveSize1D(
           (b === undefined ? a : b) as Size1DValue,
           0,
           parentHeight,
-          rootWidth,
-          rootHeight,
         ),
       )
     },
@@ -126,8 +116,6 @@ export function resolveSize2D(
   auto: Dimensions,
   parentWidth: number,
   parentHeight: number,
-  rootWidth: number,
-  rootHeight: number,
 ) {
   if (isDimensions(input)) {
     return input
@@ -147,12 +135,5 @@ export function resolveSize2D(
     return auto
   }
 
-  return normalizeSize2DValue(
-    parsed,
-    auto,
-    parentWidth,
-    parentHeight,
-    rootWidth,
-    rootHeight,
-  )
+  return normalizeSize2DValue(parsed, auto, parentWidth, parentHeight)
 }

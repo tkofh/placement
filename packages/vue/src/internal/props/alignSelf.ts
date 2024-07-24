@@ -26,7 +26,7 @@ export interface AlignSelfValue {
 
 const cache = createCache<string, AlignSelfValue>(512)
 
-const keywordResults = {
+export const keywordResults = {
   auto: {
     align: Number.POSITIVE_INFINITY,
     stretchCross: 0,
@@ -82,21 +82,22 @@ function toValue(value: ParserValue<typeof alignSelfParser>): AlignSelfValue {
 
 export function resolveAlignSelf(
   input: AlignSelfInput,
-  auto = Number.POSITIVE_INFINITY,
+  autoAlign = Number.POSITIVE_INFINITY,
+  autoStretchCross = 0,
 ): AlignSelfValue {
   if (typeof input === 'number' || input === undefined) {
     return {
-      align: input ?? auto,
-      stretchCross: 0,
+      align: input ?? autoAlign,
+      stretchCross: autoStretchCross,
     }
   }
 
-  return cache(`${input}:${auto}`, () => {
+  return cache(`${input}:${autoAlign}:${autoStretchCross}`, () => {
     const parsed = parse(input, alignSelfParser)
     if (!parsed.valid) {
       return {
-        align: auto,
-        stretchCross: 0,
+        align: autoAlign,
+        stretchCross: autoStretchCross,
       }
     }
 

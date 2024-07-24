@@ -41,7 +41,7 @@ export interface AlignContentValue {
 
 const cache = createCache<string, AlignContentValue>(512)
 
-const keywordResults = {
+export const keywordResults = {
   start: {
     alignContent: 0,
     alignContentSpace: 0,
@@ -130,29 +130,35 @@ function toValue(
 
 export function resolveAlignContent(
   input: AlignContentInput,
-  auto = 0,
+  autoAlignContent = 0,
+  autoAlignContentSpace = 0,
+  autoAlignContentSpaceOuter = 0,
+  autoStretchContent = 0,
 ): AlignContentValue {
   if (typeof input === 'number' || input === undefined) {
     return {
-      alignContent: input ?? auto,
-      alignContentSpace: 0,
-      alignContentSpaceOuter: 0,
-      stretchContent: 0,
+      alignContent: input ?? autoAlignContent,
+      alignContentSpace: autoAlignContentSpace,
+      alignContentSpaceOuter: autoAlignContentSpaceOuter,
+      stretchContent: autoStretchContent,
     }
   }
 
-  return cache(`${input}:${auto}`, () => {
-    const parsed = parse(input, alignContentParser)
+  return cache(
+    `${input}:${autoAlignContent}:${autoAlignContentSpace}:${autoAlignContentSpaceOuter}:${autoStretchContent}`,
+    () => {
+      const parsed = parse(input, alignContentParser)
 
-    if (!parsed.valid) {
-      return {
-        alignContent: auto,
-        alignContentSpace: 0,
-        alignContentSpaceOuter: 0,
-        stretchContent: 0,
+      if (!parsed.valid) {
+        return {
+          alignContent: autoAlignContent,
+          alignContentSpace: autoAlignContentSpace,
+          alignContentSpaceOuter: autoAlignContentSpaceOuter,
+          stretchContent: autoStretchContent,
+        }
       }
-    }
 
-    return toValue(parsed.value)
-  })
+      return toValue(parsed.value)
+    },
+  )
 }

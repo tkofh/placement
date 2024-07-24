@@ -41,7 +41,7 @@ export interface JustifyContentValue {
 
 const cache = createCache<string, JustifyContentValue>(512)
 
-const keywordResults = {
+export const keywordResults = {
   start: {
     justifyContent: 0,
     justifyContentSpace: 0,

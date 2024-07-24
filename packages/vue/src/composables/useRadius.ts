@@ -1,12 +1,7 @@
 import { type Point, point } from 'placement/point'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 import { type RadiusInput, resolveRadius } from '../internal/props/radius'
-import {
-  useParentHeight,
-  useParentWidth,
-  useRootHeight,
-  useRootWidth,
-} from './useSizingContext'
+import { useParentHeight, useParentWidth } from './useSizingContext'
 
 export interface RadiusProps {
   r?: RadiusInput | Point | number | undefined
@@ -20,8 +15,6 @@ export function useRadius(
 ): ComputedRef<Point> {
   const parentWidth = useParentWidth()
   const parentHeight = useParentHeight()
-  const rootWidth = useRootWidth()
-  const rootHeight = useRootHeight()
 
   return computed(() =>
     resolveRadius(
@@ -29,8 +22,6 @@ export function useRadius(
       toValue(defaultRadius),
       parentWidth.value,
       parentHeight.value,
-      rootWidth.value,
-      rootHeight.value,
     ),
   )
 }

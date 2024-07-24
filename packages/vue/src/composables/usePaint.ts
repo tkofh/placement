@@ -10,7 +10,7 @@ import {
   type StrokeInput,
   resolveStroke,
 } from '../internal/props/stroke'
-import { useParentWidth, useRootHeight, useRootWidth } from './useSizingContext'
+import { useParentWidth } from './useSizingContext'
 
 export interface StrokeProps {
   stroke?: StrokeInput
@@ -30,8 +30,6 @@ export const PAINT_PROP_KEYS = ['fill', 'opacity', 'stroke'] as const
 
 export function usePaint(props: PaintProps) {
   const parentWidth = useParentWidth()
-  const rootWidth = useRootWidth()
-  const rootHeight = useRootHeight()
 
   const fill = computed(() =>
     props.fill ? resolveFill(props.fill) : Fill.empty,
@@ -41,12 +39,7 @@ export function usePaint(props: PaintProps) {
   )
   const stroke = computed(() =>
     props.stroke
-      ? resolveStroke(
-          props.stroke,
-          parentWidth.value,
-          rootWidth.value,
-          rootHeight.value,
-        )
+      ? resolveStroke(props.stroke, parentWidth.value)
       : Stroke.empty,
   )
 

@@ -29,8 +29,6 @@ export function resolveRadius(
   auto: Point,
   parentWidth: number,
   parentHeight: number,
-  rootWidth: number,
-  rootHeight: number,
 ): Point {
   if (typeof input === 'number') {
     return point(input, input)
@@ -44,25 +42,17 @@ export function resolveRadius(
     return auto
   }
 
-  return cache(
-    `${input}:${parentWidth}:${parentHeight}:${rootWidth}:${rootHeight}`,
-    () => {
-      const value = parse(input, radius)
+  return cache(`${input}:${parentWidth}:${parentHeight}`, () => {
+    const value = parse(input, radius)
 
-      if (!value.valid) {
-        return auto
-      }
+    if (!value.valid) {
+      return auto
+    }
 
-      const [rx, ry] = value.value
+    const [rx, ry] = value.value
 
-      const x = resolveSize1D(rx, 0, parentWidth, rootWidth, rootHeight)
+    const x = resolveSize1D(rx, 0, parentWidth)
 
-      return point(
-        x,
-        ry != null
-          ? resolveSize1D(ry, 0, parentHeight, rootWidth, rootHeight)
-          : x,
-      )
-    },
-  )
+    return point(x, ry != null ? resolveSize1D(ry, 0, parentHeight) : x)
+  })
 }
