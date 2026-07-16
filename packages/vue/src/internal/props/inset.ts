@@ -1,19 +1,16 @@
 import { type Offset, isOffset, offset, set } from 'placement/offset'
 import { type Point, isPoint } from 'placement/point'
 import { type ParserInput, type ParserValue, parse } from 'valued'
-import { allOf } from 'valued/combinators/allOf'
-import { juxtapose } from 'valued/combinators/juxtapose'
-import { oneOf } from 'valued/combinators/oneOf'
+import { allOf } from 'valued'
+import { juxtapose } from 'valued'
+import { oneOf } from 'valued'
+import { between } from 'valued'
 import { keywords } from 'valued/data/keyword'
-import {
-  type LengthPercentageValue,
-  lengthPercentage,
-} from 'valued/data/length-percentage'
+import { type LengthPercentageValue, lengthPercentage } from 'valued/data/length-percentage'
 import { number } from 'valued/data/number'
-import { between } from 'valued/multipliers/between'
-import { createCache } from '../cache'
-import { SIZE_UNITS } from './constants'
-import { resolveSize1D } from './size1d'
+import { createCache } from '../cache.ts'
+import { SIZE_UNITS } from './constants.ts'
+import { resolveSize1D } from './size1d.ts'
 
 const inset = oneOf([
   between(oneOf([lengthPercentage.subset(SIZE_UNITS), number()]), {
@@ -34,22 +31,13 @@ const inset = oneOf([
 
 export type Inset = typeof inset
 
-export type InsetInput =
-  | ParserInput<Inset>
-  | Offset
-  | Point
-  | number
-  | undefined
+export type InsetInput = ParserInput<Inset> | Offset | Point | number | undefined
 
 type InsetValue = ParserValue<Inset>
 
 const cache = createCache<string, Offset>(512)
 
-function toOffset(
-  value: InsetValue,
-  parentWidth: number,
-  parentHeight: number,
-): Offset {
+function toOffset(value: InsetValue, parentWidth: number, parentHeight: number): Offset {
   const [a, b, c, d] = value
 
   if (Array.isArray(a) && Array.isArray(b)) {

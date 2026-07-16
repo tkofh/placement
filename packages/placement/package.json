@@ -1,88 +1,77 @@
 {
   "name": "placement",
   "version": "0.3.3",
-  "description": "Layout algorithms",
-  "author": "Tim Morris <timthewebguy@gmail.com>",
+  "description": "Layout algorithms for 2D graphics: flexbox, tracks, rects, and friends",
   "homepage": "https://github.com/tkofh/placement#readme",
+  "bugs": {
+    "url": "https://github.com/tkofh/placement/issues"
+  },
   "license": "MIT",
-  "sideEffects": false,
-  "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    "./dimensions": {
-      "require": "./dist/dimensions.cjs",
-      "import": "./dist/dimensions.mjs",
-      "types": "./dist/dimensions.d.ts"
-    },
-    "./flexbox": {
-      "require": "./dist/flexbox.cjs",
-      "import": "./dist/flexbox.mjs",
-      "types": "./dist/flexbox.d.ts"
-    },
-    "./frame": {
-      "require": "./dist/frame.cjs",
-      "import": "./dist/frame.mjs",
-      "types": "./dist/frame.d.ts"
-    },
-    "./interval": {
-      "require": "./dist/interval.cjs",
-      "import": "./dist/interval.mjs",
-      "types": "./dist/interval.d.ts"
-    },
-    "./offset": {
-      "require": "./dist/offset.cjs",
-      "import": "./dist/offset.mjs",
-      "types": "./dist/offset.d.ts"
-    },
-    "./point": {
-      "require": "./dist/point.cjs",
-      "import": "./dist/point.mjs",
-      "types": "./dist/point.d.ts"
-    },
-    "./rect": {
-      "require": "./dist/rect.cjs",
-      "import": "./dist/rect.mjs",
-      "types": "./dist/rect.d.ts"
-    },
-    "./track": {
-      "require": "./dist/track.cjs",
-      "import": "./dist/track.mjs",
-      "types": "./dist/track.d.ts"
-    },
-    "./utils": {
-      "require": "./dist/utils.cjs",
-      "import": "./dist/utils.mjs",
-      "types": "./dist/utils.d.ts"
-    }
-  },
-  "files": ["dist"],
-  "publishConfig": {
-    "access": "public"
-  },
+  "author": "Tim Morris <timthewebguy@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tkofh/placement.git"
   },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./dimensions": {
+      "types": "./dist/dimensions.d.mts",
+      "import": "./dist/dimensions.mjs"
+    },
+    "./flexbox": {
+      "types": "./dist/flexbox.d.mts",
+      "import": "./dist/flexbox.mjs"
+    },
+    "./frame": {
+      "types": "./dist/frame.d.mts",
+      "import": "./dist/frame.mjs"
+    },
+    "./interval": {
+      "types": "./dist/interval.d.mts",
+      "import": "./dist/interval.mjs"
+    },
+    "./offset": {
+      "types": "./dist/offset.d.mts",
+      "import": "./dist/offset.mjs"
+    },
+    "./point": {
+      "types": "./dist/point.d.mts",
+      "import": "./dist/point.mjs"
+    },
+    "./rect": {
+      "types": "./dist/rect.d.mts",
+      "import": "./dist/rect.mjs"
+    },
+    "./track": {
+      "types": "./dist/track.d.mts",
+      "import": "./dist/track.mjs"
+    },
+    "./utils": {
+      "types": "./dist/utils.d.mts",
+      "import": "./dist/utils.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "unbuild",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "prepublish": "unbuild"
-  },
-  "bugs": {
-    "url": "https://github.com/tkofh/placement/issues"
-  },
-  "devDependencies": {
-    "@types/node": "^20.14.11",
-    "@vitest/coverage-v8": "^2.0.3",
-    "@vitest/ui": "^2.0.3",
-    "tsx": "^4.16.2",
-    "unbuild": "^2.0.0",
-    "vitest": "^2.0.3"
+    "build": "tsdown",
+    "build:watch": "tsdown --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bench": "vitest bench --run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "valued": "^0.4.8"
+    "curvy": "^2.0.0-alpha.17"
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
   }
 }

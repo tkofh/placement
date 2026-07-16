@@ -1,14 +1,14 @@
-import { PRECISION } from './constants'
-import { Pipeable } from './internal/pipeable'
-import { dual } from './utils/function'
+import { PRECISION } from './constants.ts'
+import { Pipeable } from './internal/pipeable.ts'
+import { dual } from './utils/function.ts'
 import {
   lerp as lerpNumber,
   minMax,
   normalize as normalizeNumber,
   remap as remapNumber,
   roundTo,
-} from './utils/math'
-import { isRecord } from './utils/object'
+} from './utils/math.ts'
+import { isRecord } from './utils/object.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/interval')
 type TypeBrand = typeof TypeBrand
@@ -83,18 +83,14 @@ export const setSize: {
 export const setEnd: {
   (span: Interval, end: number): Interval
   (end: number): (span: Interval) => Interval
-} = dual(
-  2,
-  (span: Interval, end: number) => new Interval(end - span.size, span.size),
-)
+} = dual(2, (span: Interval, end: number) => new Interval(end - span.size, span.size))
 
 export const translate: {
   (interval: Interval, amount: number): Interval
   (amount: number): (interval: Interval) => Interval
 } = dual(
   2,
-  (interval: Interval, amount: number) =>
-    new Interval(interval.start + amount, interval.size),
+  (interval: Interval, amount: number) => new Interval(interval.start + amount, interval.size),
 )
 
 export const scale: {
@@ -115,10 +111,7 @@ export const scaleFrom: {
 } = dual(
   3,
   (interval: Interval, scale: number, position: number) =>
-    new Interval(
-      position + (interval.start - position) * scale,
-      interval.size * scale,
-    ),
+    new Interval(position + (interval.start - position) * scale, interval.size * scale),
 )
 
 export const lerp: {
@@ -152,13 +145,7 @@ export const remap: {
   3,
   (interval: Interval, source: Interval, target: Interval) =>
     new Interval(
-      remapNumber(
-        interval.start,
-        source.start,
-        source.end,
-        target.start,
-        target.end,
-      ),
+      remapNumber(interval.start, source.start, source.end, target.start, target.end),
       remapNumber(interval.size, 0, source.size, 0, target.size),
     ),
 )
@@ -176,42 +163,33 @@ export const alignTo: {
 
 export const avoid: {
   (interval: IntervalLike, target: number | IntervalLike, gap: number): Interval
-  (
-    target: number | IntervalLike,
-    gap: number,
-  ): (interval: IntervalLike) => Interval
-} = dual(
-  3,
-  (source: IntervalLike, target: number | IntervalLike, gap: number) => {
-    const targetIsIntervalLike = isIntervalLike(target)
+  (target: number | IntervalLike, gap: number): (interval: IntervalLike) => Interval
+} = dual(3, (source: IntervalLike, target: number | IntervalLike, gap: number) => {
+  const targetIsIntervalLike = isIntervalLike(target)
 
-    const start = (targetIsIntervalLike ? target.start : target) - gap
-    const end = (targetIsIntervalLike ? target.end : target) + gap
+  const start = (targetIsIntervalLike ? target.start : target) - gap
+  const end = (targetIsIntervalLike ? target.end : target) + gap
 
-    if (source.start > end || source.end < start) {
-      return source
-    }
+  if (source.start > end || source.end < start) {
+    return source
+  }
 
-    if (
-      (source.start >= start && source.end <= end) ||
-      (source.start <= start && source.end >= end)
-    ) {
-      const deltaStart = source.start - start
-      const deltaEnd = end - source.end
+  if (
+    (source.start >= start && source.end <= end) ||
+    (source.start <= start && source.end >= end)
+  ) {
+    const deltaStart = source.start - start
+    const deltaEnd = end - source.end
 
-      const offset =
-        (Math.min(deltaStart, deltaEnd) + source.size) *
-        (deltaStart > deltaEnd ? 1 : -1)
+    const offset = (Math.min(deltaStart, deltaEnd) + source.size) * (deltaStart > deltaEnd ? 1 : -1)
 
-      return new Interval(source.start + offset, source.size)
-    }
-
-    const offset =
-      Math.min(source.end, end) -
-      Math.max(source.start, start) * (source.start < start ? -1 : 1)
     return new Interval(source.start + offset, source.size)
-  },
-)
+  }
+
+  const offset =
+    Math.min(source.end, end) - Math.max(source.start, start) * (source.start < start ? -1 : 1)
+  return new Interval(source.start + offset, source.size)
+})
 //
 // export const proportionalOrigin: {
 //   (interval: IntervalLike, target: IntervalLike): number

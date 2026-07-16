@@ -2,10 +2,7 @@ import { type Dimensions, dimensions } from 'placement/dimensions'
 import { auto } from 'placement/utils'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 
-function preferCachedDimensions(
-  value: Dimensions,
-  previous: Dimensions | undefined,
-) {
+function preferCachedDimensions(value: Dimensions, previous: Dimensions | undefined) {
   if (
     previous === undefined ||
     previous.width !== value.width ||
@@ -29,12 +26,6 @@ export function computedDimensions(
   })
 }
 
-export function autoDimensions(
-  first: Dimensions,
-  second: Dimensions,
-): Dimensions {
-  return dimensions(
-    auto(first.width, second.width),
-    auto(first.height, second.height),
-  )
+export function autoDimensions(first: Dimensions, second: Dimensions): Dimensions {
+  return dimensions(auto(first.width, second.width), auto(first.height, second.height))
 }

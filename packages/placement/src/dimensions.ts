@@ -1,13 +1,8 @@
-import { PRECISION } from './constants'
-import { Pipeable } from './internal/pipeable'
-import type { Rect } from './rect'
-import { dual } from './utils/function'
-import {
-  clamp as clampNumber,
-  aspectRatio as getAspectRatio,
-  lerp,
-  roundTo,
-} from './utils/math'
+import { PRECISION } from './constants.ts'
+import { Pipeable } from './internal/pipeable.ts'
+import type { Rect } from './rect.ts'
+import { dual } from './utils/function.ts'
+import { clamp as clampNumber, aspectRatio as getAspectRatio, lerp, roundTo } from './utils/math.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/dimension')
 type TypeBrand = typeof TypeBrand
@@ -68,11 +63,7 @@ const dimensions = ((a?: number, b?: number, c?: number): Dimensions => {
 }) as DimensionsConstructor
 
 dimensions.zero = new Dimensions(0, 0, PRECISION)
-dimensions.infinity = new Dimensions(
-  Number.POSITIVE_INFINITY,
-  Number.POSITIVE_INFINITY,
-  PRECISION,
-)
+dimensions.infinity = new Dimensions(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, PRECISION)
 
 export { dimensions }
 
@@ -85,8 +76,7 @@ export const width: {
   (width: number): (self: Dimensions | Rect) => Dimensions
 } = dual(
   2,
-  (self: Dimensions | Rect, width: number) =>
-    new Dimensions(width, self.height, self.precision),
+  (self: Dimensions | Rect, width: number) => new Dimensions(width, self.height, self.precision),
 )
 
 export const height: {
@@ -94,8 +84,7 @@ export const height: {
   (height: number): (self: Dimensions | Rect) => Dimensions
 } = dual(
   2,
-  (self: Dimensions | Rect, height: number) =>
-    new Dimensions(self.width, height, self.precision),
+  (self: Dimensions | Rect, height: number) => new Dimensions(self.width, height, self.precision),
 )
 
 export const precision: {
@@ -131,11 +120,7 @@ export const minHeight: {
 } = dual(
   2,
   (self: Dimensions | Rect, minHeight: number) =>
-    new Dimensions(
-      self.width,
-      Math.max(minHeight, self.height),
-      self.precision,
-    ),
+    new Dimensions(self.width, Math.max(minHeight, self.height), self.precision),
 )
 
 export const maxHeight: {
@@ -144,11 +129,7 @@ export const maxHeight: {
 } = dual(
   2,
   (self: Dimensions | Rect, maxHeight: number) =>
-    new Dimensions(
-      self.width,
-      Math.min(maxHeight, self.height),
-      self.precision,
-    ),
+    new Dimensions(self.width, Math.min(maxHeight, self.height), self.precision),
 )
 
 export const minSize: {
@@ -183,27 +164,16 @@ export const clampWidth: {
 } = dual(
   3,
   (self: Dimensions | Rect, minWidth: number, maxWidth: number) =>
-    new Dimensions(
-      clampNumber(self.width, minWidth, maxWidth),
-      self.height,
-      self.precision,
-    ),
+    new Dimensions(clampNumber(self.width, minWidth, maxWidth), self.height, self.precision),
 )
 
 export const clampHeight: {
   (self: Dimensions | Rect, minHeight: number, maxHeight: number): Dimensions
-  (
-    minHeight: number,
-    maxHeight: number,
-  ): (self: Dimensions | Rect) => Dimensions
+  (minHeight: number, maxHeight: number): (self: Dimensions | Rect) => Dimensions
 } = dual(
   3,
   (self: Dimensions | Rect, minHeight: number, maxHeight: number) =>
-    new Dimensions(
-      self.width,
-      clampNumber(self.height, minHeight, maxHeight),
-      self.precision,
-    ),
+    new Dimensions(self.width, clampNumber(self.height, minHeight, maxHeight), self.precision),
 )
 
 export const clamp: {
@@ -218,11 +188,7 @@ export const clamp: {
   ): (self: Dimensions | Rect) => Dimensions
 } = dual(
   3,
-  (
-    self: Dimensions | Rect,
-    min: Dimensions | Rect | number,
-    max: Dimensions | Rect | number,
-  ) => {
+  (self: Dimensions | Rect, min: Dimensions | Rect | number, max: Dimensions | Rect | number) => {
     const minWidth = typeof min === 'number' ? min : min.width
     const minHeight = typeof min === 'number' ? min : min.height
     const maxWidth = typeof max === 'number' ? max : max.width
@@ -259,12 +225,7 @@ interface AspectRatio {
 
 const aspectRatio = dual(
   (args) => isDimensions(args[0]),
-  (
-    self: Dimensions | Rect,
-    aspectRatio: number,
-    alterWidth = 0.5,
-    alterHeight = 0.5,
-  ) => {
+  (self: Dimensions | Rect, aspectRatio: number, alterWidth = 0.5, alterHeight = 0.5) => {
     const alteredWidth = self.height * aspectRatio
     const alteredHeight = self.width / aspectRatio
 
@@ -275,8 +236,8 @@ const aspectRatio = dual(
       normalizedAlterWidth = 0.5
       normalizedAlterHeight = 0.5
     } else {
-      normalizedAlterWidth = normalizedAlterWidth / (alterWidth + alterHeight)
-      normalizedAlterHeight = normalizedAlterHeight / (alterWidth + alterHeight)
+      normalizedAlterWidth /= alterWidth + alterHeight
+      normalizedAlterHeight /= alterWidth + alterHeight
     }
 
     return new Dimensions(
@@ -395,20 +356,10 @@ export const cover: {
 })
 
 export const mix: {
-  (
-    self: Dimensions | Rect,
-    other: Dimensions | Rect,
-    amount: number,
-  ): Dimensions
-  (
-    other: Dimensions | Rect,
-    amount: number,
-  ): (self: Dimensions | Rect) => Dimensions
-} = dual(
-  3,
-  (self: Dimensions | Rect, other: Dimensions | Rect, amount = 0.5) => {
-    const width = lerp(amount, self.width, other.width)
-    const height = lerp(amount, self.height, other.height)
-    return new Dimensions(width, height, self.precision)
-  },
-)
+  (self: Dimensions | Rect, other: Dimensions | Rect, amount: number): Dimensions
+  (other: Dimensions | Rect, amount: number): (self: Dimensions | Rect) => Dimensions
+} = dual(3, (self: Dimensions | Rect, other: Dimensions | Rect, amount = 0.5) => {
+  const width = lerp(amount, self.width, other.width)
+  const height = lerp(amount, self.height, other.height)
+  return new Dimensions(width, height, self.precision)
+})

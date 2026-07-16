@@ -1,10 +1,10 @@
-import { PRECISION } from './constants'
-import type { Dimensions } from './dimensions'
-import { Pipeable } from './internal/pipeable'
-import type { Point } from './point'
-import { dual } from './utils/function'
-import { roundTo } from './utils/math'
-import { hasProperty, isRecord } from './utils/object'
+import { PRECISION } from './constants.ts'
+import type { Dimensions } from './dimensions.ts'
+import { Pipeable } from './internal/pipeable.ts'
+import type { Point } from './point.ts'
+import { dual } from './utils/function.ts'
+import { roundTo } from './utils/math.ts'
+import { hasProperty, isRecord } from './utils/object.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/offset')
 type TypeBrand = typeof TypeBrand
@@ -45,13 +45,7 @@ type OffsetConstructor = {
   (offset: number, precision?: number): Offset
 
   xy(x: number, y: number, precision?: number): Offset
-  trbl(
-    top: number,
-    right?: number,
-    bottom?: number,
-    left?: number,
-    precision?: number,
-  ): Offset
+  trbl(top: number, right?: number, bottom?: number, left?: number, precision?: number): Offset
   fromPoint(point: Point, precision?: number): Offset
   fromDimensions(dimensions: Dimensions, precision?: number): Offset
   zero: Offset
@@ -61,8 +55,7 @@ type OffsetConstructor = {
 const offset = ((offset: number, precision = PRECISION): Offset =>
   new Offset(offset, offset, offset, offset, precision)) as OffsetConstructor
 
-offset.xy = (x: number, y: number, precision = PRECISION) =>
-  new Offset(y, x, y, x, precision)
+offset.xy = (x: number, y: number, precision = PRECISION) => new Offset(y, x, y, x, precision)
 
 offset.trbl = (
   top: number,
@@ -70,16 +63,12 @@ offset.trbl = (
   bottom?: number,
   left?: number,
   precision = PRECISION,
-) =>
-  new Offset(top, right ?? top, bottom ?? top, left ?? right ?? top, precision)
+) => new Offset(top, right ?? top, bottom ?? top, left ?? right ?? top, precision)
 
 offset.fromPoint = (point: Point, precision = point.precision) =>
   new Offset(point.y, point.x, point.y, point.x, precision)
 
-offset.fromDimensions = (
-  dimensions: Dimensions,
-  precision = dimensions.precision,
-) =>
+offset.fromDimensions = (dimensions: Dimensions, precision = dimensions.precision) =>
   new Offset(
     dimensions.height * 0.5,
     dimensions.width * 0.5,
@@ -163,8 +152,7 @@ export const x: {
   (x: number): (offset: Offset) => Offset
 } = dual(
   2,
-  (offset: Offset, x: number) =>
-    new Offset(offset.top, x, offset.bottom, x, offset.precision),
+  (offset: Offset, x: number) => new Offset(offset.top, x, offset.bottom, x, offset.precision),
 )
 
 export const y: {
@@ -172,8 +160,7 @@ export const y: {
   (y: number): (offset: Offset) => Offset
 } = dual(
   2,
-  (offset: Offset, y: number) =>
-    new Offset(y, offset.right, y, offset.left, offset.precision),
+  (offset: Offset, y: number) => new Offset(y, offset.right, y, offset.left, offset.precision),
 )
 
 export const set: {
@@ -195,61 +182,19 @@ export const set: {
   ) => {
     switch (property) {
       case 'top':
-        return new Offset(
-          value,
-          offset.right,
-          offset.bottom,
-          offset.left,
-          offset.precision,
-        )
+        return new Offset(value, offset.right, offset.bottom, offset.left, offset.precision)
       case 'right':
-        return new Offset(
-          offset.top,
-          value,
-          offset.bottom,
-          offset.left,
-          offset.precision,
-        )
+        return new Offset(offset.top, value, offset.bottom, offset.left, offset.precision)
       case 'bottom':
-        return new Offset(
-          offset.top,
-          offset.right,
-          value,
-          offset.left,
-          offset.precision,
-        )
+        return new Offset(offset.top, offset.right, value, offset.left, offset.precision)
       case 'left':
-        return new Offset(
-          offset.top,
-          offset.right,
-          offset.bottom,
-          value,
-          offset.precision,
-        )
+        return new Offset(offset.top, offset.right, offset.bottom, value, offset.precision)
       case 'x':
-        return new Offset(
-          offset.top,
-          value,
-          offset.bottom,
-          value,
-          offset.precision,
-        )
+        return new Offset(offset.top, value, offset.bottom, value, offset.precision)
       case 'y':
-        return new Offset(
-          value,
-          offset.right,
-          value,
-          offset.left,
-          offset.precision,
-        )
+        return new Offset(value, offset.right, value, offset.left, offset.precision)
       case 'precision':
-        return new Offset(
-          offset.top,
-          offset.right,
-          offset.bottom,
-          offset.left,
-          value,
-        )
+        return new Offset(offset.top, offset.right, offset.bottom, offset.left, value)
     }
   },
 )
@@ -441,10 +386,4 @@ export const absolute = (offset: Offset): Offset =>
   )
 
 export const invert = (offset: Offset): Offset =>
-  new Offset(
-    -offset.top,
-    -offset.right,
-    -offset.bottom,
-    -offset.left,
-    offset.precision,
-  )
+  new Offset(-offset.top, -offset.right, -offset.bottom, -offset.left, offset.precision)

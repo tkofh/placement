@@ -1,7 +1,7 @@
-import { PRECISION } from './constants'
-import { Pipeable } from './internal/pipeable'
-import { dual } from './utils/function'
-import { lerp, normalizeZero, roundTo } from './utils/math'
+import { PRECISION } from './constants.ts'
+import { Pipeable } from './internal/pipeable.ts'
+import { dual } from './utils/function.ts'
+import { lerp, normalizeZero, roundTo } from './utils/math.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/point')
 type TypeBrand = typeof TypeBrand
@@ -34,10 +34,8 @@ const radiansToTurns = (radians: number) => turns(radians * inverseTwoPi)
 
 export const r = (x: number, y: number) => Math.hypot(x, y)
 export const theta = (x: number, y: number) => radiansToTurns(Math.atan2(y, x))
-export const x = (r: number, turns: number) =>
-  r * Math.cos(turnsToRadians(turns))
-export const y = (r: number, turns: number) =>
-  r * Math.sin(turnsToRadians(turns))
+export const x = (r: number, turns: number) => r * Math.cos(turnsToRadians(turns))
+export const y = (r: number, turns: number) => r * Math.sin(turnsToRadians(turns))
 
 class Point extends Pipeable implements PointLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -130,9 +128,7 @@ export const center = (points: Iterable<PointLike>, precision = PRECISION) => {
     count++
   }
 
-  return count === 0
-    ? new Point(0, 0, precision)
-    : new Point(x / count, y / count, precision)
+  return count === 0 ? new Point(0, 0, precision) : new Point(x / count, y / count, precision)
 }
 
 export const leftCorner: {
@@ -203,8 +199,7 @@ export const setR: {
   (r: number): (self: Point) => Point
 } = dual(
   2,
-  (self: Point, r: number) =>
-    new Point(x(r, self.theta), y(r, self.theta), self.precision),
+  (self: Point, r: number) => new Point(x(r, self.theta), y(r, self.theta), self.precision),
 )
 
 export const setTheta: {
@@ -212,25 +207,18 @@ export const setTheta: {
   (theta: number): (self: Point) => Point
 } = dual(
   2,
-  (self: Point, theta: number) =>
-    new Point(x(self.r, theta), y(self.r, theta), self.precision),
+  (self: Point, theta: number) => new Point(x(self.r, theta), y(self.r, theta), self.precision),
 )
 
 export const translateX: {
   (self: Point, x: number): Point
   (x: number): (self: Point) => Point
-} = dual(
-  2,
-  (self: Point, x: number) => new Point(self.x + x, self.y, self.precision),
-)
+} = dual(2, (self: Point, x: number) => new Point(self.x + x, self.y, self.precision))
 
 export const translateY: {
   (self: Point, y: number): Point
   (y: number): (self: Point) => Point
-} = dual(
-  2,
-  (self: Point, y: number) => new Point(self.x, self.y + y, self.precision),
-)
+} = dual(2, (self: Point, y: number) => new Point(self.x, self.y + y, self.precision))
 
 export const translateR: {
   (self: Point, r: number): Point
@@ -238,11 +226,7 @@ export const translateR: {
 } = dual(
   2,
   (self: Point, r: number) =>
-    new Point(
-      x(self.r + r, self.theta),
-      y(self.r + r, self.theta),
-      self.precision,
-    ),
+    new Point(x(self.r + r, self.theta), y(self.r + r, self.theta), self.precision),
 )
 
 export const translateTheta: {
@@ -251,11 +235,7 @@ export const translateTheta: {
 } = dual(
   2,
   (self: Point, theta: number) =>
-    new Point(
-      x(self.r, self.theta + theta),
-      y(self.r, self.theta + theta),
-      self.precision,
-    ),
+    new Point(x(self.r, self.theta + theta), y(self.r, self.theta + theta), self.precision),
 )
 
 export const translate: {
@@ -263,8 +243,7 @@ export const translate: {
   (x: number, y: number): (self: Point) => Point
 } = dual(
   3,
-  (self: Point, x: number, y: number) =>
-    new Point(self.x + x, self.y + y, self.precision),
+  (self: Point, x: number, y: number) => new Point(self.x + x, self.y + y, self.precision),
 )
 
 export const mix: {
@@ -273,27 +252,12 @@ export const mix: {
 } = dual(
   3,
   (self: Point, other: Point, amount = 0.5) =>
-    new Point(
-      lerp(amount, self.x, other.x),
-      lerp(amount, self.y, other.y),
-      self.precision,
-    ),
+    new Point(lerp(amount, self.x, other.x), lerp(amount, self.y, other.y), self.precision),
 )
 
 export const polarMix: {
-  (
-    self: Point,
-    other: Point,
-    amount: number,
-    origin?: Point,
-    favorLonger?: boolean,
-  ): Point
-  (
-    other: Point,
-    amount: number,
-    origin?: Point,
-    favorLonger?: boolean,
-  ): (self: Point) => Point
+  (self: Point, other: Point, amount: number, origin?: Point, favorLonger?: boolean): Point
+  (other: Point, amount: number, origin?: Point, favorLonger?: boolean): (self: Point) => Point
 } = dual(
   (args) => isPoint(args[1]),
   (
@@ -317,11 +281,7 @@ export const polarMix: {
     const r = lerp(amount, selfR, otherR)
     const radians = lerp(amount, selfRadians, otherRadians)
 
-    return new Point(
-      r * Math.cos(radians),
-      r * Math.sin(radians),
-      self.precision,
-    )
+    return new Point(r * Math.cos(radians), r * Math.sin(radians), self.precision)
   },
 )
 
@@ -330,8 +290,7 @@ export const delta: {
   (other: Point): (self: Point) => Point
 } = dual(
   2,
-  (self: Point, other: Point) =>
-    new Point(self.x - other.x, self.y - other.y, self.precision),
+  (self: Point, other: Point) => new Point(self.x - other.x, self.y - other.y, self.precision),
 )
 
 export const orbit: {

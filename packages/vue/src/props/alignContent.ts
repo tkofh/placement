@@ -4,7 +4,7 @@ import {
   type AlignContentValue,
   keywordResults,
   resolveAlignContent,
-} from '../internal/props/alignContent'
+} from '../internal/props/alignContent.ts'
 
 export type { AlignContentValue, AlignContentInput }
 
@@ -30,12 +30,8 @@ export function useAlignContent(
   fallback: MaybeRefOrGetter<AlignContentValue> = keywordResults.start,
 ): ComputedRef<AlignContentValue> {
   return computed(() => {
-    const {
-      alignContent,
-      alignContentSpace,
-      alignContentSpaceOuter,
-      stretchContent,
-    } = toValue(fallback)
+    const { alignContent, alignContentSpace, alignContentSpaceOuter, stretchContent } =
+      toValue(fallback)
     return preferCachedAlignContent(
       resolveAlignContent(
         toValue(value),

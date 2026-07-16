@@ -1,6 +1,6 @@
 import { direction, wrap } from 'placement/flexbox'
 import { type ParserInput, parse } from 'valued'
-import { someOf } from 'valued/combinators/someOf'
+import { someOf } from 'valued'
 import { keywords } from 'valued/data/keyword'
 
 const flow = someOf([

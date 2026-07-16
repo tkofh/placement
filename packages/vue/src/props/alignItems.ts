@@ -4,7 +4,7 @@ import {
   type AlignItemsValue,
   keywordResults,
   resolveAlignItems,
-} from '../internal/props/alignItems'
+} from '../internal/props/alignItems.ts'
 
 export type { AlignItemsValue, AlignItemsInput }
 
@@ -29,8 +29,6 @@ export function useAlignItems(
 ): ComputedRef<AlignItemsValue> {
   return computed(() => {
     const { alignItems, stretchItems } = toValue(fallback)
-    return preferCachedAlignItems(
-      resolveAlignItems(toValue(value), alignItems, stretchItems),
-    )
+    return preferCachedAlignItems(resolveAlignItems(toValue(value), alignItems, stretchItems))
   })
 }

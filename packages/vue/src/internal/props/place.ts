@@ -1,13 +1,13 @@
 // import { type ParserInput, type ParserValue, parse } from 'valued'
-// import { juxtapose } from 'valued/combinators/juxtapose'
-// import { oneOf } from 'valued/combinators/oneOf'
-// import { someOf } from 'valued/combinators/someOf'
+// import { juxtapose } from 'valued'
+// import { oneOf } from 'valued'
+// import { someOf } from 'valued'
 // import { isKeywordValue, keywords } from 'valued/data/keyword'
 // import { type NumberValue, isNumberValue, number } from 'valued/data/number'
 // import { type PercentageValue, percentage } from 'valued/data/percentage'
-// import { between } from 'valued/multipliers/between'
-// import { optional } from 'valued/multipliers/optional'
-// import { createCache } from '../cache'
+// import { between } from 'valued'
+// import { optional } from 'valued'
+// import { createCache } from '../cache.ts'
 //
 // const placeParser = oneOf([
 //   keywords([

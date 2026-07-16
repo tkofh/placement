@@ -1,7 +1,7 @@
 import { point } from 'placement/point'
 import { type Rect, align, contain, cover, rect } from 'placement/rect'
 import { computed, defineComponent, h, shallowRef } from 'vue'
-import { useDomRect } from '../composables/useDomRect'
+import { useDomRect } from '../composables/useDomRect.ts'
 import {
   ORIGIN_PROP_KEYS,
   type OriginProps,
@@ -13,18 +13,15 @@ import {
   useMaxSize,
   useMinSize,
   useXYTranslation,
-} from '../composables/useRect'
-import { useSizingContextRoot } from '../composables/useSizingContext'
-import { autoDimensions, computedDimensions } from '../data/dimensions'
-import type { FitInput } from '../internal/props/fit'
-import { provideShouldRenderGroups } from '../internal/render'
-import { boolProp } from '../internal/utils'
-import { useOrigin } from '../props/origin'
+} from '../composables/useRect.ts'
+import { useSizingContextRoot } from '../composables/useSizingContext.ts'
+import { autoDimensions, computedDimensions } from '../data/dimensions.ts'
+import type { FitInput } from '../internal/props/fit.ts'
+import { provideShouldRenderGroups } from '../internal/render.ts'
+import { boolProp } from '../internal/utils.ts'
+import { useOrigin } from '../props/origin.ts'
 
-export interface GraphicRootProps
-  extends SizeProps,
-    TransformProps,
-    OriginProps {
+export interface GraphicRootProps extends SizeProps, TransformProps, OriginProps {
   fit?: FitInput
   debugGroups?: boolean
 }
@@ -61,9 +58,7 @@ export const GraphicRoot = defineComponent(
           // these are reversed (cover vs contain) because the viewBox is
           // the "parent" rect in this context. when the viewBox "covers"
           // the rootRect, then the rootRect is "contained" by the viewBox
-          fit === 'cover'
-            ? contain(rootRect.value, 0)
-            : cover(rootRect.value, 0),
+          fit === 'cover' ? contain(rootRect.value, 0) : cover(rootRect.value, 0),
           align(rootRect.value, origin.value),
         )
       }

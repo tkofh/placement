@@ -1,16 +1,12 @@
 import { type ParserInput, type ParserValue, parse } from 'valued'
-import { oneOf } from 'valued/combinators/oneOf'
+import { oneOf } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { lengthPercentage } from 'valued/data/length-percentage'
 import { isNumberValue, number } from 'valued/data/number'
-import { createCache } from '../cache'
-import { SIZE_UNITS } from './constants'
+import { createCache } from '../cache.ts'
+import { SIZE_UNITS } from './constants.ts'
 
-const size1d = oneOf([
-  lengthPercentage.subset(SIZE_UNITS),
-  number({ min: 0 }),
-  keywords(['auto']),
-])
+const size1d = oneOf([lengthPercentage.subset(SIZE_UNITS), number({ min: 0 }), keywords(['auto'])])
 
 export type Size1D = typeof size1d
 
@@ -33,32 +29,25 @@ export function normalizeSize1DValue(
   auto: number,
   percentBasis: number,
 ): number {
-  return normalizationCache(
-    `${auto}:${percentBasis}:${value.toString()}`,
-    () => {
-      if (value === null || isKeywordValue(value)) {
-        return auto
-      }
+  return normalizationCache(`${auto}:${percentBasis}:${value.toString()}`, () => {
+    if (value === null || isKeywordValue(value)) {
+      return auto
+    }
 
-      if (isNumberValue(value)) {
+    if (isNumberValue(value)) {
+      return value.value
+    }
+
+    switch (value.unit) {
+      case 'px':
         return value.value
-      }
-
-      switch (value.unit) {
-        case 'px':
-          return value.value
-        case '%':
-          return percentBasis * value.value * 0.01
-      }
-    },
-  )
+      case '%':
+        return percentBasis * value.value * 0.01
+    }
+  })
 }
 
-export function resolveSize1D(
-  input: Size1DInput,
-  auto: number,
-  percentBasis: number,
-) {
+export function resolveSize1D(input: Size1DInput, auto: number, percentBasis: number) {
   if (typeof input === 'number') {
     return input
   }
@@ -67,8 +56,7 @@ export function resolveSize1D(
     return auto
   }
 
-  const parsed: Size1DValue | null =
-    typeof input === 'string' ? parseSize1DInput(input) : input
+  const parsed: Size1DValue | null = typeof input === 'string' ? parseSize1DInput(input) : input
 
   if (parsed === null) {
     return auto

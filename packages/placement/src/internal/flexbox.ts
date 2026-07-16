@@ -1,19 +1,18 @@
-import { type Flexbox, wrap } from '../flexbox'
-import type { Frame } from '../frame'
-import { type Rect, rect } from '../rect'
-import { type Track, scaleFrom, sequence, stack } from '../track'
-import { auto } from '../utils/arguments'
-import { clamp } from '../utils/math'
-import type { SequenceTrackItem } from './track/sequence'
-import type { StackTrackItem } from './track/stack'
+import { type Flexbox, wrap } from '../flexbox.ts'
+import type { Frame } from '../frame.ts'
+import { type Rect, rect } from '../rect.ts'
+import { type Track, scaleFrom, sequence, stack } from '../track.ts'
+import { auto } from '../utils/arguments.ts'
+import { clamp } from '../utils/math.ts'
+import type { SequenceTrackItem } from './track/sequence.ts'
+import type { StackTrackItem } from './track/stack.ts'
 
 function computeItem(frame: Frame, flexbox: Flexbox) {
   const basisMain = frame[flexbox.mainDimension]
   const mainStart = frame[flexbox.mainOffsetStart]
   const mainEnd = frame[flexbox.mainOffsetEnd]
 
-  const outerHypotheticalSize =
-    basisMain + auto(mainStart, 0) + auto(mainEnd, 0)
+  const outerHypotheticalSize = basisMain + auto(mainStart, 0) + auto(mainEnd, 0)
 
   const mainItem = {
     basis: basisMain,
@@ -41,11 +40,7 @@ function computeItem(frame: Frame, flexbox: Flexbox) {
   }
 }
 
-function computeMainTrack(
-  items: ReadonlyArray<SequenceTrackItem>,
-  flexbox: Flexbox,
-  parent: Rect,
-) {
+function computeMainTrack(items: ReadonlyArray<SequenceTrackItem>, flexbox: Flexbox, parent: Rect) {
   const size = parent[flexbox.mainDimension]
 
   let result = sequence(items, {
@@ -76,11 +71,7 @@ function computeCrossTrack(
   })
 }
 
-function computeTracks(
-  frames: ReadonlyArray<Frame>,
-  flexbox: Flexbox,
-  parent: Rect,
-) {
+function computeTracks(frames: ReadonlyArray<Frame>, flexbox: Flexbox, parent: Rect) {
   const mainSize = parent[flexbox.mainDimension]
 
   const mainTracks: Array<Track> = []
@@ -94,17 +85,11 @@ function computeTracks(
   const lineItems: Array<SequenceTrackItem> = []
 
   for (const frame of frames) {
-    const { mainItem, crossItem, outerHypotheticalSize } = computeItem(
-      frame,
-      flexbox,
-    )
+    const { mainItem, crossItem, outerHypotheticalSize } = computeItem(frame, flexbox)
 
     minCrossSize = Math.max(minCrossSize, crossItem.min)
 
-    if (
-      flexbox.wrap !== wrap.nowrap &&
-      totalMainSize + outerHypotheticalSize > mainSize
-    ) {
+    if (flexbox.wrap !== wrap.nowrap && totalMainSize + outerHypotheticalSize > mainSize) {
       const mainTrack = computeMainTrack(
         mainItems.length === 0 ? [mainItem] : mainItems,
         flexbox,
@@ -142,12 +127,7 @@ function computeTracks(
 
   if (mainItems.length > 0) {
     mainTracks.push(computeMainTrack(mainItems, flexbox, parent))
-    const crossTrack = computeCrossTrack(
-      crossItems,
-      flexbox,
-      parent,
-      crossTracks.length === 0,
-    )
+    const crossTrack = computeCrossTrack(crossItems, flexbox, parent, crossTracks.length === 0)
     crossTracks.push(crossTrack)
     lineItems.push({
       min: minCrossSize,
@@ -176,11 +156,7 @@ export function applyFlexbox(
     return []
   }
 
-  const { mainTracks, crossTracks, lineItems } = computeTracks(
-    frames,
-    flexbox,
-    parent,
-  )
+  const { mainTracks, crossTracks, lineItems } = computeTracks(frames, flexbox, parent)
 
   const rects: Array<Rect> = []
 
@@ -200,12 +176,7 @@ export function applyFlexbox(
       const yInterval = yTrack.intervals[i]
 
       rects.push(
-        rect(
-          parentX + xInterval.start,
-          parentY + yInterval.start,
-          xInterval.size,
-          yInterval.size,
-        ),
+        rect(parentX + xInterval.start, parentY + yInterval.start, xInterval.size, yInterval.size),
       )
     }
 
@@ -222,9 +193,7 @@ export function applyFlexbox(
   })
 
   if (flexbox.wrap === wrap.wrapReverse) {
-    lineTrack = lineTrack.pipe(
-      scaleFrom(-1, parent[flexbox.crossDimension] * 0.5),
-    )
+    lineTrack = lineTrack.pipe(scaleFrom(-1, parent[flexbox.crossDimension] * 0.5))
   }
 
   const lineIntervals = lineTrack.intervals
@@ -244,14 +213,7 @@ export function applyFlexbox(
       const { start: xStart, size: xSize } = xTrack.intervals[i]
       const { start: yStart, size: ySize } = yTrack.intervals[i]
 
-      rects.push(
-        rect(
-          parentX + xStart + xOffset,
-          parentY + yStart + yOffset,
-          xSize,
-          ySize,
-        ),
-      )
+      rects.push(rect(parentX + xStart + xOffset, parentY + yStart + yOffset, xSize, ySize))
     }
   }
 

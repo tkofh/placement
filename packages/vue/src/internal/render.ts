@@ -11,9 +11,8 @@ import {
   useSlots,
 } from 'vue'
 
-const SHOULD_RENDER_GROUPS: InjectionKey<MaybeRefOrGetter<0 | 2>> = Symbol.for(
-  'placement/debug-groups',
-)
+const SHOULD_RENDER_GROUPS: InjectionKey<MaybeRefOrGetter<0 | 2>> =
+  Symbol.for('placement/debug-groups')
 
 export function useGroupRenderer(
   rect: MaybeRefOrGetter<Rect>,
@@ -42,11 +41,7 @@ export function useGroupRenderer(
     const children = slots[slot]?.({ rect: rectValue }) ?? []
 
     if (modeValue > 0) {
-      return h(
-        'g',
-        modeValue === 1 ? attrs : { ...attrs, ...rectValue },
-        children,
-      )
+      return h('g', modeValue === 1 ? attrs : { ...attrs, ...rectValue }, children)
     }
 
     return children

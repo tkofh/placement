@@ -25,7 +25,7 @@ import {
   scaleX,
   scaleY,
   width,
-} from '../src/dimensions'
+} from '../src/dimensions.ts'
 
 function c(
   input: Dimensions,
@@ -65,13 +65,7 @@ describe('height', () => {
 })
 
 describe('precision', () => {
-  test(
-    ...c(
-      dimensions(177.77777778, 100),
-      precision(2),
-      dimensions(177.78, 100, 2),
-    ),
-  )
+  test(...c(dimensions(177.77777778, 100), precision(2), dimensions(177.78, 100, 2)))
 })
 
 describe('minWidth', () => {
@@ -102,26 +96,18 @@ describe('minSize', () => {
   test(...c(dimensions(), minSize(100), dimensions(100, 100)))
   test(...c(dimensions(), minSize(dimensions(100, 100)), dimensions(100, 100)))
   test(...c(dimensions(100), minSize(100), dimensions(100, 100)))
-  test(
-    ...c(dimensions(100), minSize(dimensions(100, 100)), dimensions(100, 100)),
-  )
+  test(...c(dimensions(100), minSize(dimensions(100, 100)), dimensions(100, 100)))
   test(...c(dimensions(200), minSize(100), dimensions(200, 200)))
-  test(
-    ...c(dimensions(200), minSize(dimensions(100, 100)), dimensions(200, 200)),
-  )
+  test(...c(dimensions(200), minSize(dimensions(100, 100)), dimensions(200, 200)))
 })
 
 describe('maxSize', () => {
   test(...c(dimensions(), maxSize(100), dimensions(0, 0)))
   test(...c(dimensions(), maxSize(dimensions(100, 100)), dimensions(0, 0)))
   test(...c(dimensions(100), maxSize(100), dimensions(100, 100)))
-  test(
-    ...c(dimensions(100), maxSize(dimensions(100, 100)), dimensions(100, 100)),
-  )
+  test(...c(dimensions(100), maxSize(dimensions(100, 100)), dimensions(100, 100)))
   test(...c(dimensions(200), maxSize(100), dimensions(100, 100)))
-  test(
-    ...c(dimensions(200), maxSize(dimensions(100, 100)), dimensions(100, 100)),
-  )
+  test(...c(dimensions(200), maxSize(dimensions(100, 100)), dimensions(100, 100)))
 })
 
 describe('clampWidth', () => {
@@ -142,118 +128,38 @@ describe('clampHeight', () => {
 
 describe('clamp', () => {
   test(...c(dimensions(50), clamp(100, 200), dimensions(100, 100)))
+  test(...c(dimensions(50), clamp(100, dimensions(200, 200)), dimensions(100, 100)))
+  test(...c(dimensions(50), clamp(dimensions(100, 100), 200), dimensions(100, 100)))
   test(
-    ...c(
-      dimensions(50),
-      clamp(100, dimensions(200, 200)),
-      dimensions(100, 100),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(50),
-      clamp(dimensions(100, 100), 200),
-      dimensions(100, 100),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(50),
-      clamp(dimensions(100, 100), dimensions(200, 200)),
-      dimensions(100, 100),
-    ),
+    ...c(dimensions(50), clamp(dimensions(100, 100), dimensions(200, 200)), dimensions(100, 100)),
   )
 
   test(...c(dimensions(100), clamp(100, 200), dimensions(100, 100)))
+  test(...c(dimensions(100), clamp(100, dimensions(200, 200)), dimensions(100, 100)))
+  test(...c(dimensions(100), clamp(dimensions(100, 100), 200), dimensions(100, 100)))
   test(
-    ...c(
-      dimensions(100),
-      clamp(100, dimensions(200, 200)),
-      dimensions(100, 100),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(100),
-      clamp(dimensions(100, 100), 200),
-      dimensions(100, 100),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(100),
-      clamp(dimensions(100, 100), dimensions(200, 200)),
-      dimensions(100, 100),
-    ),
+    ...c(dimensions(100), clamp(dimensions(100, 100), dimensions(200, 200)), dimensions(100, 100)),
   )
 
   test(...c(dimensions(150), clamp(100, 200), dimensions(150, 150)))
+  test(...c(dimensions(150), clamp(100, dimensions(200, 200)), dimensions(150, 150)))
+  test(...c(dimensions(150), clamp(dimensions(100, 100), 200), dimensions(150, 150)))
   test(
-    ...c(
-      dimensions(150),
-      clamp(100, dimensions(200, 200)),
-      dimensions(150, 150),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(150),
-      clamp(dimensions(100, 100), 200),
-      dimensions(150, 150),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(150),
-      clamp(dimensions(100, 100), dimensions(200, 200)),
-      dimensions(150, 150),
-    ),
+    ...c(dimensions(150), clamp(dimensions(100, 100), dimensions(200, 200)), dimensions(150, 150)),
   )
 
   test(...c(dimensions(200), clamp(100, 200), dimensions(200, 200)))
+  test(...c(dimensions(200), clamp(100, dimensions(200, 200)), dimensions(200, 200)))
+  test(...c(dimensions(200), clamp(dimensions(100, 100), 200), dimensions(200, 200)))
   test(
-    ...c(
-      dimensions(200),
-      clamp(100, dimensions(200, 200)),
-      dimensions(200, 200),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(200),
-      clamp(dimensions(100, 100), 200),
-      dimensions(200, 200),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(200),
-      clamp(dimensions(100, 100), dimensions(200, 200)),
-      dimensions(200, 200),
-    ),
+    ...c(dimensions(200), clamp(dimensions(100, 100), dimensions(200, 200)), dimensions(200, 200)),
   )
 
   test(...c(dimensions(250), clamp(100, 200), dimensions(200, 200)))
+  test(...c(dimensions(250), clamp(100, dimensions(200, 200)), dimensions(200, 200)))
+  test(...c(dimensions(250), clamp(dimensions(100, 100), 200), dimensions(200, 200)))
   test(
-    ...c(
-      dimensions(250),
-      clamp(100, dimensions(200, 200)),
-      dimensions(200, 200),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(250),
-      clamp(dimensions(100, 100), 200),
-      dimensions(200, 200),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(250),
-      clamp(dimensions(100, 100), dimensions(200, 200)),
-      dimensions(200, 200),
-    ),
+    ...c(dimensions(250), clamp(dimensions(100, 100), dimensions(200, 200)), dimensions(200, 200)),
   )
 })
 
@@ -316,25 +222,7 @@ describe('cover', () => {
 })
 
 describe('mix', () => {
-  test(
-    ...c(
-      dimensions(100, 100),
-      mix(dimensions(200, 200), 0),
-      dimensions(100, 100),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(100, 100),
-      mix(dimensions(200, 200), 0.5),
-      dimensions(150, 150),
-    ),
-  )
-  test(
-    ...c(
-      dimensions(100, 100),
-      mix(dimensions(200, 200), 1),
-      dimensions(200, 200),
-    ),
-  )
+  test(...c(dimensions(100, 100), mix(dimensions(200, 200), 0), dimensions(100, 100)))
+  test(...c(dimensions(100, 100), mix(dimensions(200, 200), 0.5), dimensions(150, 150)))
+  test(...c(dimensions(100, 100), mix(dimensions(200, 200), 1), dimensions(200, 200)))
 })

@@ -1,10 +1,7 @@
 export type MapFn<T = unknown> = (a: T) => T
 export type FinalMapFn<T = unknown, R = unknown> = (a: T) => R
 
-export function pipe<T, R>(
-  value: T,
-  ...fns: [...Array<MapFn<T>>, FinalMapFn<T, R>]
-): R
+export function pipe<T, R>(value: T, ...fns: [...Array<MapFn<T>>, FinalMapFn<T, R>]): R
 export function pipe(
   value: unknown,
   ...fns: Array<MapFn<unknown> | FinalMapFn<unknown, unknown>>

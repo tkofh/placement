@@ -1,8 +1,8 @@
 import { bench } from 'vitest'
-import { direction, flexbox, wrap } from '../src/flexbox'
-import { applyFlexbox } from '../src/flexbox'
-import { frame } from '../src/frame'
-import { rect, setSize } from '../src/rect'
+import { direction, flexbox, wrap } from '../src/flexbox.ts'
+import { applyFlexbox } from '../src/flexbox.ts'
+import { frame } from '../src/frame.ts'
+import { rect, setSize } from '../src/rect.ts'
 
 const frames = [
   frame({
@@ -54,8 +54,6 @@ bench('flexbox', () => {
     alignContentSpaceOuter: 0,
   })
 
-  parent = parent.pipe(
-    setSize(parent.width + Math.round(Math.random() * 100) - 25),
-  )
+  parent = parent.pipe(setSize(parent.width + Math.round(Math.random() * 100) - 25))
   applyFlexbox(frames, layout, parent)
 })

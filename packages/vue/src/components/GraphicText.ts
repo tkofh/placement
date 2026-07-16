@@ -1,11 +1,7 @@
 import { rect } from 'placement/rect'
 import { defineComponent, h, ref } from 'vue'
-import { useTextRect } from '../composables/useDomRect'
-import {
-  PAINT_PROP_KEYS,
-  type PaintProps,
-  usePaint,
-} from '../composables/usePaint'
+import { useTextRect } from '../composables/useDomRect.ts'
+import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
 import {
   INSET_PROP_KEYS,
   type InsetProps,
@@ -13,45 +9,26 @@ import {
   type TransformProps,
   useAxisInterval,
   useTransformedRect,
-} from '../composables/useRect'
+} from '../composables/useRect.ts'
 import {
   useParentHeight,
   useParentWidth,
   useParentX,
   useParentY,
-} from '../composables/useSizingContext'
-import { useLengthPercentage } from '../props/lengthPercentage'
+} from '../composables/useSizingContext.ts'
+import { useLengthPercentage } from '../props/lengthPercentage.ts'
 
-export interface GraphicTextProps
-  extends PaintProps,
-    InsetProps,
-    TransformProps {}
+export interface GraphicTextProps extends PaintProps, InsetProps, TransformProps {}
 
 export const GraphicText = defineComponent(
   (props: GraphicTextProps, { slots }) => {
     const text = ref<SVGTextElement>()
     const domRect = useTextRect(text)
 
-    const top = useLengthPercentage(
-      () => props.top,
-      Number.POSITIVE_INFINITY,
-      'height',
-    )
-    const right = useLengthPercentage(
-      () => props.right,
-      Number.POSITIVE_INFINITY,
-      'width',
-    )
-    const bottom = useLengthPercentage(
-      () => props.bottom,
-      Number.POSITIVE_INFINITY,
-      'height',
-    )
-    const left = useLengthPercentage(
-      () => props.left,
-      Number.POSITIVE_INFINITY,
-      'width',
-    )
+    const top = useLengthPercentage(() => props.top, Number.POSITIVE_INFINITY, 'height')
+    const right = useLengthPercentage(() => props.right, Number.POSITIVE_INFINITY, 'width')
+    const bottom = useLengthPercentage(() => props.bottom, Number.POSITIVE_INFINITY, 'height')
+    const left = useLengthPercentage(() => props.left, Number.POSITIVE_INFINITY, 'width')
 
     const parentX = useParentX()
     const parentY = useParentY()
@@ -78,10 +55,7 @@ export const GraphicText = defineComponent(
       Number.POSITIVE_INFINITY,
     )
 
-    const self = useTransformedRect(
-      () => rect.fromInterval(x.value, y.value),
-      props,
-    )
+    const self = useTransformedRect(() => rect.fromInterval(x.value, y.value), props)
 
     const paint = usePaint(props)
 

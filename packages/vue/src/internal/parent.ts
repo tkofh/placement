@@ -1,9 +1,6 @@
 import type { Dimensions } from 'placement/dimensions'
 import { type MaybeRefOrGetter, toValue } from 'vue'
-import {
-  useParentHeight,
-  useParentWidth,
-} from '../composables/useSizingContext'
+import { useParentHeight, useParentWidth } from '../composables/useSizingContext.ts'
 
 export function useOverrideablePercentBasis(
   percentBasis: 'width' | 'height' | MaybeRefOrGetter<number> = 'width',

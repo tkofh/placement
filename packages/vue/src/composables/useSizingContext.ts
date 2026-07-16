@@ -28,16 +28,10 @@ export interface RectGetters {
 //   'placement/root/height',
 // )
 
-const PARENT_RECT_X: InjectionKey<RectComponentGetter> =
-  Symbol.for('placement/parent/x')
-const PARENT_RECT_Y: InjectionKey<RectComponentGetter> =
-  Symbol.for('placement/parent/y')
-const PARENT_RECT_WIDTH: InjectionKey<RectComponentGetter> = Symbol.for(
-  'placement/parent/width',
-)
-const PARENT_RECT_HEIGHT: InjectionKey<RectComponentGetter> = Symbol.for(
-  'placement/parent/height',
-)
+const PARENT_RECT_X: InjectionKey<RectComponentGetter> = Symbol.for('placement/parent/x')
+const PARENT_RECT_Y: InjectionKey<RectComponentGetter> = Symbol.for('placement/parent/y')
+const PARENT_RECT_WIDTH: InjectionKey<RectComponentGetter> = Symbol.for('placement/parent/width')
+const PARENT_RECT_HEIGHT: InjectionKey<RectComponentGetter> = Symbol.for('placement/parent/height')
 
 class RectGetterStorage {
   private _x?: ComputedRef<number>

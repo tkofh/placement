@@ -1,139 +1,159 @@
 {
   "name": "@placement/vue",
   "version": "0.2.3",
-  "description": "Vue components for Placement",
-  "author": "Tim Morris <timthewebguy@gmail.com>",
+  "description": "Vue components and composables for Placement",
   "homepage": "https://github.com/tkofh/placement#readme",
+  "bugs": {
+    "url": "https://github.com/tkofh/placement/issues"
+  },
   "license": "MIT",
-  "sideEffects": false,
-  "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.mjs",
-      "types": "./dist/index.d.ts"
-    },
-    "./FlexLayout": {
-      "import": "./dist/components/FlexLayout.mjs",
-      "types": "./dist/components/FlexLayout.d.ts"
-    },
-    "./FlexItem": {
-      "import": "./dist/components/FlexItem.mjs",
-      "types": "./dist/components/FlexItem.d.ts"
-    },
-    "./GraphicCircle": {
-      "import": "./dist/components/GraphicCircle.mjs",
-      "types": "./dist/components/GraphicCircle.d.ts"
-    },
-    "./GraphicGroup": {
-      "import": "./dist/components/GraphicGroup.mjs",
-      "types": "./dist/components/GraphicGroup.d.ts"
-    },
-    "./GraphicLine": {
-      "import": "./dist/components/GraphicLine.mjs",
-      "types": "./dist/components/GraphicLine.d.ts"
-    },
-    "./GraphicPoint": {
-      "import": "./dist/components/GraphicPoint.mjs",
-      "types": "./dist/components/GraphicPoint.d.ts"
-    },
-    "./GraphicRect": {
-      "import": "./dist/components/GraphicRect.mjs",
-      "types": "./dist/components/GraphicRect.d.ts"
-    },
-    "./GraphicRoot": {
-      "import": "./dist/components/GraphicRoot.mjs",
-      "types": "./dist/components/GraphicRoot.d.ts"
-    },
-    "./GraphicText": {
-      "import": "./dist/components/GraphicText.mjs",
-      "types": "./dist/components/GraphicText.d.ts"
-    },
-    "./data/dimensions": {
-      "import": "./dist/data/dimensions.mjs",
-      "types": "./dist/data/dimensions.d.ts"
-    },
-    "./data/offset": {
-      "import": "./dist/data/offset.mjs",
-      "types": "./dist/data/offset.d.ts"
-    },
-    "./data/point": {
-      "import": "./dist/data/point.mjs",
-      "types": "./dist/data/point.d.ts"
-    },
-    "./props/alignContent": {
-      "import": "./dist/props/alignContent.mjs",
-      "types": "./dist/props/alignContent.d.ts"
-    },
-    "./props/alignItems": {
-      "import": "./dist/props/alignItems.mjs",
-      "types": "./dist/props/alignItems.d.ts"
-    },
-    "./props/alignSelf": {
-      "import": "./dist/props/alignSelf.mjs",
-      "types": "./dist/props/alignSelf.d.ts"
-    },
-    "./props/aspectRatio": {
-      "import": "./dist/props/aspectRatio.mjs",
-      "types": "./dist/props/aspectRatio.d.ts"
-    },
-    "./props/flow": {
-      "import": "./dist/props/flow.mjs",
-      "types": "./dist/props/flow.d.ts"
-    },
-    "./props/gap": {
-      "import": "./dist/props/gap.mjs",
-      "types": "./dist/props/gap.d.ts"
-    },
-    "./props/justifyContent": {
-      "import": "./dist/props/justifyContent.mjs",
-      "types": "./dist/props/justifyContent.d.ts"
-    },
-    "./props/justifySelf": {
-      "import": "./dist/props/justifySelf.mjs",
-      "types": "./dist/props/justifySelf.d.ts"
-    },
-    "./props/lengthPercentage": {
-      "import": "./dist/props/lengthPercentage.mjs",
-      "types": "./dist/props/lengthPercentage.d.ts"
-    },
-    "./props/origin": {
-      "import": "./dist/props/origin.mjs",
-      "types": "./dist/props/origin.d.ts"
-    },
-    "./props/size": {
-      "import": "./dist/props/size.mjs",
-      "types": "./dist/props/size.d.ts"
-    },
-    "./nuxt": {
-      "import": "./dist/nuxt.mjs",
-      "types": "./dist/nuxt.d.ts"
-    }
-  },
-  "files": ["dist"],
-  "publishConfig": {
-    "access": "public"
-  },
+  "author": "Tim Morris <timthewebguy@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tkofh/placement.git"
   },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./FlexLayout": {
+      "types": "./dist/components/FlexLayout.d.mts",
+      "import": "./dist/components/FlexLayout.mjs"
+    },
+    "./FlexItem": {
+      "types": "./dist/components/FlexItem.d.mts",
+      "import": "./dist/components/FlexItem.mjs"
+    },
+    "./GraphicCircle": {
+      "types": "./dist/components/GraphicCircle.d.mts",
+      "import": "./dist/components/GraphicCircle.mjs"
+    },
+    "./GraphicGroup": {
+      "types": "./dist/components/GraphicGroup.d.mts",
+      "import": "./dist/components/GraphicGroup.mjs"
+    },
+    "./GraphicLine": {
+      "types": "./dist/components/GraphicLine.d.mts",
+      "import": "./dist/components/GraphicLine.mjs"
+    },
+    "./GraphicPoint": {
+      "types": "./dist/components/GraphicPoint.d.mts",
+      "import": "./dist/components/GraphicPoint.mjs"
+    },
+    "./GraphicRect": {
+      "types": "./dist/components/GraphicRect.d.mts",
+      "import": "./dist/components/GraphicRect.mjs"
+    },
+    "./GraphicRoot": {
+      "types": "./dist/components/GraphicRoot.d.mts",
+      "import": "./dist/components/GraphicRoot.mjs"
+    },
+    "./GraphicText": {
+      "types": "./dist/components/GraphicText.d.mts",
+      "import": "./dist/components/GraphicText.mjs"
+    },
+    "./data/dimensions": {
+      "types": "./dist/data/dimensions.d.mts",
+      "import": "./dist/data/dimensions.mjs"
+    },
+    "./data/interval": {
+      "types": "./dist/data/interval.d.mts",
+      "import": "./dist/data/interval.mjs"
+    },
+    "./data/offset": {
+      "types": "./dist/data/offset.d.mts",
+      "import": "./dist/data/offset.mjs"
+    },
+    "./data/point": {
+      "types": "./dist/data/point.d.mts",
+      "import": "./dist/data/point.mjs"
+    },
+    "./props/alignContent": {
+      "types": "./dist/props/alignContent.d.mts",
+      "import": "./dist/props/alignContent.mjs"
+    },
+    "./props/alignItems": {
+      "types": "./dist/props/alignItems.d.mts",
+      "import": "./dist/props/alignItems.mjs"
+    },
+    "./props/alignSelf": {
+      "types": "./dist/props/alignSelf.d.mts",
+      "import": "./dist/props/alignSelf.mjs"
+    },
+    "./props/aspectRatio": {
+      "types": "./dist/props/aspectRatio.d.mts",
+      "import": "./dist/props/aspectRatio.mjs"
+    },
+    "./props/flow": {
+      "types": "./dist/props/flow.d.mts",
+      "import": "./dist/props/flow.mjs"
+    },
+    "./props/gap": {
+      "types": "./dist/props/gap.d.mts",
+      "import": "./dist/props/gap.mjs"
+    },
+    "./props/justifyContent": {
+      "types": "./dist/props/justifyContent.d.mts",
+      "import": "./dist/props/justifyContent.mjs"
+    },
+    "./props/justifySelf": {
+      "types": "./dist/props/justifySelf.d.mts",
+      "import": "./dist/props/justifySelf.mjs"
+    },
+    "./props/lengthPercentage": {
+      "types": "./dist/props/lengthPercentage.d.mts",
+      "import": "./dist/props/lengthPercentage.mjs"
+    },
+    "./props/origin": {
+      "types": "./dist/props/origin.d.mts",
+      "import": "./dist/props/origin.mjs"
+    },
+    "./props/size": {
+      "types": "./dist/props/size.d.mts",
+      "import": "./dist/props/size.mjs"
+    },
+    "./nuxt": {
+      "types": "./dist/nuxt.d.mts",
+      "import": "./dist/nuxt.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "unbuild"
+    "build": "tsdown",
+    "build:watch": "tsdown --watch",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nuxt/kit": "^3.12.4",
-    "@nuxt/schema": "^3.12.4",
-    "colorjs.io": "^0.5.2",
+    "curvy": "^2.0.0-alpha.17",
     "placement": "workspace:^",
-    "valued": "^0.4.8",
-    "vue": "^3.4.33"
+    "valued": "^0.5.0"
   },
   "devDependencies": {
-    "@types/node": "^20.14.11",
-    "typescript": "^5.5.3",
-    "unbuild": "^2.0.0"
+    "@nuxt/kit": "^3.12.4",
+    "@nuxt/schema": "^3.12.4",
+    "tsdown": "^0.22.0",
+    "typescript": "^6.0.3",
+    "vue": "^3.4.33"
+  },
+  "peerDependencies": {
+    "@nuxt/kit": ">=3.12.0",
+    "@nuxt/schema": ">=3.12.0",
+    "vue": ">=3.4.0"
+  },
+  "peerDependenciesMeta": {
+    "@nuxt/kit": {
+      "optional": true
+    },
+    "@nuxt/schema": {
+      "optional": true
+    }
   }
 }

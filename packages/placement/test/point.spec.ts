@@ -28,7 +28,7 @@ import {
   translateTheta,
   translateX,
   translateY,
-} from '../src/point'
+} from '../src/point.ts'
 
 function c<O>(
   input: Point,
@@ -57,8 +57,7 @@ describe('basic cases', () => {
     { input: () => fromPolar(100, 1), output: () => point(100, 0) },
     { input: () => fromPolar(100, 1.25), output: () => point(0, 100) },
     {
-      input: () =>
-        center([point(0, 100), point(100, 0), point(0, -100), point(-100, 0)]),
+      input: () => center([point(0, 100), point(100, 0), point(0, -100), point(-100, 0)]),
       output: () => point(0, 0),
     },
     {
@@ -186,13 +185,7 @@ describe('avoid', () => {
   test(...c(point(5, 0), avoid(point(0, 0), 10), point(10, 0)))
   test(...c(point(-5, 0), avoid(point(0, 0), 10), point(-10, 0)))
   test(...c(point(0, 0), avoid(point(0, 0), 10), point(10, 0)))
-  test(
-    ...c(
-      fromPolar(10, 0.125),
-      avoid(fromPolar(10, 0.125), 10),
-      fromPolar(20, 0.125),
-    ),
-  )
+  test(...c(fromPolar(10, 0.125), avoid(fromPolar(10, 0.125), 10), fromPolar(20, 0.125)))
 })
 
 describe('normalize', () => {

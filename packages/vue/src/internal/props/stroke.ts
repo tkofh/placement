@@ -1,16 +1,16 @@
 import { type ParserValue, parse } from 'valued'
-import { juxtapose } from 'valued/combinators/juxtapose'
-import { oneOf } from 'valued/combinators/oneOf'
-import { someOf } from 'valued/combinators/someOf'
+import { juxtapose } from 'valued'
+import { oneOf } from 'valued'
+import { someOf } from 'valued'
+import { oneOrMore } from 'valued'
+import { optional } from 'valued'
 import { color } from 'valued/data/color'
 import { keyword, keywords } from 'valued/data/keyword'
 import { lengthPercentage } from 'valued/data/length-percentage'
 import { number } from 'valued/data/number'
-import { oneOrMore } from 'valued/multipliers/oneOrMore'
-import { optional } from 'valued/multipliers/optional'
-import { createCache } from '../cache'
-import { SIZE_UNITS } from './constants'
-import { resolveSize1D } from './size1d'
+import { createCache } from '../cache.ts'
+import { SIZE_UNITS } from './constants.ts'
+import { resolveSize1D } from './size1d.ts'
 
 const strokeParser = someOf([
   color(),
@@ -23,11 +23,7 @@ const strokeParser = someOf([
   juxtapose(['cap', keywords(['butt', 'round', 'square'])]),
   oneOf([
     keyword('solid'),
-    juxtapose([
-      'dashed',
-      oneOrMore(number()),
-      optional(juxtapose(['offset', number()])),
-    ]),
+    juxtapose(['dashed', oneOrMore(number()), optional(juxtapose(['offset', number()]))]),
   ]),
 ])
 

@@ -1,15 +1,7 @@
 import { defineComponent, h } from 'vue'
-import {
-  PAINT_PROP_KEYS,
-  type PaintProps,
-  usePaint,
-} from '../composables/usePaint'
-import {
-  RADIUS_PROP_KEYS,
-  type RadiusProps,
-  useRadius,
-} from '../composables/useRadius'
-import { RECT_PROP_KEYS, type RectProps, useRect } from '../composables/useRect'
+import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
+import { RADIUS_PROP_KEYS, type RadiusProps, useRadius } from '../composables/useRadius.ts'
+import { RECT_PROP_KEYS, type RectProps, useRect } from '../composables/useRect.ts'
 
 export interface GraphicRectProps extends PaintProps, RectProps, RadiusProps {}
 

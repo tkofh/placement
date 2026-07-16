@@ -1,4 +1,4 @@
-// import { dual } from './utils/function'
+// import { dual } from './utils/function.ts'
 //
 // const TypeBrand: unique symbol = Symbol('placement/collection')
 //

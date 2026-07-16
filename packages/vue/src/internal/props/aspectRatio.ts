@@ -1,8 +1,8 @@
 import { type ParserInput, parse } from 'valued'
-import { oneOf } from 'valued/combinators/oneOf'
+import { oneOf } from 'valued'
 import { keyword } from 'valued/data/keyword'
 import { isRatioValue, ratio } from 'valued/data/ratio'
-import { createCache } from '../cache'
+import { createCache } from '../cache.ts'
 
 const aspectRatio = oneOf([ratio(), keyword('auto')])
 

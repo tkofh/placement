@@ -1,10 +1,10 @@
 import { parse } from 'valued'
-import { oneOf } from 'valued/combinators/oneOf'
-import { someOf } from 'valued/combinators/someOf'
+import { oneOf } from 'valued'
+import { someOf } from 'valued'
+import { optional } from 'valued'
 import { color } from 'valued/data/color'
 import { isKeywordValue, keyword, keywords } from 'valued/data/keyword'
-import { optional } from 'valued/multipliers/optional'
-import { createCache } from '../cache'
+import { createCache } from '../cache.ts'
 
 const fillParser = oneOf([
   keyword('none'),

@@ -1,11 +1,11 @@
 import { type Dimensions, dimensions } from 'placement/dimensions'
 import { auto } from 'placement/utils'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
-import { computedDimensions } from '../data/dimensions'
-import { useOverrideableParent } from '../internal/parent'
-import type { AspectRatioInput } from '../internal/props/aspectRatio'
-import { type Size1DInput, resolveSize1D } from '../internal/props/size1d'
-import { useAspectRatio } from './aspectRatio'
+import { computedDimensions } from '../data/dimensions.ts'
+import { useOverrideableParent } from '../internal/parent.ts'
+import type { AspectRatioInput } from '../internal/props/aspectRatio.ts'
+import { type Size1DInput, resolveSize1D } from '../internal/props/size1d.ts'
+import { useAspectRatio } from './aspectRatio.ts'
 
 export function useSize(
   width: MaybeRefOrGetter<Size1DInput>,
@@ -17,18 +17,10 @@ export function useSize(
   const parentDimensions = useOverrideableParent(parent)
 
   const widthRef = computed(() =>
-    resolveSize1D(
-      toValue(width),
-      Number.POSITIVE_INFINITY,
-      toValue(parentDimensions.width),
-    ),
+    resolveSize1D(toValue(width), Number.POSITIVE_INFINITY, toValue(parentDimensions.width)),
   )
   const heightRef = computed(() =>
-    resolveSize1D(
-      toValue(height),
-      Number.POSITIVE_INFINITY,
-      toValue(parentDimensions.height),
-    ),
+    resolveSize1D(toValue(height), Number.POSITIVE_INFINITY, toValue(parentDimensions.height)),
   )
 
   const fallbackRef = computed((previous: Dimensions | undefined) => {

@@ -1,5 +1,5 @@
-import { Pipeable } from './internal/pipeable'
-import { dual } from './utils/function'
+import { Pipeable } from './internal/pipeable.ts'
+import { dual } from './utils/function.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/scale')
 type TypeBrand = typeof TypeBrand
@@ -53,13 +53,8 @@ export const isScale = (value: unknown): value is Scale => {
 }
 
 export const map: {
-  <R>(
-    scale: Scale,
-    fn: (scale: number, index: number) => R,
-  ): IterableIterator<R>
-  <R>(
-    fn: (scale: number, index: number) => R,
-  ): (scale: Scale) => IterableIterator<R>
+  <R>(scale: Scale, fn: (scale: number, index: number) => R): IterableIterator<R>
+  <R>(fn: (scale: number, index: number) => R): (scale: Scale) => IterableIterator<R>
 } = dual(2, function* <
   R,
 >(scale: Scale, fn: (scale: number, index: number) => R): IterableIterator<R> {
@@ -70,8 +65,7 @@ export const map: {
   }
 })
 
-type SizeableCollection<T> = Iterable<T> &
-  ({ length: number } | { size: number })
+type SizeableCollection<T> = Iterable<T> & ({ length: number } | { size: number })
 
 export const mapWith: {
   <T, R>(

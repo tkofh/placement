@@ -1,10 +1,10 @@
 import { type ParserInput, parse } from 'valued'
-import { juxtapose } from 'valued/combinators/juxtapose'
-import { oneOf } from 'valued/combinators/oneOf'
+import { juxtapose } from 'valued'
+import { oneOf } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { type NumberValue, isNumberValue, number } from 'valued/data/number'
 import { type PercentageValue, percentage } from 'valued/data/percentage'
-import { createCache } from '../cache'
+import { createCache } from '../cache.ts'
 
 const justifySelfParser = oneOf([
   keywords(['start', 'end', 'center']),

@@ -1,16 +1,8 @@
 import { dimensions } from 'placement/dimensions'
 import { point } from 'placement/point'
 import { computed, defineComponent, h } from 'vue'
-import {
-  PAINT_PROP_KEYS,
-  type PaintProps,
-  usePaint,
-} from '../composables/usePaint'
-import {
-  RADIUS_PROP_KEYS,
-  type RadiusProps,
-  useRadius,
-} from '../composables/useRadius'
+import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
+import { RADIUS_PROP_KEYS, type RadiusProps, useRadius } from '../composables/useRadius.ts'
 import {
   RECT_PROP_KEYS,
   type RectProps,
@@ -18,20 +10,17 @@ import {
   useBasisSize,
   useMaxSize,
   useMinSize,
-} from '../composables/useRect'
+} from '../composables/useRect.ts'
 import {
   useParentHeight,
   useParentWidth,
   useParentX,
   useParentY,
-} from '../composables/useSizingContext'
-import { useLengthPercentage } from '../props/lengthPercentage'
-import { useOrigin } from '../props/origin'
+} from '../composables/useSizingContext.ts'
+import { useLengthPercentage } from '../props/lengthPercentage.ts'
+import { useOrigin } from '../props/origin.ts'
 
-export interface GraphicCircleProps
-  extends PaintProps,
-    RectProps,
-    RadiusProps {}
+export interface GraphicCircleProps extends PaintProps, RectProps, RadiusProps {}
 
 export const GraphicCircle = defineComponent(
   (props: GraphicCircleProps) => {
@@ -39,26 +28,10 @@ export const GraphicCircle = defineComponent(
     const minSize = useMinSize(props)
     const maxSize = useMaxSize(props)
 
-    const top = useLengthPercentage(
-      () => props.top,
-      Number.POSITIVE_INFINITY,
-      'height',
-    )
-    const right = useLengthPercentage(
-      () => props.right,
-      Number.POSITIVE_INFINITY,
-      'width',
-    )
-    const bottom = useLengthPercentage(
-      () => props.bottom,
-      Number.POSITIVE_INFINITY,
-      'height',
-    )
-    const left = useLengthPercentage(
-      () => props.left,
-      Number.POSITIVE_INFINITY,
-      'width',
-    )
+    const top = useLengthPercentage(() => props.top, Number.POSITIVE_INFINITY, 'height')
+    const right = useLengthPercentage(() => props.right, Number.POSITIVE_INFINITY, 'width')
+    const bottom = useLengthPercentage(() => props.bottom, Number.POSITIVE_INFINITY, 'height')
+    const left = useLengthPercentage(() => props.left, Number.POSITIVE_INFINITY, 'width')
 
     const radius = useRadius(props, point.infinity)
 
@@ -99,13 +72,9 @@ export const GraphicCircle = defineComponent(
     )
 
     const _rx = computed(() => x.value.size * 0.5)
-    const _cx = computed(
-      () => x.value.start + _rx.value - origin.value.x * x.value.size,
-    )
+    const _cx = computed(() => x.value.start + _rx.value - origin.value.x * x.value.size)
     const _ry = computed(() => y.value.size * 0.5)
-    const _cy = computed(
-      () => y.value.start + _ry.value - origin.value.y * y.value.size,
-    )
+    const _cy = computed(() => y.value.start + _ry.value - origin.value.y * y.value.size)
 
     const paint = usePaint(props)
 

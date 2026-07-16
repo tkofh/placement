@@ -4,14 +4,11 @@ import {
   type AlignSelfValue,
   keywordResults,
   resolveAlignSelf,
-} from '../internal/props/alignSelf'
+} from '../internal/props/alignSelf.ts'
 
 export type { AlignSelfValue, AlignSelfInput }
 
-function preferCachedAlignSelf(
-  value: AlignSelfValue,
-  previous?: AlignSelfValue,
-): AlignSelfValue {
+function preferCachedAlignSelf(value: AlignSelfValue, previous?: AlignSelfValue): AlignSelfValue {
   if (
     previous === undefined ||
     previous.align !== value.align ||

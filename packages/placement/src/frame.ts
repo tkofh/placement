@@ -1,6 +1,6 @@
-import { Pipeable } from './internal/pipeable'
-import { normalizeSizing, normalizeTRBL } from './utils/arguments'
-import { dual } from './utils/function'
+import { Pipeable } from './internal/pipeable.ts'
+import { normalizeSizing, normalizeTRBL } from './utils/arguments.ts'
+import { dual } from './utils/function.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/frame')
 type TypeBrand = typeof TypeBrand
@@ -54,23 +54,16 @@ class Frame extends Pipeable {
     this.offsetBottom = frame.offsetBottom ?? this.offsetBottom
     this.offsetLeft = frame.offsetLeft ?? this.offsetLeft
 
-    const {
-      aspectRatio,
-      width,
-      height,
-      minWidth,
-      minHeight,
-      maxWidth,
-      maxHeight,
-    } = normalizeSizing(
-      frame.aspectRatio ?? 0,
-      frame.width ?? -1,
-      frame.height ?? -1,
-      frame.minWidth ?? 0,
-      frame.minHeight ?? 0,
-      frame.maxWidth ?? Number.POSITIVE_INFINITY,
-      frame.maxHeight ?? Number.POSITIVE_INFINITY,
-    )
+    const { aspectRatio, width, height, minWidth, minHeight, maxWidth, maxHeight } =
+      normalizeSizing(
+        frame.aspectRatio ?? 0,
+        frame.width ?? -1,
+        frame.height ?? -1,
+        frame.minWidth ?? 0,
+        frame.minHeight ?? 0,
+        frame.maxWidth ?? Number.POSITIVE_INFINITY,
+        frame.maxHeight ?? Number.POSITIVE_INFINITY,
+      )
 
     this.aspectRatio = aspectRatio
     this.width = width
@@ -89,20 +82,15 @@ class Frame extends Pipeable {
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: inspect code does not need refactoring
   [Symbol.for('nodejs.util.inspect.custom')]() {
-    const attributes: Array<string> = [
-      `width: ${this.width}`,
-      `height: ${this.height}`,
-    ]
+    const attributes: Array<string> = [`width: ${this.width}`, `height: ${this.height}`]
 
     const hasOffsetTop = this.offsetTop !== 0
     const hasOffsetBottom = this.offsetBottom !== 0
     const hasOffsetLeft = this.offsetLeft !== 0
     const hasOffsetRight = this.offsetRight !== 0
 
-    const offsetXSymmetric =
-      hasOffsetLeft && this.offsetLeft === this.offsetRight
-    const offsetYSymmetric =
-      hasOffsetTop && this.offsetTop === this.offsetBottom
+    const offsetXSymmetric = hasOffsetLeft && this.offsetLeft === this.offsetRight
+    const offsetYSymmetric = hasOffsetTop && this.offsetTop === this.offsetBottom
 
     const offsetSymmetric =
       offsetXSymmetric && offsetYSymmetric && this.offsetTop === this.offsetLeft

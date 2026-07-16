@@ -9,7 +9,7 @@ import {
   toValue,
   watch,
 } from 'vue'
-import { useIndexParent } from './useChildIndex'
+import { useIndexParent } from './useChildIndex.ts'
 
 const POINTS: InjectionKey<Ref<Array<Point>>> = Symbol()
 

@@ -1,13 +1,13 @@
 // import { type Offset, offset } from 'placement/offset'
 // import { type Point, isPoint } from 'placement/point'
 // import { type ParserInput, parse } from 'valued'
-// import { oneOf } from 'valued/combinators/oneOf'
+// import { oneOf } from 'valued'
 // import { lengthPercentage } from 'valued/data/length-percentage'
 // import { number } from 'valued/data/number'
-// import { between } from 'valued/multipliers/between'
-// import { createCache } from '../cache'
-// import { SIZE_UNITS } from './constants'
-// import { resolveSize1D } from './size1d'
+// import { between } from 'valued'
+// import { createCache } from '../cache.ts'
+// import { SIZE_UNITS } from './constants.ts'
+// import { resolveSize1D } from './size1d.ts'
 //
 // const offsetParser = between(
 //   oneOf([lengthPercentage.subset(SIZE_UNITS), number()]),

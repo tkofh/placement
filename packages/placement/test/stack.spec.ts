@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { interval } from '../src/interval'
-import { stack, track } from '../src/track'
+import { interval } from '../src/interval.ts'
+import { stack, track } from '../src/track.ts'
 
 describe('basic', () => {
   test.each([

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { interval } from '../src/interval'
-import { sequence, track } from '../src/track'
+import { interval } from '../src/interval.ts'
+import { sequence, track } from '../src/track.ts'
 
 describe('basic cases', () => {
   test.each([
@@ -169,10 +169,7 @@ describe('with shrink', () => {
         { basis: 200, shrink: 1 },
       ],
       options: { size: 200 },
-      result: track([
-        interval(0, (100 / 3) * 2),
-        interval((100 / 3) * 2, 100 + 100 / 3),
-      ]),
+      result: track([interval(0, (100 / 3) * 2), interval((100 / 3) * 2, 100 + 100 / 3)]),
     },
     {
       items: [

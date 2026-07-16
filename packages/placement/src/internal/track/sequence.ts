@@ -1,4 +1,4 @@
-import { TrackItem, type TrackItemInput } from './item'
+import { TrackItem, type TrackItemInput } from './item.ts'
 
 export interface SequenceTrackItem extends TrackItemInput {
   grow?: number
@@ -120,7 +120,7 @@ export function applyGrow(
   }
 
   for (const item of initialGrowable) {
-    item.adjustment = item.adjustment * ratio
+    item.adjustment *= ratio
   }
 
   return initialFreeSpace - freeSpace
@@ -164,7 +164,7 @@ export function applyShrink(
   }
 
   for (const item of initialShrinkable) {
-    item.adjustment = item.adjustment * ratio
+    item.adjustment *= ratio
   }
 
   return excess - initialExcess

@@ -1,30 +1,21 @@
 import { type Point, isPoint, point } from 'placement/point'
 import { type ParserInput, type ParserValue, parse } from 'valued'
-import { allOf } from 'valued/combinators/allOf'
-import { juxtapose } from 'valued/combinators/juxtapose'
-import { oneOf } from 'valued/combinators/oneOf'
+import { allOf } from 'valued'
+import { juxtapose } from 'valued'
+import { oneOf } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { isNumberValue, number } from 'valued/data/number'
 import { isPercentageValue, percentage } from 'valued/data/percentage'
-import { createCache } from '../cache'
+import { createCache } from '../cache.ts'
 
 const origin = oneOf([
   keywords(['top', 'right', 'bottom', 'left', 'center']),
   percentage(),
   number(),
-  allOf([
-    keywords(['left', 'center', 'right']),
-    keywords(['top', 'center', 'bottom']),
-  ]),
+  allOf([keywords(['left', 'center', 'right']), keywords(['top', 'center', 'bottom'])]),
   juxtapose([
-    oneOf([
-      keywords(['left', 'center', 'right']),
-      oneOf([percentage(), number()]),
-    ]),
-    oneOf([
-      keywords(['top', 'center', 'bottom']),
-      oneOf([percentage(), number()]),
-    ]),
+    oneOf([keywords(['left', 'center', 'right']), oneOf([percentage(), number()])]),
+    oneOf([keywords(['top', 'center', 'bottom']), oneOf([percentage(), number()])]),
   ]),
   allOf([
     juxtapose([keywords(['left', 'right']), oneOf([percentage(), number()])]),
@@ -113,10 +104,7 @@ function normalize(value: OriginValue) {
   return point(x, y)
 }
 
-export function resolveOrigin(
-  input: OriginInput,
-  auto: Point = point.zero,
-): Point {
+export function resolveOrigin(input: OriginInput, auto: Point = point.zero): Point {
   if (isPoint(input)) {
     return input
   }

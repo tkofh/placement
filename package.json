@@ -1,28 +1,30 @@
 {
-  "name": "placement",
+  "name": "placement-monorepo",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "turbo run build",
     "build:watch": "turbo watch build",
-    "build:any": "turbo run build --continue",
     "dev": "turbo run dev",
-    "test": "turbo run test:run",
-    "check": "biome check --write --unsafe .",
-    "check:report": "biome check .",
-    "prepare": "lefthook install",
-    "publish-packages": "pnpm check:report && turbo run build test:run && changeset version && changeset publish && pnpm check"
+    "test": "turbo run test",
+    "test:watch": "turbo run test:watch",
+    "typecheck": "turbo run typecheck",
+    "bench": "turbo run bench",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt --check .",
+    "format:fix": "oxfmt .",
+    "check": "oxlint . && oxfmt --check .",
+    "fix": "oxlint --fix . && oxfmt .",
+    "deps:update": "pnpm -r update --latest && pnpm dedupe",
+    "version-packages": "changeset version && pnpm run format:fix"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.8.3",
-    "@changesets/cli": "^2.27.7",
-    "@tsconfig/node20": "^20.1.4",
-    "lefthook": "^1.7.4",
-    "turbo": "^2.0.9",
-    "typescript": "^5.5.3",
-    "vitest": "^2.0.3"
+    "@changesets/cli": "^2.31.0",
+    "oxfmt": "^0.48.0",
+    "oxlint": "^1.63.0",
+    "turbo": "^2.9.10",
+    "typescript": "^6.0.3"
   },
-  "packageManager": "pnpm@9.4.0",
-  "engines": {
-    "node": ">=20"
-  }
+  "packageManager": "pnpm@11.0.9+sha512.34ce82e6780233cf9cad8685029a8f81d2e06196c5a9bad98879f7424940c6817c4e4524fb7d38b8553ceed48b9758b8ebaf1abd3600c232c4c8cf7366086f38"
 }

@@ -1,5 +1,5 @@
-import { auto } from '../../utils'
-import { clamp } from '../../utils/math'
+import { auto } from '../../utils.ts'
+import { clamp } from '../../utils/math.ts'
 
 export interface TrackItemInput {
   start?: number
@@ -45,11 +45,7 @@ export class TrackItem {
   }
 
   get size(): number {
-    return clamp(
-      auto(this.initialSize, 0) + this.adjustment,
-      this.min,
-      this.max,
-    )
+    return clamp(auto(this.initialSize, 0) + this.adjustment, this.min, this.max)
   }
 
   get definiteOuterSize(): number {

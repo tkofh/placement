@@ -1,6 +1,6 @@
 import { inspect } from 'node:util'
 import { describe, expect, test } from 'vitest'
-import { point } from '../src/point'
+import { point } from '../src/point.ts'
 import {
   type Rect,
   adjustBottom,
@@ -59,14 +59,10 @@ import {
   translate,
   translateX,
   translateY,
-} from '../src/rect'
+} from '../src/rect.ts'
 
 // a test case
-function c(
-  input: Rect,
-  operation: (rect: Rect) => Rect,
-  output: Rect,
-): [string, () => void] {
+function c(input: Rect, operation: (rect: Rect) => Rect, output: Rect): [string, () => void] {
   return [
     `${inspect(input)}: ${inspect(output)}`,
     () => {
@@ -126,13 +122,7 @@ describe('setHeight', () => {
 })
 
 describe('setPrecision', () => {
-  test(
-    ...c(
-      rect(10.1, 20.2, 30.3, 40.4),
-      setPrecision(0),
-      rect(10, 20, 30, 40, 0),
-    ),
-  )
+  test(...c(rect(10.1, 20.2, 30.3, 40.4), setPrecision(0), rect(10, 20, 30, 40, 0)))
 })
 
 describe('setTop', () => {
@@ -328,30 +318,22 @@ describe('alignTop', () => {
 
 describe('alignBottom', () => {
   test(...c(rect1234, alignBottom(rect5678), rect(10, 100, 30, 40)))
-  test(
-    ...c(rect1234, alignBottom(rect(50, -60, 70, 80)), rect(10, -20, 30, 40)),
-  )
+  test(...c(rect1234, alignBottom(rect(50, -60, 70, 80)), rect(10, -20, 30, 40)))
 })
 
 describe('alignCenterX', () => {
   test(...c(rect1234, alignCenterX(rect5678), rect(70, 20, 30, 40)))
-  test(
-    ...c(rect1234, alignCenterX(rect(-50, 60, 70, 80)), rect(-30, 20, 30, 40)),
-  )
+  test(...c(rect1234, alignCenterX(rect(-50, 60, 70, 80)), rect(-30, 20, 30, 40)))
 })
 
 describe('alignCenterY', () => {
   test(...c(rect1234, alignCenterY(rect5678), rect(10, 80, 30, 40)))
-  test(
-    ...c(rect1234, alignCenterY(rect(50, -60, 70, 80)), rect(10, -40, 30, 40)),
-  )
+  test(...c(rect1234, alignCenterY(rect(50, -60, 70, 80)), rect(10, -40, 30, 40)))
 })
 
 describe('alignCenter', () => {
   test(...c(rect1234, alignCenter(rect5678), rect(70, 80, 30, 40)))
-  test(
-    ...c(rect1234, alignCenter(rect(-50, -60, 70, 80)), rect(-30, -40, 30, 40)),
-  )
+  test(...c(rect1234, alignCenter(rect(-50, -60, 70, 80)), rect(-30, -40, 30, 40)))
 })
 
 describe('alignX', () => {
@@ -458,71 +440,21 @@ describe('intersect', () => {
 describe('contain', () => {
   test(...c(rect(0, 0, 100), contain(rect(50, 50, 100)), rect(50, 50, 100)))
   test(...c(rect(0, 0, 100), contain(rect(50, 50, 25)), rect(50, 50, 25)))
-  test(
-    ...c(
-      rect(0, 0, 100, 200),
-      contain(rect(50, 50, 100)),
-      rect(75, 50, 50, 100),
-    ),
-  )
+  test(...c(rect(0, 0, 100, 200), contain(rect(50, 50, 100)), rect(75, 50, 50, 100)))
 })
 
 describe('cover', () => {
   test(...c(rect(0, 0, 100), cover(rect(50, 50, 100)), rect(50, 50, 100)))
   test(...c(rect(0, 0, 100), cover(rect(50, 50, 25)), rect(50, 50, 25)))
-  test(
-    ...c(rect(0, 0, 100, 200), cover(rect(50, 50, 100)), rect(50, 0, 100, 200)),
-  )
+  test(...c(rect(0, 0, 100, 200), cover(rect(50, 50, 100)), rect(50, 0, 100, 200)))
 })
 
 describe('fit', () => {
-  test(
-    ...c(
-      rect(0, 0, 100, 200),
-      fit(rect(50, 50, 100), 'cover'),
-      rect(50, 0, 100, 200),
-    ),
-  )
-  test(
-    ...c(
-      rect(0, 0, 100, 200),
-      fit(rect(50, 50, 100), 'cover', 0),
-      rect(50, 50, 100, 200),
-    ),
-  )
-  test(
-    ...c(
-      rect(0, 0, 100, 200),
-      fit(rect(50, 50, 100), 'cover', 1),
-      rect(50, -50, 100, 200),
-    ),
-  )
-  test(
-    ...c(
-      rect(0, 0, 100, 200),
-      fit(rect(50, 50, 100), 'contain'),
-      rect(75, 50, 50, 100),
-    ),
-  )
-  test(
-    ...c(
-      rect(0, 0, 100, 200),
-      fit(rect(50, 50, 100), 'contain', 0),
-      rect(50, 50, 50, 100),
-    ),
-  )
-  test(
-    ...c(
-      rect(0, 0, 100, 200),
-      fit(rect(50, 50, 100), 'contain', 1),
-      rect(100, 50, 50, 100),
-    ),
-  )
-  test(
-    ...c(
-      rect(0, 0, 100, 200),
-      fit(rect(50, 50, 100), 'crop'),
-      rect(50, 50, 50, 100),
-    ),
-  )
+  test(...c(rect(0, 0, 100, 200), fit(rect(50, 50, 100), 'cover'), rect(50, 0, 100, 200)))
+  test(...c(rect(0, 0, 100, 200), fit(rect(50, 50, 100), 'cover', 0), rect(50, 50, 100, 200)))
+  test(...c(rect(0, 0, 100, 200), fit(rect(50, 50, 100), 'cover', 1), rect(50, -50, 100, 200)))
+  test(...c(rect(0, 0, 100, 200), fit(rect(50, 50, 100), 'contain'), rect(75, 50, 50, 100)))
+  test(...c(rect(0, 0, 100, 200), fit(rect(50, 50, 100), 'contain', 0), rect(50, 50, 50, 100)))
+  test(...c(rect(0, 0, 100, 200), fit(rect(50, 50, 100), 'contain', 1), rect(100, 50, 50, 100)))
+  test(...c(rect(0, 0, 100, 200), fit(rect(50, 50, 100), 'crop'), rect(50, 50, 50, 100)))
 })

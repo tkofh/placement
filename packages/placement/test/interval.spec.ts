@@ -12,7 +12,7 @@ import {
   setSize,
   setStart,
   translate,
-} from '../src/interval'
+} from '../src/interval.ts'
 
 interface IntervalCase {
   input: Interval
@@ -20,18 +20,12 @@ interface IntervalCase {
   output: Interval
 }
 
-function describeIntervalOperation(
-  name: string,
-  cases: ReadonlyArray<IntervalCase>,
-) {
+function describeIntervalOperation(name: string, cases: ReadonlyArray<IntervalCase>) {
   describe(name, () => {
-    test.each(cases)(
-      `${name}($input): $output`,
-      ({ input, operation, output }) => {
-        const result = operation(input)
-        expect(result).toEqual(output)
-      },
-    )
+    test.each(cases)(`${name}($input): $output`, ({ input, operation, output }) => {
+      const result = operation(input)
+      expect(result).toEqual(output)
+    })
   })
 }
 

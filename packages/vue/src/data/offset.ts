@@ -1,10 +1,7 @@
 import { type Offset, offset } from 'placement/offset'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 
-export function preferCachedOffset(
-  value: Offset,
-  previous: Offset | undefined,
-): Offset {
+export function preferCachedOffset(value: Offset, previous: Offset | undefined): Offset {
   if (
     previous === undefined ||
     previous.top !== value.top ||
@@ -17,9 +14,7 @@ export function preferCachedOffset(
   return previous
 }
 
-export function computedOffset(
-  value: MaybeRefOrGetter<number>,
-): ComputedRef<Offset> {
+export function computedOffset(value: MaybeRefOrGetter<number>): ComputedRef<Offset> {
   return computed((previous: Offset | undefined) =>
     preferCachedOffset(offset(toValue(value)), previous),
   )

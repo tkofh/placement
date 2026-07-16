@@ -15,9 +15,7 @@ type ChildIndexAPI = (vm: ComponentInternalInstance) => Readonly<Ref<number>>
 
 const injection = Symbol.for('ChildIndexRoot') as InjectionKey<ChildIndexAPI>
 
-function isRecordOrArray(
-  input: unknown,
-): input is Record<string, unknown> | Array<unknown> {
+function isRecordOrArray(input: unknown): input is Record<string, unknown> | Array<unknown> {
   return typeof input === 'object' && input !== null
 }
 function isNode(node: unknown): node is Node {
@@ -31,10 +29,7 @@ function getVmNode(vm: ComponentInternalInstance) {
   return vm.vnode.el
 }
 
-function compareVmNodes(
-  a: ComponentInternalInstance,
-  b: ComponentInternalInstance,
-) {
+function compareVmNodes(a: ComponentInternalInstance, b: ComponentInternalInstance) {
   const aNode = getVmNode(a)
   const bNode = getVmNode(b)
 

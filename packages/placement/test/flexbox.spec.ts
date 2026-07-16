@@ -1,14 +1,8 @@
 import { inspect } from 'node:util'
 import { describe, expect, test } from 'vitest'
-import {
-  type Flexbox,
-  applyFlexbox,
-  direction,
-  flexbox,
-  wrap,
-} from '../src/flexbox'
-import { type Frame, frame } from '../src/frame'
-import { type Rect, rect } from '../src/rect'
+import { type Flexbox, applyFlexbox, direction, flexbox, wrap } from '../src/flexbox.ts'
+import { type Frame, frame } from '../src/frame.ts'
+import { type Rect, rect } from '../src/rect.ts'
 
 function c(
   layout: Flexbox,
@@ -166,12 +160,7 @@ describe('wrap', () => {
       flexbox({ direction: direction.row, wrap: wrap.wrap }),
       rect(300),
       [square(100), rectangle(200, 100), rectangle(200, 100), square(100)],
-      [
-        rect(0, 0, 100),
-        rect(100, 0, 200, 100),
-        rect(0, 100, 200, 100),
-        rect(200, 100, 100),
-      ],
+      [rect(0, 0, 100), rect(100, 0, 200, 100), rect(0, 100, 200, 100), rect(200, 100, 100)],
     ),
   )
 })
@@ -199,12 +188,7 @@ describe('gap', () => {
       flexbox({ direction: direction.row, columnGap: 10, wrap: wrap.wrap }),
       rect(210),
       [square(100), square(100), square(100), square(100)],
-      [
-        rect(0, 0, 100),
-        rect(110, 0, 100),
-        rect(0, 100, 100),
-        rect(110, 100, 100),
-      ],
+      [rect(0, 0, 100), rect(110, 0, 100), rect(0, 100, 100), rect(110, 100, 100)],
     ),
   )
   test(
@@ -212,12 +196,7 @@ describe('gap', () => {
       flexbox({ direction: direction.row, rowGap: 10, wrap: wrap.wrap }),
       rect(210),
       [square(100), square(100), square(100), square(100)],
-      [
-        rect(0, 0, 100),
-        rect(100, 0, 100),
-        rect(0, 110, 100),
-        rect(100, 110, 100),
-      ],
+      [rect(0, 0, 100), rect(100, 0, 100), rect(0, 110, 100), rect(100, 110, 100)],
     ),
   )
   test(
@@ -230,12 +209,7 @@ describe('gap', () => {
       }),
       rect(210),
       [square(100), square(100), square(100), square(100)],
-      [
-        rect(0, 0, 100),
-        rect(110, 0, 100),
-        rect(0, 110, 100),
-        rect(110, 110, 100),
-      ],
+      [rect(0, 0, 100), rect(110, 0, 100), rect(0, 110, 100), rect(110, 110, 100)],
     ),
   )
 })
@@ -303,11 +277,6 @@ test(
     }),
     rect(10, 10, 1000),
     [square(100), square(100), square(100), square(100)],
-    [
-      rect(10, 10, 100),
-      rect(110, 10, 100),
-      rect(210, 10, 100),
-      rect(310, 10, 100),
-    ],
+    [rect(10, 10, 100), rect(110, 10, 100), rect(210, 10, 100), rect(310, 10, 100)],
   ),
 )

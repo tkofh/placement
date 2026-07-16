@@ -2,11 +2,7 @@ import { type Interval, interval } from 'placement/interval'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 
 function preferCachedInterval(value: Interval, previous: Interval | undefined) {
-  if (
-    previous === undefined ||
-    previous.start !== value.start ||
-    previous.end !== value.end
-  ) {
+  if (previous === undefined || previous.start !== value.start || previous.end !== value.end) {
     return value
   }
 

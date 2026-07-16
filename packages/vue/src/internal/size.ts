@@ -1,7 +1,7 @@
 import { dimensions } from 'placement/dimensions'
-import { type AspectRatioInput, resolveAspectRatio } from './props/aspectRatio'
-import { type Size1DInput, resolveSize1D } from './props/size1d'
-import { type Size2DInput, resolveSize2D } from './props/size2d'
+import { type AspectRatioInput, resolveAspectRatio } from './props/aspectRatio.ts'
+import { type Size1DInput, resolveSize1D } from './props/size1d.ts'
+import { type Size2DInput, resolveSize2D } from './props/size2d.ts'
 
 export function calculateSize(
   parentWidth: number,
@@ -13,12 +13,7 @@ export function calculateSize(
   height: Size1DInput,
   aspectRatio: AspectRatioInput,
 ) {
-  const sizeProp = resolveSize2D(
-    size,
-    dimensions.infinity,
-    parentWidth,
-    parentHeight,
-  )
+  const sizeProp = resolveSize2D(size, dimensions.infinity, parentWidth, parentHeight)
 
   if (Number.isFinite(sizeProp.width) && Number.isFinite(sizeProp.height)) {
     return sizeProp
@@ -26,20 +21,14 @@ export function calculateSize(
 
   const widthProp = resolveSize1D(width, Number.POSITIVE_INFINITY, parentWidth)
 
-  const heightProp = resolveSize1D(
-    height,
-    Number.POSITIVE_INFINITY,
-    parentHeight,
-  )
+  const heightProp = resolveSize1D(height, Number.POSITIVE_INFINITY, parentHeight)
 
   if (Number.isFinite(widthProp) && Number.isFinite(heightProp)) {
     return dimensions(widthProp, heightProp)
   }
 
   const aspectRatioProp =
-    typeof aspectRatio === 'number'
-      ? aspectRatio
-      : resolveAspectRatio(aspectRatio)
+    typeof aspectRatio === 'number' ? aspectRatio : resolveAspectRatio(aspectRatio)
 
   if (Number.isFinite(widthProp) && Number.isFinite(aspectRatioProp)) {
     return dimensions(widthProp, widthProp / aspectRatioProp)

@@ -4,7 +4,7 @@ import {
   type JustifyContentValue,
   keywordResults,
   resolveJustifyContent,
-} from '../internal/props/justifyContent'
+} from '../internal/props/justifyContent.ts'
 
 export type { JustifyContentValue, JustifyContentInput }
 
@@ -29,8 +29,7 @@ export function useJustifyContent(
   fallback: MaybeRefOrGetter<JustifyContentValue> = keywordResults.start,
 ): ComputedRef<JustifyContentValue> {
   return computed(() => {
-    const { justifyContent, justifyContentSpace, justifyContentSpaceOuter } =
-      toValue(fallback)
+    const { justifyContent, justifyContentSpace, justifyContentSpaceOuter } = toValue(fallback)
     return preferCachedJustifyContent(
       resolveJustifyContent(
         toValue(value),

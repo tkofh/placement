@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { interval } from '../src/interval'
+import { interval } from '../src/interval.ts'
 import {
   type Track,
   alignItems,
@@ -19,7 +19,7 @@ import {
   setSize,
   track,
   translate,
-} from '../src/track'
+} from '../src/track.ts'
 
 interface TrackCase {
   input: Track
@@ -29,13 +29,10 @@ interface TrackCase {
 
 function describeTrackOperation(name: string, cases: ReadonlyArray<TrackCase>) {
   describe(name, () => {
-    test.each(cases)(
-      `${name}($input): $output`,
-      ({ input, operation, output }) => {
-        const result = operation(input)
-        expect(result).toEqual(output)
-      },
-    )
+    test.each(cases)(`${name}($input): $output`, ({ input, operation, output }) => {
+      const result = operation(input)
+      expect(result).toEqual(output)
+    })
   })
 }
 

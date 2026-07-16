@@ -1,21 +1,15 @@
-import {
-  type Dimensions,
-  contain,
-  cover,
-  dimensions,
-  isDimensions,
-} from 'placement/dimensions'
+import { type Dimensions, contain, cover, dimensions, isDimensions } from 'placement/dimensions'
 import { type ParserInput, type ParserValue, parse } from 'valued'
-import { juxtapose } from 'valued/combinators/juxtapose'
-import { oneOf } from 'valued/combinators/oneOf'
+import { juxtapose } from 'valued'
+import { oneOf } from 'valued'
+import { between } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { lengthPercentage } from 'valued/data/length-percentage'
 import { number } from 'valued/data/number'
 import { isRatioValue, ratio } from 'valued/data/ratio'
-import { between } from 'valued/multipliers/between'
-import { createCache } from '../cache'
-import { SIZE_UNITS } from './constants'
-import { type Size1DValue, resolveSize1D } from './size1d'
+import { createCache } from '../cache.ts'
+import { SIZE_UNITS } from './constants.ts'
+import { type Size1DValue, resolveSize1D } from './size1d.ts'
 
 const size2d = oneOf([
   keywords(['fill', 'auto']),
@@ -60,9 +54,7 @@ function normalizeSize2DValue(
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: it is what it is
     () => {
       if (isKeywordValue(value)) {
-        return value.value === 'auto'
-          ? auto
-          : dimensions(parentWidth, parentHeight)
+        return value.value === 'auto' ? auto : dimensions(parentWidth, parentHeight)
       }
 
       if (value.length === 3) {
@@ -72,8 +64,7 @@ function normalizeSize2DValue(
           return infinity
         }
 
-        const percentBasis =
-          dimension.value === 'width' ? parentWidth : parentHeight
+        const percentBasis = dimension.value === 'width' ? parentWidth : parentHeight
 
         const pixels = resolveSize1D(length, 0, percentBasis)
 
@@ -101,11 +92,7 @@ function normalizeSize2DValue(
 
       return dimensions(
         resolveSize1D(a as Size1DValue, 0, parentWidth),
-        resolveSize1D(
-          (b === undefined ? a : b) as Size1DValue,
-          0,
-          parentHeight,
-        ),
+        resolveSize1D((b === undefined ? a : b) as Size1DValue, 0, parentHeight),
       )
     },
   )

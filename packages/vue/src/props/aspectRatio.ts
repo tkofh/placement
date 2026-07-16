@@ -1,8 +1,5 @@
 import { type MaybeRefOrGetter, computed, toValue } from 'vue'
-import {
-  type AspectRatioInput,
-  resolveAspectRatio,
-} from '../internal/props/aspectRatio'
+import { type AspectRatioInput, resolveAspectRatio } from '../internal/props/aspectRatio.ts'
 
 export type { AspectRatioInput }
 

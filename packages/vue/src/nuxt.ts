@@ -1,6 +1,5 @@
 import { addComponent, defineNuxtModule } from '@nuxt/kit'
 // noinspection ES6UnusedImports
-import type {} from '@nuxt/schema'
 
 const components = [
   'FlexItem',

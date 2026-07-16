@@ -1,5 +1,5 @@
-import { auto } from '../../utils/arguments'
-import { TrackItem, type TrackItemInput } from './item'
+import { auto } from '../../utils/arguments.ts'
+import { TrackItem, type TrackItemInput } from './item.ts'
 
 export interface StackTrackItem extends TrackItemInput {
   stretch?: number
@@ -26,19 +26,13 @@ class InternalStackTrackItem extends TrackItem {
     this.stretch = stretch
     this.place = place
 
-    this.stretchable = !(
-      this.startIsAuto ||
-      this.endIsAuto ||
-      !Number.isFinite(this.initialSize)
-    )
+    this.stretchable = !(this.startIsAuto || this.endIsAuto || !Number.isFinite(this.initialSize))
   }
 }
 
 export type { InternalStackTrackItem }
 
-export function stackTrackItem(
-  options: StackTrackItem,
-): InternalStackTrackItem {
+export function stackTrackItem(options: StackTrackItem): InternalStackTrackItem {
   return new InternalStackTrackItem(
     options.start ?? 0,
     options.end ?? 0,

@@ -1,11 +1,5 @@
 import { type Rect, rect } from 'placement/rect'
-import {
-  type MaybeRefOrGetter,
-  type ShallowRef,
-  shallowRef,
-  toValue,
-  watch,
-} from 'vue'
+import { type MaybeRefOrGetter, type ShallowRef, shallowRef, toValue, watch } from 'vue'
 
 function useResizeObserver<T extends Element>(
   element: MaybeRefOrGetter<T | undefined>,

@@ -3,30 +3,21 @@ import type { Rect } from 'placement/rect'
 import { parse } from 'valued'
 import { number } from 'valued/data/number'
 import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
-import { useFlexItem } from '../composables/useFlex'
+import { useFlexItem } from '../composables/useFlex.ts'
 import {
   SIZE_PROP_KEYS,
   type SizeProps,
   useBasisSize,
   useMaxSize,
   useMinSize,
-} from '../composables/useRect'
-import { useParentRectRegistration } from '../composables/useSizingContext'
-import { computedTRBLOffset } from '../data/offset'
-import {
-  type AlignSelfInput,
-  resolveAlignSelf,
-} from '../internal/props/alignSelf'
-import {
-  type JustifySelfInput,
-  resolveJustifySelf,
-} from '../internal/props/justifySelf'
-import { useGroupRenderer } from '../internal/render'
-import { boolProp } from '../internal/utils'
-import {
-  type LengthPercentageInput,
-  useLengthPercentage,
-} from '../props/lengthPercentage'
+} from '../composables/useRect.ts'
+import { useParentRectRegistration } from '../composables/useSizingContext.ts'
+import { computedTRBLOffset } from '../data/offset.ts'
+import { type AlignSelfInput, resolveAlignSelf } from '../internal/props/alignSelf.ts'
+import { type JustifySelfInput, resolveJustifySelf } from '../internal/props/justifySelf.ts'
+import { useGroupRenderer } from '../internal/render.ts'
+import { boolProp } from '../internal/utils.ts'
+import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
 
 export interface FlexItemProps extends SizeProps {
   marginTop?: LengthPercentageInput
@@ -56,19 +47,10 @@ export const FlexItem = defineComponent(
 
     const marginTop = useLengthPercentage(() => props.marginTop, 0, 'height')
     const marginRight = useLengthPercentage(() => props.marginRight, 0, 'width')
-    const marginBottom = useLengthPercentage(
-      () => props.marginBottom,
-      0,
-      'height',
-    )
+    const marginBottom = useLengthPercentage(() => props.marginBottom, 0, 'height')
     const marginLeft = useLengthPercentage(() => props.marginLeft, 0, 'width')
 
-    const margin = computedTRBLOffset(
-      marginTop,
-      marginRight,
-      marginBottom,
-      marginLeft,
-    )
+    const margin = computedTRBLOffset(marginTop, marginRight, marginBottom, marginLeft)
 
     const self = computed(() =>
       frame({

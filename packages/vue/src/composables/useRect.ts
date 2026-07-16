@@ -1,28 +1,19 @@
-import {
-  type Dimensions,
-  clamp as clampDimensions,
-  dimensions,
-} from 'placement/dimensions'
+import { type Dimensions, clamp as clampDimensions, dimensions } from 'placement/dimensions'
 import { type Point, point } from 'placement/point'
 import { type Rect, align, rect, translate } from 'placement/rect'
 import { auto, clamp } from 'placement/utils'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
-import { computedInterval } from '../data/interval'
+import { computedInterval } from '../data/interval.ts'
 import type {
   AspectRatioInput,
   // resolveAspectRatio,
-} from '../internal/props/aspectRatio'
-import type { OriginInput } from '../internal/props/origin'
-import { type Size1DInput, resolveSize1D } from '../internal/props/size1d'
-import { useLengthPercentage } from '../props/lengthPercentage'
-import { useOrigin } from '../props/origin'
-import { useSize } from '../props/size'
-import {
-  useParentHeight,
-  useParentWidth,
-  useParentX,
-  useParentY,
-} from './useSizingContext'
+} from '../internal/props/aspectRatio.ts'
+import type { OriginInput } from '../internal/props/origin.ts'
+import { type Size1DInput, resolveSize1D } from '../internal/props/size1d.ts'
+import { useLengthPercentage } from '../props/lengthPercentage.ts'
+import { useOrigin } from '../props/origin.ts'
+import { useSize } from '../props/size.ts'
+import { useParentHeight, useParentWidth, useParentX, useParentY } from './useSizingContext.ts'
 
 export interface MinSizeProps {
   minWidth?: Size1DInput | number | undefined
@@ -78,10 +69,7 @@ export const TRANSLATE_PROP_KEYS = ['x', 'y'] as const
 
 export interface TransformProps extends OriginProps, TranslateProps {}
 
-export const TRANSFORM_PROP_KEYS = [
-  ...ORIGIN_PROP_KEYS,
-  ...TRANSLATE_PROP_KEYS,
-] as const
+export const TRANSFORM_PROP_KEYS = [...ORIGIN_PROP_KEYS, ...TRANSLATE_PROP_KEYS] as const
 
 export interface RectProps extends InsetProps, SizeProps, TransformProps {}
 
@@ -187,9 +175,7 @@ export function useConstrainedSize(
   min: MaybeRefOrGetter<Dimensions>,
   max: MaybeRefOrGetter<Dimensions>,
 ): ComputedRef<Dimensions> {
-  return computed(() =>
-    clampDimensions(toValue(basis), toValue(min), toValue(max)),
-  )
+  return computed(() => clampDimensions(toValue(basis), toValue(min), toValue(max)))
 }
 
 // export function useSize(input: MaybeRefOrGetter<SizeProps>) {
@@ -322,21 +308,14 @@ export function useOriginTranslation(
   fallback: MaybeRefOrGetter<Point> = point.zero,
 ): ComputedRef<(self: Rect) => Rect> {
   const origin = useOrigin(() => props.origin, fallback)
-  return computed(
-    () => (self: Rect) => align(self, point(self.x, self.y), origin.value),
-  )
+  return computed(() => (self: Rect) => align(self, point(self.x, self.y), origin.value))
 }
 
-export function useTransformedRect(
-  rect: MaybeRefOrGetter<Rect>,
-  props: TransformProps,
-) {
+export function useTransformedRect(rect: MaybeRefOrGetter<Rect>, props: TransformProps) {
   const originTranslation = useOriginTranslation(props)
   const translation = useXYTranslation(props, rect)
 
-  return computed(() =>
-    toValue(rect).pipe(originTranslation.value, translation.value),
-  )
+  return computed(() => toValue(rect).pipe(originTranslation.value, translation.value))
 }
 
 export function useRect(props: RectProps): ComputedRef<Rect> {
@@ -349,26 +328,10 @@ export function useRect(props: RectProps): ComputedRef<Rect> {
   const minSize = useMinSize(props)
   const maxSize = useMaxSize(props)
 
-  const top = useLengthPercentage(
-    () => props.top,
-    Number.POSITIVE_INFINITY,
-    'height',
-  )
-  const right = useLengthPercentage(
-    () => props.right,
-    Number.POSITIVE_INFINITY,
-    'width',
-  )
-  const bottom = useLengthPercentage(
-    () => props.bottom,
-    Number.POSITIVE_INFINITY,
-    'height',
-  )
-  const left = useLengthPercentage(
-    () => props.left,
-    Number.POSITIVE_INFINITY,
-    'width',
-  )
+  const top = useLengthPercentage(() => props.top, Number.POSITIVE_INFINITY, 'height')
+  const right = useLengthPercentage(() => props.right, Number.POSITIVE_INFINITY, 'width')
+  const bottom = useLengthPercentage(() => props.bottom, Number.POSITIVE_INFINITY, 'height')
+  const left = useLengthPercentage(() => props.left, Number.POSITIVE_INFINITY, 'width')
 
   const x = useAxisInterval(
     left,

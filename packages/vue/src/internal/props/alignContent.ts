@@ -1,29 +1,18 @@
 import { type ParserInput, type ParserValue, parse } from 'valued'
-import { juxtapose } from 'valued/combinators/juxtapose'
-import { oneOf } from 'valued/combinators/oneOf'
-import { someOf } from 'valued/combinators/someOf'
+import { juxtapose } from 'valued'
+import { oneOf } from 'valued'
+import { someOf } from 'valued'
+import { between } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { type NumberValue, isNumberValue, number } from 'valued/data/number'
 import { type PercentageValue, percentage } from 'valued/data/percentage'
-import { between } from 'valued/multipliers/between'
-import { createCache } from '../cache'
+import { createCache } from '../cache.ts'
 
 const alignContentParser = oneOf([
-  keywords([
-    'start',
-    'end',
-    'center',
-    'space-between',
-    'space-around',
-    'space-evenly',
-    'stretch',
-  ]),
+  keywords(['start', 'end', 'center', 'space-between', 'space-around', 'space-evenly', 'stretch']),
   someOf([
     juxtapose(['place', oneOf([percentage(), number()])]),
-    juxtapose([
-      'space',
-      between(oneOf([percentage(), number()]), { minLength: 1, maxLength: 2 }),
-    ]),
+    juxtapose(['space', between(oneOf([percentage(), number()]), { minLength: 1, maxLength: 2 })]),
     juxtapose(['stretch', oneOf([percentage(), number()])]),
   ]),
 ])
@@ -93,9 +82,7 @@ function toNormalized(input: NumberValue | PercentageValue): number {
   return input.value / 100
 }
 
-function toValue(
-  value: ParserValue<typeof alignContentParser>,
-): AlignContentValue {
+function toValue(value: ParserValue<typeof alignContentParser>): AlignContentValue {
   if (isKeywordValue(value)) {
     return keywordResults[value.value]
   }

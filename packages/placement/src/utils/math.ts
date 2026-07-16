@@ -1,4 +1,4 @@
-import { PRECISION } from '../constants'
+import { PRECISION } from '../constants.ts'
 
 export function minMax(min: number, max: number) {
   return {
@@ -30,13 +30,7 @@ export function normalize(value: number, a: number, b: number) {
   return (value - bounds.min) / (bounds.max - bounds.min)
 }
 
-export function remap(
-  value: number,
-  x1: number,
-  x2: number,
-  y1: number,
-  y2: number,
-) {
+export function remap(value: number, x1: number, x2: number, y1: number, y2: number) {
   const normalized = normalize(value, x1, x2)
   return lerp(normalized, y1, y2)
 }
@@ -50,11 +44,7 @@ export function normalizeZero(value: number) {
   return value === 0 ? 0 : value
 }
 
-export function aspectRatio(
-  width: number,
-  height: number,
-  precision = PRECISION,
-) {
+export function aspectRatio(width: number, height: number, precision = PRECISION) {
   return width === 0
     ? 0
     : height === 0

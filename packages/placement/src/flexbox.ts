@@ -1,4 +1,4 @@
-export { applyFlexbox } from './internal/flexbox'
+export { applyFlexbox } from './internal/flexbox.ts'
 
 export const direction = {
   row: 0,
@@ -66,13 +66,11 @@ class Flexbox {
     this.rowGap = flexbox.rowGap ?? this.rowGap
     this.columnGap = flexbox.columnGap ?? this.columnGap
 
-    this.justifyContentSpace =
-      flexbox.justifyContentSpace ?? this.justifyContentSpace
+    this.justifyContentSpace = flexbox.justifyContentSpace ?? this.justifyContentSpace
     this.justifyContentSpaceOuter =
       flexbox.justifyContentSpaceOuter ?? this.justifyContentSpaceOuter
     this.alignContentSpace = flexbox.alignContentSpace ?? this.alignContentSpace
-    this.alignContentSpaceOuter =
-      flexbox.alignContentSpaceOuter ?? this.alignContentSpaceOuter
+    this.alignContentSpaceOuter = flexbox.alignContentSpaceOuter ?? this.alignContentSpaceOuter
   }
 
   get isRow(): boolean {

@@ -12,7 +12,7 @@ import {
   toValue,
   watch,
 } from 'vue'
-import { useChildIndex, useIndexParent } from './useChildIndex'
+import { useChildIndex, useIndexParent } from './useChildIndex.ts'
 
 const FLEX_FRAMES = Symbol() as InjectionKey<Ref<ReadonlyArray<Frame>>>
 
@@ -83,7 +83,5 @@ export function useFlexItem(input: MaybeRefOrGetter<Frame>) {
     { immediate: true },
   )
 
-  return computed(() =>
-    index.value === -1 ? zero : rects.value.at(index.value) ?? zero,
-  )
+  return computed(() => (index.value === -1 ? zero : (rects.value.at(index.value) ?? zero)))
 }
