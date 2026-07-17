@@ -113,8 +113,6 @@
 </template>
 
 <script setup lang="ts">
-import { useSpring } from '@coily/vue'
-
 const count = 5
 
 const layers = [
@@ -134,28 +132,28 @@ const delayB = 2022 * timeScale
 const delayC = 3303 * timeScale
 const delayD = 5055 * timeScale
 
-const { value: valueA } = useSpring(() => (toggleA.value ? 2 : 8), {
+const valueA = useSpring(() => (toggleA.value ? 2 : 8), {
   tension: 120,
   damping: 20,
   mass: 1,
   precision: 2,
 })
 
-const { value: valueB } = useSpring(() => (toggleB.value ? 40 : 70), {
+const valueB = useSpring(() => (toggleB.value ? 40 : 70), {
   tension: 120,
   damping: 20,
   mass: 1,
   precision: 2,
 })
 
-const { value: valueC } = useSpring(() => (toggleC.value ? 0 : 100), {
+const valueC = useSpring(() => (toggleC.value ? 0 : 100), {
   tension: 50,
   damping: 40,
   mass: 0.5,
   precision: 8,
 })
 
-const { value: valueD } = useSpring(() => (toggleD.value ? 6 : 8), {
+const valueD = useSpring(() => (toggleD.value ? 6 : 8), {
   tension: 200,
   damping: 40,
   mass: 1.5,

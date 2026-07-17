@@ -7,11 +7,11 @@
     "build": "nuxt build"
   },
   "dependencies": {
-    "@coily/vue": "^0.8.0",
     "@placement/vue": "workspace:^",
-    "nuxt": "^3.12.4",
+    "coily": "^0.14.0",
+    "nuxt": "^4.4.8",
     "placement": "workspace:^",
-    "vue": "^3.4.33",
+    "vue": "^3.5.0",
     "vue-router": "^4.4.0"
   }
 }

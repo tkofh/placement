@@ -2,6 +2,6 @@
 export default defineNuxtConfig({
   devtools: { enabled: false },
   ssr: false,
-  modules: ['@coily/vue/nuxt', '@placement/vue/nuxt'],
-  compatibilityDate: '2024-07-16',
+  modules: ['coily/nuxt', '@placement/vue/nuxt'],
+  compatibilityDate: '2026-07-17',
 })
