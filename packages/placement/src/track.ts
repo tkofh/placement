@@ -141,7 +141,8 @@ export const isTrack = (value: unknown): value is Track => {
  *   A non-finite value marks the offset auto: auto offsets absorb the
  *   item's free space (an auto `start` pushes the item to the track's end,
  *   auto offsets on both sides center it), and the item ignores `place` and
- *   never stretches. Default to `0`.
+ *   never stretches. When the item overflows the track, auto offsets
+ *   resolve to `0` instead of going negative. Default to `0`.
  * - `stretch` — the item's own stretch fraction, overriding the track-level
  *   `stretch`. Non-finite (the default) inherits the track's value.
  * - `place` — the item's own normalized position within its free space,
@@ -238,13 +239,16 @@ export interface SequenceOptions extends BaseOptions {
   /**
    * The fraction of its computed growth each item actually receives: `1`
    * (the default) grows fully, `0` disables growing. Growth is distributed
-   * and clamped against `[min, max]` first, then scaled.
+   * and clamped against `[min, max]` first, then scaled; the growth a
+   * fractional ratio withholds stays free for `space` and `place`.
    */
   growRatio?: number
   /**
    * The fraction of its computed shrinkage each item actually receives: `1`
    * (the default) shrinks fully, `0` disables shrinking. Shrinkage is
-   * distributed and clamped against `[min, max]` first, then scaled.
+   * distributed and clamped against `[min, max]` first, then scaled; the
+   * shrinkage a fractional ratio withholds still counts as used space for
+   * `space` and `place`.
    */
   shrinkRatio?: number
 }
@@ -261,6 +265,8 @@ export interface SequenceOptions extends BaseOptions {
  * `start`/`end` offsets). An item with auto (non-finite) offsets ignores
  * `place`: the auto offsets absorb its free space instead, so an auto
  * `start` pushes it to the end and auto offsets on both sides center it.
+ * When the item overflows the track, its auto offsets resolve to `0`
+ * instead of going negative and its clamped size stands.
  *
  * The data-last form omits `items` and returns a function of them.
  *
@@ -304,9 +310,12 @@ export const stack: {
       const free = size - item.definiteOuterSize
 
       if (item.autoOffsetCount > 0) {
+        // Auto offsets absorb the item's free space; when the item
+        // overflows the track they resolve to zero instead of going
+        // negative (as in CSS), and the min/max-clamped size stands.
         return interval(
-          (item.startIsAuto ? free / item.autoOffsetCount : 0) + item.definiteStart,
-          Math.min(item.size, size),
+          (item.startIsAuto ? Math.max(free, 0) / item.autoOffsetCount : 0) + item.definiteStart,
+          item.size,
         )
       }
 

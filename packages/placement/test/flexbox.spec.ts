@@ -35,6 +35,10 @@ function rectangle(width: number, height: number) {
   return frame({ width, height })
 }
 
+function lineCount(rects: ReadonlyArray<Rect>) {
+  return new Set(rects.map((r) => r.y)).size
+}
+
 describe('flexbox', () => {
   test('empty input applies the defaults', () => {
     const result = flexbox({})
@@ -654,5 +658,85 @@ describe('non-finite stretch inherits (regression)', () => {
         rect(300),
       ),
     ).toEqual([rect(0, 0, 100, 300)])
+  })
+})
+
+describe('cross min lands on the joined line (regression)', () => {
+  // minCrossSize used to accumulate before the wrap flush, folding a
+  // wrapping item's cross min into the height of the line it is NOT on.
+  test('a wrapping item contributes its cross min to its own line', () => {
+    expect(
+      applyFlexbox(
+        [frame({ width: 100, height: 10 }), frame({ width: 100, height: 50, minHeight: 50 })],
+        flexbox({ wrap: wrap.wrap }),
+        rect(100),
+      ),
+    ).toEqual([rect(0, 0, 100, 10), rect(0, 10, 100, 50)])
+  })
+})
+
+describe('wrap decision is tolerance-aware (regression)', () => {
+  // The overflow check used a raw float comparison, so rounding residue
+  // (0.1 * 3 sums past 0.3) wrapped a line that the same layout scaled by
+  // 10 kept whole — breaking PRECISION.md scale invariance.
+  test('0.1-wide items in a 0.3-wide parent stay on one line, like the layout scaled by 10', () => {
+    const small = applyFlexbox(
+      Array.from({ length: 3 }, () => frame({ width: 0.1, height: 1 })),
+      flexbox({ wrap: wrap.wrap }),
+      rect(0.3, 1),
+    )
+    const large = applyFlexbox(
+      Array.from({ length: 3 }, () => frame({ width: 1, height: 10 })),
+      flexbox({ wrap: wrap.wrap }),
+      rect(3, 10),
+    )
+
+    expect(lineCount(large)).toBe(1)
+    expect(lineCount(small)).toBe(lineCount(large))
+  })
+})
+
+describe('offsets are physical in reversed flows (regression)', () => {
+  // The main track is laid out logically and reflected afterward, margins
+  // included; computeItem swaps the offset sources in reversed flows so
+  // each margin lands on its named physical side.
+  test('rowReverse keeps offsetLeft on the physical left of the item', () => {
+    expect(
+      applyFlexbox(
+        [frame({ width: 100, height: 100, offsetLeft: 10 }), square(100)],
+        flexbox({ direction: direction.rowReverse }),
+        rect(1000),
+      ),
+    ).toEqual([rect(900, 0, 100), rect(790, 0, 100)])
+  })
+
+  test('columnReverse keeps offsetTop physically above the item', () => {
+    expect(
+      applyFlexbox(
+        [frame({ width: 100, height: 100, offsetTop: 10 })],
+        flexbox({ direction: direction.columnReverse }),
+        rect(300),
+      ),
+    ).toEqual([rect(0, 200, 100)])
+  })
+
+  test('an auto offsetLeft pushes the item to the physical right in rowReverse', () => {
+    expect(
+      applyFlexbox(
+        [frame({ width: 100, height: 100, offsetLeft: Number.POSITIVE_INFINITY })],
+        flexbox({ direction: direction.rowReverse }),
+        rect(300),
+      ),
+    ).toEqual([rect(200, 0, 100)])
+  })
+
+  test('an auto offsetBottom pushes the item to the physical top in columnReverse', () => {
+    expect(
+      applyFlexbox(
+        [frame({ width: 100, height: 100, offsetBottom: Number.POSITIVE_INFINITY })],
+        flexbox({ direction: direction.columnReverse }),
+        rect(300),
+      ),
+    ).toEqual([rect(0, 0, 100)])
   })
 })

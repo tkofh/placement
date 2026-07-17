@@ -1,6 +1,7 @@
-import { EPSILON, RELATIVE_TOLERANCE, coincident, lerp as lerpNumber } from 'curvy/number'
+import { lerp as lerpNumber } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import { isRecord } from './utils/object.ts'
+import { boundsTolerance, fieldsCoincident } from './utils/tolerance.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/point')
 type TypeBrand = typeof TypeBrand
@@ -518,8 +519,10 @@ export const avoid: {
   const distance = Math.hypot(deltaX, deltaY)
 
   // Tolerance for the boundary decision, scaled to the magnitudes that enter
-  // the question (see PRECISION.md).
-  const tolerance = EPSILON + RELATIVE_TOLERANCE * Math.max(distance, Math.abs(gap))
+  // the question (see PRECISION.md). Only finite magnitudes contribute — an
+  // infinite gap would blow the band up to Infinity and treat every point as
+  // already outside.
+  const tolerance = boundsTolerance(distance, gap)
 
   if (distance >= gap - tolerance) {
     return self
@@ -636,7 +639,10 @@ export const cross: {
  * `curvy/number`: equal when
  * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)`, so
  * rounding noise never separates points at any magnitude (see
- * `PRECISION.md`). Like any tolerant equality, it is not transitive.
+ * `PRECISION.md`). Non-finite coordinates compare exactly: an infinite
+ * coordinate equals only the same infinity (`point.infinity` equals
+ * itself), and a `NaN` coordinate equals nothing. Like any tolerant
+ * equality, it is not transitive.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -646,6 +652,7 @@ export const cross: {
  * @example
  * ```ts
  * equals(point(0.1 + 0.2, 1), point(0.3, 1)) // true
+ * equals(point.infinity, point.infinity) // true
  * point(1, 2).pipe(equals(point(1, 3))) // false
  * ```
  */
@@ -654,5 +661,6 @@ export const equals: {
   (other: PointLike): (self: Point) => boolean
 } = dual(
   2,
-  (self: Point, other: PointLike) => coincident(self.x, other.x) && coincident(self.y, other.y),
+  (self: Point, other: PointLike) =>
+    fieldsCoincident(self.x, other.x) && fieldsCoincident(self.y, other.y),
 )

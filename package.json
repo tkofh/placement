@@ -17,7 +17,8 @@
     "check": "oxlint . && oxfmt --check .",
     "fix": "oxlint --fix . && oxfmt .",
     "deps:update": "pnpm -r update --latest && pnpm dedupe",
-    "version-packages": "changeset version && pnpm run format:fix"
+    "version-packages": "changeset version && pnpm run format:fix",
+    "check:fix": "oxlint --fix . && oxfmt ."
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",

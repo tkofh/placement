@@ -493,6 +493,12 @@ describe('equals', () => {
     expect(equals(point((0.1 + 0.2) * 1e9, 1), point(0.3 * 1e9, 1))).toBe(true)
   })
 
+  test('non-finite coordinates compare exactly (regression: verdicts were inverted)', () => {
+    expect(equals(point.infinity, point.infinity)).toBe(true)
+    expect(equals(point.infinity, point(100, 100))).toBe(false)
+    expect(equals(point(Number.NaN, 1), point(Number.NaN, 1))).toBe(false)
+  })
+
   test('data-last form', () => {
     expect(point(1, 2).pipe(equals(point(1, 2)))).toBe(true)
   })

@@ -20,6 +20,9 @@ export type AlignSelf = typeof alignSelfParser
 
 export type AlignSelfInput = ParserInput<AlignSelf> | number | undefined
 
+// `Number.POSITIVE_INFINITY` is the core's inherit sentinel (see
+// `placement/frame`): an infinite `align` inherits the container's
+// `alignItems`, an infinite `stretch` inherits its `stretchItems`.
 export interface AlignSelfValue {
   align: number
   stretch: number
@@ -28,10 +31,13 @@ export interface AlignSelfValue {
 const cache = createCache<string, AlignSelfValue>(512)
 
 export const keywordResults = {
+  // 'auto' inherits both channels from the container.
   auto: {
     align: Number.POSITIVE_INFINITY,
-    stretch: 0,
+    stretch: Number.POSITIVE_INFINITY,
   },
+  // The placement keywords are complete specifications: like CSS
+  // `align-self`, an explicit placement defeats an inherited stretch.
   start: {
     align: 0,
     stretch: 0,
@@ -57,8 +63,9 @@ function toValue(value: ParserValue<typeof alignSelfParser>): AlignSelfValue {
 
   const [placeValue, stretchValue] = value
 
+  // A channel the input leaves unset stays at the inherit sentinel.
   let place = Number.POSITIVE_INFINITY
-  let stretch = 0
+  let stretch = Number.POSITIVE_INFINITY
 
   if (placeValue !== null) {
     place = toNormalized(placeValue[0])
@@ -77,7 +84,7 @@ function toValue(value: ParserValue<typeof alignSelfParser>): AlignSelfValue {
 export function resolveAlignSelf(
   input: AlignSelfInput,
   autoAlign = Number.POSITIVE_INFINITY,
-  autoStretch = 0,
+  autoStretch = Number.POSITIVE_INFINITY,
 ): AlignSelfValue {
   if (typeof input === 'number' || input === undefined) {
     return {

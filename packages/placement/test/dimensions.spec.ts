@@ -309,6 +309,18 @@ describe('contain', () => {
     expect(result.height).toBeCloseTo(56.25)
   })
 
+  test('zero-extent inputs collapse to zero (regression)', () => {
+    // The coincident shortcut used to fire on an Infinity aspect ratio and
+    // return the input extents for any finite ratio.
+    expect(contain(dimensions(100, 0), 2)).toEqual(dimensions(0, 0))
+    expect(contain(dimensions(0, 100), 2)).toEqual(dimensions(0, 0))
+    expect(contain(dimensions(0, 0), 2)).toEqual(dimensions(0, 0))
+  })
+
+  test('a degenerate ratio identical to the aspect ratio keeps the extents', () => {
+    expect(contain(dimensions(100, 0), Number.POSITIVE_INFINITY)).toEqual(dimensions(100, 0))
+  })
+
   test('data-last form', () => {
     expect(dimensions(100).pipe(contain(2))).toEqual(dimensions(100, 50))
   })
@@ -344,6 +356,14 @@ describe('cover', () => {
     expect(result.height).toBe(100)
   })
 
+  test('zero-extent inputs derive the smallest covering extents (regression)', () => {
+    // The coincident shortcut used to fire on an Infinity aspect ratio:
+    // cover(dimensions(100, 0), 2) returned 100x0.
+    expect(cover(dimensions(100, 0), 2)).toEqual(dimensions(100, 50))
+    expect(cover(dimensions(0, 100), 2)).toEqual(dimensions(200, 100))
+    expect(cover(dimensions(0, 0), 2)).toEqual(dimensions(0, 0))
+  })
+
   test('data-last form', () => {
     expect(dimensions(100).pipe(cover(2))).toEqual(dimensions(200, 100))
   })
@@ -375,6 +395,14 @@ describe('equals', () => {
   test('tolerant of rounding noise, at any magnitude', () => {
     expect(equals(dimensions(0.1 + 0.2, 1), dimensions(0.3, 1))).toBe(true)
     expect(equals(dimensions((0.1 + 0.2) * 1e9, 1e9), dimensions(0.3 * 1e9, 1e9))).toBe(true)
+  })
+
+  test('non-finite extents compare exactly (regression: verdicts were inverted)', () => {
+    // coincident degenerates at Infinity: dimensions.infinity used to fail
+    // reflexivity while comparing equal to any finite dimensions.
+    expect(equals(dimensions.infinity, dimensions.infinity)).toBe(true)
+    expect(equals(dimensions.infinity, dimensions(100))).toBe(false)
+    expect(equals(dimensions(Number.NaN, 1), dimensions(Number.NaN, 1))).toBe(false)
   })
 
   test('data-last form', () => {

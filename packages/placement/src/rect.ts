@@ -1,11 +1,4 @@
-import {
-  EPSILON,
-  RELATIVE_TOLERANCE,
-  clamp as clampNumber,
-  coincident,
-  lerp as lerpNumber,
-  minMax,
-} from 'curvy/number'
+import { clamp as clampNumber, lerp as lerpNumber, minMax } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import type { Dimensions } from './dimensions.ts'
 import type { Interval } from './interval.ts'
@@ -13,6 +6,7 @@ import type { Offset } from './offset.ts'
 import { type Point, type PointLike, isPoint, point } from './point.ts'
 import { normalizeTRBL, normalizeXYWH } from './utils/arguments.ts'
 import { isRecord } from './utils/object.ts'
+import { boundsTolerance, fieldsCoincident } from './utils/tolerance.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/rect')
 type TypeBrand = typeof TypeBrand
@@ -320,11 +314,6 @@ export const isRectLike = (value: unknown): value is RectLike => {
     typeof value.height === 'number'
   )
 }
-
-// Tolerance for boundary decisions, scaled to the magnitudes that enter the
-// question (see PRECISION.md).
-const boundsTolerance = (min: number, max: number): number =>
-  EPSILON + RELATIVE_TOLERANCE * Math.max(Math.abs(min), Math.abs(max))
 
 // Negative sizes are legal, so bounds questions operate on the normalized
 // extents [xMin, xMax, yMin, yMax].
@@ -1146,12 +1135,16 @@ export const intersect: {
  * space on the loose axis distributed by `origin`: `0` packs toward the
  * left/top, `0.5` centers, `1` packs toward the right/bottom.
  *
+ * The aspect ratio comes from `self`'s normalized extents (`|width|` by
+ * `|height|`), so a negative-size `self` fits like its positive mirror
+ * and the result's size is always non-negative.
+ *
  * A zero-area `self` carries no aspect ratio to preserve; the `target`
  * instance itself is returned.
  *
  * The data-last form omits `self` and returns a function of it.
  *
- * @param self - The rect to fit. Only its aspect ratio matters.
+ * @param self - The rect to fit. Only the aspect ratio of its normalized extents matters.
  * @param target - The rect to fit inside.
  * @param origin - The normalized position of the leftover space. Defaults to `0.5`.
  * @returns A new `Rect` inscribed in `target`, or `target` itself when `self` has zero area.
@@ -1171,9 +1164,13 @@ export const contain: {
       return target
     }
 
-    const factor = Math.min(target.width / self.width, target.height / self.height)
-    const width = self.width * factor
-    const height = self.height * factor
+    // Normalized extents: a negative size would flip the factor's sign and
+    // place the result outside the target.
+    const selfWidth = Math.abs(self.width)
+    const selfHeight = Math.abs(self.height)
+    const factor = Math.min(target.width / selfWidth, target.height / selfHeight)
+    const width = selfWidth * factor
+    const height = selfHeight * factor
 
     return new Rect(
       target.x + (target.width - width) * origin,
@@ -1191,12 +1188,16 @@ export const contain: {
  * (overflow spills right/down), `0.5` centers, `1` aligns the
  * right/bottom edges.
  *
+ * The aspect ratio comes from `self`'s normalized extents (`|width|` by
+ * `|height|`), so a negative-size `self` covers like its positive mirror
+ * and the result's size is always non-negative.
+ *
  * A zero-area `self` carries no aspect ratio to preserve; the `target`
  * instance itself is returned.
  *
  * The data-last form omits `self` and returns a function of it.
  *
- * @param self - The rect to fit. Only its aspect ratio matters.
+ * @param self - The rect to fit. Only the aspect ratio of its normalized extents matters.
  * @param target - The rect to cover.
  * @param origin - The normalized position of the overflow. Defaults to `0.5`.
  * @returns A new `Rect` covering `target`, or `target` itself when `self` has zero area.
@@ -1216,9 +1217,13 @@ export const cover: {
       return target
     }
 
-    const factor = Math.max(target.width / self.width, target.height / self.height)
-    const width = self.width * factor
-    const height = self.height * factor
+    // Normalized extents, as in contain: a negative size would flip the
+    // factor's sign and place the result outside the target.
+    const selfWidth = Math.abs(self.width)
+    const selfHeight = Math.abs(self.height)
+    const factor = Math.max(target.width / selfWidth, target.height / selfHeight)
+    const width = selfWidth * factor
+    const height = selfHeight * factor
 
     return new Rect(
       target.x + (target.width - width) * origin,
@@ -1304,8 +1309,10 @@ export const lerp: {
  * Edges count as inside.
  *
  * Boundary comparisons are tolerant per `PRECISION.md`: a target within
- * rounding noise of an edge counts as contained, at any magnitude.
- * Negative sizes are normalized on both sides.
+ * rounding noise of an edge counts as contained, at any magnitude. The
+ * band scales to `self`'s finite bounds — an infinite bound contributes
+ * nothing, so a half-infinite rect still judges its finite edges
+ * tolerantly. Negative sizes are normalized on both sides.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1386,6 +1393,9 @@ export const intersects: {
  * `PRECISION.md`, so rounding noise never separates two rects, at any
  * magnitude.
  *
+ * Non-finite fields compare exactly: an infinite field equals only the
+ * same infinity, and a `NaN` field equals nothing.
+ *
  * Fields are compared as stored, not as covered area: two rects describing
  * the same region with opposite-sign sizes are not equal.
  *
@@ -1406,8 +1416,8 @@ export const equals: {
 } = dual(
   2,
   (self: Rect, other: RectLike) =>
-    coincident(self.x, other.x) &&
-    coincident(self.y, other.y) &&
-    coincident(self.width, other.width) &&
-    coincident(self.height, other.height),
+    fieldsCoincident(self.x, other.x) &&
+    fieldsCoincident(self.y, other.y) &&
+    fieldsCoincident(self.width, other.width) &&
+    fieldsCoincident(self.height, other.height),
 )

@@ -1,7 +1,8 @@
-import { clamp as clampNumber, coincident, lerp as lerpNumber } from 'curvy/number'
+import { clamp as clampNumber, lerp as lerpNumber } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import type { Rect } from './rect.ts'
 import { isRecord } from './utils/object.ts'
+import { fieldsCoincident } from './utils/tolerance.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/dimensions')
 type TypeBrand = typeof TypeBrand
@@ -452,9 +453,12 @@ export const scaleToHeight: {
  *
  * A ratio wider than `self`'s keeps the width and shrinks the height. A
  * narrower ratio keeps the height and shrinks the width. A ratio
- * coincident with `self`'s aspect ratio (the same tolerance band as
+ * coincident with `self`'s aspect ratio (the same per-field tolerance as
  * `equals`) keeps the exact input extents instead of recomputing them
- * through a division. The data-last form omits `self` and returns a
+ * through a division; a degenerate aspect ratio (`Infinity` or `NaN`,
+ * from a zero extent) matches only the identical ratio. A zero-extent
+ * `self` with a finite positive ratio collapses to the zero dimensions —
+ * nothing larger fits. The data-last form omits `self` and returns a
  * function of it.
  *
  * @param self - The extents to fit inside. A `Rect` contributes only its width and height.
@@ -474,8 +478,10 @@ export const contain: {
   const aspectRatio = self.width / self.height
 
   // A coincident ratio keeps the exact input extents (rewrapped: self may
-  // be a Rect) rather than round-tripping them through a division.
-  if (coincident(ratio, aspectRatio)) {
+  // be a Rect) rather than round-tripping them through a division. The
+  // finite-only check matters: coincident(x, Infinity) is true for every x,
+  // which would freeze zero-height inputs at their input extents.
+  if (fieldsCoincident(ratio, aspectRatio)) {
     return new Dimensions(self.width, self.height)
   }
 
@@ -493,9 +499,13 @@ export const contain: {
  *
  * A ratio wider than `self`'s keeps the height and grows the width. A
  * narrower ratio keeps the width and grows the height. A ratio coincident
- * with `self`'s aspect ratio (the same tolerance band as `equals`) keeps
- * the exact input extents. The data-last form omits `self` and returns a
- * function of it.
+ * with `self`'s aspect ratio (the same per-field tolerance as `equals`)
+ * keeps the exact input extents; a degenerate aspect ratio (`Infinity` or
+ * `NaN`, from a zero extent) matches only the identical ratio. A
+ * zero-extent `self` with a finite positive ratio keeps its nonzero
+ * extent and derives the other through the ratio — the smallest covering
+ * dimensions. The data-last form omits `self` and returns a function of
+ * it.
  *
  * @param self - The extents to cover. A `Rect` contributes only its width and height.
  * @param ratio - The target `width / height` ratio.
@@ -513,7 +523,10 @@ export const cover: {
 } = dual(2, (self: Dimensions | Rect, ratio: number) => {
   const aspectRatio = self.width / self.height
 
-  if (coincident(ratio, aspectRatio)) {
+  // Finite-only coincidence, as in contain: coincident(x, Infinity) is true
+  // for every x, which would freeze zero-height inputs at their input
+  // extents.
+  if (fieldsCoincident(ratio, aspectRatio)) {
     return new Dimensions(self.width, self.height)
   }
 
@@ -560,9 +573,11 @@ export const lerp: {
  * when `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)`, with
  * `EPSILON = 1e-10` and `RELATIVE_TOLERANCE = 1e-12`. The band absorbs
  * rounding noise at any magnitude, so uniformly scaling both values never
- * changes the verdict. Like `coincident`, the comparison is not
- * transitive. The data-last form omits `self` and returns a function of
- * it.
+ * changes the verdict. Non-finite extents compare exactly: an infinite
+ * extent equals only `Infinity` (`dimensions.infinity` equals itself),
+ * and a `NaN` extent equals nothing. Like `coincident`, the comparison is
+ * not transitive. The data-last form omits `self` and returns a function
+ * of it.
  *
  * @param self - The first extents. A `Rect` contributes only its width and height.
  * @param other - The extents to compare against. Any `DimensionsLike` works.
@@ -571,6 +586,7 @@ export const lerp: {
  * ```ts
  * equals(dimensions(0.1 + 0.2, 1), dimensions(0.3, 1)) // true
  * equals(dimensions(100, 50), { width: 100, height: 50 }) // true
+ * equals(dimensions.infinity, dimensions.infinity) // true
  * dimensions(100, 50).pipe(equals(dimensions(100, 50))) // true
  * ```
  */
@@ -580,5 +596,5 @@ export const equals: {
 } = dual(
   2,
   (self: Dimensions | Rect, other: DimensionsLike) =>
-    coincident(self.width, other.width) && coincident(self.height, other.height),
+    fieldsCoincident(self.width, other.width) && fieldsCoincident(self.height, other.height),
 )

@@ -233,3 +233,24 @@ describe('definite offsets beside auto offsets (regression)', () => {
     expect(result.intervals).toEqual([interval(390, 100)])
   })
 })
+
+describe('auto offsets on overflow (regression)', () => {
+  // The auto-offset branch used to hand each auto offset a negative share
+  // of the free space and cap the item at the track size, truncating it
+  // below its min; auto offsets resolve to zero on overflow instead (as in
+  // CSS), and the min/max-clamped size stands.
+  test('an overflowing auto-start item keeps its min-clamped size at offset zero', () => {
+    const result = stack([{ basis: 150, min: 150, start: Number.POSITIVE_INFINITY }], {
+      size: 100,
+    })
+    expect(result.intervals).toEqual([interval(0, 150)])
+  })
+
+  test('an overflowing auto-centered item keeps its clamped size with offsets zero', () => {
+    const result = stack(
+      [{ basis: 150, start: Number.POSITIVE_INFINITY, end: Number.POSITIVE_INFINITY }],
+      { size: 100 },
+    )
+    expect(result.intervals).toEqual([interval(0, 150)])
+  })
+})

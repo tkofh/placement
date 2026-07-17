@@ -69,7 +69,10 @@ class LRUCache<K, V> {
     }
   }
 
-  #removeNode(node: Node<K, V>) {
+  // Relinks the list around the node without touching the map: eviction
+  // (`#removeTail`) deletes the map entry separately, and `#moveToHead` must
+  // keep it.
+  #unlink(node: Node<K, V>) {
     if (node.prev) {
       node.prev.next = node.next
     } else {
@@ -81,12 +84,13 @@ class LRUCache<K, V> {
     } else {
       this.#tail = node.prev
     }
-
-    this.#cache.delete(node.key)
   }
 
   #moveToHead(node: Node<K, V>) {
-    this.#removeNode(node)
+    if (this.#head === node) {
+      return
+    }
+    this.#unlink(node)
     this.#addNode(node)
   }
 
@@ -95,7 +99,8 @@ class LRUCache<K, V> {
       return
     }
     const tail = this.#tail
-    this.#removeNode(tail)
+    this.#unlink(tail)
+    this.#cache.delete(tail.key)
   }
 }
 

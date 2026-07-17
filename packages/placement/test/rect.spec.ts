@@ -623,6 +623,14 @@ describe('contain', () => {
     expect(contain(rect(), target)).toBe(target)
   })
 
+  test('a negative-size self fits like its positive mirror (regression)', () => {
+    // The factor used to go negative, placing the result outside the target.
+    const target = rect(0, 0, 100, 100)
+    expect(contain(rect(0, 0, -100, 200), target)).toEqual(rect(25, 0, 50, 100))
+    expect(contain(rect(0, 0, 100, -200), target)).toEqual(rect(25, 0, 50, 100))
+    expect(contains(target, contain(rect(0, 0, -100, 200), target))).toBe(true)
+  })
+
   test('data-last form', () => {
     expect(rect(0, 0, 100, 200).pipe(contain(rect(50, 50, 100)))).toEqual(rect(75, 50, 50, 100))
   })
@@ -643,6 +651,14 @@ describe('cover', () => {
   test('a zero-area self returns the target', () => {
     const target = rect(50, 50, 100)
     expect(cover(rect(), target)).toBe(target)
+  })
+
+  test('a negative-size self covers like its positive mirror (regression)', () => {
+    // The factor used to go negative, producing a rect that missed the target.
+    const target = rect(0, 0, 100, 100)
+    expect(cover(rect(0, 0, -100, 200), target)).toEqual(rect(0, -50, 100, 200))
+    expect(cover(rect(0, 0, 100, -200), target)).toEqual(rect(0, -50, 100, 200))
+    expect(contains(cover(rect(0, 0, -100, 200), target), target)).toBe(true)
   })
 
   test('data-last form', () => {
@@ -715,6 +731,12 @@ describe('contains', () => {
     expect(contains(rect(0, 0, 0.3 * 1e9, 1e9), point((0.1 + 0.2) * 1e9, 0.5 * 1e9))).toBe(true)
   })
 
+  test('infinite extents do not blow the tolerance band up (regression)', () => {
+    // The band used to become Infinity, accepting every point.
+    expect(contains(rect(0, 0, Number.POSITIVE_INFINITY, 100), point(-1e9, 50))).toBe(false)
+    expect(contains(rect(0, 0, Number.POSITIVE_INFINITY, 100), point(5, 50))).toBe(true)
+  })
+
   test('data-last form', () => {
     expect(rect(0, 0, 100).pipe(contains(point(50, 50)))).toBe(true)
   })
@@ -746,6 +768,13 @@ describe('equals', () => {
   test('tolerant of rounding noise, at any magnitude', () => {
     expect(equals(rect(0.1 + 0.2, 0, 1, 1), rect(0.3, 0, 1, 1))).toBe(true)
     expect(equals(rect((0.1 + 0.2) * 1e9, 0, 1e9, 1e9), rect(0.3 * 1e9, 0, 1e9, 1e9))).toBe(true)
+  })
+
+  test('non-finite fields compare exactly (regression: verdicts were inverted)', () => {
+    const halfInfinite = rect(0, 0, Number.POSITIVE_INFINITY, 10)
+    expect(equals(halfInfinite, rect(0, 0, Number.POSITIVE_INFINITY, 10))).toBe(true)
+    expect(equals(halfInfinite, rect(0, 0, 100, 10))).toBe(false)
+    expect(equals(rect(Number.NaN, 0, 1, 1), rect(Number.NaN, 0, 1, 1))).toBe(false)
   })
 
   test('data-last form', () => {

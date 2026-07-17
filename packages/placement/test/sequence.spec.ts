@@ -770,3 +770,18 @@ describe('auto offsets win over place (regression)', () => {
     expect(result.intervals).toEqual([interval(0, 600)])
   })
 })
+
+describe('fractional ratios report scaled consumption (regression)', () => {
+  // applyGrow/applyShrink scale each item's adjustment by the ratio but
+  // used to report the unscaled distribution as consumed, so place and
+  // space saw less free space than actually remained.
+  test('growRatio 0.5 leaves the ungrown half of the free space for place', () => {
+    const result = sequence([{ basis: 0, grow: 1 }], { size: 100, growRatio: 0.5, place: 1 })
+    expect(result.intervals).toEqual([interval(50, 50)])
+  })
+
+  test('shrinkRatio 0.5 keeps the unshrunk half counting as used space for place', () => {
+    const result = sequence([{ basis: 100, shrink: 1 }], { size: 50, shrinkRatio: 0.5, place: 1 })
+    expect(result.intervals).toEqual([interval(-25, 75)])
+  })
+})

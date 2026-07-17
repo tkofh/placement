@@ -5,6 +5,7 @@ import {
   customRef,
   getCurrentInstance,
   inject,
+  onMounted,
   onUnmounted,
   onUpdated,
   provide,
@@ -50,14 +51,15 @@ class OrderedInstanceStorage {
   readonly order: Array<ComponentInternalInstance> = []
   readonly trigger: (value: number) => void
 
-  #nextIndex = 0
-
   constructor(trigger: (value: number) => void) {
     this.trigger = trigger
   }
 
   insert(vm: ComponentInternalInstance) {
-    const index = ref(this.#nextIndex++)
+    // Append at the current end: indexes stay contiguous because `remove`
+    // compacts the survivors. DOM order is unknowable here (the vm has no
+    // element until it mounts), so `update` re-sorts on the child's mount.
+    const index = ref(this.order.length)
     this.storage.set(vm, index)
     this.order.push(vm)
 
@@ -67,8 +69,22 @@ class OrderedInstanceStorage {
   }
 
   remove(vm: ComponentInternalInstance) {
-    this.order.splice(this.order.indexOf(vm), 1)
+    const index = this.storage.get(vm)
+    const at = this.order.indexOf(vm)
+
+    if (at !== -1) {
+      this.order.splice(at, 1)
+    }
     this.storage.delete(vm)
+
+    // Flag the removed child first so its consumers read -1, then re-sort and
+    // compact the survivors: a child unmounting behind an intermediate
+    // component boundary never re-renders the parent, so waiting for the
+    // parent's onUpdated would leave every index permanently stale.
+    if (index !== undefined) {
+      index.value = -1
+    }
+    this.update()
 
     this.trigger(this.order.length)
   }
@@ -109,6 +125,13 @@ export function useIndexParent() {
   })
 
   provide(injection, (vm) => {
+    // Re-sort on the child's own mount: a child (re)mounted behind an
+    // intermediate component boundary never re-renders the parent, so the
+    // parent's onUpdated below cannot be relied on to assign its index.
+    onMounted(() => {
+      storage.update()
+    }, vm)
+
     onUnmounted(() => {
       storage.remove(vm)
     }, vm)

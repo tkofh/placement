@@ -340,10 +340,17 @@ describe('contains', () => {
   })
 
   test('boundaries are tolerant of rounding noise', () => {
-    // 0.1 + 0.2 sits an ulp above 0.3; a raw comparison would exclude it.
-    expect(contains(interval(0, 0.1 + 0.2), 0.3)).toBe(true)
+    // 0.1 + 0.2 sits an ulp above 0.3, outside the raw bounds; only the
+    // tolerance band admits it.
+    expect(contains(interval(0, 0.3), 0.1 + 0.2)).toBe(true)
     // Scale invariance: the same geometry at 1e9 gives the same verdict.
-    expect(contains(interval(0, (0.1 + 0.2) * 1e9), 0.3 * 1e9)).toBe(true)
+    expect(contains(interval(0, 0.3 * 1e9), (0.1 + 0.2) * 1e9)).toBe(true)
+  })
+
+  test('infinite extents do not blow the tolerance band up (regression)', () => {
+    // The band used to become Infinity, accepting every position.
+    expect(contains(interval(0, Number.POSITIVE_INFINITY), -1)).toBe(false)
+    expect(contains(interval(0, Number.POSITIVE_INFINITY), 5)).toBe(true)
   })
 
   test('data-last form', () => {
@@ -356,6 +363,13 @@ describe('intersects', () => {
     expect(intersects(interval(0, 100), interval(50, 100))).toBe(true)
     expect(intersects(interval(0, 100), interval(100, 50))).toBe(true)
     expect(intersects(interval(0, 100), interval(150, 50))).toBe(false)
+  })
+
+  test('infinite extents do not blow the tolerance band up (regression)', () => {
+    // Spans -15..-5, clear of 0..Infinity; the band used to be Infinity.
+    expect(intersects(interval(0, Number.POSITIVE_INFINITY), interval(-15, 10))).toBe(false)
+    // Spans -5..5, overlapping 0..Infinity.
+    expect(intersects(interval(0, Number.POSITIVE_INFINITY), interval(-5, 10))).toBe(true)
   })
 
   test('data-last form', () => {
@@ -372,6 +386,16 @@ describe('equals', () => {
   test('tolerant of rounding noise, at any magnitude', () => {
     expect(equals(interval(0.1 + 0.2, 1), interval(0.3, 1))).toBe(true)
     expect(equals(interval((0.1 + 0.2) * 1e9, 1e9), interval(0.3 * 1e9, 1e9))).toBe(true)
+  })
+
+  test('non-finite fields compare exactly (regression: verdicts were inverted)', () => {
+    // coincident degenerates at Infinity: reflexivity used to fail while
+    // infinite-vs-finite passed.
+    expect(
+      equals(interval(0, Number.POSITIVE_INFINITY), interval(0, Number.POSITIVE_INFINITY)),
+    ).toBe(true)
+    expect(equals(interval(0, Number.POSITIVE_INFINITY), interval(0, 100))).toBe(false)
+    expect(equals(interval(Number.NaN, 1), interval(Number.NaN, 1))).toBe(false)
   })
 
   test('data-last form', () => {

@@ -7,6 +7,7 @@ import {
   type Ref,
   computed,
   inject,
+  onBeforeUnmount,
   provide,
   shallowRef,
   toValue,
@@ -88,6 +89,16 @@ export function useFlexItem(input: MaybeRefOrGetter<Frame>) {
     },
     { immediate: true },
   )
+
+  // Drop this item's frame while its index is still valid. The index storage
+  // is cleaned up in onUnmounted, after this component's watchers are
+  // stopped, so the index watcher above cannot perform the removal itself.
+  onBeforeUnmount(() => {
+    const at = index.value
+    if (at !== -1 && at < frames.value.length) {
+      frames.value = frames.value.toSpliced(at, 1)
+    }
+  })
 
   return computed(() => (index.value === -1 ? zero : (rects.value.at(index.value) ?? zero)))
 }

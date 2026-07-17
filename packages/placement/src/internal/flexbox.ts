@@ -1,4 +1,4 @@
-import { clamp } from 'curvy/number'
+import { EPSILON, RELATIVE_TOLERANCE, clamp } from 'curvy/number'
 import { Pipeable } from 'curvy/utils'
 import type { Frame } from '../frame.ts'
 import type { Interval } from '../interval.ts'
@@ -35,7 +35,8 @@ export const direction = {
  * - `nowrap` keeps every item on one line, which overflows the parent when
  *   the items do not fit.
  * - `wrap` starts a new line whenever the next item would overflow the
- *   main size.
+ *   main size. Overflow is judged within tolerance (see PRECISION.md), so
+ *   rounding residue never wraps a line.
  * - `wrapReverse` wraps identically but stacks the lines in the opposite
  *   cross direction — upward in a row container, since y points down.
  */
@@ -383,8 +384,12 @@ const columnAxes: AxisView = {
 
 function computeItem(frame: Frame, flexbox: Flexbox, axes: AxisView) {
   const basisMain = frame[axes.mainDimension]
-  const mainStart = frame[axes.mainOffsetStart]
-  const mainEnd = frame[axes.mainOffsetEnd]
+  // Frame offsets are physical (offsetLeft always names the left edge), but
+  // a reversed flow lays the main track out logically and reflects it
+  // afterward, margins included — so the sources swap here for each offset
+  // to land on its named physical side after the reflection.
+  const mainStart = frame[flexbox.isReverse ? axes.mainOffsetEnd : axes.mainOffsetStart]
+  const mainEnd = frame[flexbox.isReverse ? axes.mainOffsetStart : axes.mainOffsetEnd]
 
   const outerHypotheticalSize = basisMain + auto(mainStart, 0) + auto(mainEnd, 0)
 
@@ -465,15 +470,18 @@ function computeTracks(
   for (const frame of frames) {
     const { mainItem, crossItem, outerHypotheticalSize } = computeItem(frame, flexbox, axes)
 
-    minCrossSize = Math.max(minCrossSize, crossItem.min)
+    const requiredMainSize = totalMainSize + outerHypotheticalSize
 
     // Flush only when the line already has items: a lone overflowing frame
     // keeps its own line (flushing it here AND pushing it below would emit
-    // more rects than frames).
+    // more rects than frames). Overflow is judged within tolerance (see
+    // PRECISION.md): rounding residue past the main size must not wrap a
+    // line that the same layout at another scale keeps whole.
     if (
       flexbox.wrap !== wrap.nowrap &&
       mainItems.length > 0 &&
-      totalMainSize + outerHypotheticalSize > mainSize
+      requiredMainSize - mainSize >
+        EPSILON + RELATIVE_TOLERANCE * Math.max(Math.abs(requiredMainSize), Math.abs(mainSize))
     ) {
       const mainTrack = computeMainTrack(mainItems, flexbox, mainSize)
       const crossTrack = computeCrossTrack(crossItems, flexbox, crossSize, false)
@@ -496,6 +504,10 @@ function computeTracks(
       totalMainSize = 0
     }
     totalMainSize += outerHypotheticalSize + flexbox.mainGap
+
+    // Accumulated after the flush so the min lands on the line the item
+    // actually joins, not the line just closed.
+    minCrossSize = Math.max(minCrossSize, crossItem.min)
 
     mainItems.push(mainItem)
     crossItems.push(crossItem)
@@ -532,8 +544,10 @@ function computeTracks(
  * `shrink` before the justify and align ratios place what remains. A frame
  * whose `align` or `stretch` is non-finite (both default to `Infinity`)
  * inherits the container's
- * `alignItems` or `stretchItems`, and a non-finite frame offset is an auto
- * margin that absorbs free space on its side. The space is y-down: cross
+ * `alignItems` or `stretchItems`. Frame offsets are physical in every
+ * direction: `offsetLeft` pads the item's left edge even in `rowReverse`,
+ * and a non-finite offset is an auto margin that absorbs free space on its
+ * named physical side. The space is y-down: cross
  * positions grow toward `parent.bottom`, and `wrapReverse` stacks lines
  * upward instead.
  *

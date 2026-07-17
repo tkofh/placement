@@ -1,7 +1,4 @@
 import {
-  EPSILON,
-  RELATIVE_TOLERANCE,
-  coincident,
   lerp as lerpNumber,
   minMax,
   normalize as normalizeNumber,
@@ -9,6 +6,7 @@ import {
 } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import { isRecord } from './utils/object.ts'
+import { boundsTolerance, fieldsCoincident } from './utils/tolerance.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/interval')
 type TypeBrand = typeof TypeBrand
@@ -139,11 +137,6 @@ export const isInterval = (value: unknown): value is Interval => {
 export const isIntervalLike = (value: unknown): value is IntervalLike => {
   return isRecord(value) && typeof value.start === 'number' && typeof value.size === 'number'
 }
-
-// Tolerance for boundary decisions, scaled to the magnitudes that enter the
-// question (see PRECISION.md).
-const boundsTolerance = (min: number, max: number): number =>
-  EPSILON + RELATIVE_TOLERANCE * Math.max(Math.abs(min), Math.abs(max))
 
 const targetBounds = (target: number | IntervalLike, gap: number): [number, number] => {
   if (typeof target === 'number') {
@@ -491,9 +484,11 @@ export const intersect: {
 /**
  * Checks whether the interval contains a position or another interval, boundaries included.
  * The comparison is tolerance-aware: a target within rounding distance of a boundary counts as
- * inside, in a band scaled to `self`'s bounds so the verdict is magnitude-invariant (see
- * `PRECISION.md`). Negative sizes are normalized — containment is judged on `min`/`max` bounds
- * on both sides. The data-last form omits `self` and returns a function of it.
+ * inside, in a band scaled to `self`'s finite bounds so the verdict is magnitude-invariant (see
+ * `PRECISION.md`). An infinite bound contributes nothing to the band — a half-infinite interval
+ * still judges its finite boundary tolerantly. Negative sizes are normalized — containment is
+ * judged on `min`/`max` bounds on both sides. The data-last form omits `self` and returns a
+ * function of it.
  *
  * @param self - The containing interval.
  * @param target - A position, or an interval that must lie entirely within `self`.
@@ -502,7 +497,7 @@ export const intersect: {
  * ```ts
  * contains(interval(0, 100), 100) // true
  * contains(interval(0, 100), interval(50, 100)) // false
- * contains(interval(0, 0.1 + 0.2), 0.3) // true, tolerating boundary noise
+ * contains(interval(0, 0.3), 0.1 + 0.2) // true, tolerating boundary noise
  * interval(0, 100).pipe(contains(50)) // true
  * ```
  */
@@ -549,9 +544,11 @@ export const intersects: {
  * Checks the two intervals for equality, per field: `start` against `start` and `size` against
  * `size`, each within the `coincident` band of `curvy/number` —
  * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)` — so rounding noise never separates
- * two computed intervals, at any magnitude (see `PRECISION.md`). Orientation matters: an
- * interval and its negative-size mirror cover the same span but are not equal. Like
- * `coincident`, not transitive. The data-last form omits `self` and returns a function of it.
+ * two computed intervals, at any magnitude (see `PRECISION.md`). Non-finite fields compare
+ * exactly: an infinite field equals only the same infinity, and a `NaN` field equals nothing.
+ * Orientation matters: an interval and its negative-size mirror cover the same span but are not
+ * equal. Like `coincident`, not transitive. The data-last form omits `self` and returns a
+ * function of it.
  *
  * @param self - The first interval.
  * @param other - The second interval.
@@ -560,6 +557,7 @@ export const intersects: {
  * ```ts
  * equals(interval(0, 100), interval(0, 100)) // true
  * equals(interval(0.1 + 0.2, 1), interval(0.3, 1)) // true
+ * equals(interval(0, Infinity), interval(0, Infinity)) // true
  * interval(0, 100).pipe(equals(interval(0, 101))) // false
  * ```
  */
@@ -569,5 +567,5 @@ export const equals: {
 } = dual(
   2,
   (self: Interval, other: IntervalLike) =>
-    coincident(self.start, other.start) && coincident(self.size, other.size),
+    fieldsCoincident(self.start, other.start) && fieldsCoincident(self.size, other.size),
 )

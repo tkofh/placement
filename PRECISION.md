@@ -54,6 +54,16 @@ the neighborhood of zero, where relative comparison degenerates. Built on
 `Offset`, and `Track` (per field), and the boundary comparisons inside
 `contains` and `intersects`.
 
+Non-finite fields compare exactly, not through the band: the band
+degenerates at infinity (`|Inf - Inf|` is `NaN`, while any finite value
+lands within an infinite band), so `equals` falls back to `===` when either
+field is non-finite — an infinity equals only the same-signed infinity, and
+`NaN` equals nothing. For the same reason, the boundary band inside
+`contains`/`intersects`/`avoid` scales its relative term by the largest
+_finite_ bound magnitude (zero when none is finite): a half-infinite extent
+keeps a band scaled to its finite bound, and a fully infinite one falls back
+to the absolute `EPSILON`.
+
 `coincident` is not transitive: chains of pairwise-coincident values can
 drift beyond the band. That is fine for the identity questions placement
 asks.
@@ -67,6 +77,12 @@ cancellation, so the loop treats any remainder smaller than
 `RELATIVE_TOLERANCE` times the space it started with as consumed. Without
 this, float dust can force an extra distribution round that assigns
 subatomic sizes to items.
+
+The wrap decision is the same shape: whether a line's accumulated item
+sizes exceed the container's main size is a discrete classification over a
+sum, so a line wraps only when the required size exceeds the available size
+by more than the hybrid band. Three `0.1`-wide items fit a `0.3`-wide
+container exactly as three `1`-wide items fit a `3`-wide one.
 
 ## What stays exact
 

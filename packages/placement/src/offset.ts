@@ -1,8 +1,9 @@
-import { coincident, lerp as lerpNumber } from 'curvy/number'
+import { lerp as lerpNumber } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import type { Dimensions } from './dimensions.ts'
 import type { Point } from './point.ts'
 import { isRecord } from './utils/object.ts'
+import { fieldsCoincident } from './utils/tolerance.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/offset')
 type TypeBrand = typeof TypeBrand
@@ -468,9 +469,11 @@ export const lerp: {
  * `coincident` from `curvy/number`:
  * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)` per side
  * (`1e-10` and `1e-12`). Rounding noise never fails an equality, and the
- * verdict is invariant under uniform scaling of both operands. Like every
- * tolerant comparison, not transitive. The data-last form omits `self` and
- * returns a function of it.
+ * verdict is invariant under uniform scaling of both operands. Non-finite
+ * sides compare exactly: an infinite side equals only the same infinity
+ * (`offset.infinity` equals itself), and a `NaN` side equals nothing.
+ * Like every tolerant comparison, not transitive. The data-last form
+ * omits `self` and returns a function of it.
  *
  * @param self - The offset to compare.
  * @param other - The offset, or any offset-shaped object, to compare against.
@@ -478,6 +481,7 @@ export const lerp: {
  * @example
  * ```ts
  * equals(offset(0.1 + 0.2), offset(0.3)) // true
+ * equals(offset.infinity, offset.infinity) // true
  * offset(1).pipe(equals(offset.trbl(1, 2, 3, 4))) // false
  * ```
  */
@@ -487,8 +491,8 @@ export const equals: {
 } = dual(
   2,
   (self: Offset, other: OffsetLike) =>
-    coincident(self.top, other.top) &&
-    coincident(self.right, other.right) &&
-    coincident(self.bottom, other.bottom) &&
-    coincident(self.left, other.left),
+    fieldsCoincident(self.top, other.top) &&
+    fieldsCoincident(self.right, other.right) &&
+    fieldsCoincident(self.bottom, other.bottom) &&
+    fieldsCoincident(self.left, other.left),
 )

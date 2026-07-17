@@ -268,6 +268,12 @@ describe('equals', () => {
     expect(equals(offset((0.1 + 0.2) * 1e9), offset(0.3 * 1e9))).toBe(true)
   })
 
+  test('non-finite sides compare exactly (regression: verdicts were inverted)', () => {
+    expect(equals(offset.infinity, offset.infinity)).toBe(true)
+    expect(equals(offset.infinity, offset(100))).toBe(false)
+    expect(equals(offset(Number.NaN), offset(Number.NaN))).toBe(false)
+  })
+
   test('data-last form', () => {
     expect(offset(1).pipe(equals(offset(1)))).toBe(true)
   })

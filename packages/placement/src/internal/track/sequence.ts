@@ -136,7 +136,9 @@ export function applyGrow(
     item.adjustment *= ratio
   }
 
-  return initialFreeSpace - freeSpace
+  // The consumption reported back scales with the adjustments: the growth a
+  // fractional ratio withholds stays free for space and place.
+  return (initialFreeSpace - freeSpace) * ratio
 }
 
 // Returns the change in consumed size: zero or negative, so callers can sum
@@ -191,5 +193,7 @@ export function applyShrink(
     item.adjustment *= ratio
   }
 
-  return excess - initialExcess
+  // The consumption reported back scales with the adjustments: the
+  // shrinkage a fractional ratio withholds still counts as used space.
+  return (excess - initialExcess) * ratio
 }

@@ -18,13 +18,16 @@ export type FillInput =
   | (string & {})
   | undefined
 
+// Property names are the kebab-case SVG presentation attribute names so an
+// instance can be spread verbatim onto an SVG element's attrs: browsers
+// ignore unknown camelCase attributes like `fillRule`.
 export class Fill {
   readonly fill: string | undefined
-  readonly fillRule: string | undefined
+  readonly 'fill-rule': string | undefined
 
   constructor(fill: string | undefined = undefined, fillRule: string | undefined = undefined) {
     this.fill = fill
-    this.fillRule = fillRule
+    this['fill-rule'] = fillRule
   }
 
   static empty = new Fill()
@@ -37,7 +40,7 @@ export function resolveFill(input: FillInput, auto = Fill.empty): Fill {
     return auto
   }
 
-  return cache(`${input}:${auto.fill}:${auto.fillRule}`, () => {
+  return cache(`${input}:${auto.fill}:${auto['fill-rule']}`, () => {
     const parsed = parse(input, fillParser)
 
     if (!parsed.valid) {

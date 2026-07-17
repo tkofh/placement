@@ -1,6 +1,9 @@
 packages:
   - 'packages/*'
   - 'apps/*'
+linkWorkspacePackages: true
+preferWorkspacePackages: true
+shamefullyHoist: true
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

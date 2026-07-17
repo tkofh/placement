@@ -26,16 +26,19 @@ type OpacityParser = typeof opacityParser
 
 export type OpacityInput = ParserInput<OpacityParser> | number | string | undefined
 
+// Property names are the kebab-case SVG presentation attribute names so an
+// instance can be spread verbatim onto an SVG element's attrs: browsers
+// ignore unknown camelCase attributes like `fillOpacity`.
 export class Opacity {
-  readonly fillOpacity: number | undefined
-  readonly strokeOpacity: number | undefined
+  readonly 'fill-opacity': number | undefined
+  readonly 'stroke-opacity': number | undefined
 
   constructor(
     fillOpacity: number | undefined = undefined,
     strokeOpacity: number | undefined = undefined,
   ) {
-    this.fillOpacity = fillOpacity
-    this.strokeOpacity = strokeOpacity
+    this['fill-opacity'] = fillOpacity
+    this['stroke-opacity'] = strokeOpacity
   }
 
   static empty = new Opacity()
@@ -52,7 +55,7 @@ export function resolveOpacity(input: OpacityInput, auto: Opacity = Opacity.empt
     return auto
   }
 
-  return cache(`${input.toString()}:${auto.fillOpacity}:${auto.strokeOpacity}`, () => {
+  return cache(`${input.toString()}:${auto['fill-opacity']}:${auto['stroke-opacity']}`, () => {
     const parsed = parse(input, opacityParser)
 
     if (!parsed.valid) {
