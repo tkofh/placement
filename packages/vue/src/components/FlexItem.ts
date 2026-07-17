@@ -4,18 +4,13 @@ import { parse } from 'valued'
 import { number } from 'valued/data/number'
 import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
 import { useFlexItem } from '../composables/useFlex.ts'
-import {
-  SIZE_PROP_KEYS,
-  type SizeProps,
-  useBasisSize,
-  useMaxSize,
-  useMinSize,
-} from '../composables/useRect.ts'
+import { SIZE_PROP_KEYS, type SizeProps } from '../composables/useRect.ts'
 import { useParentRectRegistration } from '../composables/useSizingContext.ts'
 import { computedTRBLOffset } from '../data/offset.ts'
 import { type AlignSelfInput, resolveAlignSelf } from '../internal/props/alignSelf.ts'
 import { useGroupRenderer } from '../internal/render.ts'
 import { boolProp } from '../internal/utils.ts'
+import { useAspectRatio } from '../props/aspectRatio.ts'
 import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
 
 export interface FlexItemProps extends SizeProps {
@@ -37,19 +32,24 @@ function resolveNumber(value: number | `${number}` | undefined): number {
   return parsed.valid ? parsed.value.value : 0
 }
 
-// The sizing composables mark an unset dimension with the old
-// `Number.POSITIVE_INFINITY` sentinel, but `Frame.make` stores non-finite
-// sizing fields as literal infinite preferences (defeating, e.g., an
-// inherited stretch). Translate the sentinel to the core's unset convention.
-function finiteOrUndefined(value: number): number | undefined {
-  return Number.isFinite(value) ? value : undefined
+// The prop resolvers mark an unset input with NaN; `Frame.make` wants such
+// fields omitted (a non-finite sizing input to `Frame.make` is a literal
+// infinite preference, defeating e.g. an inherited stretch).
+function unsetIfNaN(value: number): number | undefined {
+  return Number.isNaN(value) ? undefined : value
 }
 
 export const FlexItem = defineComponent(
   (props: FlexItemProps) => {
-    const basisSize = useBasisSize(props)
-    const minSize = useMinSize(props)
-    const maxSize = useMaxSize(props)
+    // Raw per-axis resolution only — the width/height/ratio interplay and
+    // the min/max clamping are the core's job (see `placement/frame`).
+    const width = useLengthPercentage(() => props.width, Number.NaN, 'width')
+    const height = useLengthPercentage(() => props.height, Number.NaN, 'height')
+    const aspectRatio = useAspectRatio(() => props.aspectRatio, Number.NaN)
+    const minWidth = useLengthPercentage(() => props.minWidth, Number.NaN, 'width')
+    const minHeight = useLengthPercentage(() => props.minHeight, Number.NaN, 'height')
+    const maxWidth = useLengthPercentage(() => props.maxWidth, Number.NaN, 'width')
+    const maxHeight = useLengthPercentage(() => props.maxHeight, Number.NaN, 'height')
 
     const marginTop = useLengthPercentage(() => props.marginTop, 0, 'height')
     const marginRight = useLengthPercentage(() => props.marginRight, 0, 'width')
@@ -60,12 +60,13 @@ export const FlexItem = defineComponent(
 
     const self = computed(() =>
       Frame.make({
-        width: finiteOrUndefined(basisSize.value.width),
-        height: finiteOrUndefined(basisSize.value.height),
-        minWidth: finiteOrUndefined(minSize.value.width),
-        minHeight: finiteOrUndefined(minSize.value.height),
-        maxWidth: finiteOrUndefined(maxSize.value.width),
-        maxHeight: finiteOrUndefined(maxSize.value.height),
+        width: unsetIfNaN(width.value),
+        height: unsetIfNaN(height.value),
+        aspectRatio: unsetIfNaN(aspectRatio.value),
+        minWidth: unsetIfNaN(minWidth.value),
+        minHeight: unsetIfNaN(minHeight.value),
+        maxWidth: unsetIfNaN(maxWidth.value),
+        maxHeight: unsetIfNaN(maxHeight.value),
         offsetTop: margin.value.top,
         offsetRight: margin.value.right,
         offsetBottom: margin.value.bottom,

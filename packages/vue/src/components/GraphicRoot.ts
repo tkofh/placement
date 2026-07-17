@@ -1,3 +1,4 @@
+import * as Box from 'placement/box'
 import * as Point from 'placement/point'
 import * as Rect from 'placement/rect'
 import { computed, defineComponent, h, shallowRef } from 'vue'
@@ -8,14 +9,11 @@ import {
   SIZE_PROP_KEYS,
   type SizeProps,
   type TransformProps,
-  useBasisSize,
-  useConstrainedSize,
-  useMaxSize,
-  useMinSize,
   useXYTranslation,
 } from '../composables/useRect.ts'
 import { useSizingContextRoot } from '../composables/useSizingContext.ts'
-import { autoDimensions, computedDimensions } from '../data/dimensions.ts'
+import { resolveAspectRatio } from '../internal/props/aspectRatio.ts'
+import { resolveSize1D } from '../internal/props/size1d.ts'
 import { provideShouldRenderGroups } from '../internal/render.ts'
 import { boolProp } from '../internal/utils.ts'
 import { useOrigin } from '../props/origin.ts'
@@ -31,19 +29,24 @@ export const GraphicRoot = defineComponent(
   (props: GraphicRootProps, { slots }) => {
     const svg = shallowRef<SVGElement>()
     const domRect = useDomRect(svg)
-    const domDimensions = computedDimensions(
-      () => domRect.value.width,
-      () => domRect.value.height,
+
+    // The measured <svg> is both the percent basis and the fill target: a
+    // dimension the props leave undetermined falls back to the measured
+    // size, constrained (see `placement/box`).
+    const box = computed(() =>
+      Box.make({
+        width: resolveSize1D(props.width, Number.NaN, domRect.value.width),
+        height: resolveSize1D(props.height, Number.NaN, domRect.value.height),
+        aspectRatio: resolveAspectRatio(props.aspectRatio, Number.NaN),
+        minWidth: resolveSize1D(props.minWidth, Number.NaN, domRect.value.width),
+        minHeight: resolveSize1D(props.minHeight, Number.NaN, domRect.value.height),
+        maxWidth: resolveSize1D(props.maxWidth, Number.NaN, domRect.value.width),
+        maxHeight: resolveSize1D(props.maxHeight, Number.NaN, domRect.value.height),
+      }),
     )
 
-    const basisSize = useBasisSize(props, domDimensions)
-    const minSize = useMinSize(props, domDimensions)
-    const maxSize = useMaxSize(props, domDimensions)
-
-    const size = useConstrainedSize(basisSize, minSize, maxSize)
-
     const rootRect = computed(() =>
-      Rect.fromDimensions(autoDimensions(size.value, domDimensions.value)),
+      Box.apply(box.value, Rect.make(domRect.value.width, domRect.value.height)),
     )
 
     const origin = useOrigin(() => props.origin, Point.half)

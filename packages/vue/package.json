@@ -110,10 +110,6 @@
       "types": "./dist/props/origin.d.mts",
       "import": "./dist/props/origin.mjs"
     },
-    "./props/size": {
-      "types": "./dist/props/size.d.mts",
-      "import": "./dist/props/size.mjs"
-    },
     "./nuxt": {
       "types": "./dist/nuxt.d.mts",
       "import": "./dist/nuxt.mjs"

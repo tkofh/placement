@@ -26,7 +26,6 @@ export default defineConfig({
     'src/props/justifyContent.ts',
     'src/props/lengthPercentage.ts',
     'src/props/origin.ts',
-    'src/props/size.ts',
   ],
   format: 'esm',
   dts: true,

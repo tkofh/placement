@@ -1,5 +1,5 @@
 import * as Box from 'placement/box'
-import * as Dimensions from 'placement/dimensions'
+import type * as Dimensions from 'placement/dimensions'
 import * as Point from 'placement/point'
 import * as Rect from 'placement/rect'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
@@ -9,7 +9,6 @@ import { type Size1DInput, resolveSize1D } from '../internal/props/size1d.ts'
 import { useAspectRatio } from '../props/aspectRatio.ts'
 import { useLengthPercentage } from '../props/lengthPercentage.ts'
 import { useOrigin } from '../props/origin.ts'
-import { useSize } from '../props/size.ts'
 import { useParentHeight, useParentWidth, useParentX, useParentY } from './useSizingContext.ts'
 
 export interface MinSizeProps {
@@ -75,53 +74,6 @@ export const RECT_PROP_KEYS = [
   ...INSET_PROP_KEYS,
   ...TRANSFORM_PROP_KEYS,
 ] as const
-
-export function useBasisSize(
-  input: MaybeRefOrGetter<BasisSizeProps>,
-  parent: 'inherit' | MaybeRefOrGetter<Dimensions.Dimensions> = 'inherit',
-): ComputedRef<Dimensions.Dimensions> {
-  return useSize(
-    () => toValue(input).width,
-    () => toValue(input).height,
-    () => toValue(input).aspectRatio,
-    Dimensions.infinity,
-    parent,
-  )
-}
-
-export function useMinSize(
-  input: MaybeRefOrGetter<MinSizeProps>,
-  parent: 'inherit' | MaybeRefOrGetter<Dimensions.Dimensions> = 'inherit',
-): ComputedRef<Dimensions.Dimensions> {
-  return useSize(
-    () => toValue(input).minWidth,
-    () => toValue(input).minHeight,
-    undefined,
-    Dimensions.zero,
-    parent,
-  )
-}
-
-export function useMaxSize(
-  input: MaybeRefOrGetter<MaxSizeProps>,
-  parent: 'inherit' | MaybeRefOrGetter<Dimensions.Dimensions> = 'inherit',
-): ComputedRef<Dimensions.Dimensions> {
-  return useSize(
-    () => toValue(input).maxWidth,
-    () => toValue(input).maxHeight,
-    undefined,
-    Dimensions.infinity,
-    parent,
-  )
-}
-
-export function useConstrainedSize(
-  basis: MaybeRefOrGetter<Dimensions.Dimensions>,
-  min: MaybeRefOrGetter<Dimensions.Dimensions>,
-  max: MaybeRefOrGetter<Dimensions.Dimensions>,
-): ComputedRef<Dimensions.Dimensions> {
-  return computed(() => Dimensions.clamp(toValue(basis), toValue(min), toValue(max)))
-}
 
 export function useXYTranslation(
   props: MaybeRefOrGetter<TranslateProps>,
