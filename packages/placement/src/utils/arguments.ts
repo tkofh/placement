@@ -113,7 +113,8 @@ export interface NormalizedSizing {
 // and an optional aspect ratio (0 = unset). Resolution order: two definite
 // dimensions win; one definite dimension plus a ratio derives the other; a
 // ratio alone is applied against the clamped zero fallbacks; otherwise both
-// fall back to clamped zero.
+// fall back to clamped zero. Crossed constraints resolve as CSS clamp()
+// does: the maximum is raised to the minimum, so the minimum wins.
 export function normalizeSizing(
   aspectRatio: number,
   width: number,
@@ -124,7 +125,7 @@ export function normalizeSizing(
   maxHeight: number,
 ): NormalizedSizing {
   const min = [Math.max(minWidth, 0), Math.max(minHeight, 0)] as const
-  const max = [Math.max(maxWidth, 0), Math.max(maxHeight, 0)] as const
+  const max = [Math.max(maxWidth, min[0]), Math.max(maxHeight, min[1])] as const
   const ratio = Math.max(aspectRatio, 0)
 
   const widthIsSet = !Number.isNaN(width)

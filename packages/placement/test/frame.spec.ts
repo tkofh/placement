@@ -49,6 +49,13 @@ describe('frame', () => {
     expect(Frame.make({ height: 100, maxHeight: 80 }).height).toBe(80)
   })
 
+  test('the minimum wins over a crossed maximum', () => {
+    const crossed = Frame.make({ width: 120, minWidth: 100, maxWidth: 50 })
+    expect(crossed.width).toBe(100)
+    expect(crossed.maxWidth).toBe(100)
+    expect(Frame.make({ height: 120, minHeight: 100, maxHeight: 50 }).height).toBe(100)
+  })
+
   test('resolved aspect ratio is exact IEEE division', () => {
     expect(Frame.make({ width: 0.1, height: 0.2 }).aspectRatio).toBe(0.1 / 0.2)
   })

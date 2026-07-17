@@ -1,8 +1,8 @@
 # placement
 
-Layout algorithms for 2D graphics: flexbox, 1D tracks, and a toolkit of
-immutable geometric value types. Framework-agnostic — bring your own renderer
-(SVG, canvas, WebGL). `@placement/vue` wraps it for Vue 3.
+Layout algorithms for 2D graphics: flexbox, absolute positioning, 1D tracks,
+and a toolkit of immutable geometric value types. Framework-agnostic — bring
+your own renderer (SVG, canvas, WebGL). `@placement/vue` wraps it for Vue 3.
 
 ```sh
 pnpm add placement
@@ -29,6 +29,25 @@ returns one `Rect` per frame, positioned inside the parent rect. Wrapping,
 reverse directions, gaps, `alignContent`/`alignItems`/`justifyContent`, and
 auto margins (pass `Infinity` as an offset) all behave like their CSS
 namesakes.
+
+## Absolute positioning
+
+`Box` is the positioned counterpart to `Frame`: insets, sizing, and
+constraints, solved against any parent rect.
+
+```ts
+import * as Box from 'placement/box'
+
+Box.apply(Box.make({ right: 10, bottom: 10, width: 100, aspectRatio: 2 }), Rect.make(400, 200))
+// Rect (290, 140) 100x50
+```
+
+Explicit sizes win; an inset pair determines an unset dimension; an
+`aspectRatio` derives one undetermined axis from the other; whatever remains
+fills the parent minus the set insets. Everything clamps to the min/max
+constraints (the minimum wins, as in CSS `clamp()`), and boxes anchor to
+`left`/`top` when set, else to `right`/`bottom` measured with the used size —
+CSS absolute positioning, without a DOM.
 
 ## The pieces underneath
 
@@ -80,9 +99,9 @@ radians.
 
 ## Entry points
 
-`placement/dimensions` · `placement/flexbox` · `placement/frame` ·
-`placement/interval` · `placement/offset` · `placement/point` ·
-`placement/rect` · `placement/track` · `placement/utils`
+`placement/box` · `placement/dimensions` · `placement/flexbox` ·
+`placement/frame` · `placement/interval` · `placement/offset` ·
+`placement/point` · `placement/rect` · `placement/track` · `placement/utils`
 
 ESM only. Every export carries JSDoc — the types are the reference docs.
 

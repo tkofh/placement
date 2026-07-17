@@ -27,7 +27,9 @@ Every class extends `Pipeable` from `curvy/utils`. Operations are standalone
 `Interval` (start/size); `Track` is a non-empty list of intervals plus the two
 1D solvers (`sequence` = flexbox main axis, `stack` = cross axis); flexbox is
 two tracks per line plus a track of lines. `Frame` is a flex-item spec,
-`Flexbox` the container spec (solved by `Flexbox.apply`), and
+`Flexbox` the container spec (solved by `Flexbox.apply`), `Box` a
+positioned-box spec (CSS absolute positioning, solved by `Box.apply`
+against a parent rect; every non-finite input acts as unset), and
 `Rect`/`Point`/`Dimensions`/`Offset` the 2D value types. Type-only
 cross-module imports may stay flat (`import type { Rect } from ...`);
 namespace imports are for value usage.

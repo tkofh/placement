@@ -1,4 +1,3 @@
-import * as Rect from 'placement/rect'
 import { defineComponent, h, ref } from 'vue'
 import { useTextRect } from '../composables/useDomRect.ts'
 import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
@@ -7,16 +6,8 @@ import {
   type InsetProps,
   TRANSFORM_PROP_KEYS,
   type TransformProps,
-  useAxisInterval,
-  useTransformedRect,
+  useRect,
 } from '../composables/useRect.ts'
-import {
-  useParentHeight,
-  useParentWidth,
-  useParentX,
-  useParentY,
-} from '../composables/useSizingContext.ts'
-import { useLengthPercentage } from '../props/lengthPercentage.ts'
 
 export interface GraphicTextProps extends PaintProps, InsetProps, TransformProps {}
 
@@ -25,37 +16,9 @@ export const GraphicText = defineComponent(
     const text = ref<SVGTextElement>()
     const domRect = useTextRect(text)
 
-    const top = useLengthPercentage(() => props.top, Number.POSITIVE_INFINITY, 'height')
-    const right = useLengthPercentage(() => props.right, Number.POSITIVE_INFINITY, 'width')
-    const bottom = useLengthPercentage(() => props.bottom, Number.POSITIVE_INFINITY, 'height')
-    const left = useLengthPercentage(() => props.left, Number.POSITIVE_INFINITY, 'width')
-
-    const parentX = useParentX()
-    const parentY = useParentY()
-    const parentWidth = useParentWidth()
-    const parentHeight = useParentHeight()
-
-    const x = useAxisInterval(
-      left,
-      right,
-      () => domRect.value.width,
-      parentX,
-      parentWidth,
-      0,
-      Number.POSITIVE_INFINITY,
-    )
-
-    const y = useAxisInterval(
-      top,
-      bottom,
-      () => domRect.value.height,
-      parentY,
-      parentHeight,
-      0,
-      Number.POSITIVE_INFINITY,
-    )
-
-    const self = useTransformedRect(() => Rect.fromInterval(x.value, y.value), props)
+    // The measured DOM rect is the box's explicit size; the inset and
+    // transform props position it.
+    const self = useRect(props, { size: domRect })
 
     const paint = usePaint(props)
 

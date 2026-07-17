@@ -18,6 +18,10 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./box": {
+      "types": "./dist/box.d.mts",
+      "import": "./dist/box.mjs"
+    },
     "./dimensions": {
       "types": "./dist/dimensions.d.mts",
       "import": "./dist/dimensions.mjs"

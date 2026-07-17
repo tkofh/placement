@@ -282,7 +282,8 @@ class Frame extends Pipeable {
 
   /**
    * The effective upper bound on `width`: the raw input clamped to
-   * `>= 0`, and `Infinity` when unset.
+   * `>= 0`, and `Infinity` when unset. Raised to `minWidth` when the
+   * bounds cross — the minimum wins, as in CSS `clamp()`.
    */
   get maxWidth(): number {
     return this.#resolved.maxWidth
@@ -290,7 +291,8 @@ class Frame extends Pipeable {
 
   /**
    * The effective upper bound on `height`: the raw input clamped to
-   * `>= 0`, and `Infinity` when unset.
+   * `>= 0`, and `Infinity` when unset. Raised to `minHeight` when the
+   * bounds cross — the minimum wins, as in CSS `clamp()`.
    */
   get maxHeight(): number {
     return this.#resolved.maxHeight
