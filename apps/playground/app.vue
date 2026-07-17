@@ -131,7 +131,12 @@ const barData = ref(roll())
 const sorted = ref(false)
 
 // One composite spring animates every bar; retargeting keeps momentum.
-const bars = useSpring(() => barData.value, { tension: 170, damping: 24 })
+// Composite configs take SpringDefinitions (a plain object would be read
+// as a per-channel shape mirroring the array).
+const bars = useSpring(
+  () => barData.value,
+  defineSpring({ tension: 170, damping: 24 }),
+)
 const barGap = useSpring(() => (sorted.value ? 22 : 8), { duration: 800, bounce: 0.45 })
 
 const total = computed(() => barData.value.reduce((sum, value) => sum + value, 0))
