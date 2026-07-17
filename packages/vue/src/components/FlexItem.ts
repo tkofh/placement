@@ -37,6 +37,14 @@ function resolveNumber(value: number | `${number}` | undefined): number {
   return parsed.valid ? parsed.value.value : 0
 }
 
+// The sizing composables mark an unset dimension with the old
+// `Number.POSITIVE_INFINITY` sentinel, but `frame` stores non-finite sizing
+// fields as literal infinite preferences (defeating, e.g., an inherited
+// stretch). Translate the sentinel to the core's unset convention.
+function finiteOrUndefined(value: number): number | undefined {
+  return Number.isFinite(value) ? value : undefined
+}
+
 export const FlexItem = defineComponent(
   (props: FlexItemProps) => {
     const basisSize = useBasisSize(props)
@@ -52,12 +60,12 @@ export const FlexItem = defineComponent(
 
     const self = computed(() =>
       frame({
-        width: basisSize.value.width,
-        height: basisSize.value.height,
-        minWidth: minSize.value.width,
-        minHeight: minSize.value.height,
-        maxWidth: maxSize.value.width,
-        maxHeight: maxSize.value.height,
+        width: finiteOrUndefined(basisSize.value.width),
+        height: finiteOrUndefined(basisSize.value.height),
+        minWidth: finiteOrUndefined(minSize.value.width),
+        minHeight: finiteOrUndefined(minSize.value.height),
+        maxWidth: finiteOrUndefined(maxSize.value.width),
+        maxHeight: finiteOrUndefined(maxSize.value.height),
         offsetTop: margin.value.top,
         offsetRight: margin.value.right,
         offsetBottom: margin.value.bottom,

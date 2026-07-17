@@ -1,104 +1,30 @@
 import { type Flexbox, applyFlexbox } from 'placement/flexbox'
 import type { Frame } from 'placement/frame'
 import { type Rect, rect } from 'placement/rect'
-import {
-  type InjectionKey,
-  type MaybeRefOrGetter,
-  type Ref,
-  computed,
-  inject,
-  onBeforeUnmount,
-  provide,
-  shallowRef,
-  toValue,
-  watch,
-} from 'vue'
-import { useChildIndex, useIndexParent } from './useChildIndex.ts'
-
-const FLEX_FRAMES = Symbol.for('placement/flex-frames') as InjectionKey<Ref<ReadonlyArray<Frame>>>
-
-const FLEX_RECTS = Symbol.for('placement/flex-rects') as InjectionKey<Ref<ReadonlyArray<Rect>>>
-
-export function useFlexLayout(
-  flexbox: MaybeRefOrGetter<Flexbox>,
-  rect: MaybeRefOrGetter<Rect>,
-): {
-  frames: Readonly<Ref<ReadonlyArray<Frame>>>
-  rects: Readonly<Ref<ReadonlyArray<Rect>>>
-} {
-  const length = useIndexParent()
-
-  const frames = shallowRef<ReadonlyArray<Frame>>([])
-
-  watch(length, (length) => {
-    if (length < frames.value.length) {
-      frames.value = frames.value.slice(0, length)
-    }
-  })
-
-  provide(FLEX_FRAMES, frames)
-
-  const rects = computed(() => {
-    return applyFlexbox(frames.value, toValue(flexbox), toValue(rect))
-  })
-
-  provide(FLEX_RECTS, rects)
-
-  return { frames, rects }
-}
+import { type MaybeRefOrGetter, type Ref, toValue } from 'vue'
+import { useChild, useChildren } from './useChildren.ts'
 
 const zero = rect()
 
-export function useFlexItem(input: MaybeRefOrGetter<Frame>) {
-  const index = useChildIndex()
+export function useFlexLayout(
+  layout: MaybeRefOrGetter<Flexbox>,
+  innerRect: MaybeRefOrGetter<Rect>,
+): void {
+  // The mapper is a reactive effect: reads of the layout, the inner rect, and
+  // every child frame are tracked, so any of them changing re-runs the solve.
+  useChildren<Frame, Rect>('placement/flex', (children) => {
+    const rects = applyFlexbox(
+      children.map((child) => child.input.value),
+      toValue(layout),
+      toValue(innerRect),
+    )
 
-  const frames = inject(FLEX_FRAMES)
-  const rects = inject(FLEX_RECTS)
-
-  if (frames === undefined || rects === undefined) {
-    throw new Error('no flex parent')
-  }
-
-  watch(
-    index,
-    (current, previous) => {
-      const frame = toValue(input)
-
-      if (previous === undefined || previous === -1) {
-        frames.value = frames.value.toSpliced(current, 0, frame)
-      } else if (current === -1) {
-        frames.value = frames.value.toSpliced(previous, 1)
-      } else {
-        frames.value = frames.value.with(current, frame)
-      }
-    },
-    { immediate: true, flush: 'sync' },
-  )
-
-  watch(
-    () => toValue(input),
-    (frame) => {
-      if (index.value === -1) {
-        return
-      }
-
-      frames.value =
-        index.value >= frames.value.length
-          ? frames.value.concat(frame)
-          : frames.value.with(index.value, frame)
-    },
-    { immediate: true },
-  )
-
-  // Drop this item's frame while its index is still valid. The index storage
-  // is cleaned up in onUnmounted, after this component's watchers are
-  // stopped, so the index watcher above cannot perform the removal itself.
-  onBeforeUnmount(() => {
-    const at = index.value
-    if (at !== -1 && at < frames.value.length) {
-      frames.value = frames.value.toSpliced(at, 1)
+    for (const [index, child] of children.entries()) {
+      child.output.value = rects[index] ?? zero
     }
   })
+}
 
-  return computed(() => (index.value === -1 ? zero : (rects.value.at(index.value) ?? zero)))
+export function useFlexItem(frame: MaybeRefOrGetter<Frame>): Readonly<Ref<Rect>> {
+  return useChild('placement/flex', frame, zero)
 }
