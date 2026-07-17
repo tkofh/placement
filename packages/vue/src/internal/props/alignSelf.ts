@@ -3,9 +3,10 @@ import { juxtapose } from 'valued'
 import { oneOf } from 'valued'
 import { someOf } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
-import { type NumberValue, isNumberValue, number } from 'valued/data/number'
-import { type PercentageValue, percentage } from 'valued/data/percentage'
+import { number } from 'valued/data/number'
+import { percentage } from 'valued/data/percentage'
 import { createCache } from '../cache.ts'
+import { toNormalized } from './normalize.ts'
 
 const alignSelfParser = oneOf([
   keywords(['auto', 'start', 'end', 'center', 'stretch']),
@@ -21,7 +22,7 @@ export type AlignSelfInput = ParserInput<AlignSelf> | number | undefined
 
 export interface AlignSelfValue {
   align: number
-  stretchCross: number
+  stretch: number
 }
 
 const cache = createCache<string, AlignSelfValue>(512)
@@ -29,32 +30,25 @@ const cache = createCache<string, AlignSelfValue>(512)
 export const keywordResults = {
   auto: {
     align: Number.POSITIVE_INFINITY,
-    stretchCross: 0,
+    stretch: 0,
   },
   start: {
     align: 0,
-    stretchCross: 0,
+    stretch: 0,
   },
   end: {
     align: 1,
-    stretchCross: 0,
+    stretch: 0,
   },
   center: {
     align: 0.5,
-    stretchCross: 0,
+    stretch: 0,
   },
   stretch: {
     align: 0,
-    stretchCross: 1,
+    stretch: 1,
   },
 } as const
-
-function toNormalized(input: NumberValue | PercentageValue): number {
-  if (isNumberValue(input)) {
-    return input.value
-  }
-  return input.value / 100
-}
 
 function toValue(value: ParserValue<typeof alignSelfParser>): AlignSelfValue {
   if (isKeywordValue(value)) {
@@ -76,28 +70,28 @@ function toValue(value: ParserValue<typeof alignSelfParser>): AlignSelfValue {
 
   return {
     align: place,
-    stretchCross: stretch,
+    stretch,
   }
 }
 
 export function resolveAlignSelf(
   input: AlignSelfInput,
   autoAlign = Number.POSITIVE_INFINITY,
-  autoStretchCross = 0,
+  autoStretch = 0,
 ): AlignSelfValue {
   if (typeof input === 'number' || input === undefined) {
     return {
       align: input ?? autoAlign,
-      stretchCross: autoStretchCross,
+      stretch: autoStretch,
     }
   }
 
-  return cache(`${input}:${autoAlign}:${autoStretchCross}`, () => {
+  return cache(`${input}:${autoAlign}:${autoStretch}`, () => {
     const parsed = parse(input, alignSelfParser)
     if (!parsed.valid) {
       return {
         align: autoAlign,
-        stretchCross: autoStretchCross,
+        stretch: autoStretch,
       }
     }
 

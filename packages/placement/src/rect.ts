@@ -17,19 +17,51 @@ import { isRecord } from './utils/object.ts'
 const TypeBrand: unique symbol = Symbol('placement/rect')
 type TypeBrand = typeof TypeBrand
 
+/**
+ * The minimal structural shape of a rectangle: a position and a signed
+ * size in y-down coordinate space.
+ *
+ * Read-only inputs accept any `RectLike` — `rect.from`, the second operand
+ * of `join`, `intersect`, and `lerp`, and the predicates — while
+ * transforms require a branded `Rect` built by `rect`.
+ */
 export interface RectLike {
+  /** The x coordinate of the origin corner — the left edge when `width >= 0`. */
   readonly x: number
+  /** The y coordinate of the origin corner — the top edge when `height >= 0` (y points down). */
   readonly y: number
+  /** The signed horizontal size. Negative values extend leftward from `x`. */
   readonly width: number
+  /** The signed vertical size. Negative values extend upward from `y`. */
   readonly height: number
 }
 
+/**
+ * An axis-aligned rectangle: a position (`x`, `y`) plus a signed size
+ * (`width`, `height`), in y-down screen space — `top === y`, and `bottom`
+ * is `y + height`.
+ *
+ * Values are immutable, and constructions are exact IEEE 754: fields hold
+ * exactly what the arithmetic produced, with no rounding and no stored
+ * precision (see `PRECISION.md`). Negative sizes are legal — a negative
+ * `width` extends the rect leftward from `x`. The edge getters report raw
+ * coordinates, while bounds questions (`contains`, `intersects`, `join`,
+ * `intersect`) normalize the extent first.
+ *
+ * Construct values with the `rect` factory — the class is exported
+ * type-only. Extends `Pipeable`, so operations chain as
+ * `self.pipe(op(...))`.
+ */
 class Rect extends Pipeable implements RectLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
+  /** The x coordinate of the origin corner — the left edge when `width >= 0`. */
   readonly x: number
+  /** The y coordinate of the origin corner — the top edge when `height >= 0` (y points down). */
   readonly y: number
+  /** The signed horizontal size. Negative values extend leftward from `x`. */
   readonly width: number
+  /** The signed vertical size. Negative values extend upward from `y`. */
   readonly height: number
 
   constructor(x: number, y: number, width: number, height: number) {
@@ -41,38 +73,57 @@ class Rect extends Pipeable implements RectLike {
     this.height = height
   }
 
+  /**
+   * The y coordinate of the top edge — identical to `y`, since the y axis
+   * points down. Raw, not normalized: with a negative `height`,
+   * `bottom < top`.
+   */
   get top(): number {
     return this.y
   }
 
+  /** The y coordinate of the bottom edge, `y + height`. */
   get bottom(): number {
     return this.y + this.height
   }
 
+  /**
+   * The x coordinate of the left edge — identical to `x`. Raw, not
+   * normalized: with a negative `width`, `right < left`.
+   */
   get left(): number {
     return this.x
   }
 
+  /** The x coordinate of the right edge, `x + width`. */
   get right(): number {
     return this.x + this.width
   }
 
+  /** The signed area, `width * height` — negative when exactly one size is negative. */
   get area(): number {
     return this.width * this.height
   }
 
+  /**
+   * The ratio `width / height`, as exact IEEE division: a zero `height`
+   * gives `Infinity` or `-Infinity`, and a zero-size rect gives `NaN`.
+   */
   get aspectRatio(): number {
     return this.width / this.height
   }
 
+  /** The x coordinate of the center, `x + width / 2`. */
   get centerX(): number {
     return this.x + this.width / 2
   }
 
+  /** The y coordinate of the center, `y + height / 2`. */
   get centerY(): number {
     return this.y + this.height / 2
   }
 
+  /** The center as a `Point`: `(centerX, centerY)`. */
   get center(): Point {
     return point(this.centerX, this.centerY)
   }
@@ -81,6 +132,12 @@ class Rect extends Pipeable implements RectLike {
     return `Rect [(${this.x}, ${this.y}) ${this.width}x${this.height}]`
   }
 
+  /**
+   * Returns the plain `{ x, y, width, height }` record `JSON.stringify`
+   * serializes.
+   *
+   * @returns The rect's four fields as a plain object.
+   */
   toJSON() {
     return {
       x: this.x,
@@ -94,20 +151,121 @@ class Rect extends Pipeable implements RectLike {
 export type { Rect }
 
 interface RectConstructor {
+  /**
+   * Creates the zero rect.
+   *
+   * @returns The rect at `(0, 0)` with zero size.
+   */
   (): Rect
+  /**
+   * Creates a square of `size` at the origin.
+   *
+   * @param size - The width and height.
+   * @returns The rect at `(0, 0)` with size `size` by `size`.
+   */
   (size: number): Rect
+  /**
+   * Creates a rect of `width` by `height` at the origin.
+   *
+   * @param width - The width.
+   * @param height - The height.
+   * @returns The rect at `(0, 0)` with the given size.
+   */
   (width: number, height: number): Rect
+  /**
+   * Creates a square of `size` at `(x, y)`.
+   *
+   * @param x - The x coordinate.
+   * @param y - The y coordinate.
+   * @param size - The width and height.
+   * @returns The rect at `(x, y)` with size `size` by `size`.
+   */
   (x: number, y: number, size: number): Rect
+  /**
+   * Creates a rect of `width` by `height` at `(x, y)`.
+   *
+   * @param x - The x coordinate.
+   * @param y - The y coordinate.
+   * @param width - The width.
+   * @param height - The height.
+   * @returns The rect at `(x, y)` with the given size.
+   */
   (x: number, y: number, width: number, height: number): Rect
 
+  /**
+   * Creates a `Rect` from any value with numeric `x`, `y`, `width`, and
+   * `height` fields, copying the four fields exactly.
+   *
+   * @param rect - The rect-like value to copy.
+   * @returns A new `Rect` with the same position and size.
+   */
   from(rect: RectLike): Rect
+  /**
+   * Creates a `Rect` with the size of `dimensions` at `position`.
+   *
+   * @param dimensions - The size, from `placement/dimensions`.
+   * @param position - The `(x, y)` position. Defaults to the origin.
+   * @returns A new `Rect` at `position` with the given dimensions.
+   */
   fromDimensions(dimensions: Dimensions, position?: PointLike): Rect
+  /**
+   * Creates a `Rect` from 1D intervals, one per axis: each interval's
+   * `start` becomes the position coordinate and its `size` the size. With
+   * `y` omitted, `x` is mirrored onto both axes.
+   *
+   * @param x - The horizontal interval (`x` and `width`).
+   * @param y - The vertical interval (`y` and `height`). Defaults to `x`.
+   * @returns A new `Rect` spanning both intervals.
+   */
   fromInterval(x: Interval, y?: Interval): Rect
+  /**
+   * Creates a `Rect` spanning absolute edge coordinates — not inset
+   * distances. The result runs from `left` to `right` and `top` to
+   * `bottom` exactly as given, so `right < left` (or `bottom < top`)
+   * produces a negative size.
+   *
+   * Omitted arguments fall back CSS-shorthand style: one value places all
+   * four edges (a zero-size rect at `(top, top)`), two are
+   * vertical/horizontal, and three leave `left` mirroring `right`.
+   *
+   * @param top - The y coordinate of the top edge.
+   * @param right - The x coordinate of the right edge. Defaults to `top`.
+   * @param bottom - The y coordinate of the bottom edge. Defaults to `top`.
+   * @param left - The x coordinate of the left edge. Defaults to `right`.
+   * @returns A new `Rect` spanning the given edges.
+   * @example
+   * ```ts
+   * rect.trbl(20, 40, 60, 10) // rect(10, 20, 30, 40)
+   * rect.trbl(10) // rect(10, 10, 0, 0)
+   * ```
+   */
   trbl(top: number, right?: number, bottom?: number, left?: number): Rect
 
+  /** The rect at `(0, 0)` with zero size — a shared instance. */
   zero: Rect
 }
 
+/**
+ * Creates a `Rect`. Arity picks the meaning of the arguments: none is the
+ * zero rect, one is a square of that size at the origin, two are a width
+ * and height at the origin, three are `x`, `y`, and a square size, and
+ * four are `x`, `y`, `width`, and `height`.
+ *
+ * Inputs are stored exactly as given — no rounding, no normalization — and
+ * negative sizes are legal. The statics build rects from other shapes:
+ * `rect.from` copies a rect-like, `rect.fromDimensions` and
+ * `rect.fromInterval` lift the other value types, and `rect.trbl` spans
+ * absolute edge coordinates.
+ *
+ * @example
+ * ```ts
+ * rect() // rect(0, 0, 0, 0)
+ * rect(10) // rect(0, 0, 10, 10)
+ * rect(10, 20) // rect(0, 0, 10, 20)
+ * rect(10, 20, 30) // rect(10, 20, 30, 30)
+ * rect(10, 20, 30, 40) // x 10, y 20, width 30, height 40
+ * ```
+ */
 const rect = ((a?: number, b?: number, c?: number, d?: number): Rect =>
   new Rect(...normalizeXYWH(a, b, c, d))) as RectConstructor
 
@@ -129,10 +287,30 @@ rect.zero = new Rect(0, 0, 0, 0)
 
 export { rect }
 
+/**
+ * Checks if a value is a `Rect`.
+ *
+ * True only for values built by `rect` (or its statics), which carry the
+ * brand — a plain `{ x, y, width, height }` object is rect-like but not a
+ * `Rect`.
+ *
+ * @param value - The value to check.
+ * @returns `true` if the value is a `Rect`, `false` otherwise.
+ */
 export const isRect = (value: unknown): value is Rect => {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
 
+/**
+ * Checks if a value is structurally a rectangle: an object with numeric
+ * `x`, `y`, `width`, and `height` fields. Every `Rect` qualifies.
+ *
+ * This is the shape check `contains` uses to tell rect targets from point
+ * targets.
+ *
+ * @param value - The value to check.
+ * @returns `true` if the value carries the four numeric fields, `false` otherwise.
+ */
 export const isRectLike = (value: unknown): value is RectLike => {
   return (
     isRecord(value) &&
@@ -156,16 +334,45 @@ const bounds = (target: RectLike): [number, number, number, number] => {
   return [xMin, xMax, yMin, yMax]
 }
 
+/**
+ * Replaces the `x` coordinate, keeping everything else.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to reposition.
+ * @param x - The new `x` coordinate.
+ * @returns A new `Rect` with `x` replaced.
+ */
 export const setX: {
   (self: Rect, x: number): Rect
   (x: number): (self: Rect) => Rect
 } = dual(2, (self: Rect, x: number) => new Rect(x, self.y, self.width, self.height))
 
+/**
+ * Replaces the `y` coordinate, keeping everything else.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to reposition.
+ * @param y - The new `y` coordinate.
+ * @returns A new `Rect` with `y` replaced.
+ */
 export const setY: {
   (self: Rect, y: number): Rect
   (y: number): (self: Rect) => Rect
 } = dual(2, (self: Rect, y: number) => new Rect(self.x, y, self.width, self.height))
 
+/**
+ * Replaces both position coordinates, keeping the size. With `y` omitted,
+ * `x` is used for both.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to reposition.
+ * @param x - The new `x` coordinate.
+ * @param y - The new `y` coordinate. Defaults to `x`.
+ * @returns A new `Rect` at `(x, y)` with the same size.
+ */
 export const setPosition: {
   (self: Rect, x: number, y?: number): Rect
   (x: number, y?: number): (self: Rect) => Rect
@@ -174,16 +381,45 @@ export const setPosition: {
   (self: Rect, x: number, y?: number) => new Rect(x, y ?? x, self.width, self.height),
 )
 
+/**
+ * Replaces the `width`, keeping everything else.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to resize.
+ * @param width - The new width. May be negative.
+ * @returns A new `Rect` with `width` replaced.
+ */
 export const setWidth: {
   (self: Rect, width: number): Rect
   (width: number): (self: Rect) => Rect
 } = dual(2, (self: Rect, width: number) => new Rect(self.x, self.y, width, self.height))
 
+/**
+ * Replaces the `height`, keeping everything else.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to resize.
+ * @param height - The new height. May be negative.
+ * @returns A new `Rect` with `height` replaced.
+ */
 export const setHeight: {
   (self: Rect, height: number): Rect
   (height: number): (self: Rect) => Rect
 } = dual(2, (self: Rect, height: number) => new Rect(self.x, self.y, self.width, height))
 
+/**
+ * Replaces the size, keeping the position. With `height` omitted, `width`
+ * is used for both.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to resize.
+ * @param width - The new width.
+ * @param height - The new height. Defaults to `width`.
+ * @returns A new `Rect` of the given size at the same position.
+ */
 export const setSize: {
   (self: Rect, width: number, height?: number): Rect
   (width: number, height?: number): (self: Rect) => Rect
@@ -192,6 +428,16 @@ export const setSize: {
   (self: Rect, width: number, height?: number) => new Rect(self.x, self.y, width, height ?? width),
 )
 
+/**
+ * Moves the rect so its `right` edge (`x + width`) lands on the given
+ * coordinate, keeping the size.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to reposition.
+ * @param right - The target `right` coordinate.
+ * @returns A new `Rect` with `x` set to `right - width`.
+ */
 export const setRight: {
   (self: Rect, right: number): Rect
   (right: number): (self: Rect) => Rect
@@ -200,6 +446,16 @@ export const setRight: {
   (self: Rect, right: number) => new Rect(right - self.width, self.y, self.width, self.height),
 )
 
+/**
+ * Moves the rect so its `bottom` edge (`y + height`) lands on the given
+ * coordinate, keeping the size.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to reposition.
+ * @param bottom - The target `bottom` coordinate.
+ * @returns A new `Rect` with `y` set to `bottom - height`.
+ */
 export const setBottom: {
   (self: Rect, bottom: number): Rect
   (bottom: number): (self: Rect) => Rect
@@ -208,16 +464,49 @@ export const setBottom: {
   (self: Rect, bottom: number) => new Rect(self.x, bottom - self.height, self.width, self.height),
 )
 
+/**
+ * Translates the rect along the x axis.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to move.
+ * @param x - The distance to add to `x`.
+ * @returns A new `Rect` moved horizontally by `x`.
+ */
 export const translateX: {
   (self: Rect, x: number): Rect
   (x: number): (self: Rect) => Rect
 } = dual(2, (self: Rect, x: number) => new Rect(self.x + x, self.y, self.width, self.height))
 
+/**
+ * Translates the rect along the y axis. Positive distances move down.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to move.
+ * @param y - The distance to add to `y`.
+ * @returns A new `Rect` moved vertically by `y`.
+ */
 export const translateY: {
   (self: Rect, y: number): Rect
   (y: number): (self: Rect) => Rect
 } = dual(2, (self: Rect, y: number) => new Rect(self.x, self.y + y, self.width, self.height))
 
+/**
+ * Translates the rect on both axes, keeping the size.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to move.
+ * @param x - The distance to add to `x`.
+ * @param y - The distance to add to `y`. Positive is down.
+ * @returns A new `Rect` moved by `(x, y)`.
+ * @example
+ * ```ts
+ * translate(rect(0, 0, 100), 10, 20) // rect(10, 20, 100, 100)
+ * rect(0, 0, 100).pipe(translate(10, 20)) // rect(10, 20, 100, 100)
+ * ```
+ */
 export const translate: {
   (self: Rect, x: number, y: number): Rect
   (x: number, y: number): (self: Rect) => Rect
@@ -226,6 +515,25 @@ export const translate: {
   (self: Rect, x: number, y: number) => new Rect(self.x + x, self.y + y, self.width, self.height),
 )
 
+/**
+ * Scales the width by `factor` about a fixed point on the x axis.
+ *
+ * `origin` names the fixed point as a fraction of the width: `0` holds the
+ * left edge, `0.5` the center, `1` the right edge — the coordinate
+ * `x + width * origin` does not move. `y` and the height are untouched.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to scale.
+ * @param factor - The scale factor applied to `width`.
+ * @param origin - The fixed point as a fraction of the width. Defaults to `0`.
+ * @returns A new `Rect` with `width * factor`, repositioned to hold the origin point.
+ * @example
+ * ```ts
+ * scaleX(rect(10), 2) // rect(0, 0, 20, 10)
+ * scaleX(rect(10), 2, 0.5) // rect(-5, 0, 20, 10)
+ * ```
+ */
 export const scaleX: {
   (self: Rect, factor: number, origin?: number): Rect
   (factor: number, origin?: number): (self: Rect) => Rect
@@ -240,6 +548,20 @@ export const scaleX: {
     ),
 )
 
+/**
+ * Scales the height by `factor` about a fixed point on the y axis.
+ *
+ * `origin` names the fixed point as a fraction of the height: `0` holds
+ * the top edge, `0.5` the center, `1` the bottom edge — the coordinate
+ * `y + height * origin` does not move. `x` and the width are untouched.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to scale.
+ * @param factor - The scale factor applied to `height`.
+ * @param origin - The fixed point as a fraction of the height. Defaults to `0`.
+ * @returns A new `Rect` with `height * factor`, repositioned to hold the origin point.
+ */
 export const scaleY: {
   (self: Rect, factor: number, origin?: number): Rect
   (factor: number, origin?: number): (self: Rect) => Rect
@@ -254,6 +576,25 @@ export const scaleY: {
     ),
 )
 
+/**
+ * Scales both sizes by `factor` about a shared fixed point.
+ *
+ * `origin` is the fraction along each axis that stays put: `0` holds the
+ * top-left corner, `0.5` the center, `1` the bottom-right corner. To scale
+ * about an absolute point instead, use `scaleFrom`.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to scale.
+ * @param factor - The scale factor applied to both sizes.
+ * @param origin - The fixed point as a fraction of each size. Defaults to `0`.
+ * @returns A new `Rect` scaled by `factor`, repositioned to hold the origin point.
+ * @example
+ * ```ts
+ * scale(rect(10), 2, 0.5) // rect(-5, -5, 20, 20)
+ * rect(10).pipe(scale(2, 1)) // rect(-10, -10, 20, 20)
+ * ```
+ */
 export const scale: {
   (self: Rect, factor: number, origin?: number): Rect
   (factor: number, origin?: number): (self: Rect) => Rect
@@ -268,6 +609,22 @@ export const scale: {
     ),
 )
 
+/**
+ * Scales the rect by `factor` about an absolute point: every corner moves
+ * along its line through `position`, as
+ * `position + (corner - position) * factor`.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to scale.
+ * @param factor - The scale factor applied to both sizes.
+ * @param position - The point that stays fixed.
+ * @returns A new `Rect` scaled about `position`.
+ * @example
+ * ```ts
+ * scaleFrom(rect(100, 100, 100), 2, point.zero) // rect(200, 200, 200, 200)
+ * ```
+ */
 export const scaleFrom: {
   (self: Rect, factor: number, position: PointLike): Rect
   (factor: number, position: PointLike): (self: Rect) => Rect
@@ -282,6 +639,24 @@ export const scaleFrom: {
     ),
 )
 
+/**
+ * Clamps the `x` coordinate to `[min, max]`, keeping everything else.
+ *
+ * Crossed bounds resolve as CSS `clamp()` does: when `min > max`, the
+ * minimum wins and the result is pinned to `min`.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to constrain.
+ * @param min - The lower bound for `x`.
+ * @param max - The upper bound for `x`.
+ * @returns A new `Rect` with `x` clamped.
+ * @example
+ * ```ts
+ * clampX(rect(), 10, 30) // rect(10, 0, 0, 0)
+ * clampX(rect(), 30, 10) // rect(30, 0, 0, 0) (crossed bounds: the minimum wins)
+ * ```
+ */
 export const clampX: {
   (self: Rect, min: number, max: number): Rect
   (min: number, max: number): (self: Rect) => Rect
@@ -290,6 +665,17 @@ export const clampX: {
   return new Rect(clampNumber(self.x, min, Math.max(min, max)), self.y, self.width, self.height)
 })
 
+/**
+ * Clamps the `y` coordinate to `[min, max]`, keeping everything else.
+ * When the bounds cross, the minimum wins, as in `clampX`.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to constrain.
+ * @param min - The lower bound for `y`.
+ * @param max - The upper bound for `y`.
+ * @returns A new `Rect` with `y` clamped.
+ */
 export const clampY: {
   (self: Rect, min: number, max: number): Rect
   (min: number, max: number): (self: Rect) => Rect
@@ -297,6 +683,17 @@ export const clampY: {
   return new Rect(self.x, clampNumber(self.y, min, Math.max(min, max)), self.width, self.height)
 })
 
+/**
+ * Clamps the `width` to `[min, max]`, keeping everything else.
+ * When the bounds cross, the minimum wins, as in `clampX`.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to constrain.
+ * @param min - The lower bound for `width`.
+ * @param max - The upper bound for `width`.
+ * @returns A new `Rect` with `width` clamped.
+ */
 export const clampWidth: {
   (self: Rect, min: number, max: number): Rect
   (min: number, max: number): (self: Rect) => Rect
@@ -304,6 +701,17 @@ export const clampWidth: {
   return new Rect(self.x, self.y, clampNumber(self.width, min, Math.max(min, max)), self.height)
 })
 
+/**
+ * Clamps the `height` to `[min, max]`, keeping everything else.
+ * When the bounds cross, the minimum wins, as in `clampX`.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to constrain.
+ * @param min - The lower bound for `height`.
+ * @param max - The upper bound for `height`.
+ * @returns A new `Rect` with `height` clamped.
+ */
 export const clampHeight: {
   (self: Rect, min: number, max: number): Rect
   (min: number, max: number): (self: Rect) => Rect
@@ -314,6 +722,23 @@ export const clampHeight: {
 // The align family takes fixed arities: the target is itself a Rect (or a
 // Point), so a trailing optional origin would make 2-argument calls
 // ambiguous between the data-first and data-last forms.
+/**
+ * Positions the rect horizontally within `target` by a normalized origin:
+ * `0` aligns the left edges, `0.5` centers, `1` aligns the right edges.
+ * Values outside `[0, 1]` keep going in proportion. `y` and the size are
+ * untouched.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to position.
+ * @param target - The rect to align within.
+ * @param origin - The normalized alignment position along the x axis.
+ * @returns A new `Rect` with `x` set to `target.x + (target.width - width) * origin`.
+ * @example
+ * ```ts
+ * alignX(rect(100), rect(200), 0.5) // rect(50, 0, 100, 100)
+ * ```
+ */
 export const alignX: {
   (self: Rect, target: Rect, origin: number): Rect
   (target: Rect, origin: number): (self: Rect) => Rect
@@ -323,6 +748,19 @@ export const alignX: {
     new Rect(target.x + (target.width - self.width) * origin, self.y, self.width, self.height),
 )
 
+/**
+ * Positions the rect vertically within `target` by a normalized origin:
+ * `0` aligns the top edges, `0.5` centers, `1` aligns the bottom edges.
+ * Values outside `[0, 1]` keep going in proportion. `x` and the size are
+ * untouched.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to position.
+ * @param target - The rect to align within.
+ * @param origin - The normalized alignment position along the y axis.
+ * @returns A new `Rect` with `y` set to `target.y + (target.height - height) * origin`.
+ */
 export const alignY: {
   (self: Rect, target: Rect, origin: number): Rect
   (target: Rect, origin: number): (self: Rect) => Rect
@@ -332,6 +770,28 @@ export const alignY: {
     new Rect(self.x, target.y + (target.height - self.height) * origin, self.width, self.height),
 )
 
+/**
+ * Positions the rect within a target on both axes by a normalized origin:
+ * `0` aligns the left/top edges, `0.5` centers, `1` aligns the
+ * right/bottom edges. The size is untouched.
+ *
+ * A `Point` target acts as a zero-size rect at that position, so `origin`
+ * picks which point of `self` lands on it — `0` the top-left corner, `1`
+ * the bottom-right. A `Point` origin aligns each axis independently
+ * (`origin.x` for x, `origin.y` for y).
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to position.
+ * @param target - The rect or point to align to.
+ * @param origin - The normalized alignment position: one number for both axes, or per-axis as a point.
+ * @returns A new `Rect` aligned to `target`.
+ * @example
+ * ```ts
+ * align(rect(100), rect(200), 0.5) // rect(50, 50, 100, 100)
+ * rect(100).pipe(align(point(50, 60), 0.5)) // rect(0, 10, 100, 100)
+ * ```
+ */
 export const align: {
   (self: Rect, target: Rect | Point, origin: number | Point): Rect
   (target: Rect | Point, origin: number | Point): (self: Rect) => Rect
@@ -354,6 +814,22 @@ export const align: {
 // resizeTop/resizeRight/resizeBottom/resizeLeft move one edge to an absolute
 // coordinate with the opposite edge fixed; crossing edges flip (size stays
 // non-negative) rather than clamp.
+/**
+ * Moves the top edge to an absolute y coordinate, keeping the `bottom`
+ * edge fixed. Crossing the fixed edge flips rather than clamps: the result
+ * spans from `bottom` to `top`, and the size stays non-negative.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to resize.
+ * @param top - The new y coordinate of the top edge.
+ * @returns A new `Rect` spanning `top` to the original `bottom`.
+ * @example
+ * ```ts
+ * resizeTop(rect(10, 20, 30, 40), 10) // rect(10, 10, 30, 50)
+ * resizeTop(rect(10, 20, 30, 40), 70) // rect(10, 60, 30, 10) (crossed the bottom edge)
+ * ```
+ */
 export const resizeTop: {
   (self: Rect, top: number): Rect
   (top: number): (self: Rect) => Rect
@@ -362,6 +838,17 @@ export const resizeTop: {
   return new Rect(self.x, min, self.width, max - min)
 })
 
+/**
+ * Moves the right edge to an absolute x coordinate, keeping the `left`
+ * edge (`x`) fixed. Crossing the fixed edge flips rather than clamps: the
+ * result spans from `right` to `left`, and the size stays non-negative.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to resize.
+ * @param right - The new x coordinate of the right edge.
+ * @returns A new `Rect` spanning the original `left` to `right`.
+ */
 export const resizeRight: {
   (self: Rect, right: number): Rect
   (right: number): (self: Rect) => Rect
@@ -370,6 +857,17 @@ export const resizeRight: {
   return new Rect(min, self.y, max - min, self.height)
 })
 
+/**
+ * Moves the bottom edge to an absolute y coordinate, keeping the `top`
+ * edge (`y`) fixed. Crossing the fixed edge flips rather than clamps: the
+ * result spans from `bottom` to `top`, and the size stays non-negative.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to resize.
+ * @param bottom - The new y coordinate of the bottom edge.
+ * @returns A new `Rect` spanning the original `top` to `bottom`.
+ */
 export const resizeBottom: {
   (self: Rect, bottom: number): Rect
   (bottom: number): (self: Rect) => Rect
@@ -378,6 +876,17 @@ export const resizeBottom: {
   return new Rect(self.x, min, self.width, max - min)
 })
 
+/**
+ * Moves the left edge to an absolute x coordinate, keeping the `right`
+ * edge fixed. Crossing the fixed edge flips rather than clamps: the result
+ * spans from `right` to `left`, and the size stays non-negative.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to resize.
+ * @param left - The new x coordinate of the left edge.
+ * @returns A new `Rect` spanning `left` to the original `right`.
+ */
 export const resizeLeft: {
   (self: Rect, left: number): Rect
   (left: number): (self: Rect) => Rect
@@ -386,6 +895,24 @@ export const resizeLeft: {
   return new Rect(min, self.y, max - min, self.height)
 })
 
+/**
+ * Adds `delta` to the width, with `origin` deciding where the change
+ * happens: it names the fixed point as a fraction of the width, so `0`
+ * holds the left edge (the rect grows rightward), `0.5` splits the change
+ * evenly, and `1` holds the right edge. Negative deltas shrink, and may
+ * drive the width negative — nothing clamps.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to resize.
+ * @param delta - The amount to add to `width`.
+ * @param origin - The fixed point as a fraction of the width. Defaults to `0`.
+ * @returns A new `Rect` with `width + delta` and `x` shifted by `-delta * origin`.
+ * @example
+ * ```ts
+ * resizeX(rect(10, 20, 30, 40), 10, 0.5) // rect(5, 20, 40, 40)
+ * ```
+ */
 export const resizeX: {
   (self: Rect, delta: number, origin?: number): Rect
   (delta: number, origin?: number): (self: Rect) => Rect
@@ -395,6 +922,20 @@ export const resizeX: {
     new Rect(self.x - delta * origin, self.y, self.width + delta, self.height),
 )
 
+/**
+ * Adds `delta` to the height, with `origin` deciding where the change
+ * happens: it names the fixed point as a fraction of the height, so `0`
+ * holds the top edge (the rect grows downward), `0.5` splits the change
+ * evenly, and `1` holds the bottom edge. Negative deltas shrink, and may
+ * drive the height negative — nothing clamps.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to resize.
+ * @param delta - The amount to add to `height`.
+ * @param origin - The fixed point as a fraction of the height. Defaults to `0`.
+ * @returns A new `Rect` with `height + delta` and `y` shifted by `-delta * origin`.
+ */
 export const resizeY: {
   (self: Rect, delta: number, origin?: number): Rect
   (delta: number, origin?: number): (self: Rect) => Rect
@@ -404,6 +945,27 @@ export const resizeY: {
     new Rect(self.x, self.y - delta * origin, self.width, self.height + delta),
 )
 
+/**
+ * Adds a delta to both sizes, with an origin deciding where the change
+ * happens on each axis: `0` holds the left/top edge, `0.5` the center,
+ * `1` the right/bottom edge.
+ *
+ * A `Point` delta resizes each axis by its own amount (`delta.x` to the
+ * width, `delta.y` to the height); a `Point` origin fixes each axis
+ * independently. Numbers apply to both axes.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to resize.
+ * @param delta - The amount to add to the size: one number for both axes, or per-axis as a point.
+ * @param origin - The fixed point per axis. Defaults to `0`.
+ * @returns A new `Rect` resized about the origin point.
+ * @example
+ * ```ts
+ * resize(rect(100), 10, 0.5) // rect(-5, -5, 110, 110)
+ * resize(rect(100), point(20, 10), 0.5) // rect(-10, -5, 120, 110)
+ * ```
+ */
 export const resize: {
   (self: Rect, delta: number | Point, origin?: number | Point): Rect
   (delta: number | Point, origin?: number | Point): (self: Rect) => Rect
@@ -424,6 +986,27 @@ export const resize: {
   },
 )
 
+/**
+ * Insets the rect's edges inward, as padding does: a number insets all
+ * four edges uniformly, an `Offset` (from `placement/offset`) insets each
+ * edge by its own field.
+ *
+ * The size floors at zero — opposing insets larger than the rect collapse
+ * it rather than turning it inside out — but the position still moves by
+ * the full `left`/`top` inset. `expand` is the un-floored inverse.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to contract.
+ * @param value - The inset: one number for every edge, or a per-edge offset.
+ * @returns A new `Rect` inset by `value`, its size floored at zero.
+ * @example
+ * ```ts
+ * contract(rect(0, 0, 100), 10) // rect(10, 10, 80, 80)
+ * rect(0, 0, 100).pipe(contract(offset.trbl(10, 20, 30, 40))) // rect(40, 10, 40, 60)
+ * contract(rect(0, 0, 10), 20) // rect(20, 20, 0, 0) (floored)
+ * ```
+ */
 export const contract: {
   (self: Rect, value: Offset | number): Rect
   (value: Offset | number): (self: Rect) => Rect
@@ -442,6 +1025,25 @@ export const contract: {
   )
 })
 
+/**
+ * Outsets the rect's edges outward, as margin does: a number outsets all
+ * four edges uniformly, an `Offset` (from `placement/offset`) outsets each
+ * edge by its own field.
+ *
+ * The inverse of `contract`, minus the floor: nothing clamps here, so
+ * negative components shrink the rect and can drive its size negative.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to expand.
+ * @param value - The outset: one number for every edge, or a per-edge offset.
+ * @returns A new `Rect` grown by `value` on each edge.
+ * @example
+ * ```ts
+ * expand(rect(0, 0, 100), 10) // rect(-10, -10, 120, 120)
+ * expand(rect(0, 0, 100), offset.trbl(10, 20, 30, 40)) // rect(-40, -10, 160, 140)
+ * ```
+ */
 export const expand: {
   (self: Rect, value: Offset | number): Rect
   (value: Offset | number): (self: Rect) => Rect
@@ -459,6 +1061,23 @@ export const expand: {
   )
 })
 
+/**
+ * Computes the smallest rect enclosing both `self` and `other` — the
+ * bounding hull.
+ *
+ * Negative sizes are normalized before the hull is taken, so the result
+ * always has a non-negative size, positioned at the minimum corner.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The first rect.
+ * @param other - The second rect (any rect-like value).
+ * @returns A new `Rect` covering both inputs.
+ * @example
+ * ```ts
+ * join(rect(10, 10, 0), rect(-10, -20, 0)) // rect(-10, -20, 20, 30)
+ * ```
+ */
 export const join: {
   (self: Rect, other: RectLike): Rect
   (other: RectLike): (self: Rect) => Rect
@@ -472,6 +1091,26 @@ export const join: {
   return new Rect(x, y, Math.max(selfXMax, otherXMax) - x, Math.max(selfYMax, otherYMax) - y)
 })
 
+/**
+ * Computes the overlap of `self` and `other`, on their normalized extents.
+ *
+ * When the extents do not strictly overlap on both axes — disjoint, or
+ * merely edge-touching — the result is a zero-size rect at the midpoint of
+ * the two centers. That decision is exact, unlike the tolerant
+ * `intersects` predicate: rects touching within rounding noise take the
+ * disjoint path.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The first rect.
+ * @param other - The second rect (any rect-like value).
+ * @returns A new `Rect` covering the overlap, or a zero-size `Rect` between the centers.
+ * @example
+ * ```ts
+ * intersect(rect(0, 0, 100), rect(50, 50, 100)) // rect(50, 50, 50, 50)
+ * intersect(rect(0, 0, 100), rect(300, 0, 100)) // rect(200, 50, 0, 0)
+ * ```
+ */
 export const intersect: {
   (self: Rect, other: RectLike): Rect
   (other: RectLike): (self: Rect) => Rect
@@ -501,6 +1140,27 @@ export const intersect: {
 // contain/cover/fit dispatch on isRect(args[1]): the data-first form's second
 // argument is always the target Rect, while the data-last form's second
 // argument is a number, a string, or absent — never ambiguous.
+/**
+ * Scales `self` uniformly to the largest size that fits inside `target`,
+ * preserving `self`'s aspect ratio, then positions it with the leftover
+ * space on the loose axis distributed by `origin`: `0` packs toward the
+ * left/top, `0.5` centers, `1` packs toward the right/bottom.
+ *
+ * A zero-area `self` carries no aspect ratio to preserve; the `target`
+ * instance itself is returned.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to fit. Only its aspect ratio matters.
+ * @param target - The rect to fit inside.
+ * @param origin - The normalized position of the leftover space. Defaults to `0.5`.
+ * @returns A new `Rect` inscribed in `target`, or `target` itself when `self` has zero area.
+ * @example
+ * ```ts
+ * contain(rect(0, 0, 100, 200), rect(50, 50, 100)) // rect(75, 50, 50, 100)
+ * contain(rect(0, 0, 100, 200), rect(50, 50, 100), 0) // rect(50, 50, 50, 100)
+ * ```
+ */
 export const contain: {
   (self: Rect, target: Rect, origin?: number): Rect
   (target: Rect, origin?: number): (self: Rect) => Rect
@@ -524,6 +1184,28 @@ export const contain: {
   },
 )
 
+/**
+ * Scales `self` uniformly to the smallest size that covers `target`,
+ * preserving `self`'s aspect ratio, then positions it with the overflow
+ * on the long axis distributed by `origin`: `0` aligns the left/top edges
+ * (overflow spills right/down), `0.5` centers, `1` aligns the
+ * right/bottom edges.
+ *
+ * A zero-area `self` carries no aspect ratio to preserve; the `target`
+ * instance itself is returned.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to fit. Only its aspect ratio matters.
+ * @param target - The rect to cover.
+ * @param origin - The normalized position of the overflow. Defaults to `0.5`.
+ * @returns A new `Rect` covering `target`, or `target` itself when `self` has zero area.
+ * @example
+ * ```ts
+ * cover(rect(0, 0, 100, 200), rect(50, 50, 100)) // rect(50, 0, 100, 200)
+ * cover(rect(0, 0, 100, 200), rect(50, 50, 100), 0) // rect(50, 50, 100, 200)
+ * ```
+ */
 export const cover: {
   (self: Rect, target: Rect, origin?: number): Rect
   (target: Rect, origin?: number): (self: Rect) => Rect
@@ -547,6 +1229,24 @@ export const cover: {
   },
 )
 
+/**
+ * Fits `self` to `target` by mode: `'contain'` and `'cover'` scale as the
+ * functions of those names do, and `'crop'` is `intersect(self, target)`
+ * — no scaling, and `origin` is ignored.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect to fit.
+ * @param target - The rect to fit to.
+ * @param mode - `'contain'`, `'cover'`, or `'crop'`.
+ * @param origin - The normalized position for the scaling modes. Defaults to `0.5`.
+ * @returns The fitted `Rect`.
+ * @example
+ * ```ts
+ * fit(rect(0, 0, 100, 200), rect(50, 50, 100), 'contain') // rect(75, 50, 50, 100)
+ * rect(0, 0, 100, 200).pipe(fit(rect(50, 50, 100), 'cover', 0)) // rect(50, 50, 100, 200)
+ * ```
+ */
 export const fit: {
   (self: Rect, target: Rect, mode: 'contain' | 'cover' | 'crop', origin?: number): Rect
   (target: Rect, mode: 'contain' | 'cover' | 'crop', origin?: number): (self: Rect) => Rect
@@ -565,6 +1265,24 @@ export const fit: {
   },
 )
 
+/**
+ * Linearly interpolates every field — `x`, `y`, `width`, and `height` —
+ * from `self` (at `amount = 0`) toward `target` (at `amount = 1`).
+ *
+ * Exact at the endpoints, and not clamped: amounts outside `[0, 1]`
+ * extrapolate along the same line.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect at `amount = 0`.
+ * @param target - The rect at `amount = 1` (any rect-like value).
+ * @param amount - The interpolation factor. Not restricted to `[0, 1]`.
+ * @returns A new `Rect` with each field interpolated.
+ * @example
+ * ```ts
+ * lerp(rect(0, 0, 100), rect(100, 100, 50), 0.5) // rect(50, 50, 75, 75)
+ * ```
+ */
 export const lerp: {
   (self: Rect, target: RectLike, amount: number): Rect
   (target: RectLike, amount: number): (self: Rect) => Rect
@@ -579,6 +1297,28 @@ export const lerp: {
     ),
 )
 
+/**
+ * Checks whether `self` covers a point or a whole rect. A target carrying
+ * the four rect fields is tested as a rect — its normalized extent must
+ * lie within `self`'s — and anything point-like is tested as a point.
+ * Edges count as inside.
+ *
+ * Boundary comparisons are tolerant per `PRECISION.md`: a target within
+ * rounding noise of an edge counts as contained, at any magnitude.
+ * Negative sizes are normalized on both sides.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The containing rect.
+ * @param target - The point or rect to test.
+ * @returns `true` if `self` covers `target`.
+ * @example
+ * ```ts
+ * contains(rect(0, 0, 100), point(100, 100)) // true (edges count)
+ * contains(rect(0, 0, 100), rect(50, 50, 100)) // false
+ * contains(rect(0, 0, 0.3, 1), point(0.1 + 0.2, 0.5)) // true (tolerant boundary)
+ * ```
+ */
 export const contains: {
   (self: Rect, target: PointLike | RectLike): boolean
   (target: PointLike | RectLike): (self: Rect) => boolean
@@ -605,6 +1345,23 @@ export const contains: {
   )
 })
 
+/**
+ * Checks whether the normalized extents of `self` and `other` overlap or
+ * touch. Edge contact counts, and the comparison is tolerant per
+ * `PRECISION.md`: rects separated by no more than rounding noise still
+ * intersect, at any magnitude.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The first rect.
+ * @param other - The second rect (any rect-like value).
+ * @returns `true` if the rects overlap or touch.
+ * @example
+ * ```ts
+ * intersects(rect(0, 0, 100), rect(100, 0, 100)) // true (edge contact counts)
+ * rect(0, 0, 100).pipe(intersects(rect(150, 0, 50))) // false
+ * ```
+ */
 export const intersects: {
   (self: Rect, other: RectLike): boolean
   (other: RectLike): (self: Rect) => boolean
@@ -623,6 +1380,26 @@ export const intersects: {
   )
 })
 
+/**
+ * Tolerance-aware equality: `true` when each field — `x`, `y`, `width`,
+ * and `height` — is coincident with `other`'s within the hybrid band of
+ * `PRECISION.md`, so rounding noise never separates two rects, at any
+ * magnitude.
+ *
+ * Fields are compared as stored, not as covered area: two rects describing
+ * the same region with opposite-sign sizes are not equal.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The first rect.
+ * @param other - The second rect (any rect-like value).
+ * @returns `true` if all four fields are pairwise coincident.
+ * @example
+ * ```ts
+ * equals(rect(0.1 + 0.2, 0, 1, 1), rect(0.3, 0, 1, 1)) // true
+ * rect(10, 20, 30, 40).pipe(equals(rect(10, 20, 30, 41))) // false
+ * ```
+ */
 export const equals: {
   (self: Rect, other: RectLike): boolean
   (other: RectLike): (self: Rect) => boolean

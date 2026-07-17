@@ -14,7 +14,6 @@ import {
 import { useParentRectRegistration } from '../composables/useSizingContext.ts'
 import { computedTRBLOffset } from '../data/offset.ts'
 import { type AlignSelfInput, resolveAlignSelf } from '../internal/props/alignSelf.ts'
-import { type JustifySelfInput, resolveJustifySelf } from '../internal/props/justifySelf.ts'
 import { useGroupRenderer } from '../internal/render.ts'
 import { boolProp } from '../internal/utils.ts'
 import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
@@ -27,7 +26,6 @@ export interface FlexItemProps extends SizeProps {
   grow?: number | `${number}`
   shrink?: number | `${number}`
   alignSelf?: AlignSelfInput | number
-  justifySelf?: JustifySelfInput | number
   debug?: boolean
 }
 
@@ -60,13 +58,12 @@ export const FlexItem = defineComponent(
         minHeight: minSize.value.height,
         maxWidth: maxSize.value.width,
         maxHeight: maxSize.value.height,
-        offsetTop: margin.value.bottom,
+        offsetTop: margin.value.top,
         offsetRight: margin.value.right,
-        offsetBottom: margin.value.top,
+        offsetBottom: margin.value.bottom,
         offsetLeft: margin.value.left,
         grow: resolveNumber(props.grow),
         shrink: resolveNumber(props.shrink),
-        justify: resolveJustifySelf(props.justifySelf),
         ...resolveAlignSelf(props.alignSelf),
       }),
     )
@@ -88,7 +85,6 @@ export const FlexItem = defineComponent(
       'grow',
       'shrink',
       'alignSelf',
-      'justifySelf',
       'debug',
     ],
     inheritAttrs: false,

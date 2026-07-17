@@ -13,7 +13,7 @@ import {
 
 type ChildIndexAPI = (vm: ComponentInternalInstance) => Readonly<Ref<number>>
 
-const injection = Symbol.for('ChildIndexRoot') as InjectionKey<ChildIndexAPI>
+const injection = Symbol.for('placement/child-index') as InjectionKey<ChildIndexAPI>
 
 function isRecordOrArray(input: unknown): input is Record<string, unknown> | Array<unknown> {
   return typeof input === 'object' && input !== null
@@ -48,10 +48,13 @@ function compareVmNodes(a: ComponentInternalInstance, b: ComponentInternalInstan
 class OrderedInstanceStorage {
   readonly storage = new Map<ComponentInternalInstance, Ref<number>>()
   readonly order: Array<ComponentInternalInstance> = []
+  readonly trigger: (value: number) => void
 
   #nextIndex = 0
 
-  constructor(readonly trigger: (value: number) => void) {}
+  constructor(trigger: (value: number) => void) {
+    this.trigger = trigger
+  }
 
   insert(vm: ComponentInternalInstance) {
     const index = ref(this.#nextIndex++)
@@ -86,7 +89,7 @@ class OrderedInstanceStorage {
 
 export function useIndexParent() {
   let storage: OrderedInstanceStorage
-  const length = customRef((track, trigger) => {
+  const length = customRef<number>((track, trigger) => {
     storage = new OrderedInstanceStorage(trigger)
 
     return {

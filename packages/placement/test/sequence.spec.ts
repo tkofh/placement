@@ -755,3 +755,18 @@ describe('auto offsets (regression)', () => {
     expect(result.intervals).toEqual([interval(0, 100), interval(100, 100)])
   })
 })
+
+describe('auto offsets win over place (regression)', () => {
+  test('place has no free space left to position once auto offsets absorb it', () => {
+    const result = sequence([{ basis: 100, start: Number.POSITIVE_INFINITY }], {
+      size: 500,
+      place: 1,
+    })
+    expect(result.intervals).toEqual([interval(400, 100)])
+  })
+
+  test('overflowing items resolve auto offsets to zero instead of negative', () => {
+    const result = sequence([{ basis: 600, start: Number.POSITIVE_INFINITY }], { size: 500 })
+    expect(result.intervals).toEqual([interval(0, 600)])
+  })
+})

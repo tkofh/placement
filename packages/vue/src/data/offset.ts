@@ -14,21 +14,6 @@ export function preferCachedOffset(value: Offset, previous: Offset | undefined):
   return previous
 }
 
-export function computedOffset(value: MaybeRefOrGetter<number>): ComputedRef<Offset> {
-  return computed((previous: Offset | undefined) =>
-    preferCachedOffset(offset(toValue(value)), previous),
-  )
-}
-
-export function computedXYOffset(
-  x: MaybeRefOrGetter<number>,
-  y: MaybeRefOrGetter<number>,
-): ComputedRef<Offset> {
-  return computed((previous: Offset | undefined) =>
-    preferCachedOffset(offset.xy(toValue(x), toValue(y)), previous),
-  )
-}
-
 export function computedTRBLOffset(
   top: MaybeRefOrGetter<number>,
   right: MaybeRefOrGetter<number>,

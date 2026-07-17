@@ -220,3 +220,16 @@ describe('dual forms', () => {
     )
   })
 })
+
+describe('definite offsets beside auto offsets (regression)', () => {
+  // The auto-offset branch used to drop the definite start offset.
+  test('a definite start offset survives an auto end offset', () => {
+    const result = stack([{ basis: 100, start: 10, end: Number.POSITIVE_INFINITY }], { size: 500 })
+    expect(result.intervals).toEqual([interval(10, 100)])
+  })
+
+  test('an auto start offset beside a definite end offset', () => {
+    const result = stack([{ basis: 100, start: Number.POSITIVE_INFINITY, end: 10 }], { size: 500 })
+    expect(result.intervals).toEqual([interval(390, 100)])
+  })
+})

@@ -29,7 +29,7 @@ export function useAlignContent(
   value: MaybeRefOrGetter<AlignContentInput>,
   fallback: MaybeRefOrGetter<AlignContentValue> = keywordResults.start,
 ): ComputedRef<AlignContentValue> {
-  return computed(() => {
+  return computed((previous: AlignContentValue | undefined) => {
     const { alignContent, alignContentSpace, alignContentSpaceOuter, stretchContent } =
       toValue(fallback)
     return preferCachedAlignContent(
@@ -40,6 +40,7 @@ export function useAlignContent(
         alignContentSpaceOuter,
         stretchContent,
       ),
+      previous,
     )
   })
 }

@@ -24,7 +24,6 @@ export default defineConfig({
     'src/props/flow.ts',
     'src/props/gap.ts',
     'src/props/justifyContent.ts',
-    'src/props/justifySelf.ts',
     'src/props/lengthPercentage.ts',
     'src/props/origin.ts',
     'src/props/size.ts',

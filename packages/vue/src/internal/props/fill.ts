@@ -19,10 +19,13 @@ export type FillInput =
   | undefined
 
 export class Fill {
-  constructor(
-    readonly fill: string | undefined = undefined,
-    readonly fillRule: string | undefined = undefined,
-  ) {}
+  readonly fill: string | undefined
+  readonly fillRule: string | undefined
+
+  constructor(fill: string | undefined = undefined, fillRule: string | undefined = undefined) {
+    this.fill = fill
+    this.fillRule = fillRule
+  }
 
   static empty = new Fill()
 }

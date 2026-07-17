@@ -8,15 +8,15 @@ import {
   computed,
   inject,
   provide,
-  ref,
+  shallowRef,
   toValue,
   watch,
 } from 'vue'
 import { useChildIndex, useIndexParent } from './useChildIndex.ts'
 
-const FLEX_FRAMES = Symbol() as InjectionKey<Ref<ReadonlyArray<Frame>>>
+const FLEX_FRAMES = Symbol.for('placement/flex-frames') as InjectionKey<Ref<ReadonlyArray<Frame>>>
 
-const FLEX_RECTS = Symbol() as InjectionKey<Ref<ReadonlyArray<Rect>>>
+const FLEX_RECTS = Symbol.for('placement/flex-rects') as InjectionKey<Ref<ReadonlyArray<Rect>>>
 
 export function useFlexLayout(
   flexbox: MaybeRefOrGetter<Flexbox>,
@@ -27,10 +27,12 @@ export function useFlexLayout(
 } {
   const length = useIndexParent()
 
-  const frames = ref<Array<Frame>>([])
+  const frames = shallowRef<ReadonlyArray<Frame>>([])
 
   watch(length, (length) => {
-    frames.value.length = length
+    if (length < frames.value.length) {
+      frames.value = frames.value.slice(0, length)
+    }
   })
 
   provide(FLEX_FRAMES, frames)
@@ -75,6 +77,10 @@ export function useFlexItem(input: MaybeRefOrGetter<Frame>) {
   watch(
     () => toValue(input),
     (frame) => {
+      if (index.value === -1) {
+        return
+      }
+
       frames.value =
         index.value >= frames.value.length
           ? frames.value.concat(frame)

@@ -2,9 +2,10 @@ import { type ParserInput, parse } from 'valued'
 import { juxtapose } from 'valued'
 import { oneOf } from 'valued'
 import { someOf } from 'valued'
-import { type NumberValue, isNumberValue, number } from 'valued/data/number'
-import { type PercentageValue, percentage } from 'valued/data/percentage'
+import { number } from 'valued/data/number'
+import { percentage } from 'valued/data/percentage'
 import { createCache } from '../cache.ts'
+import { toNormalized } from './normalize.ts'
 
 const opacityParser = oneOf([
   number({ min: 0, max: 1 }),
@@ -26,20 +27,18 @@ type OpacityParser = typeof opacityParser
 export type OpacityInput = ParserInput<OpacityParser> | number | string | undefined
 
 export class Opacity {
+  readonly fillOpacity: number | undefined
+  readonly strokeOpacity: number | undefined
+
   constructor(
-    readonly fillOpacity: number | undefined = undefined,
-    readonly strokeOpacity: number | undefined = undefined,
-  ) {}
-
-  static empty = new Opacity()
-}
-
-function toOpacityValue(input: NumberValue | PercentageValue): number {
-  if (isNumberValue(input)) {
-    return input.value
+    fillOpacity: number | undefined = undefined,
+    strokeOpacity: number | undefined = undefined,
+  ) {
+    this.fillOpacity = fillOpacity
+    this.strokeOpacity = strokeOpacity
   }
 
-  return input.value / 100
+  static empty = new Opacity()
 }
 
 const cache = createCache<string, Opacity>(512)
@@ -63,11 +62,11 @@ export function resolveOpacity(input: OpacityInput, auto: Opacity = Opacity.empt
     if (Array.isArray(parsed.value)) {
       const [first, second] = parsed.value
       return new Opacity(
-        first !== null ? toOpacityValue(first[0]) : undefined,
-        second !== null ? toOpacityValue(second[0]) : undefined,
+        first !== null ? toNormalized(first[0]) : undefined,
+        second !== null ? toNormalized(second[0]) : undefined,
       )
     }
-    const value = toOpacityValue(parsed.value)
+    const value = toNormalized(parsed.value)
     return new Opacity(value, value)
   })
 }

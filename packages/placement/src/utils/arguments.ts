@@ -50,6 +50,25 @@ export function normalizeTRBL(
   return [a ?? 0, a ?? 0, a ?? 0, a ?? 0]
 }
 
+/**
+ * Resolves a chain of candidate values to the first finite one, or to the
+ * last candidate when none is finite. This is the resolver behind the
+ * library's `Infinity`-as-auto sentinels: `auto(value, fallback)` reads as
+ * "value, unless it is auto, then fallback".
+ *
+ * @param a - The preferred value.
+ * @param b - The next candidate, consulted when `a` is not finite.
+ * @param c - The next candidate after `b`.
+ * @param tail - Any further candidates, in order of preference.
+ * @returns The first finite candidate, or the last candidate when every one
+ * is non-finite.
+ * @example
+ * ```ts
+ * auto(Number.POSITIVE_INFINITY, 5) // 5
+ * auto(10, 5) // 10
+ * auto(Number.NaN, Number.POSITIVE_INFINITY) // Infinity
+ * ```
+ */
 export function auto(a: number, b?: number, c?: number, ...tail: ReadonlyArray<number>): number {
   if (Number.isFinite(a)) {
     return a

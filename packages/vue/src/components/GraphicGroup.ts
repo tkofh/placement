@@ -5,12 +5,12 @@ import { useParentRectRegistration } from '../composables/useSizingContext.ts'
 import { useGroupRenderer } from '../internal/render.ts'
 import { boolProp } from '../internal/utils.ts'
 
-export interface GraphicRectProps extends RectProps {
+export interface GraphicGroupProps extends RectProps {
   debug?: boolean
 }
 
 export const GraphicGroup = defineComponent(
-  (props: GraphicRectProps) => {
+  (props: GraphicGroupProps) => {
     const self = useRect(props)
 
     useParentRectRegistration(self)

@@ -28,7 +28,7 @@ export function useJustifyContent(
   value: MaybeRefOrGetter<JustifyContentInput>,
   fallback: MaybeRefOrGetter<JustifyContentValue> = keywordResults.start,
 ): ComputedRef<JustifyContentValue> {
-  return computed(() => {
+  return computed((previous: JustifyContentValue | undefined) => {
     const { justifyContent, justifyContentSpace, justifyContentSpaceOuter } = toValue(fallback)
     return preferCachedJustifyContent(
       resolveJustifyContent(
@@ -37,6 +37,7 @@ export function useJustifyContent(
         justifyContentSpace,
         justifyContentSpaceOuter,
       ),
+      previous,
     )
   })
 }

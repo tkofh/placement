@@ -1,0 +1,87 @@
+{
+  // ───────────────────────────────────────────────────────────────────────────
+  // Project-local Zed settings for the Biome trial (see biome.jsonc).
+  //
+  // Biome is wired up ONLY per-language below — never at the top level. Setting
+  // Biome as a global formatter / language_server would break languages it
+  // doesn't support. This is Biome's own recommendation.
+  //
+  // Division of labor:
+  //   • vtsls (Zed's default TS server) — go-to-definition, references, hover,
+  //     rename, autocomplete. Left untouched.
+  //   • biome — formatting, lint diagnostics, organize-imports + quick-fix
+  //     code actions for the languages listed under "languages".
+  //
+  // The Biome extension auto-detects the workspace's pinned @biomejs/biome from
+  // node_modules, so the editor matches the CLI (2.5.0) — no binary path needed.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  "lsp": {
+    "biome": {
+      "settings": {
+        // Only activate Biome when a config file is present (this repo has
+        // biome.jsonc). Belt-and-suspenders alongside the project scope.
+        "require_config_file": true
+      }
+    }
+  },
+
+  "languages": {
+    "TypeScript": {
+      "formatter": { "language_server": { "name": "biome" } },
+      "format_on_save": "on",
+      "code_actions_on_format": {
+        "source.fixAll.biome": true,
+        "source.organizeImports.biome": true
+      }
+    },
+    "TSX": {
+      "formatter": { "language_server": { "name": "biome" } },
+      "format_on_save": "on",
+      "code_actions_on_format": {
+        "source.fixAll.biome": true,
+        "source.organizeImports.biome": true
+      }
+    },
+    "JavaScript": {
+      "formatter": { "language_server": { "name": "biome" } },
+      "format_on_save": "on",
+      "code_actions_on_format": {
+        "source.fixAll.biome": true,
+        "source.organizeImports.biome": true
+      }
+    },
+    "JSON": {
+      "formatter": { "language_server": { "name": "biome" } },
+      "format_on_save": "on",
+      "code_actions_on_format": {
+        "source.fixAll.biome": true,
+        "source.organizeImports.biome": true
+      }
+    },
+    "JSONC": {
+      "formatter": { "language_server": { "name": "biome" } },
+      "format_on_save": "on",
+      "code_actions_on_format": {
+        "source.fixAll.biome": true,
+        "source.organizeImports.biome": true
+      }
+    },
+    "CSS": {
+      "formatter": { "language_server": { "name": "biome" } },
+      "format_on_save": "on",
+      "code_actions_on_format": {
+        "source.fixAll.biome": true,
+        "source.organizeImports.biome": true
+      }
+    },
+    "Vue.js": {
+      "formatter": { "language_server": { "name": "biome" } },
+      "format_on_save": "on",
+      "code_actions_on_format": {
+        "source.fixAll.biome": true,
+        "source.organizeImports.biome": true
+      }
+    }
+  }
+}

@@ -3,9 +3,10 @@ import { juxtapose } from 'valued'
 import { oneOf } from 'valued'
 import { someOf } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
-import { type NumberValue, isNumberValue, number } from 'valued/data/number'
-import { type PercentageValue, percentage } from 'valued/data/percentage'
+import { number } from 'valued/data/number'
+import { percentage } from 'valued/data/percentage'
 import { createCache } from '../cache.ts'
+import { toNormalized } from './normalize.ts'
 
 const alignItemsParser = oneOf([
   keywords(['start', 'end', 'center', 'stretch']),
@@ -44,13 +45,6 @@ export const keywordResults = {
     stretchItems: 1,
   },
 } as const
-
-function toNormalized(input: NumberValue | PercentageValue): number {
-  if (isNumberValue(input)) {
-    return input.value
-  }
-  return input.value / 100
-}
 
 function toValue(value: ParserValue<typeof alignItemsParser>): AlignItemsValue {
   if (isKeywordValue(value)) {

@@ -613,3 +613,46 @@ describe('serialization', () => {
     )
   })
 })
+
+describe('wrap with a lone overflowing frame (regression)', () => {
+  // The flush branch used to emit an overflowing first frame on its own line
+  // AND at the head of the next, returning more rects than frames.
+  test('one frame wider than the container yields exactly one rect', () => {
+    const result = applyFlexbox(
+      [frame({ width: 200, height: 200 })],
+      flexbox({ wrap: wrap.wrap }),
+      rect(100),
+    )
+    expect(result).toEqual([rect(0, 0, 200, 200)])
+  })
+
+  test('an overflowing first frame keeps its own line', () => {
+    const result = applyFlexbox(
+      [frame({ width: 200, height: 50 }), frame({ width: 50, height: 50 })],
+      flexbox({ wrap: wrap.wrap }),
+      rect(100),
+    )
+    expect(result).toEqual([rect(0, 0, 200, 50), rect(0, 50, 50, 50)])
+  })
+
+  test('an overflowing later frame wraps onto its own line', () => {
+    const result = applyFlexbox(
+      [frame({ width: 50, height: 50 }), frame({ width: 200, height: 50 })],
+      flexbox({ wrap: wrap.wrap }),
+      rect(100),
+    )
+    expect(result).toEqual([rect(0, 0, 50, 50), rect(0, 50, 200, 50)])
+  })
+})
+
+describe('non-finite stretch inherits (regression)', () => {
+  test('a NaN per-item stretch inherits stretchItems, like align does', () => {
+    expect(
+      applyFlexbox(
+        [frame({ width: 100, height: 100, stretch: Number.NaN })],
+        flexbox({ stretchItems: 1 }),
+        rect(300),
+      ),
+    ).toEqual([rect(0, 0, 100, 300)])
+  })
+})

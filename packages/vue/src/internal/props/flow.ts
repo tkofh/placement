@@ -1,4 +1,4 @@
-import { direction, wrap } from 'placement/flexbox'
+import { type FlexDirection, type FlexWrap, direction, wrap } from 'placement/flexbox'
 import { type ParserInput, parse } from 'valued'
 import { someOf } from 'valued'
 import { keywords } from 'valued/data/keyword'
@@ -12,18 +12,15 @@ export type Flow = typeof flow
 
 export type FlowInput = ParserInput<Flow> | undefined
 
-type Direction = (typeof direction)[keyof typeof direction]
-type Wrap = (typeof wrap)[keyof typeof wrap]
-
 export interface FlowValue {
-  readonly direction: Direction
-  readonly wrap: Wrap
+  readonly direction: FlexDirection
+  readonly wrap: FlexWrap
 }
 
 export function resolveFlow(
   input: string | undefined,
-  autoDirection: Direction = 0,
-  autoWrap: Wrap = 0,
+  autoDirection: FlexDirection = 0,
+  autoWrap: FlexWrap = 0,
 ): FlowValue {
   if (input == null) {
     return {
@@ -34,8 +31,8 @@ export function resolveFlow(
 
   const result = parse(input, flow)
 
-  let directionResult: Direction = autoDirection
-  let wrapResult: Wrap = autoWrap
+  let directionResult: FlexDirection = autoDirection
+  let wrapResult: FlexWrap = autoWrap
 
   if (result.valid) {
     const [directionValue, wrapValue] = result.value

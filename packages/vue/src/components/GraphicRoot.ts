@@ -16,10 +16,11 @@ import {
 } from '../composables/useRect.ts'
 import { useSizingContextRoot } from '../composables/useSizingContext.ts'
 import { autoDimensions, computedDimensions } from '../data/dimensions.ts'
-import type { FitInput } from '../internal/props/fit.ts'
 import { provideShouldRenderGroups } from '../internal/render.ts'
 import { boolProp } from '../internal/utils.ts'
 import { useOrigin } from '../props/origin.ts'
+
+export type FitInput = 'contain' | 'cover' | 'crop'
 
 export interface GraphicRootProps extends SizeProps, TransformProps, OriginProps {
   fit?: FitInput

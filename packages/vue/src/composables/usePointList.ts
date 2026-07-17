@@ -5,32 +5,32 @@ import {
   type Ref,
   inject,
   provide,
-  ref,
+  shallowRef,
   toValue,
   watch,
 } from 'vue'
-import { useIndexParent } from './useChildIndex.ts'
+import { useChildIndex, useIndexParent } from './useChildIndex.ts'
 
-const POINTS: InjectionKey<Ref<Array<Point>>> = Symbol()
+const POINTS = Symbol.for('placement/points') as InjectionKey<Ref<ReadonlyArray<Point>>>
 
 export function usePointList(): Readonly<Ref<ReadonlyArray<Point>>> {
   const length = useIndexParent()
 
-  const points = ref<Array<Point>>([])
+  const points = shallowRef<ReadonlyArray<Point>>([])
 
-  // biome-ignore lint/suspicious/noExplicitAny: vue ref type mapping is dumb sometimes
-  provide(POINTS, points as any)
+  provide(POINTS, points)
 
   watch(length, (length) => {
-    points.value.length = length
+    if (length < points.value.length) {
+      points.value = points.value.slice(0, length)
+    }
   })
 
-  // biome-ignore lint/suspicious/noExplicitAny: vue ref type mapping is dumb sometimes
-  return points as any
+  return points
 }
 
 export function usePoint(input: MaybeRefOrGetter<Point>) {
-  const index = useIndexParent()
+  const index = useChildIndex()
 
   const points = inject(POINTS)
 
@@ -57,6 +57,10 @@ export function usePoint(input: MaybeRefOrGetter<Point>) {
   watch(
     () => toValue(input),
     (point) => {
+      if (index.value === -1) {
+        return
+      }
+
       points.value =
         index.value >= points.value.length
           ? points.value.concat(point)

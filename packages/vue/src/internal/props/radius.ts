@@ -42,7 +42,7 @@ export function resolveRadius(
     return auto
   }
 
-  return cache(`${input}:${parentWidth}:${parentHeight}`, () => {
+  return cache(`${input}:${auto.x}:${auto.y}:${parentWidth}:${parentHeight}`, () => {
     const value = parse(input, radius)
 
     if (!value.valid) {

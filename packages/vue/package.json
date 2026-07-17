@@ -102,10 +102,6 @@
       "types": "./dist/props/justifyContent.d.mts",
       "import": "./dist/props/justifyContent.mjs"
     },
-    "./props/justifySelf": {
-      "types": "./dist/props/justifySelf.d.mts",
-      "import": "./dist/props/justifySelf.mjs"
-    },
     "./props/lengthPercentage": {
       "types": "./dist/props/lengthPercentage.d.mts",
       "import": "./dist/props/lengthPercentage.mjs"

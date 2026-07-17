@@ -5,15 +5,42 @@ import { isRecord } from './utils/object.ts'
 const TypeBrand: unique symbol = Symbol('placement/point')
 type TypeBrand = typeof TypeBrand
 
+/**
+ * The structural shape of a point: any value with numeric `x` and `y`
+ * fields.
+ *
+ * Operations take their primary operand as a branded `Point` but accept
+ * a `PointLike` anywhere a point is only read — `add`'s other point,
+ * `orbit`'s center, `center`'s whole iterable — so a plain `{ x, y }`
+ * literal works as a secondary operand.
+ */
 export interface PointLike {
+  /** The x coordinate. */
   readonly x: number
+  /** The y coordinate, increasing downward. */
   readonly y: number
 }
 
+/**
+ * An immutable 2D point in y-down screen space, doubling as a vector
+ * for the vector operations (`add`, `scale`, `dot`, `cross`, ...).
+ *
+ * Coordinates are exact IEEE 754 doubles: neither construction nor any
+ * operation rounds or snaps its result (see `PRECISION.md`). Compare
+ * computed points with `equals`, which tolerates rounding noise, rather
+ * than by raw coordinate comparison.
+ *
+ * Exported type-only: instances come from the `point` factory,
+ * `fromPolar`, or any operation in this module. Extends `Pipeable`, so
+ * data-last operations chain: `p.pipe(translate(10, 0), scale(2))`.
+ */
 class Point extends Pipeable implements PointLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
+  /** The x coordinate. */
   readonly x: number
+
+  /** The y coordinate, increasing downward. */
   readonly y: number
 
   constructor(x: number, y: number) {
@@ -23,10 +50,22 @@ class Point extends Pipeable implements PointLike {
     this.y = y
   }
 
+  /**
+   * Formats the point for Node's `util.inspect`, which `console.log`
+   * uses.
+   *
+   * @returns The debug string, in the style `'Point (3, 4)'`.
+   */
   [Symbol.for('nodejs.util.inspect.custom')]() {
     return `Point (${this.x}, ${this.y})`
   }
 
+  /**
+   * Converts the point to the plain `{ x, y }` record `JSON.stringify`
+   * serializes.
+   *
+   * @returns An object carrying the point's `x` and `y`.
+   */
   toJSON() {
     return {
       x: this.x,
@@ -37,13 +76,38 @@ class Point extends Pipeable implements PointLike {
 
 export type { Point }
 
+/**
+ * Creates a `Point`. No arguments make the origin, one argument fills
+ * both components, and two are `x` and `y`.
+ *
+ * Common points hang off the factory as shared constants: `point.zero`,
+ * `point.half`, `point.one`, and `point.infinity`.
+ *
+ * @param x - The x coordinate. Defaults to `0`.
+ * @param y - The y coordinate. Copies `x` when omitted.
+ * @returns The point `(x, y)`.
+ * @example
+ * ```ts
+ * point() // Point (0, 0)
+ * point(100) // Point (100, 100)
+ * point(50, 100) // Point (50, 100)
+ * ```
+ */
 export const point: {
   (): Point
   (xy: number): Point
   (x: number, y: number): Point
+  /** The origin, `(0, 0)` — the additive identity. */
   readonly zero: Point
+  /** The point `(0.5, 0.5)` — the center of the unit square. */
   readonly half: Point
+  /** The point `(1, 1)` — the far corner of the unit square. */
   readonly one: Point
+  /**
+   * The point `(Infinity, Infinity)` — the identity for componentwise
+   * `min`. One shared instance, so it also serves as an
+   * identity-checked sentinel.
+   */
   readonly infinity: Point
 } = Object.assign((x?: number, y?: number) => new Point(x ?? 0, y ?? x ?? 0), {
   zero: new Point(0, 0),
@@ -52,23 +116,96 @@ export const point: {
   infinity: new Point(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY),
 })
 
+/**
+ * Checks whether a value is a `Point`.
+ *
+ * True only for branded instances built by this module — the `point`
+ * factory, `fromPolar`, and the operations. A plain `{ x, y }` record
+ * fails; test for the structural shape with `isPointLike`.
+ *
+ * @param value - The value to check.
+ * @returns `true` when `value` is a `Point`.
+ */
 export const isPoint = (value: unknown): value is Point => {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
 
+/**
+ * Checks whether a value has the structural shape of a point: an object
+ * with numeric `x` and `y` fields. Every `Point` passes.
+ *
+ * @param value - The value to check.
+ * @returns `true` when `value` is a `PointLike`.
+ */
 export const isPointLike = (value: unknown): value is PointLike => {
   return isRecord(value) && typeof value.x === 'number' && typeof value.y === 'number'
 }
 
-// Angles are radians throughout, atan2 convention: 0 along +x, positive
-// counterclockwise, unbounded input (no revolution normalization).
+/**
+ * Creates a `Point` from polar coordinates.
+ *
+ * Angles are radians, atan2 convention: `0` points along +x, and
+ * positive angles rotate toward +y — clockwise on a y-down screen. The
+ * angle is not normalized; whole revolutions wrap through trig
+ * periodicity.
+ *
+ * The result is exact IEEE arithmetic, so off-axis angles carry
+ * ordinary trig rounding: `fromPolar(100, Math.PI / 2)` lands within
+ * rounding distance of `(0, 100)`, not exactly on it.
+ *
+ * @param magnitude - The distance from the origin.
+ * @param angle - The direction, in radians from the positive x axis.
+ * @returns The point `(magnitude * cos(angle), magnitude * sin(angle))`.
+ * @example
+ * ```ts
+ * fromPolar(100, 0) // Point (100, 0)
+ * ```
+ */
 export const fromPolar = (magnitude: number, angle: number): Point =>
   new Point(magnitude * Math.cos(angle), magnitude * Math.sin(angle))
 
+/**
+ * Computes the Euclidean length of the vector from the origin to
+ * `self`: `sqrt(x^2 + y^2)`.
+ *
+ * @param self - The point to measure.
+ * @returns The length, always non-negative.
+ * @example
+ * ```ts
+ * magnitude(point(3, 4)) // 5
+ * ```
+ */
 export const magnitude = (self: Point): number => Math.hypot(self.x, self.y)
 
+/**
+ * Computes the direction of the vector from the origin to `self`, in
+ * radians from the positive x axis (`Math.atan2` of `y` and `x`).
+ *
+ * Positive angles rotate toward +y — clockwise on a y-down screen — and
+ * the result lies in `[-pi, pi]`. The origin reports `0`.
+ *
+ * @param self - The point to measure.
+ * @returns The angle in radians, in `[-pi, pi]`.
+ * @example
+ * ```ts
+ * angle(point(0, 100)) // Math.PI / 2 (straight down on screen)
+ * ```
+ */
 export const angle = (self: Point): number => Math.atan2(self.y, self.x)
 
+/**
+ * Computes the arithmetic mean of the points — their centroid.
+ *
+ * The iterable is consumed in a single pass, and any `PointLike` values
+ * work. An empty iterable yields the origin.
+ *
+ * @param points - The points to average.
+ * @returns The centroid, or `(0, 0)` for no points.
+ * @example
+ * ```ts
+ * center([point(0, 0), point(100, 50)]) // Point (50, 25)
+ * ```
+ */
 export const center = (points: Iterable<PointLike>): Point => {
   let x = 0
   let y = 0
@@ -83,46 +220,176 @@ export const center = (points: Iterable<PointLike>): Point => {
   return count === 0 ? new Point(0, 0) : new Point(x / count, y / count)
 }
 
+/**
+ * Replaces the x coordinate of `self`, leaving y unchanged.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The point to derive from.
+ * @param x - The new x coordinate.
+ * @returns The point `(x, self.y)`.
+ * @example
+ * ```ts
+ * setX(point(0, 100), 50) // Point (50, 100)
+ * ```
+ */
 export const setX: {
   (self: Point, x: number): Point
   (x: number): (self: Point) => Point
 } = dual(2, (self: Point, x: number) => new Point(x, self.y))
 
+/**
+ * Replaces the y coordinate of `self`, leaving x unchanged.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The point to derive from.
+ * @param y - The new y coordinate.
+ * @returns The point `(self.x, y)`.
+ * @example
+ * ```ts
+ * setY(point(100, 0), 50) // Point (100, 50)
+ * ```
+ */
 export const setY: {
   (self: Point, y: number): Point
   (y: number): (self: Point) => Point
 } = dual(2, (self: Point, y: number) => new Point(self.x, y))
 
+/**
+ * Moves `self` by an offset per axis.
+ *
+ * The data-last form takes only the offsets and returns a function of
+ * `self`.
+ *
+ * @param self - The point to move.
+ * @param x - The offset added to the x coordinate.
+ * @param y - The offset added to the y coordinate. Positive is downward.
+ * @returns The point `(self.x + x, self.y + y)`.
+ * @example
+ * ```ts
+ * translate(point(1, 2), 10, 20) // Point (11, 22)
+ * ```
+ */
 export const translate: {
   (self: Point, x: number, y: number): Point
   (x: number, y: number): (self: Point) => Point
 } = dual(3, (self: Point, x: number, y: number) => new Point(self.x + x, self.y + y))
 
+/**
+ * Moves `self` along the x axis by `x`.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The point to move.
+ * @param x - The offset added to the x coordinate.
+ * @returns The point `(self.x + x, self.y)`.
+ * @example
+ * ```ts
+ * translateX(point(1, 2), 10) // Point (11, 2)
+ * ```
+ */
 export const translateX: {
   (self: Point, x: number): Point
   (x: number): (self: Point) => Point
 } = dual(2, (self: Point, x: number) => new Point(self.x + x, self.y))
 
+/**
+ * Moves `self` along the y axis by `y` — downward for positive `y`.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The point to move.
+ * @param y - The offset added to the y coordinate.
+ * @returns The point `(self.x, self.y + y)`.
+ * @example
+ * ```ts
+ * translateY(point(1, 2), 20) // Point (1, 22)
+ * ```
+ */
 export const translateY: {
   (self: Point, y: number): Point
   (y: number): (self: Point) => Point
 } = dual(2, (self: Point, y: number) => new Point(self.x, self.y + y))
 
+/**
+ * Adds the coordinates of `other` to `self`, componentwise — vector
+ * addition.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The point to add to.
+ * @param other - The point to add; any `PointLike`.
+ * @returns The point `(self.x + other.x, self.y + other.y)`.
+ * @example
+ * ```ts
+ * add(point(1, 2), point(3, 4)) // Point (4, 6)
+ * point(1, 2).pipe(add({ x: 3, y: 4 })) // Point (4, 6)
+ * ```
+ */
 export const add: {
   (self: Point, other: PointLike): Point
   (other: PointLike): (self: Point) => Point
 } = dual(2, (self: Point, other: PointLike) => new Point(self.x + other.x, self.y + other.y))
 
+/**
+ * Subtracts the coordinates of `other` from `self`, componentwise. As a
+ * vector, the result points from `other` to `self`.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The minuend.
+ * @param other - The subtrahend; any `PointLike`.
+ * @returns The point `(self.x - other.x, self.y - other.y)`.
+ * @example
+ * ```ts
+ * subtract(point(1, 2), point(3, 4)) // Point (-2, -2)
+ * ```
+ */
 export const subtract: {
   (self: Point, other: PointLike): Point
   (other: PointLike): (self: Point) => Point
 } = dual(2, (self: Point, other: PointLike) => new Point(self.x - other.x, self.y - other.y))
 
+/**
+ * Multiplies both coordinates by `factor`, scaling the point's vector
+ * from the origin. A negative factor reflects through the origin.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The point to scale.
+ * @param factor - The multiplier applied to both coordinates.
+ * @returns The point `(self.x * factor, self.y * factor)`.
+ * @example
+ * ```ts
+ * scale(point(100, 50), 0.5) // Point (50, 25)
+ * scale(point(100, 50), -1) // Point (-100, -50)
+ * ```
+ */
 export const scale: {
   (self: Point, factor: number): Point
   (factor: number): (self: Point) => Point
 } = dual(2, (self: Point, factor: number) => new Point(self.x * factor, self.y * factor))
 
+/**
+ * Interpolates from `self` toward `target`, componentwise.
+ *
+ * Exact at the endpoints: `0` returns `self`'s exact coordinates and
+ * `1` returns `target`'s. `amount` is not clamped — values outside
+ * `[0, 1]` extrapolate along the same line.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The point at `amount = 0`.
+ * @param target - The point at `amount = 1`; any `PointLike`.
+ * @param amount - The interpolation parameter.
+ * @returns The point `amount` of the way from `self` to `target`.
+ * @example
+ * ```ts
+ * lerp(point(0, 0), point(100, 100), 0.5) // Point (50, 50)
+ * point(100, 100).pipe(lerp(point(200, 200), 0.5)) // Point (150, 150)
+ * ```
+ */
 export const lerp: {
   (self: Point, target: PointLike, amount: number): Point
   (target: PointLike, amount: number): (self: Point) => Point
@@ -132,6 +399,21 @@ export const lerp: {
     new Point(lerpNumber(amount, self.x, target.x), lerpNumber(amount, self.y, target.y)),
 )
 
+/**
+ * Takes the componentwise minimum of `self` and `other`. With `max`,
+ * this yields the corners of the two points' bounding box — `min` is
+ * the top-left corner in y-down space.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The first point.
+ * @param other - The second point; any `PointLike`.
+ * @returns The point `(min(self.x, other.x), min(self.y, other.y))`.
+ * @example
+ * ```ts
+ * min(point(0, 100), point(100, 0)) // Point (0, 0)
+ * ```
+ */
 export const min: {
   (self: Point, other: PointLike): Point
   (other: PointLike): (self: Point) => Point
@@ -141,6 +423,21 @@ export const min: {
     new Point(Math.min(self.x, other.x), Math.min(self.y, other.y)),
 )
 
+/**
+ * Takes the componentwise maximum of `self` and `other`. With `min`,
+ * this yields the corners of the two points' bounding box — `max` is
+ * the bottom-right corner in y-down space.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The first point.
+ * @param other - The second point; any `PointLike`.
+ * @returns The point `(max(self.x, other.x), max(self.y, other.y))`.
+ * @example
+ * ```ts
+ * max(point(0, 100), point(100, 0)) // Point (100, 100)
+ * ```
+ */
 export const max: {
   (self: Point, other: PointLike): Point
   (other: PointLike): (self: Point) => Point
@@ -150,6 +447,26 @@ export const max: {
     new Point(Math.max(self.x, other.x), Math.max(self.y, other.y)),
 )
 
+/**
+ * Rotates `self` about `center` by `angle` radians.
+ *
+ * Positive angles rotate from +x toward +y — clockwise on a y-down
+ * screen. The angle is not normalized; whole revolutions wrap through
+ * trig periodicity. Off-axis results carry ordinary trig rounding, as
+ * `fromPolar`.
+ *
+ * The data-last form takes only (`center`, `angle`) and returns a
+ * function of `self`.
+ *
+ * @param self - The point to rotate.
+ * @param center - The point to rotate around; any `PointLike`.
+ * @param angle - The rotation, in radians.
+ * @returns The rotated point.
+ * @example
+ * ```ts
+ * orbit(point(0, 100), point(0, 0), Math.PI) // within rounding of Point (0, -100)
+ * ```
+ */
 export const orbit: {
   (self: Point, center: PointLike, angle: number): Point
   (center: PointLike, angle: number): (self: Point) => Point
@@ -166,6 +483,32 @@ export const orbit: {
 // avoid takes a fixed arity: its target may itself be a Point, so a trailing
 // optional gap would make 2-argument calls ambiguous between the data-first
 // and data-last forms.
+/**
+ * Pushes `self` away from `target` until it sits at least `gap` away.
+ *
+ * A point already `gap` or more from `target` is returned unchanged —
+ * the same instance — and the boundary decision tolerates rounding
+ * noise at any magnitude (see `PRECISION.md`). A closer point moves
+ * directly away from `target`, along the ray from `target` through
+ * `self`, to the gap distance.
+ *
+ * Coincident points have no escape direction: `self` moves `gap`
+ * further along its own ray from the origin, or along +x when `self` is
+ * the origin.
+ *
+ * The data-last form takes only (`target`, `gap`) and returns a
+ * function of `self`.
+ *
+ * @param self - The point to push.
+ * @param target - The point to keep away from; any `PointLike`.
+ * @param gap - The minimum distance to enforce.
+ * @returns `self` when already far enough, otherwise a point `gap` away from `target`.
+ * @example
+ * ```ts
+ * avoid(point(3, 4), point(0, 0), 10) // Point (6, 8)
+ * point(20, 0).pipe(avoid(point(0, 0), 10)) // the same instance, untouched
+ * ```
+ */
 export const avoid: {
   (self: Point, target: PointLike, gap: number): Point
   (target: PointLike, gap: number): (self: Point) => Point
@@ -201,26 +544,111 @@ export const avoid: {
   )
 })
 
+/**
+ * Scales `self` to magnitude `1`, preserving its direction — the unit
+ * vector.
+ *
+ * The zero vector has no direction: both components come out `NaN`
+ * (IEEE `0 / 0`), and no fallback value is invented (see
+ * `PRECISION.md`).
+ *
+ * @param self - The point to normalize.
+ * @returns The unit vector, or `(NaN, NaN)` for the zero vector.
+ * @example
+ * ```ts
+ * normalize(point(3, 4)) // Point (0.6, 0.8)
+ * ```
+ */
 export const normalize = (self: Point): Point => {
   const selfMagnitude = Math.hypot(self.x, self.y)
   return new Point(self.x / selfMagnitude, self.y / selfMagnitude)
 }
 
+/**
+ * Computes the Euclidean distance between `self` and `target`.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The first point.
+ * @param target - The second point; any `PointLike`.
+ * @returns The distance, always non-negative.
+ * @example
+ * ```ts
+ * distance(point(0, 0), point(100, 0)) // 100
+ * ```
+ */
 export const distance: {
   (self: Point, target: PointLike): number
   (target: PointLike): (self: Point) => number
 } = dual(2, (self: Point, target: PointLike) => Math.hypot(target.x - self.x, target.y - self.y))
 
+/**
+ * Computes the dot product `self.x * target.x + self.y * target.y`.
+ *
+ * Zero for perpendicular vectors; positive when the vectors point
+ * within a quarter turn of each other, negative beyond it.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The first vector.
+ * @param target - The second vector; any `PointLike`.
+ * @returns The dot product.
+ * @example
+ * ```ts
+ * dot(point(3, 4), point(1, 2)) // 11
+ * dot(point(3, 4), point(4, -3)) // 0 (perpendicular)
+ * ```
+ */
 export const dot: {
   (self: Point, target: PointLike): number
   (target: PointLike): (self: Point) => number
 } = dual(2, (self: Point, target: PointLike) => self.x * target.x + self.y * target.y)
 
+/**
+ * Computes the 2D cross product `self.x * target.y - self.y * target.x`
+ * — the z component of the 3D cross product of the two vectors.
+ *
+ * Zero when the vectors are parallel (or either is zero). Positive when
+ * the shorter rotation from `self` to `target` goes from +x toward +y —
+ * a clockwise turn on a y-down screen. Its magnitude is the area of the
+ * parallelogram the vectors span.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The first vector.
+ * @param target - The second vector; any `PointLike`.
+ * @returns The signed cross product.
+ * @example
+ * ```ts
+ * cross(point(5, 0), point(0, 5)) // 25 (a clockwise turn on screen)
+ * cross(point(3, 4), point(1, 2)) // 2
+ * ```
+ */
 export const cross: {
   (self: Point, target: PointLike): number
   (target: PointLike): (self: Point) => number
 } = dual(2, (self: Point, target: PointLike) => self.x * target.y - self.y * target.x)
 
+/**
+ * Compares two points for coordinate equality within tolerance.
+ *
+ * Each coordinate pair is compared with `coincident` from
+ * `curvy/number`: equal when
+ * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)`, so
+ * rounding noise never separates points at any magnitude (see
+ * `PRECISION.md`). Like any tolerant equality, it is not transitive.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The first point.
+ * @param other - The second point; any `PointLike`.
+ * @returns `true` when both coordinates coincide within tolerance.
+ * @example
+ * ```ts
+ * equals(point(0.1 + 0.2, 1), point(0.3, 1)) // true
+ * point(1, 2).pipe(equals(point(1, 3))) // false
+ * ```
+ */
 export const equals: {
   (self: Point, other: PointLike): boolean
   (other: PointLike): (self: Point) => boolean

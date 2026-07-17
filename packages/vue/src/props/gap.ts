@@ -24,7 +24,7 @@ export function useGap(
 ): ComputedRef<GapValue> {
   const parentDimensions = useOverrideableParent(parent)
 
-  return computed(() => {
+  return computed((previous: GapValue | undefined) => {
     const fallbackValue = toValue(fallback)
     const fallbackRow = typeof fallbackValue === 'number' ? fallbackValue : fallbackValue.rowGap
     const fallbackColumn =
@@ -38,6 +38,7 @@ export function useGap(
         toValue(parentDimensions.width),
         toValue(parentDimensions.height),
       ),
+      previous,
     )
   })
 }

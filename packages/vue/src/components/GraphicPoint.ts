@@ -18,7 +18,7 @@ import { resolveSize1D } from '../internal/props/size1d.ts'
 import { boolProp } from '../internal/utils.ts'
 import { useLengthPercentage } from '../props/lengthPercentage.ts'
 
-interface GraphicPointProps extends InsetProps, TranslateProps {
+export interface GraphicPointProps extends InsetProps, TranslateProps {
   global?: boolean
 }
 

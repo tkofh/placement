@@ -31,7 +31,6 @@ export type OriginValue = ParserValue<Origin>
 
 const cache = createCache<string, Point>(512)
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: will be simpler soon
 function normalize(value: OriginValue) {
   if (isKeywordValue(value)) {
     switch (value.value) {

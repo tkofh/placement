@@ -1,13 +1,11 @@
+import { clamp } from 'curvy/number'
 import { type Dimensions, clamp as clampDimensions, dimensions } from 'placement/dimensions'
 import { type Point, point } from 'placement/point'
 import { type Rect, align, rect, translate } from 'placement/rect'
-import { auto, clamp } from 'placement/utils'
+import { auto } from 'placement/utils'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 import { computedInterval } from '../data/interval.ts'
-import type {
-  AspectRatioInput,
-  // resolveAspectRatio,
-} from '../internal/props/aspectRatio.ts'
+import type { AspectRatioInput } from '../internal/props/aspectRatio.ts'
 import type { OriginInput } from '../internal/props/origin.ts'
 import { type Size1DInput, resolveSize1D } from '../internal/props/size1d.ts'
 import { useLengthPercentage } from '../props/lengthPercentage.ts'
@@ -79,58 +77,6 @@ export const RECT_PROP_KEYS = [
   ...TRANSFORM_PROP_KEYS,
 ] as const
 
-// function calculateSize(
-//   parentWidth: number,
-//   parentHeight: number,
-//
-//   auto: number,
-//   size: Size2DInput,
-//   width: Size1DInput,
-//   height: Size1DInput,
-//   aspectRatio: AspectRatioInput,
-// ) {
-//   const sizeProp = resolveSize2D(
-//     size,
-//     dimensions.infinity,
-//     parentWidth,
-//     parentHeight,
-//   )
-//
-//   if (Number.isFinite(sizeProp.width) && Number.isFinite(sizeProp.height)) {
-//     return sizeProp
-//   }
-//
-//   const widthProp = resolveSize1D(width, Number.POSITIVE_INFINITY, parentWidth)
-//
-//   const heightProp = resolveSize1D(
-//     height,
-//     Number.POSITIVE_INFINITY,
-//     parentHeight,
-//   )
-//
-//   if (Number.isFinite(widthProp) && Number.isFinite(heightProp)) {
-//     return dimensions(widthProp, heightProp)
-//   }
-//
-//   const aspectRatioProp =
-//     typeof aspectRatio === 'number'
-//       ? aspectRatio
-//       : resolveAspectRatio(aspectRatio)
-//
-//   if (Number.isFinite(widthProp) && Number.isFinite(aspectRatioProp)) {
-//     return dimensions(widthProp, widthProp / aspectRatioProp)
-//   }
-//
-//   if (Number.isFinite(aspectRatioProp) && Number.isFinite(heightProp)) {
-//     return dimensions(heightProp * aspectRatioProp, heightProp)
-//   }
-//
-//   return dimensions(
-//     Number.isFinite(widthProp) ? widthProp : auto,
-//     Number.isFinite(heightProp) ? heightProp : auto,
-//   )
-// }
-
 export function useBasisSize(
   input: MaybeRefOrGetter<BasisSizeProps>,
   parent: 'inherit' | MaybeRefOrGetter<Dimensions> = 'inherit',
@@ -178,14 +124,6 @@ export function useConstrainedSize(
   return computed(() => clampDimensions(toValue(basis), toValue(min), toValue(max)))
 }
 
-// export function useSize(input: MaybeRefOrGetter<SizeProps>) {
-//   const basis = useBasisSize(input)
-//   const min = useMinSize(input)
-//   const max = useMaxSize(input)
-//
-//   return useConstrainedSize(basis, min, max)
-// }
-
 export function useAxisInterval(
   start: MaybeRefOrGetter<number>,
   end: MaybeRefOrGetter<number>,
@@ -225,52 +163,16 @@ export function useAxisInterval(
       const endValue = toValue(end)
       const parentSizeValue = toValue(parentSize)
 
+      // The minimum wins when the bounds cross (CSS clamp semantics); curvy's
+      // clamp assumes min <= max.
+      const minSizeValue = toValue(minSize)
       return clamp(
         parentSizeValue - auto(startValue, 0) - auto(endValue, 0),
-        toValue(minSize),
-        toValue(maxSize),
+        minSizeValue,
+        Math.max(minSizeValue, toValue(maxSize)),
       )
     },
   )
-
-  // return computed(() => {
-  //   const startValue = toValue(start)
-  //   const endValue = toValue(end)
-  //   const sizeValue = toValue(size)
-  //
-  //   const parentStartValue = toValue(parentStart)
-  //   const parentSizeValue = toValue(parentSize)
-  //
-  //   const startIsFinite = Number.isFinite(startValue)
-  //   const sizeIsFinite = Number.isFinite(sizeValue)
-  //   const endIsFinite = Number.isFinite(endValue)
-  //
-  //   let resultStart: number = parentStartValue
-  //   let resultSize: number = sizeValue
-  //
-  //   if (startIsFinite) {
-  //     resultStart += startValue
-  //   } else if (sizeIsFinite && endIsFinite) {
-  //     resultStart += parentSizeValue - sizeValue - endValue
-  //   }
-  //
-  //   if (!sizeIsFinite) {
-  //     resultSize = parentSizeValue
-  //
-  //     if (startIsFinite) {
-  //       resultSize -= startValue
-  //     }
-  //
-  //     if (endIsFinite) {
-  //       resultSize -= endValue
-  //     }
-  //   }
-  //
-  //   return interval(
-  //     resultStart,
-  //     clamp(resultSize, toValue(minSize), toValue(maxSize)),
-  //   )
-  // })
 }
 
 export function useXYTranslation(
@@ -284,24 +186,6 @@ export function useXYTranslation(
     return translate(resolveSize1D(x, 0, width), resolveSize1D(y, 0, height))
   })
 }
-
-// export function useOrigin(
-//   props: MaybeRefOrGetter<OriginProps>,
-//   defaultOrigin: MaybeRefOrGetter<Point | number> = 0,
-// ): ComputedRef<Point> {
-//   return computed(() => {
-//     const { origin } = toValue(props)
-//
-//     const defaultOriginValue = toValue(defaultOrigin)
-//
-//     return resolveOrigin(
-//       origin,
-//       isPoint(defaultOriginValue)
-//         ? defaultOriginValue
-//         : point(defaultOriginValue, defaultOriginValue),
-//     )
-//   })
-// }
 
 export function useOriginTranslation(
   props: OriginProps,

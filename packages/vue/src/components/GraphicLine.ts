@@ -4,7 +4,7 @@ import { STROKE_PROP_KEYS, type StrokeProps, usePaint } from '../composables/use
 import { usePointList } from '../composables/usePointList.ts'
 import { useParentX, useParentY } from '../composables/useSizingContext.ts'
 
-interface GraphicLineProps extends StrokeProps {}
+export interface GraphicLineProps extends StrokeProps {}
 
 export const GraphicLine = defineComponent(
   (props: GraphicLineProps, { slots, attrs }) => {
