@@ -1,4 +1,5 @@
-import { Pipeable } from './internal/pipeable.ts'
+import { lerp as lerpNumber } from 'curvy/number'
+import { Pipeable, dual } from 'curvy/utils'
 import {
   type InternalSequenceTrackItem,
   type SequenceTrackItem,
@@ -14,18 +15,15 @@ import {
 } from './internal/track/stack.ts'
 import {
   type Interval,
+  type IntervalLike,
   alignTo as alignIntervalTo,
+  equals as intervalEquals,
   interval,
-  isInterval,
   normalize as normalizeInterval,
   remap as remapInterval,
   setSize as setIntervalSize,
-  setStart,
-  translate as translateInterval,
 } from './interval.ts'
 import { auto } from './utils/arguments.ts'
-import { dual } from './utils/function.ts'
-import { lerp as lerpNumber } from './utils/math.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/track')
 type TypeBrand = typeof TypeBrand
@@ -33,23 +31,27 @@ type TypeBrand = typeof TypeBrand
 class Track extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
+  readonly intervals: ReadonlyArray<Interval>
+
   readonly start: number
   readonly end: number
   readonly size: number
 
-  constructor(readonly intervals: ReadonlyArray<Interval>) {
+  constructor(intervals: ReadonlyArray<Interval>) {
     super()
 
-    if (this.intervals.length === 0) {
+    if (intervals.length === 0) {
       throw new RangeError('Track must contain at least one interval')
     }
+
+    this.intervals = intervals
 
     let start = Number.POSITIVE_INFINITY
     let end = Number.NEGATIVE_INFINITY
 
-    for (const interval of intervals) {
-      start = Math.min(start, interval.start)
-      end = Math.max(end, interval.end)
+    for (const ival of intervals) {
+      start = Math.min(start, ival.start)
+      end = Math.max(end, ival.end)
     }
 
     this.start = start
@@ -58,19 +60,28 @@ class Track extends Pipeable {
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
-    return `Track [${this.intervals.map((interval) => `[${interval.start}, ${interval.end}]`).join(', ')}]`
+    return `Track [${this.intervals.map((ival) => `[${ival.start}, ${ival.end}]`).join(', ')}]`
+  }
+
+  toJSON() {
+    return {
+      intervals: this.intervals.map((ival) => ival.toJSON()),
+    }
   }
 }
+
+export type { Track }
 
 export function track(intervals: ReadonlyArray<Interval>): Track {
   return new Track(intervals)
 }
 
-export type { Track }
-
-export function isTrack(value: unknown): value is Track {
+export const isTrack = (value: unknown): value is Track => {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
+
+export type StackItem = StackTrackItem
+export type SequenceItem = SequenceTrackItem
 
 interface BaseOptions {
   place?: number
@@ -90,9 +101,9 @@ export interface SequenceOptions extends BaseOptions {
 }
 
 export const stack: {
-  (items: ReadonlyArray<StackTrackItem>, options: StackOptions): Track
-  (options: StackOptions): (items: ReadonlyArray<StackTrackItem>) => Track
-} = dual(2, (items: ReadonlyArray<StackTrackItem>, options: StackOptions): Track => {
+  (items: ReadonlyArray<StackItem>, options: StackOptions): Track
+  (options: StackOptions): (items: ReadonlyArray<StackItem>) => Track
+} = dual(2, (items: ReadonlyArray<StackItem>, options: StackOptions): Track => {
   const trackItems: Array<InternalStackTrackItem> = []
   let maxSize = 0
 
@@ -137,9 +148,9 @@ function sequenceWithoutFreeSpace(
   let cursor = start
 
   for (const item of items) {
-    cursor += autoOffset * Number(item.startIsAuto) + item.start
+    cursor += autoOffset * Number(item.startIsAuto) + item.definiteStart
     intervals.push(interval(cursor, item.size))
-    cursor += item.size + gap + autoOffset * Number(item.endIsAuto) + item.end
+    cursor += item.size + gap + autoOffset * Number(item.endIsAuto) + item.definiteEnd
   }
 
   return new Track(intervals)
@@ -171,18 +182,18 @@ function sequenceWithFreeSpace(
   }
 
   for (const item of items) {
-    cursor += item.start
+    cursor += item.definiteStart
     intervals.push(interval(cursor, item.size))
-    cursor += item.size + between + item.end
+    cursor += item.size + between + item.definiteEnd
   }
 
   return new Track(intervals)
 }
 
 export const sequence: {
-  (items: ReadonlyArray<SequenceTrackItem>, options: SequenceOptions): Track
-  (options: SequenceOptions): (items: ReadonlyArray<SequenceTrackItem>) => Track
-} = dual(2, (items: ReadonlyArray<SequenceTrackItem>, options: SequenceOptions): Track => {
+  (items: ReadonlyArray<SequenceItem>, options: SequenceOptions): Track
+  (options: SequenceOptions): (items: ReadonlyArray<SequenceItem>) => Track
+} = dual(2, (items: ReadonlyArray<SequenceItem>, options: SequenceOptions): Track => {
   const { trackItems, growable, shrinkable, totals } = processItems(items)
 
   const gap = options.gap ?? 0
@@ -221,142 +232,133 @@ export const sequence: {
   )
 })
 
-export const toInterval = (track: Track) => {
-  return interval(track.start, track.size)
+export const toInterval = (self: Track): Interval => {
+  return interval(self.start, self.size)
 }
 
 export const translate: {
-  (track: Track, amount: number): Track
-  (amount: number): (track: Track) => Track
+  (self: Track, amount: number): Track
+  (amount: number): (self: Track) => Track
 } = dual(
   2,
-  (track: Track, amount: number) =>
-    new Track(track.intervals.map((ival) => interval(ival.start + amount, ival.size))),
+  (self: Track, amount: number) =>
+    new Track(self.intervals.map((ival) => interval(ival.start + amount, ival.size))),
 )
 
 export const scale: {
-  (track: Track, scale: number, origin?: number): Track
-  (scale: number, origin?: number): (track: Track) => Track
+  (self: Track, factor: number, origin?: number): Track
+  (factor: number, origin?: number): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
-  (track: Track, scale: number, origin = 0) =>
-    scaleFrom(track, scale, lerpNumber(origin, track.start, track.end)),
+  (self: Track, factor: number, origin = 0) =>
+    scaleFrom(self, factor, lerpNumber(origin, self.start, self.end)),
 )
 
 export const scaleFrom: {
-  (track: Track, scale: number, position: number): Track
-  (scale: number, position: number): (track: Track) => Track
+  (self: Track, factor: number, position: number): Track
+  (factor: number, position: number): (self: Track) => Track
 } = dual(
   3,
-  (track: Track, scale: number, position: number) =>
+  (self: Track, factor: number, position: number) =>
     new Track(
-      Array.from(track.intervals, (ival) => {
-        const size = ival.size * scale
+      Array.from(self.intervals, (ival) => {
+        const size = ival.size * factor
         return interval(
-          position + (ival.start - position) * scale + Math.min(size, 0),
+          position + (ival.start - position) * factor + Math.min(size, 0),
           Math.abs(size),
         )
       }),
     ),
 )
 
+// alignTo takes a fixed arity: its target may itself be a Track, so a
+// trailing optional would make 2-argument calls ambiguous between the
+// data-first and data-last forms.
 export const alignTo: {
-  (track: Track, target: number | Interval | Track, origin: number): Track
-  (target: number | Interval | Track, origin: number): (track: Track) => Track
-} = dual(3, (track: Track, target: number | Interval | Track, origin: number) => {
-  const isIntervalLike = isInterval(target) || isTrack(target)
-
-  const set = setStart(
-    lerpNumber(
-      origin,
-      isIntervalLike ? target.start : target,
-      isIntervalLike ? target.end : target,
-    ) -
-      track.size * origin,
-  )
-  return map(track, (ival) => ival.pipe(set, translateInterval(ival.start - track.start)))
+  (self: Track, target: number | IntervalLike | Track, origin: number): Track
+  (target: number | IntervalLike | Track, origin: number): (self: Track) => Track
+} = dual(3, (self: Track, target: number | IntervalLike | Track, origin: number) => {
+  const position = typeof target === 'number' ? target : target.start + target.size * origin
+  const delta = position - self.size * origin - self.start
+  return new Track(self.intervals.map((ival) => interval(ival.start + delta, ival.size)))
 })
 
 export const setSize: {
-  (track: Track, size: number, origin?: number): Track
-  (size: number, origin?: number): (track: Track) => Track
+  (self: Track, size: number, origin?: number): Track
+  (size: number, origin?: number): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
-  (track: Track, size: number, origin = 0) => scale(track, size / track.size, origin),
+  (self: Track, size: number, origin = 0) => scale(self, size / self.size, origin),
 )
 
 export const map: {
-  (track: Track, fn: (interval: Interval, index: number, track: Track) => Interval): Track
-  (fn: (interval: Interval, index: number) => Interval, track: Track): (track: Track) => Track
+  (self: Track, fn: (interval: Interval, index: number, track: Track) => Interval): Track
+  (fn: (interval: Interval, index: number, track: Track) => Interval): (self: Track) => Track
 } = dual(
   2,
-  (track: Track, fn: (interval: Interval, index: number, track: Track) => Interval): Track =>
-    new Track(Array.from(track.intervals, (ival, index) => fn(ival, index, track))),
+  (self: Track, fn: (interval: Interval, index: number, track: Track) => Interval): Track =>
+    new Track(Array.from(self.intervals, (ival, index) => fn(ival, index, self))),
 )
 
 export const alignItemsTo: {
-  (track: Track, position: number, origin?: number): Track
-  (position: number, origin?: number): (track: Track) => Track
+  (self: Track, position: number, origin?: number): Track
+  (position: number, origin?: number): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
-  (track: Track, position: number, origin = 0) =>
-    new Track(track.intervals.map((ival) => interval(position - ival.size * origin, ival.size))),
+  (self: Track, position: number, origin = 0) =>
+    new Track(self.intervals.map((ival) => interval(position - ival.size * origin, ival.size))),
 )
 
 export const alignItems: {
-  (track: Track, align: number): Track
-  (track: Track, align: number, origin: number): Track
-  (align: number): (track: Track) => Track
-  (align: number, origin: number): (track: Track) => Track
+  (self: Track, align: number, origin?: number): Track
+  (align: number, origin?: number): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
-  (track: Track, align: number, origin?: number) =>
-    map(track, alignIntervalTo(lerpNumber(align, track.start, track.end), origin ?? align)),
+  (self: Track, align: number, origin?: number) =>
+    map(self, alignIntervalTo(lerpNumber(align, self.start, self.end), origin ?? align)),
 )
 
 export const reflect: {
-  (track: Track, origin?: number): Track
-  (origin?: number): (track: Track) => Track
+  (self: Track, origin?: number): Track
+  (origin?: number): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
-  (track: Track, origin = 0.5) => scale(track, -1, origin),
+  (self: Track, origin = 0.5) => scale(self, -1, origin),
 )
 
 export const normalize: {
-  (track: Track, target?: Interval): Track
-  (target: Interval): (track: Track) => Track
+  (self: Track, target?: Interval): Track
+  (target?: Interval): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
-  (track: Track, target = toInterval(track)) => map(track, normalizeInterval(target)),
+  (self: Track, target: Interval = toInterval(self)) => map(self, normalizeInterval(target)),
 )
 
+// remap takes a fixed arity: a Track is itself IntervalLike, so a 2-argument
+// data-first convenience could not be disambiguated from the data-last form.
+// Callers pass toInterval(self) as the source explicitly.
 export const remap: {
-  (track: Track, target: Interval): Track
-  (track: Track, source: Interval, target: Interval): Track
-  (target: Interval): (track: Track) => Track
-  (source: Interval, target: Interval): (track: Track) => Track
-} = dual(3, (track: Track, source: Interval, target?: Interval) =>
-  map(track, remapInterval(target == null ? toInterval(track) : source, target ?? source)),
+  (self: Track, source: Interval, target: Interval): Track
+  (source: Interval, target: Interval): (self: Track) => Track
+} = dual(3, (self: Track, source: Interval, target: Interval) =>
+  map(self, remapInterval(source, target)),
 )
 
 export const distribute: {
-  (track: Track): Track
-  (track: Track, origin: number): Track
-  (track: Track, origin: number, gap: number): Track
-  (origin: number): (track: Track) => Track
-  (origin: number, gap: number): (track: Track) => Track
+  (self: Track, origin?: number, gap?: number): Track
+  (origin?: number, gap?: number): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
-  (track: Track, origin = 0, gap = 0) => {
-    const intervals: Array<Interval> = []
-
+  (self: Track, origin = 0, gap = 0) => {
     let totalSize = -gap
-    for (const ival of track.intervals) {
+    for (const ival of self.intervals) {
       totalSize += ival.size + gap
     }
 
-    let cursor = track.start + origin * (track.size - totalSize)
-    for (const ival of track.intervals) {
+    const intervals: Array<Interval> = []
+
+    let cursor = self.start + origin * (self.size - totalSize)
+    for (const ival of self.intervals) {
       intervals.push(interval(cursor, ival.size))
       cursor += ival.size + gap
     }
@@ -366,22 +368,22 @@ export const distribute: {
 )
 
 export const distributeWithin: {
-  (track: Track): Track
-  (track: Track, target: Interval): Track
-  (target: Interval): (track: Track) => Track
+  (self: Track, target?: Interval): Track
+  (target?: Interval): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
-  (track: Track, target: Interval = toInterval(track)) => {
-    const intervals: Array<Interval> = []
-
+  (self: Track, target: Interval = toInterval(self)) => {
     let totalSize = 0
-    for (const ival of track.intervals) {
+    for (const ival of self.intervals) {
       totalSize += ival.size
     }
 
-    const between = (target.size - totalSize) / (track.intervals.length - 1)
+    const between = (target.size - totalSize) / (self.intervals.length - 1)
+
+    const intervals: Array<Interval> = []
+
     let cursor = target.start
-    for (const ival of track.intervals) {
+    for (const ival of self.intervals) {
       intervals.push(interval(cursor, ival.size))
       cursor += ival.size + between
     }
@@ -391,64 +393,77 @@ export const distributeWithin: {
 )
 
 export const lerp: {
-  (track: Track, other: Track, amount: number): Track
-  (other: Track, amount: number): (track: Track) => Track
+  (self: Track, other: Track, amount: number): Track
+  (other: Track, amount: number): (self: Track) => Track
 } = dual(
   3,
-  (track: Track, other: Track, amount = 0.5) =>
+  (self: Track, other: Track, amount: number) =>
     new Track(
-      Array.from({ length: Math.min(track.intervals.length, other.intervals.length) }, (_, i) => {
-        const trackItem = track.intervals[i]
-        const otherItem = other.intervals[i]
-        return interval(
-          lerpNumber(amount, trackItem.start, otherItem.start),
-          lerpNumber(amount, trackItem.size, otherItem.size),
-        )
-      }),
+      Array.from(
+        { length: Math.min(self.intervals.length, other.intervals.length) },
+        (_, index) => {
+          const a = self.intervals[index] as Interval
+          const b = other.intervals[index] as Interval
+          return interval(lerpNumber(amount, a.start, b.start), lerpNumber(amount, a.size, b.size))
+        },
+      ),
     ),
 )
 
 export const mapItemStarts: {
-  (track: Track, fn: (interval: Interval, index: number) => number): Track
-  (fn: (interval: Interval, index: number) => number): (track: Track) => Track
-} = dual(2, (track: Track, fn: (interval: Interval, index: number) => number) =>
-  map(track, (ival, index) => interval(fn(ival, index), ival.size)),
+  (self: Track, fn: (interval: Interval, index: number) => number): Track
+  (fn: (interval: Interval, index: number) => number): (self: Track) => Track
+} = dual(2, (self: Track, fn: (interval: Interval, index: number) => number) =>
+  map(self, (ival, index) => interval(fn(ival, index), ival.size)),
 )
 
 export const mapItemEnds: {
-  (track: Track, fn: (interval: Interval, index: number) => number): Track
-  (fn: (interval: Interval, index: number) => number): (track: Track) => Track
-} = dual(2, (track: Track, fn: (interval: Interval, index: number) => number) =>
-  map(track, (ival, index) => interval(fn(ival, index) - ival.size, ival.size)),
+  (self: Track, fn: (interval: Interval, index: number) => number): Track
+  (fn: (interval: Interval, index: number) => number): (self: Track) => Track
+} = dual(2, (self: Track, fn: (interval: Interval, index: number) => number) =>
+  map(self, (ival, index) => interval(fn(ival, index) - ival.size, ival.size)),
 )
 
 export const mapItemSizes: {
   (
-    track: Track,
+    self: Track,
     size: number | ((interval: Interval, index: number, track: Track) => number),
     origin?: number | ((interval: Interval, index: number, track: Track) => number),
   ): Track
   (
     size: number | ((interval: Interval, index: number, track: Track) => number),
     origin?: number | ((interval: Interval, index: number, track: Track) => number),
-  ): (track: Track) => Track
+  ): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
   (
-    track: Track,
+    self: Track,
     size: number | ((interval: Interval, index: number, track: Track) => number),
     origin: number | ((interval: Interval, index: number, track: Track) => number) = 0,
   ) => {
     if (typeof size === 'number' && typeof origin === 'number') {
-      return map(track, setIntervalSize(size, origin))
+      return map(self, setIntervalSize(size, origin))
     }
 
-    const sizeFn = typeof size === 'number' ? () => size : size
-    const originFn = typeof origin === 'number' ? () => origin : origin
+    const sizeOf = typeof size === 'number' ? () => size : size
+    const originOf = typeof origin === 'number' ? () => origin : origin
 
-    return map(track, (ival, index, track) => {
-      const size = sizeFn(ival, index, track)
-      return interval(ival.start + (ival.size - size) * originFn(ival, index, track), size)
+    return map(self, (ival, index, current) => {
+      const nextSize = sizeOf(ival, index, current)
+      return interval(
+        ival.start + (ival.size - nextSize) * originOf(ival, index, current),
+        nextSize,
+      )
     })
   },
+)
+
+export const equals: {
+  (self: Track, other: Track): boolean
+  (other: Track): (self: Track) => boolean
+} = dual(
+  2,
+  (self: Track, other: Track) =>
+    self.intervals.length === other.intervals.length &&
+    self.intervals.every((ival, index) => intervalEquals(ival, other.intervals[index] as Interval)),
 )

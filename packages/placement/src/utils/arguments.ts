@@ -1,4 +1,4 @@
-import { clamp } from './math.ts'
+import { clamp } from 'curvy/number'
 
 export function normalizeXYWH(
   a?: number,
@@ -80,11 +80,7 @@ export function auto(a: number, b?: number, c?: number, ...tail: ReadonlyArray<n
   return last
 }
 
-function safeDivide(a: number, b: number) {
-  return b === 0 ? Number.POSITIVE_INFINITY : a / b
-}
-
-interface NormalizedSizing {
+export interface NormalizedSizing {
   readonly aspectRatio: number
   readonly width: number
   readonly height: number
@@ -94,6 +90,11 @@ interface NormalizedSizing {
   readonly maxHeight: number
 }
 
+// Resolves a width/height pair from potentially-unset inputs (NaN = unset)
+// and an optional aspect ratio (0 = unset). Resolution order: two definite
+// dimensions win; one definite dimension plus a ratio derives the other; a
+// ratio alone is applied against the clamped zero fallbacks; otherwise both
+// fall back to clamped zero.
 export function normalizeSizing(
   aspectRatio: number,
   width: number,
@@ -103,107 +104,48 @@ export function normalizeSizing(
   maxWidth: number,
   maxHeight: number,
 ): NormalizedSizing {
-  const normalizedMinWidth = Math.max(minWidth, 0)
-  const normalizedMinHeight = Math.max(minHeight, 0)
-  const normalizedMaxWidth = Math.max(maxWidth, 0)
-  const normalizedMaxHeight = Math.max(maxHeight, 0)
+  const min = [Math.max(minWidth, 0), Math.max(minHeight, 0)] as const
+  const max = [Math.max(maxWidth, 0), Math.max(maxHeight, 0)] as const
+  const ratio = Math.max(aspectRatio, 0)
 
-  const normalizedAspectRatio = Math.max(aspectRatio ?? 0, 0)
+  const widthIsSet = !Number.isNaN(width)
+  const heightIsSet = !Number.isNaN(height)
 
-  if (width >= 0 && height >= 0) {
-    const normalizedWidth = clamp(width, normalizedMinWidth, normalizedMaxWidth)
-    const normalizedHeight = clamp(height, normalizedMinHeight, normalizedMaxHeight)
-    return {
-      aspectRatio: safeDivide(normalizedWidth, normalizedHeight),
-      width: normalizedWidth,
-      height: normalizedHeight,
-      minWidth: normalizedMinWidth,
-      minHeight: normalizedMinHeight,
-      maxWidth: normalizedMaxWidth,
-      maxHeight: normalizedMaxHeight,
-    }
-  }
+  let resolvedWidth: number
+  let resolvedHeight: number
 
-  if (normalizedAspectRatio > 0 && width >= 0) {
-    const normalizedWidth = clamp(width, normalizedMinWidth, normalizedMaxWidth)
-    const normalizedHeight = clamp(
-      normalizedWidth / normalizedAspectRatio,
-      normalizedMinHeight,
-      normalizedMaxHeight,
-    )
-    return {
-      aspectRatio: safeDivide(normalizedWidth, normalizedHeight),
-      width: normalizedWidth,
-      height: normalizedHeight,
-      minWidth: normalizedMinWidth,
-      minHeight: normalizedMinHeight,
-      maxWidth: normalizedMaxWidth,
-      maxHeight: normalizedMaxHeight,
-    }
-  }
+  if (widthIsSet && heightIsSet) {
+    resolvedWidth = clamp(width, min[0], max[0])
+    resolvedHeight = clamp(height, min[1], max[1])
+  } else if (ratio > 0 && widthIsSet) {
+    resolvedWidth = clamp(width, min[0], max[0])
+    resolvedHeight = clamp(resolvedWidth / ratio, min[1], max[1])
+  } else if (ratio > 0 && heightIsSet) {
+    resolvedHeight = clamp(height, min[1], max[1])
+    resolvedWidth = clamp(resolvedHeight * ratio, min[0], max[0])
+  } else {
+    const fallbackWidth = clamp(widthIsSet ? width : 0, min[0], max[0])
+    const fallbackHeight = clamp(heightIsSet ? height : 0, min[1], max[1])
 
-  if (normalizedAspectRatio > 0 && height >= 0) {
-    const normalizedHeight = clamp(height, normalizedMinHeight, normalizedMaxHeight)
-    const normalizedWidth = clamp(
-      normalizedHeight * normalizedAspectRatio,
-      normalizedMinWidth,
-      normalizedMaxWidth,
-    )
-    return {
-      aspectRatio: safeDivide(normalizedWidth, normalizedHeight),
-      width: normalizedWidth,
-      height: normalizedHeight,
-      minWidth: normalizedMinWidth,
-      minHeight: normalizedMinHeight,
-      maxWidth: normalizedMaxWidth,
-      maxHeight: normalizedMaxHeight,
-    }
-  }
-
-  const normalizedConstrainedWidth = clamp(width ?? 0, normalizedMinWidth, normalizedMaxWidth)
-  const normalizedConstrainedHeight = clamp(height ?? 0, normalizedMinHeight, normalizedMaxHeight)
-
-  if (normalizedAspectRatio > 0) {
-    if (normalizedConstrainedWidth === 0) {
-      const normalizedWidth = clamp(
-        normalizedConstrainedHeight * normalizedAspectRatio,
-        normalizedMinWidth,
-        normalizedMaxWidth,
-      )
-      return {
-        aspectRatio: safeDivide(normalizedWidth, normalizedConstrainedHeight),
-        width: normalizedWidth,
-        height: normalizedConstrainedHeight,
-        minWidth: normalizedMinWidth,
-        minHeight: normalizedMinHeight,
-        maxWidth: normalizedMaxWidth,
-        maxHeight: normalizedMaxHeight,
-      }
-    }
-    const normalizedHeight = clamp(
-      normalizedConstrainedWidth / normalizedAspectRatio,
-      normalizedMinHeight,
-      normalizedMaxHeight,
-    )
-
-    return {
-      aspectRatio: safeDivide(normalizedConstrainedWidth, normalizedHeight),
-      width: normalizedConstrainedWidth,
-      height: normalizedHeight,
-      minWidth: normalizedMinWidth,
-      minHeight: normalizedMinHeight,
-      maxWidth: normalizedMaxWidth,
-      maxHeight: normalizedMaxHeight,
+    if (ratio > 0 && fallbackWidth === 0) {
+      resolvedHeight = fallbackHeight
+      resolvedWidth = clamp(fallbackHeight * ratio, min[0], max[0])
+    } else if (ratio > 0) {
+      resolvedWidth = fallbackWidth
+      resolvedHeight = clamp(fallbackWidth / ratio, min[1], max[1])
+    } else {
+      resolvedWidth = fallbackWidth
+      resolvedHeight = fallbackHeight
     }
   }
 
   return {
-    aspectRatio: safeDivide(normalizedConstrainedWidth, normalizedConstrainedHeight),
-    width: normalizedConstrainedWidth,
-    height: normalizedConstrainedHeight,
-    minWidth: normalizedMinWidth,
-    minHeight: normalizedMinHeight,
-    maxWidth: normalizedMaxWidth,
-    maxHeight: normalizedMaxHeight,
+    aspectRatio: resolvedWidth / resolvedHeight,
+    width: resolvedWidth,
+    height: resolvedHeight,
+    minWidth: min[0],
+    minHeight: min[1],
+    maxWidth: max[0],
+    maxHeight: max[1],
   }
 }

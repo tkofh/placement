@@ -1,5 +1,5 @@
-import { auto } from '../../utils.ts'
-import { clamp } from '../../utils/math.ts'
+import { clamp } from 'curvy/number'
+import { auto } from '../../utils/arguments.ts'
 
 export interface TrackItemInput {
   start?: number
@@ -10,27 +10,34 @@ export interface TrackItemInput {
 }
 
 export class TrackItem {
-  readonly initialSize: number
-
-  adjustment = 0
+  readonly start: number
+  readonly end: number
 
   readonly basis: number
   readonly min: number
   readonly max: number
 
-  readonly definiteStart: number
-  readonly definiteEnd: number
-
   readonly startIsAuto: boolean
   readonly endIsAuto: boolean
 
-  constructor(
-    readonly start: number,
-    readonly end: number,
-    basis: number,
-    min: number,
-    max: number,
-  ) {
+  readonly definiteStart: number
+  readonly definiteEnd: number
+
+  readonly autoOffsetCount: number
+
+  readonly initialSize: number
+
+  // Inputs are immutable; only adjustment mutates after construction, so
+  // everything else is precomputed here and only the adjustment-dependent
+  // values are getters.
+  adjustment = 0
+
+  readonly #baseSize: number
+
+  constructor(start: number, end: number, basis: number, min: number, max: number) {
+    this.start = start
+    this.end = end
+
     this.basis = Math.max(basis, 0)
     this.min = Math.max(min, 0)
     this.max = Math.max(max, 0)
@@ -41,18 +48,17 @@ export class TrackItem {
     this.definiteStart = this.startIsAuto ? 0 : start
     this.definiteEnd = this.endIsAuto ? 0 : end
 
-    this.initialSize = clamp(basis, min, max)
+    this.autoOffsetCount = Number(this.startIsAuto) + Number(this.endIsAuto)
+
+    this.initialSize = clamp(basis, this.min, this.max)
+    this.#baseSize = auto(this.initialSize, 0)
   }
 
   get size(): number {
-    return clamp(auto(this.initialSize, 0) + this.adjustment, this.min, this.max)
+    return clamp(this.#baseSize + this.adjustment, this.min, this.max)
   }
 
   get definiteOuterSize(): number {
     return this.size + this.definiteStart + this.definiteEnd
-  }
-
-  get autoOffsetCount(): number {
-    return Number(this.startIsAuto) + Number(this.endIsAuto)
   }
 }

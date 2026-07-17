@@ -6,6 +6,10 @@ export default defineConfig({
   rules: {
     'no-empty': 'off',
     'no-empty-pattern': 'off',
+    // Effect-style modules export ops (track, flexbox, center, angle) whose
+    // names are also the natural parameter names; shadowing is pervasive and
+    // intentional here.
+    'no-shadow': 'off',
     'no-underscore-dangle': 'off',
     'no-case-declarations': 'warn',
     'no-unused-private-class-members': 'error',
@@ -33,5 +37,10 @@ export default defineConfig({
       rules: { 'import/no-default-export': 'off' },
     },
     { files: ['**/utils.ts'], rules: { 'prefer-rest-params': 'off' } },
+    {
+      // Vue components are PascalCase by convention.
+      files: ['packages/vue/src/components/**'],
+      rules: { 'unicorn/filename-case': ['error', { case: 'pascalCase' }] },
+    },
   ],
 })

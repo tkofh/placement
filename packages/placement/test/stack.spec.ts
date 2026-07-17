@@ -73,7 +73,7 @@ describe('with stretch', () => {
   })
 })
 
-describe('wth place', () => {
+describe('with place', () => {
   test.each([
     {
       items: [{ basis: 100, place: 0 }, { basis: 200 }],
@@ -209,5 +209,14 @@ describe('with auto offsets', () => {
   ])('stack($items, $options): $result', ({ items, options, result }) => {
     const track = stack(items, options)
     expect(track).toEqual(result)
+  })
+})
+
+describe('dual forms', () => {
+  test('data-last form', () => {
+    const operation = stack({ stretch: 1 })
+    expect(operation([{ basis: 100 }, { basis: 200 }])).toEqual(
+      track([interval(0, 200), interval(0, 200)]),
+    )
   })
 })

@@ -1,59 +1,53 @@
-import { bench } from 'vitest'
-import { direction, flexbox, wrap } from '../src/flexbox.ts'
-import { applyFlexbox } from '../src/flexbox.ts'
-import { frame } from '../src/frame.ts'
-import { rect, setSize } from '../src/rect.ts'
+import { bench, describe } from 'vitest'
+import { applyFlexbox, direction, flexbox, wrap } from '../src/flexbox.ts'
+import { type Frame, frame } from '../src/frame.ts'
+import { rect } from '../src/rect.ts'
 
-const frames = [
-  frame({
-    width: 100,
-    height: 100,
-    align: 0,
-    justify: 0,
-    stretchCross: 1,
-  }),
-  frame({
-    width: 100,
-    height: 100,
-    align: 0,
-    justify: 0,
-    stretchCross: 1,
-  }),
-  frame({
-    width: 200,
-    height: 50,
-    align: 0,
-    justify: 0,
-    stretchCross: 1,
-  }),
-  frame({
-    width: 200,
-    height: 50,
-    align: 0,
-    justify: 0,
-    stretchCross: 1,
-  }),
-]
+// Deterministic size cycles stand in for varied content; no randomness, so
+// runs are comparable.
+const widths = [100, 60, 140, 80, 120, 90, 110, 70, 130, 50] as const
+const heights = [80, 120, 60, 100, 90, 70, 110, 130, 50, 140] as const
 
-let parent = rect(1000)
+const makeFrames = (count: number): ReadonlyArray<Frame> =>
+  Array.from({ length: count }, (_, index) =>
+    frame({
+      width: widths[index % widths.length] as number,
+      height: heights[index % heights.length] as number,
+      grow: index % 3,
+      shrink: index % 2,
+    }),
+  )
 
-bench('flexbox', () => {
-  const layout = flexbox({
-    direction: direction.row,
-    wrap: wrap.nowrap,
-    alignContent: 0,
-    alignItems: 0,
-    stretchContent: 1,
-    stretchItems: 1,
-    justifyContent: 0,
-    rowGap: 0,
-    columnGap: 0,
-    justifyContentSpace: 0,
-    justifyContentSpaceOuter: 0,
-    alignContentSpace: 0,
-    alignContentSpaceOuter: 0,
-  })
+const parent = rect(1000)
 
-  parent = parent.pipe(setSize(parent.width + Math.round(Math.random() * 100) - 25))
-  applyFlexbox(frames, layout, parent)
+const nowrapLayout = flexbox({
+  direction: direction.row,
+  wrap: wrap.nowrap,
+  columnGap: 10,
+  justifyContent: 0.5,
 })
+
+const wrapLayout = flexbox({
+  direction: direction.row,
+  wrap: wrap.wrap,
+  columnGap: 10,
+  rowGap: 10,
+  justifyContent: 0.5,
+  alignItems: 0.5,
+  alignContent: 0.5,
+  stretchItems: 0.5,
+})
+
+for (const count of [10, 100, 1000]) {
+  const frames = makeFrames(count)
+
+  describe(`${count} items`, () => {
+    bench('nowrap', () => {
+      applyFlexbox(frames, nowrapLayout, parent)
+    })
+
+    bench('wrap', () => {
+      applyFlexbox(frames, wrapLayout, parent)
+    })
+  })
+}

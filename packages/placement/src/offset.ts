@@ -1,10 +1,8 @@
-import { PRECISION } from './constants.ts'
+import { coincident, lerp as lerpNumber } from 'curvy/number'
+import { Pipeable, dual } from 'curvy/utils'
 import type { Dimensions } from './dimensions.ts'
-import { Pipeable } from './internal/pipeable.ts'
 import type { Point } from './point.ts'
-import { dual } from './utils/function.ts'
-import { roundTo } from './utils/math.ts'
-import { hasProperty, isRecord } from './utils/object.ts'
+import { isRecord } from './utils/object.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/offset')
 type TypeBrand = typeof TypeBrand
@@ -18,372 +16,186 @@ export interface OffsetLike {
 
 class Offset extends Pipeable implements OffsetLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
+
   readonly top: number
   readonly right: number
   readonly bottom: number
   readonly left: number
 
-  constructor(
-    top: number,
-    right: number,
-    bottom: number,
-    left: number,
-    readonly precision: number,
-  ) {
+  constructor(top: number, right: number, bottom: number, left: number) {
     super()
 
-    this.top = roundTo(top, precision)
-    this.right = roundTo(right, precision)
-    this.bottom = roundTo(bottom, precision)
-    this.left = roundTo(left, precision)
+    this.top = top
+    this.right = right
+    this.bottom = bottom
+    this.left = left
+  }
+
+  [Symbol.for('nodejs.util.inspect.custom')]() {
+    return `Offset [${this.top} ${this.right} ${this.bottom} ${this.left}]`
+  }
+
+  toJSON() {
+    return {
+      top: this.top,
+      right: this.right,
+      bottom: this.bottom,
+      left: this.left,
+    }
   }
 }
 
 export type { Offset }
 
 type OffsetConstructor = {
-  (offset: number, precision?: number): Offset
+  (value: number): Offset
 
-  xy(x: number, y: number, precision?: number): Offset
-  trbl(top: number, right?: number, bottom?: number, left?: number, precision?: number): Offset
-  fromPoint(point: Point, precision?: number): Offset
-  fromDimensions(dimensions: Dimensions, precision?: number): Offset
+  xy(x: number, y: number): Offset
+  trbl(top: number, right?: number, bottom?: number, left?: number): Offset
+  fromPoint(point: Point): Offset
+  fromDimensions(dimensions: Dimensions): Offset
   zero: Offset
   infinity: Offset
 }
 
-const offset = ((offset: number, precision = PRECISION): Offset =>
-  new Offset(offset, offset, offset, offset, precision)) as OffsetConstructor
+const offset = ((value: number): Offset =>
+  new Offset(value, value, value, value)) as OffsetConstructor
 
-offset.xy = (x: number, y: number, precision = PRECISION) => new Offset(y, x, y, x, precision)
+offset.xy = (x: number, y: number) => new Offset(y, x, y, x)
 
-offset.trbl = (
-  top: number,
-  right?: number,
-  bottom?: number,
-  left?: number,
-  precision = PRECISION,
-) => new Offset(top, right ?? top, bottom ?? top, left ?? right ?? top, precision)
+// CSS shorthand fallbacks: bottom mirrors top, left mirrors right.
+offset.trbl = (top: number, right?: number, bottom?: number, left?: number) =>
+  new Offset(top, right ?? top, bottom ?? top, left ?? right ?? top)
 
-offset.fromPoint = (point: Point, precision = point.precision) =>
-  new Offset(point.y, point.x, point.y, point.x, precision)
+offset.fromPoint = (point: Point) => new Offset(point.y, point.x, point.y, point.x)
 
-offset.fromDimensions = (dimensions: Dimensions, precision = dimensions.precision) =>
+offset.fromDimensions = (dimensions: Dimensions) =>
   new Offset(
     dimensions.height * 0.5,
     dimensions.width * 0.5,
     dimensions.height * 0.5,
     dimensions.width * 0.5,
-    precision,
   )
 
-offset.zero = new Offset(0, 0, 0, 0, PRECISION)
+offset.zero = new Offset(0, 0, 0, 0)
 offset.infinity = new Offset(
   Number.POSITIVE_INFINITY,
   Number.POSITIVE_INFINITY,
   Number.POSITIVE_INFINITY,
   Number.POSITIVE_INFINITY,
-  PRECISION,
 )
 
 export { offset }
 
-export function isOffset(value: unknown): value is Offset {
-  return isRecord(value) && TypeBrand in value
+export const isOffset = (value: unknown): value is Offset => {
+  return typeof value === 'object' && value !== null && TypeBrand in value
 }
 
-export function isOffsetLike(value: unknown): value is OffsetLike {
+export const isOffsetLike = (value: unknown): value is OffsetLike => {
   return (
     isRecord(value) &&
-    hasProperty(value, 'top') &&
-    hasProperty(value, 'right') &&
-    hasProperty(value, 'bottom') &&
-    hasProperty(value, 'left')
+    typeof value.top === 'number' &&
+    typeof value.right === 'number' &&
+    typeof value.bottom === 'number' &&
+    typeof value.left === 'number'
   )
 }
 
-export const top: {
-  (offset: Offset, top: number): Offset
-  (top: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, top: number) =>
-    new Offset(top, offset.right, offset.bottom, offset.left, offset.precision),
-)
+export const setTop: {
+  (self: Offset, top: number): Offset
+  (top: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, top: number) => new Offset(top, self.right, self.bottom, self.left))
 
-export const right: {
-  (offset: Offset, right: number): Offset
-  (right: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, right: number) =>
-    new Offset(offset.top, right, offset.bottom, offset.left, offset.precision),
-)
+export const setRight: {
+  (self: Offset, right: number): Offset
+  (right: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, right: number) => new Offset(self.top, right, self.bottom, self.left))
 
-export const bottom: {
-  (offset: Offset, bottom: number): Offset
-  (bottom: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, bottom: number) =>
-    new Offset(offset.top, offset.right, bottom, offset.left, offset.precision),
-)
+export const setBottom: {
+  (self: Offset, bottom: number): Offset
+  (bottom: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, bottom: number) => new Offset(self.top, self.right, bottom, self.left))
 
-export const left: {
-  (offset: Offset, left: number): Offset
-  (left: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, left: number) =>
-    new Offset(offset.top, offset.right, offset.bottom, left, offset.precision),
-)
+export const setLeft: {
+  (self: Offset, left: number): Offset
+  (left: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, left: number) => new Offset(self.top, self.right, self.bottom, left))
 
-export const precision: {
-  (offset: Offset, precision: number): Offset
-  (precision: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, precision: number) =>
-    new Offset(offset.top, offset.right, offset.bottom, offset.left, precision),
-)
+export const setX: {
+  (self: Offset, x: number): Offset
+  (x: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, x: number) => new Offset(self.top, x, self.bottom, x))
 
-export const x: {
-  (offset: Offset, x: number): Offset
-  (x: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, x: number) => new Offset(offset.top, x, offset.bottom, x, offset.precision),
-)
-
-export const y: {
-  (offset: Offset, y: number): Offset
-  (y: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, y: number) => new Offset(y, offset.right, y, offset.left, offset.precision),
-)
-
-export const set: {
-  (
-    offset: Offset,
-    property: 'top' | 'right' | 'bottom' | 'left' | 'x' | 'y' | 'precision',
-    value: number,
-  ): Offset
-  (
-    property: 'top' | 'right' | 'bottom' | 'left' | 'x' | 'y' | 'precision',
-    value: number,
-  ): (offset: Offset) => Offset
-} = dual(
-  3,
-  (
-    offset: Offset,
-    property: 'top' | 'right' | 'bottom' | 'left' | 'x' | 'y' | 'precision',
-    value: number,
-  ) => {
-    switch (property) {
-      case 'top':
-        return new Offset(value, offset.right, offset.bottom, offset.left, offset.precision)
-      case 'right':
-        return new Offset(offset.top, value, offset.bottom, offset.left, offset.precision)
-      case 'bottom':
-        return new Offset(offset.top, offset.right, value, offset.left, offset.precision)
-      case 'left':
-        return new Offset(offset.top, offset.right, offset.bottom, value, offset.precision)
-      case 'x':
-        return new Offset(offset.top, value, offset.bottom, value, offset.precision)
-      case 'y':
-        return new Offset(value, offset.right, value, offset.left, offset.precision)
-      case 'precision':
-        return new Offset(offset.top, offset.right, offset.bottom, offset.left, value)
-    }
-  },
-)
-
-export const minTop: {
-  (offset: Offset, top: number): Offset
-  (top: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, top: number) =>
-    new Offset(
-      Math.max(offset.top, top),
-      offset.right,
-      offset.bottom,
-      offset.left,
-      offset.precision,
-    ),
-)
-
-export const minRight: {
-  (offset: Offset, right: number): Offset
-  (right: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, right: number) =>
-    new Offset(
-      offset.top,
-      Math.max(offset.right, right),
-      offset.bottom,
-      offset.left,
-      offset.precision,
-    ),
-)
-
-export const minBottom: {
-  (offset: Offset, bottom: number): Offset
-  (bottom: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, bottom: number) =>
-    new Offset(
-      offset.top,
-      offset.right,
-      Math.max(offset.bottom, bottom),
-      offset.left,
-      offset.precision,
-    ),
-)
-
-export const minLeft: {
-  (offset: Offset, left: number): Offset
-  (left: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, left: number) =>
-    new Offset(
-      offset.top,
-      offset.right,
-      offset.bottom,
-      Math.max(offset.left, left),
-      offset.precision,
-    ),
-)
-
-export const maxTop: {
-  (offset: Offset, top: number): Offset
-  (top: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, top: number) =>
-    new Offset(
-      Math.min(offset.top, top),
-      offset.right,
-      offset.bottom,
-      offset.left,
-      offset.precision,
-    ),
-)
-
-export const maxRight: {
-  (offset: Offset, right: number): Offset
-  (right: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, right: number) =>
-    new Offset(
-      offset.top,
-      Math.min(offset.right, right),
-      offset.bottom,
-      offset.left,
-      offset.precision,
-    ),
-)
-
-export const maxBottom: {
-  (offset: Offset, bottom: number): Offset
-  (bottom: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, bottom: number) =>
-    new Offset(
-      offset.top,
-      offset.right,
-      Math.min(offset.bottom, bottom),
-      offset.left,
-      offset.precision,
-    ),
-)
-
-export const maxLeft: {
-  (offset: Offset, left: number): Offset
-  (left: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, left: number) =>
-    new Offset(
-      offset.top,
-      offset.right,
-      offset.bottom,
-      Math.min(offset.left, left),
-      offset.precision,
-    ),
-)
+export const setY: {
+  (self: Offset, y: number): Offset
+  (y: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, y: number) => new Offset(y, self.right, y, self.left))
 
 export const add: {
-  (offset: Offset, value: number | Offset): Offset
-  (value: number | Offset): (offset: Offset) => Offset
-} = dual(2, (offset: Offset, value: number | Offset) =>
+  (self: Offset, value: number | Offset): Offset
+  (value: number | Offset): (self: Offset) => Offset
+} = dual(2, (self: Offset, value: number | Offset) =>
   isOffset(value)
     ? new Offset(
-        offset.top + value.top,
-        offset.right + value.right,
-        offset.bottom + value.bottom,
-        offset.left + value.left,
-        offset.precision,
+        self.top + value.top,
+        self.right + value.right,
+        self.bottom + value.bottom,
+        self.left + value.left,
       )
-    : new Offset(
-        offset.top + value,
-        offset.right + value,
-        offset.bottom + value,
-        offset.left + value,
-        offset.precision,
-      ),
+    : new Offset(self.top + value, self.right + value, self.bottom + value, self.left + value),
 )
 
 export const subtract: {
-  (offset: Offset, value: number | Offset): Offset
-  (value: number | Offset): (offset: Offset) => Offset
-} = dual(2, (offset: Offset, value: number | Offset) =>
+  (self: Offset, value: number | Offset): Offset
+  (value: number | Offset): (self: Offset) => Offset
+} = dual(2, (self: Offset, value: number | Offset) =>
   isOffset(value)
     ? new Offset(
-        offset.top - value.top,
-        offset.right - value.right,
-        offset.bottom - value.bottom,
-        offset.left - value.left,
-        offset.precision,
+        self.top - value.top,
+        self.right - value.right,
+        self.bottom - value.bottom,
+        self.left - value.left,
       )
-    : new Offset(
-        offset.top - value,
-        offset.right - value,
-        offset.bottom - value,
-        offset.left - value,
-        offset.precision,
-      ),
+    : new Offset(self.top - value, self.right - value, self.bottom - value, self.left - value),
 )
 
 export const scale: {
-  (offset: Offset, value: number): Offset
-  (value: number): (offset: Offset) => Offset
+  (self: Offset, factor: number): Offset
+  (factor: number): (self: Offset) => Offset
 } = dual(
   2,
-  (offset: Offset, value: number) =>
+  (self: Offset, factor: number) =>
+    new Offset(self.top * factor, self.right * factor, self.bottom * factor, self.left * factor),
+)
+
+export const negate = (self: Offset): Offset =>
+  new Offset(-self.top, -self.right, -self.bottom, -self.left)
+
+export const absolute = (self: Offset): Offset =>
+  new Offset(Math.abs(self.top), Math.abs(self.right), Math.abs(self.bottom), Math.abs(self.left))
+
+export const lerp: {
+  (self: Offset, target: Offset, amount: number): Offset
+  (target: Offset, amount: number): (self: Offset) => Offset
+} = dual(
+  3,
+  (self: Offset, target: Offset, amount: number) =>
     new Offset(
-      offset.top * value,
-      offset.right * value,
-      offset.bottom * value,
-      offset.left * value,
-      offset.precision,
+      lerpNumber(amount, self.top, target.top),
+      lerpNumber(amount, self.right, target.right),
+      lerpNumber(amount, self.bottom, target.bottom),
+      lerpNumber(amount, self.left, target.left),
     ),
 )
 
-export const absolute = (offset: Offset): Offset =>
-  new Offset(
-    Math.abs(offset.top),
-    Math.abs(offset.right),
-    Math.abs(offset.bottom),
-    Math.abs(offset.left),
-    offset.precision,
-  )
-
-export const invert = (offset: Offset): Offset =>
-  new Offset(-offset.top, -offset.right, -offset.bottom, -offset.left, offset.precision)
+export const equals: {
+  (self: Offset, other: OffsetLike): boolean
+  (other: OffsetLike): (self: Offset) => boolean
+} = dual(
+  2,
+  (self: Offset, other: OffsetLike) =>
+    coincident(self.top, other.top) &&
+    coincident(self.right, other.right) &&
+    coincident(self.bottom, other.bottom) &&
+    coincident(self.left, other.left),
+)

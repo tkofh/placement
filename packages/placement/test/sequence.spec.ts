@@ -173,14 +173,6 @@ describe('with shrink', () => {
     },
     {
       items: [
-        { basis: 100, shrink: 2 },
-        { basis: 100, shrink: 1 },
-      ],
-      options: { size: 100 },
-      result: track([interval(0, 100 / 3), interval(100 / 3, (100 / 3) * 2)]),
-    },
-    {
-      items: [
         { basis: 100, shrink: 1, min: 75 },
         { basis: 100, shrink: 1 },
       ],
@@ -190,6 +182,23 @@ describe('with shrink', () => {
   ])('sequence($items, $options): $result', ({ items, options, result }) => {
     const track = sequence(items, options)
     expect(track).toEqual(result)
+  })
+
+  test('2:1 shrink shares land within rounding distance of exact thirds', () => {
+    // The shares put thirds through cancellation; construction is exact
+    // IEEE, so the result carries an ulp of rounding (see PRECISION.md).
+    const result = sequence(
+      [
+        { basis: 100, shrink: 2 },
+        { basis: 100, shrink: 1 },
+      ],
+      { size: 100 },
+    )
+    const [first, second] = result.intervals
+    expect(first?.start).toBe(0)
+    expect(first?.size).toBeCloseTo(100 / 3, 10)
+    expect(second?.start).toBeCloseTo(100 / 3, 10)
+    expect(second?.size).toBeCloseTo((100 / 3) * 2, 10)
   })
 })
 
@@ -671,5 +680,78 @@ describe('with grow, max, space, and spaceOuter', () => {
   ])('sequence($items, $options): $result', ({ items, options, result }) => {
     const track = sequence(items, options)
     expect(track).toEqual(result)
+  })
+})
+
+describe('dual forms', () => {
+  test('data-last form', () => {
+    const operation = sequence({ size: 400 })
+    expect(operation([{ basis: 100, grow: 1 }, { basis: 200 }])).toEqual(
+      track([interval(0, 200), interval(200, 200)]),
+    )
+  })
+})
+
+describe('float-dust termination (regression)', () => {
+  // Distribution rounds leave remainders manufactured by cancellation; the
+  // loop treats anything below RELATIVE_TOLERANCE of the initial free space
+  // as consumed instead of distributing subatomic sizes (see PRECISION.md).
+  test('growing by non-dyadic factors terminates with sizes summing to the available space', () => {
+    const result = sequence(
+      [
+        { basis: 0, grow: 0.1 },
+        { basis: 0, grow: 0.2 },
+        { basis: 0, grow: 0.3 },
+      ],
+      { size: 100 },
+    )
+    const total = result.intervals.reduce((sum, ival) => sum + ival.size, 0)
+    expect(total).toBeCloseTo(100, 9)
+  })
+
+  test('shrinking by non-dyadic shares terminates with sizes summing to the available space', () => {
+    const result = sequence(
+      [
+        { basis: 100, shrink: 1 },
+        { basis: 200, shrink: 1 },
+      ],
+      { size: 200 },
+    )
+    const total = result.intervals.reduce((sum, ival) => sum + ival.size, 0)
+    expect(total).toBeCloseTo(200, 9)
+  })
+})
+
+describe('auto offsets (regression)', () => {
+  // Auto (non-finite) start/end offsets absorb the free space; the walkers
+  // must use definiteStart/definiteEnd or the Infinity sentinel leaks into
+  // interval positions.
+  test('an auto start offset pushes the item to the end', () => {
+    const result = sequence([{ basis: 100, start: Number.POSITIVE_INFINITY }], { size: 500 })
+    expect(result.intervals).toEqual([interval(400, 100)])
+  })
+
+  test('auto offsets on both sides center the item', () => {
+    const result = sequence(
+      [{ basis: 100, start: Number.POSITIVE_INFINITY, end: Number.POSITIVE_INFINITY }],
+      { size: 500 },
+    )
+    expect(result.intervals).toEqual([interval(200, 100)])
+  })
+
+  test('auto offsets split the free space between items', () => {
+    const result = sequence(
+      [
+        { basis: 100, end: Number.POSITIVE_INFINITY },
+        { basis: 100, start: Number.POSITIVE_INFINITY },
+      ],
+      { size: 500 },
+    )
+    expect(result.intervals).toEqual([interval(0, 100), interval(400, 100)])
+  })
+
+  test('auto offsets without a definite size resolve to zero', () => {
+    const result = sequence([{ basis: 100, start: Number.POSITIVE_INFINITY }, { basis: 100 }], {})
+    expect(result.intervals).toEqual([interval(0, 100), interval(100, 100)])
   })
 })

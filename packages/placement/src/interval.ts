@@ -1,13 +1,13 @@
-import { PRECISION } from './constants.ts'
-import { Pipeable } from './internal/pipeable.ts'
-import { dual } from './utils/function.ts'
 import {
+  EPSILON,
+  RELATIVE_TOLERANCE,
+  coincident,
   lerp as lerpNumber,
   minMax,
   normalize as normalizeNumber,
   remap as remapNumber,
-  roundTo,
-} from './utils/math.ts'
+} from 'curvy/number'
+import { Pipeable, dual } from 'curvy/utils'
 import { isRecord } from './utils/object.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/interval')
@@ -16,7 +16,6 @@ type TypeBrand = typeof TypeBrand
 export interface IntervalLike {
   readonly start: number
   readonly size: number
-  readonly end: number
 }
 
 class Interval extends Pipeable implements IntervalLike {
@@ -28,17 +27,24 @@ class Interval extends Pipeable implements IntervalLike {
   constructor(start: number, size: number) {
     super()
 
-    this.start = roundTo(start, PRECISION)
-    this.size = roundTo(size, PRECISION)
+    this.start = start
+    this.size = size
   }
 
   get end(): number {
     return this.start + this.size
   }
 
+  get min(): number {
+    return Math.min(this.start, this.end)
+  }
+
+  get max(): number {
+    return Math.max(this.start, this.end)
+  }
+
   [Symbol.for('nodejs.util.inspect.custom')]() {
-    const { min, max } = minMax(this.start, this.end)
-    return `Interval [${min}, ${max}]`
+    return `Interval [${this.min}, ${this.max}]`
   }
 
   toJSON() {
@@ -56,186 +62,188 @@ export const interval: {
   (size: number): Interval
   (start: number, size: number): Interval
 } = (a?: number, b?: number) => {
-  return new Interval(b === undefined ? 0 : (a as number), b ?? (a as number))
+  return b === undefined ? new Interval(0, a ?? 0) : new Interval(a as number, b)
 }
 
 export const isInterval = (value: unknown): value is Interval => {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
+
 export const isIntervalLike = (value: unknown): value is IntervalLike => {
-  return isRecord(value) && 'start' in value && 'size' in value
+  return isRecord(value) && typeof value.start === 'number' && typeof value.size === 'number'
+}
+
+// Tolerance for boundary decisions, scaled to the magnitudes that enter the
+// question (see PRECISION.md).
+const boundsTolerance = (min: number, max: number): number =>
+  EPSILON + RELATIVE_TOLERANCE * Math.max(Math.abs(min), Math.abs(max))
+
+const targetBounds = (target: number | IntervalLike, gap: number): [number, number] => {
+  if (typeof target === 'number') {
+    return [target - gap, target + gap]
+  }
+  const [min, max] = minMax(target.start, target.start + target.size)
+  return [min - gap, max + gap]
 }
 
 export const setStart: {
-  (span: Interval, start: number): Interval
-  (start: number): (span: Interval) => Interval
-} = dual(2, (span: Interval, start: number) => new Interval(start, span.size))
+  (self: Interval, start: number): Interval
+  (start: number): (self: Interval) => Interval
+} = dual(2, (self: Interval, start: number) => new Interval(start, self.size))
 
 export const setSize: {
-  (span: Interval, size: number, origin?: number): Interval
-  (size: number, origin?: number): (span: Interval) => Interval
+  (self: Interval, size: number, origin?: number): Interval
+  (size: number, origin?: number): (self: Interval) => Interval
 } = dual(
   (args) => isInterval(args[0]),
-  (span: Interval, size: number, origin = 0) =>
-    new Interval(span.start + (span.size - size) * origin, size),
+  (self: Interval, size: number, origin = 0) =>
+    new Interval(self.start + (self.size - size) * origin, size),
 )
 
 export const setEnd: {
-  (span: Interval, end: number): Interval
-  (end: number): (span: Interval) => Interval
-} = dual(2, (span: Interval, end: number) => new Interval(end - span.size, span.size))
+  (self: Interval, end: number): Interval
+  (end: number): (self: Interval) => Interval
+} = dual(2, (self: Interval, end: number) => new Interval(end - self.size, self.size))
 
 export const translate: {
-  (interval: Interval, amount: number): Interval
-  (amount: number): (interval: Interval) => Interval
-} = dual(
-  2,
-  (interval: Interval, amount: number) => new Interval(interval.start + amount, interval.size),
-)
+  (self: Interval, amount: number): Interval
+  (amount: number): (self: Interval) => Interval
+} = dual(2, (self: Interval, amount: number) => new Interval(self.start + amount, self.size))
 
 export const scale: {
-  (interval: Interval, scale: number, origin?: number): Interval
-  (scale: number, origin?: number): (interval: Interval) => Interval
+  (self: Interval, factor: number, origin?: number): Interval
+  (factor: number, origin?: number): (self: Interval) => Interval
 } = dual(
   (args) => isInterval(args[0]),
-  (interval: Interval, scale: number, origin = 0) =>
-    new Interval(
-      interval.start + (interval.size - interval.size * scale) * origin,
-      interval.size * scale,
-    ),
+  (self: Interval, factor: number, origin = 0) =>
+    new Interval(self.start + (self.size - self.size * factor) * origin, self.size * factor),
 )
 
 export const scaleFrom: {
-  (interval: Interval, scale: number, position: number): Interval
-  (scale: number, position: number): (interval: Interval) => Interval
+  (self: Interval, factor: number, position: number): Interval
+  (factor: number, position: number): (self: Interval) => Interval
 } = dual(
   3,
-  (interval: Interval, scale: number, position: number) =>
-    new Interval(position + (interval.start - position) * scale, interval.size * scale),
+  (self: Interval, factor: number, position: number) =>
+    new Interval(position + (self.start - position) * factor, self.size * factor),
 )
 
 export const lerp: {
-  (interval: Interval, target: Interval, amount: number): Interval
-  (target: Interval, amount: number): (interval: Interval) => Interval
+  (self: Interval, target: Interval, amount: number): Interval
+  (target: Interval, amount: number): (self: Interval) => Interval
 } = dual(
   3,
-  (interval: Interval, target: Interval, amount: number) =>
+  (self: Interval, target: Interval, amount: number) =>
     new Interval(
-      lerpNumber(amount, interval.start, target.start),
-      lerpNumber(amount, interval.size, target.size),
+      lerpNumber(amount, self.start, target.start),
+      lerpNumber(amount, self.size, target.size),
     ),
 )
 
 export const normalize: {
-  (interval: Interval, target: Interval): Interval
-  (target: Interval): (interval: Interval) => Interval
+  (self: Interval, target: Interval): Interval
+  (target: Interval): (self: Interval) => Interval
 } = dual(
   2,
-  (interval: Interval, target: Interval) =>
-    new Interval(
-      normalizeNumber(interval.start, target.start, target.end),
-      interval.size / target.size,
-    ),
+  (self: Interval, target: Interval) =>
+    new Interval(normalizeNumber(self.start, target.start, target.end), self.size / target.size),
 )
 
 export const remap: {
-  (interval: Interval, source: Interval, target: Interval): Interval
-  (source: Interval, target: Interval): (interval: Interval) => Interval
+  (self: Interval, source: Interval, target: Interval): Interval
+  (source: Interval, target: Interval): (self: Interval) => Interval
 } = dual(
   3,
-  (interval: Interval, source: Interval, target: Interval) =>
+  (self: Interval, source: Interval, target: Interval) =>
     new Interval(
-      remapNumber(interval.start, source.start, source.end, target.start, target.end),
-      remapNumber(interval.size, 0, source.size, 0, target.size),
+      remapNumber(self.start, source.start, source.end, target.start, target.end),
+      remapNumber(self.size, 0, source.size, 0, target.size),
     ),
 )
 
+// alignTo and avoid take fixed arities: their target may itself be an
+// Interval, so a trailing optional would make 2-argument calls ambiguous
+// between the data-first and data-last forms.
 export const alignTo: {
-  (interval: Interval, target: number | Interval, origin?: number): Interval
-  (target: number | Interval, origin?: number): (interval: Interval) => Interval
-} = dual(
-  (args) =>
-    isInterval(args[0]) &&
-    (isInterval(args[1]) || (typeof args[1] === 'number' && args.length >= 3)),
-  (interval: Interval, target: number, origin = 0) =>
-    new Interval(target - interval.size * origin, interval.size),
-)
+  (self: Interval, target: number | IntervalLike, origin: number): Interval
+  (target: number | IntervalLike, origin: number): (self: Interval) => Interval
+} = dual(3, (self: Interval, target: number | IntervalLike, origin: number) => {
+  const position = typeof target === 'number' ? target : target.start + target.size * origin
+  return new Interval(position - self.size * origin, self.size)
+})
 
 export const avoid: {
-  (interval: IntervalLike, target: number | IntervalLike, gap: number): Interval
-  (target: number | IntervalLike, gap: number): (interval: IntervalLike) => Interval
-} = dual(3, (source: IntervalLike, target: number | IntervalLike, gap: number) => {
-  const targetIsIntervalLike = isIntervalLike(target)
+  (self: Interval, target: number | IntervalLike, gap: number): Interval
+  (target: number | IntervalLike, gap: number): (self: Interval) => Interval
+} = dual(3, (self: Interval, target: number | IntervalLike, gap: number) => {
+  const [lo, hi] = targetBounds(target, gap)
+  const tolerance = boundsTolerance(Math.min(lo, self.min), Math.max(hi, self.max))
 
-  const start = (targetIsIntervalLike ? target.start : target) - gap
-  const end = (targetIsIntervalLike ? target.end : target) + gap
-
-  if (source.start > end || source.end < start) {
-    return source
+  if (self.max <= lo + tolerance || self.min >= hi - tolerance) {
+    return self
   }
 
-  if (
-    (source.start >= start && source.end <= end) ||
-    (source.start <= start && source.end >= end)
-  ) {
-    const deltaStart = source.start - start
-    const deltaEnd = end - source.end
-
-    const offset = (Math.min(deltaStart, deltaEnd) + source.size) * (deltaStart > deltaEnd ? 1 : -1)
-
-    return new Interval(source.start + offset, source.size)
-  }
-
-  const offset =
-    Math.min(source.end, end) - Math.max(source.start, start) * (source.start < start ? -1 : 1)
-  return new Interval(source.start + offset, source.size)
+  // Escape by the smaller shift; ties resolve toward the start.
+  const shiftDown = self.max - lo
+  const shiftUp = hi - self.min
+  return new Interval(self.start + (shiftDown <= shiftUp ? -shiftDown : shiftUp), self.size)
 })
-//
-// export const proportionalOrigin: {
-//   (interval: IntervalLike, target: IntervalLike): number
-//   (target: IntervalLike): (interval: IntervalLike) => number
-// } = dual(2, (source: IntervalLike, target: IntervalLike): number => {
-//   if (source.size > target.size) {
-//     return proportionalOrigin(target, source)
-//   }
-//
-//   if (source.start >= target.start && source.end <= target.end) {
-//     const ratio = (target.size - source.size) / target.size
-//     const absolute = lerpNumber(ratio, target.start, target.end)
-//     return normalizeNumber(absolute, target.start, target.end)
-//   }
-//
-//   if (source.end === target.start) {
-//     return 1
-//   }
-//
-//   if (source.start === target.end) {
-//     return 0
-//   }
-//
-//   if (source.end < target.start) {
-//     return remapNumber(
-//       lerpNumber(0.5, source.end, target.start),
-//       source.start,
-//       source.end,
-//       0,
-//       1,
-//     )
-//   }
-//
-//   if (source.start > target.end) {
-//     return remapNumber(
-//       lerpNumber(0.5, source.start, target.end),
-//       source.start,
-//       source.end,
-//       0,
-//       1,
-//     )
-//   }
-//
-//   if (source.start < target.start) {
-//     return normalizeNumber(target.start, source.start, source.end)
-//   }
-//
-//   return normalizeNumber(target.end, source.start, source.end)
-// })
+
+export const join: {
+  (self: Interval, other: IntervalLike): Interval
+  (other: IntervalLike): (self: Interval) => Interval
+} = dual(2, (self: Interval, other: IntervalLike) => {
+  const [otherMin, otherMax] = minMax(other.start, other.start + other.size)
+  const min = Math.min(self.min, otherMin)
+  const max = Math.max(self.max, otherMax)
+  return new Interval(min, max - min)
+})
+
+export const intersect: {
+  (self: Interval, other: IntervalLike): Interval
+  (other: IntervalLike): (self: Interval) => Interval
+} = dual(2, (self: Interval, other: IntervalLike) => {
+  const [otherMin, otherMax] = minMax(other.start, other.start + other.size)
+  const min = Math.max(self.min, otherMin)
+  const max = Math.min(self.max, otherMax)
+
+  if (min > max) {
+    // Disjoint: zero-size interval at the midpoint of the gap between the
+    // nearest edges (parity with rect.intersect).
+    return new Interval((min + max) / 2, 0)
+  }
+
+  return new Interval(min, max - min)
+})
+
+export const contains: {
+  (self: Interval, target: number | IntervalLike): boolean
+  (target: number | IntervalLike): (self: Interval) => boolean
+} = dual(2, (self: Interval, target: number | IntervalLike) => {
+  const tolerance = boundsTolerance(self.min, self.max)
+
+  if (typeof target === 'number') {
+    return target >= self.min - tolerance && target <= self.max + tolerance
+  }
+
+  const [targetMin, targetMax] = minMax(target.start, target.start + target.size)
+  return targetMin >= self.min - tolerance && targetMax <= self.max + tolerance
+})
+
+export const intersects: {
+  (self: Interval, other: IntervalLike): boolean
+  (other: IntervalLike): (self: Interval) => boolean
+} = dual(2, (self: Interval, other: IntervalLike) => {
+  const [otherMin, otherMax] = minMax(other.start, other.start + other.size)
+  const tolerance = boundsTolerance(Math.min(self.min, otherMin), Math.max(self.max, otherMax))
+  return self.min <= otherMax + tolerance && self.max >= otherMin - tolerance
+})
+
+export const equals: {
+  (self: Interval, other: IntervalLike): boolean
+  (other: IntervalLike): (self: Interval) => boolean
+} = dual(
+  2,
+  (self: Interval, other: IntervalLike) =>
+    coincident(self.start, other.start) && coincident(self.size, other.size),
+)

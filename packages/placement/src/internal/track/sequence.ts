@@ -1,3 +1,4 @@
+import { RELATIVE_TOLERANCE } from 'curvy/number'
 import { TrackItem, type TrackItemInput } from './item.ts'
 
 export interface SequenceTrackItem extends TrackItemInput {
@@ -6,6 +7,8 @@ export interface SequenceTrackItem extends TrackItemInput {
 }
 
 class InternalSequenceTrackItem extends TrackItem {
+  readonly grow: number
+
   readonly definiteOuterSizeMin: number
   readonly definiteOuterSizeMax: number
 
@@ -17,10 +20,12 @@ class InternalSequenceTrackItem extends TrackItem {
     basis: number,
     min: number,
     max: number,
-    readonly grow: number,
+    grow: number,
     shrink: number,
   ) {
     super(start, end, basis, min, max)
+
+    this.grow = grow
 
     this.definiteOuterSizeMin = this.min + this.definiteStart + this.definiteEnd
     this.definiteOuterSizeMax = this.max + this.definiteStart + this.definiteEnd
@@ -101,10 +106,14 @@ export function applyGrow(
 
   const growable = new Set(initialGrowable)
 
+  // Free space this small relative to what distribution started with is
+  // rounding residue, not layout; treat it as consumed (see PRECISION.md).
+  const tolerance = RELATIVE_TOLERANCE * initialFreeSpace
+
   let freeSpace = initialFreeSpace
   let totalGrow = initialTotalGrow
 
-  while (freeSpace > 0 && growable.size > 0) {
+  while (freeSpace > tolerance && growable.size > 0) {
     const growthUnit = freeSpace / totalGrow
     for (const item of growable) {
       const growth = Math.min(item.availableGrowth, growthUnit * item.grow)
@@ -119,6 +128,10 @@ export function applyGrow(
     }
   }
 
+  if (freeSpace <= tolerance) {
+    freeSpace = 0
+  }
+
   for (const item of initialGrowable) {
     item.adjustment *= ratio
   }
@@ -126,6 +139,8 @@ export function applyGrow(
   return initialFreeSpace - freeSpace
 }
 
+// Returns the change in consumed size: zero or negative, so callers can sum
+// it with the non-negative result of applyGrow.
 export function applyShrink(
   initialShrinkable: Set<InternalSequenceTrackItem>,
   initialFreeSpace: number,
@@ -139,16 +154,21 @@ export function applyShrink(
   const shrinkable = new Set(initialShrinkable)
 
   const initialExcess = Math.abs(initialFreeSpace)
+
+  // Excess this small relative to what distribution started with is rounding
+  // residue, not layout; treat it as consumed (see PRECISION.md).
+  const tolerance = RELATIVE_TOLERANCE * initialExcess
+
   let excess = initialExcess
   let totalScaledShrink = initialTotalScaledShrink
 
-  while (excess > 0 && shrinkable.size > 0) {
+  while (excess > tolerance && shrinkable.size > 0) {
     let excessReduction = 0
     let totalScaledShrinkReduction = 0
 
     for (const item of shrinkable) {
-      const ratio = item.scaledShrinkFactor / totalScaledShrink
-      const shrink = Math.min(item.availableShrinkage, excess * ratio)
+      const share = item.scaledShrinkFactor / totalScaledShrink
+      const shrink = Math.min(item.availableShrinkage, excess * share)
 
       if (shrink === item.availableShrinkage) {
         shrinkable.delete(item)
@@ -161,6 +181,10 @@ export function applyShrink(
 
     excess -= excessReduction
     totalScaledShrink -= totalScaledShrinkReduction
+  }
+
+  if (excess <= tolerance) {
+    excess = 0
   }
 
   for (const item of initialShrinkable) {

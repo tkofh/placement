@@ -55,7 +55,6 @@ export function applyStretch(
     }
 
     const free = size - item.definiteOuterSize
-    const stretchAmount = auto(item.stretch, stretch) * free
-    item.adjustment += stretchAmount
+    item.adjustment += auto(item.stretch, stretch) * free
   }
 }
