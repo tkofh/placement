@@ -1,4 +1,4 @@
-import { type Point, isPoint, point } from 'placement/point'
+import * as Point from 'placement/point'
 import { type ParserInput, parse } from 'valued'
 import { oneOf } from 'valued'
 import { between } from 'valued'
@@ -20,21 +20,21 @@ const radius = between(
 
 export type Radius = typeof radius
 
-export type RadiusInput = ParserInput<Radius> | Point | number | undefined
+export type RadiusInput = ParserInput<Radius> | Point.Point | number | undefined
 
-const cache = createCache<string, Point>(512)
+const cache = createCache<string, Point.Point>(512)
 
 export function resolveRadius(
   input: RadiusInput,
-  auto: Point,
+  auto: Point.Point,
   parentWidth: number,
   parentHeight: number,
-): Point {
+): Point.Point {
   if (typeof input === 'number') {
-    return point(input, input)
+    return Point.make(input, input)
   }
 
-  if (isPoint(input)) {
+  if (Point.isPoint(input)) {
     return input
   }
 
@@ -53,6 +53,6 @@ export function resolveRadius(
 
     const x = resolveSize1D(rx, 0, parentWidth)
 
-    return point(x, ry != null ? resolveSize1D(ry, 0, parentHeight) : x)
+    return Point.make(x, ry != null ? resolveSize1D(ry, 0, parentHeight) : x)
   })
 }

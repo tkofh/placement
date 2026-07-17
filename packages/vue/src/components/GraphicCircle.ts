@@ -1,5 +1,5 @@
-import { dimensions } from 'placement/dimensions'
-import { point } from 'placement/point'
+import * as Dimensions from 'placement/dimensions'
+import * as Point from 'placement/point'
 import { computed, defineComponent, h } from 'vue'
 import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
 import { RADIUS_PROP_KEYS, type RadiusProps, useRadius } from '../composables/useRadius.ts'
@@ -33,7 +33,7 @@ export const GraphicCircle = defineComponent(
     const bottom = useLengthPercentage(() => props.bottom, Number.POSITIVE_INFINITY, 'height')
     const left = useLengthPercentage(() => props.left, Number.POSITIVE_INFINITY, 'width')
 
-    const radius = useRadius(props, point.infinity)
+    const radius = useRadius(props, Point.infinity)
 
     const parentX = useParentX()
     const parentY = useParentY()
@@ -41,9 +41,9 @@ export const GraphicCircle = defineComponent(
     const parentHeight = useParentHeight()
 
     const size = computed(() =>
-      radius.value === point.infinity
+      radius.value === Point.infinity
         ? basisSize.value
-        : dimensions(radius.value.x * 2, radius.value.y * 2),
+        : Dimensions.make(radius.value.x * 2, radius.value.y * 2),
     )
 
     const x = useAxisInterval(
@@ -68,7 +68,7 @@ export const GraphicCircle = defineComponent(
 
     const origin = useOrigin(
       () => props.origin,
-      () => (radius.value === point.infinity ? point.zero : point.half),
+      () => (radius.value === Point.infinity ? Point.zero : Point.half),
     )
 
     const _rx = computed(() => x.value.size * 0.5)

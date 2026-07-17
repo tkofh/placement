@@ -2,15 +2,8 @@ import { EPSILON, RELATIVE_TOLERANCE, clamp } from 'curvy/number'
 import { Pipeable } from 'curvy/utils'
 import type { Frame } from '../frame.ts'
 import type { Interval } from '../interval.ts'
-import { type Rect, rect } from '../rect.ts'
-import {
-  type SequenceItem,
-  type StackItem,
-  type Track,
-  scaleFrom,
-  sequence,
-  stack,
-} from '../track.ts'
+import * as Rect from '../rect.ts'
+import * as Track from '../track.ts'
 import { auto } from '../utils/arguments.ts'
 
 /**
@@ -59,7 +52,7 @@ export type FlexDirection = (typeof direction)[keyof typeof direction]
 export type FlexWrap = (typeof wrap)[keyof typeof wrap]
 
 /**
- * The configuration accepted by `flexbox`. Every property is optional: an
+ * The configuration accepted by `make`. Every property is optional: an
  * empty input is a non-wrapping row with no alignment, spacing, or gaps.
  */
 export interface FlexboxInput {
@@ -157,7 +150,7 @@ const wrapNames = ['nowrap', 'wrap', 'wrap-reverse'] as const
 
 /**
  * An immutable flexbox container specification: the main-axis direction,
- * wrapping mode, alignment and spacing ratios, and gaps that `applyFlexbox`
+ * wrapping mode, alignment and spacing ratios, and gaps that `apply`
  * consumes together with the `Frame` item specs.
  *
  * Alignment is continuous rather than keyword-based: the placement
@@ -166,7 +159,7 @@ const wrapNames = ['nowrap', 'wrap', 'wrap-reverse'] as const
  * Construction applies defaults and stores the values as given, without
  * validation or clamping.
  *
- * Exported type-only; construct with `flexbox`.
+ * Exported type-only; construct with `make`.
  */
 class Flexbox extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -309,32 +302,32 @@ export type { Flexbox }
 
 /**
  * Creates a `Flexbox` container specification from a partial configuration.
- * Omitted properties take their defaults, so `flexbox({})` is a
+ * Omitted properties take their defaults, so `Flexbox.make({})` is a
  * non-wrapping row with no alignment, spacing, or gaps.
  *
  * @param input - The container configuration. See `FlexboxInput` for the per-property defaults.
  * @returns An immutable `Flexbox`.
  * @example
  * ```ts
- * const container = flexbox({ direction: direction.column, rowGap: 10 })
+ * const container = Flexbox.make({ direction: Flexbox.direction.column, rowGap: 10 })
  * container.isRow // false
  * container.mainGap // 10
  * ```
  */
-export const flexbox = (input: FlexboxInput): Flexbox => new Flexbox(input)
+export const make = (input: FlexboxInput): Flexbox => new Flexbox(input)
 
 /**
  * Checks if a value is a `Flexbox`.
  *
- * True only for values built by `flexbox`, which carry the brand — a
+ * True only for values built by `make`, which carry the brand — a
  * structural look-alike does not pass.
  *
  * @param value - The value to check.
  * @returns `true` if the value is a `Flexbox`, `false` otherwise.
  * @example
  * ```ts
- * isFlexbox(flexbox({})) // true
- * isFlexbox({ direction: 0 }) // false
+ * Flexbox.isFlexbox(Flexbox.make({})) // true
+ * Flexbox.isFlexbox({ direction: 0 }) // false
  * ```
  */
 export const isFlexbox = (value: unknown): value is Flexbox => {
@@ -342,7 +335,7 @@ export const isFlexbox = (value: unknown): value is Flexbox => {
 }
 
 // Frame and Rect property names for the main and cross axes, selected once
-// per applyFlexbox call from the flexbox direction.
+// per apply call from the flexbox direction.
 interface AxisView {
   readonly mainDimension: 'width' | 'height'
   readonly mainDimensionMin: 'minWidth' | 'minHeight'
@@ -401,7 +394,7 @@ function computeItem(frame: Frame, flexbox: Flexbox, axes: AxisView) {
     max: frame[axes.mainDimensionMax],
     grow: frame.grow,
     shrink: frame.shrink,
-  } satisfies SequenceItem
+  } satisfies Track.SequenceItem
 
   const crossItem = {
     basis: frame[axes.crossDimension],
@@ -413,13 +406,17 @@ function computeItem(frame: Frame, flexbox: Flexbox, axes: AxisView) {
     // Any non-finite per-item stretch inherits the container's stretchItems,
     // exactly as a non-finite align inherits alignItems inside stack().
     stretch: auto(frame.stretch, flexbox.stretchItems, 0),
-  } satisfies StackItem
+  } satisfies Track.StackItem
 
   return { mainItem, crossItem, outerHypotheticalSize }
 }
 
-function computeMainTrack(items: ReadonlyArray<SequenceItem>, flexbox: Flexbox, size: number) {
-  let result = sequence(items, {
+function computeMainTrack(
+  items: ReadonlyArray<Track.SequenceItem>,
+  flexbox: Flexbox,
+  size: number,
+) {
+  let result = Track.sequence(items, {
     spaceOuter: flexbox.justifyContentSpaceOuter,
     space: flexbox.justifyContentSpace,
     gap: flexbox.mainGap,
@@ -428,21 +425,21 @@ function computeMainTrack(items: ReadonlyArray<SequenceItem>, flexbox: Flexbox, 
   })
 
   if (flexbox.isReverse) {
-    result = result.pipe(scaleFrom(-1, size * 0.5))
+    result = result.pipe(Track.scaleFrom(-1, size * 0.5))
   }
 
   return result
 }
 
 function computeCrossTrack(
-  items: ReadonlyArray<StackItem>,
+  items: ReadonlyArray<Track.StackItem>,
   flexbox: Flexbox,
   crossSize: number,
   isSolo: boolean,
 ) {
   // Every item arrives with a finite stretch (computeItem resolves the
   // inherit sentinel), so no track-level stretch fallback is passed.
-  return stack(items, {
+  return Track.stack(items, {
     place: flexbox.alignItems,
     size: isSolo ? crossSize : Number.POSITIVE_INFINITY,
   })
@@ -451,21 +448,21 @@ function computeCrossTrack(
 function computeTracks(
   frames: ReadonlyArray<Frame>,
   flexbox: Flexbox,
-  parent: Rect,
+  parent: Rect.Rect,
   axes: AxisView,
 ) {
   const mainSize = parent[axes.mainDimension]
   const crossSize = parent[axes.crossDimension]
 
-  const mainTracks: Array<Track> = []
-  const crossTracks: Array<Track> = []
+  const mainTracks: Array<Track.Track> = []
+  const crossTracks: Array<Track.Track> = []
 
   let totalMainSize = 0
   let minCrossSize = 0
 
-  let mainItems: Array<SequenceItem> = []
-  let crossItems: Array<StackItem> = []
-  const lineItems: Array<SequenceItem> = []
+  let mainItems: Array<Track.SequenceItem> = []
+  let crossItems: Array<Track.StackItem> = []
+  const lineItems: Array<Track.SequenceItem> = []
 
   for (const frame of frames) {
     const { mainItem, crossItem, outerHypotheticalSize } = computeItem(frame, flexbox, axes)
@@ -565,19 +562,19 @@ function computeTracks(
  * @example
  * ```ts
  * const items = [
- *   frame({ width: 100, aspectRatio: 1 }),
- *   frame({ width: 100, aspectRatio: 1 }),
- *   frame({ width: 100, aspectRatio: 1 }),
+ *   Frame.make({ width: 100, aspectRatio: 1 }),
+ *   Frame.make({ width: 100, aspectRatio: 1 }),
+ *   Frame.make({ width: 100, aspectRatio: 1 }),
  * ]
- * applyFlexbox(items, flexbox({ wrap: wrap.wrap }), rect(200))
- * // [rect(0, 0, 100), rect(100, 0, 100), rect(0, 100, 100)]
+ * Flexbox.apply(items, Flexbox.make({ wrap: Flexbox.wrap.wrap }), Rect.make(200))
+ * // [Rect.make(0, 0, 100), Rect.make(100, 0, 100), Rect.make(0, 100, 100)]
  * ```
  */
-export function applyFlexbox(
+export function apply(
   frames: ReadonlyArray<Frame>,
   flexbox: Flexbox,
-  parent: Rect,
-): ReadonlyArray<Rect> {
+  parent: Rect.Rect,
+): ReadonlyArray<Rect.Rect> {
   if (frames.length === 0) {
     return []
   }
@@ -586,7 +583,7 @@ export function applyFlexbox(
 
   const { mainTracks, crossTracks, lineItems } = computeTracks(frames, flexbox, parent, axes)
 
-  const rects: Array<Rect> = []
+  const rects: Array<Rect.Rect> = []
 
   const xTracks = flexbox.isRow ? mainTracks : crossTracks
   const yTracks = flexbox.isRow ? crossTracks : mainTracks
@@ -595,8 +592,8 @@ export function applyFlexbox(
   const parentY = parent.y
 
   if (xTracks.length === 1) {
-    const xTrack = xTracks[0] as Track
-    const yTrack = yTracks[0] as Track
+    const xTrack = xTracks[0] as Track.Track
+    const yTrack = yTracks[0] as Track.Track
 
     const len = frames.length
     for (let i = 0; i < len; i++) {
@@ -604,14 +601,19 @@ export function applyFlexbox(
       const yInterval = yTrack.intervals[i] as Interval
 
       rects.push(
-        rect(parentX + xInterval.start, parentY + yInterval.start, xInterval.size, yInterval.size),
+        Rect.make(
+          parentX + xInterval.start,
+          parentY + yInterval.start,
+          xInterval.size,
+          yInterval.size,
+        ),
       )
     }
 
     return rects
   }
 
-  let lineTrack = sequence(lineItems, {
+  let lineTrack = Track.sequence(lineItems, {
     spaceOuter: flexbox.alignContentSpaceOuter,
     space: flexbox.alignContentSpace,
     gap: flexbox.crossGap,
@@ -621,15 +623,15 @@ export function applyFlexbox(
   })
 
   if (flexbox.wrap === wrap.wrapReverse) {
-    lineTrack = lineTrack.pipe(scaleFrom(-1, parent[axes.crossDimension] * 0.5))
+    lineTrack = lineTrack.pipe(Track.scaleFrom(-1, parent[axes.crossDimension] * 0.5))
   }
 
   const lineIntervals = lineTrack.intervals
 
   const tracksLen = xTracks.length
   for (let t = 0; t < tracksLen; t++) {
-    const xTrack = xTracks[t] as Track
-    const yTrack = yTracks[t] as Track
+    const xTrack = xTracks[t] as Track.Track
+    const yTrack = yTracks[t] as Track.Track
 
     const lineInterval = lineIntervals[t] as Interval
 
@@ -641,7 +643,7 @@ export function applyFlexbox(
       const { start: xStart, size: xSize } = xTrack.intervals[i] as Interval
       const { start: yStart, size: ySize } = yTrack.intervals[i] as Interval
 
-      rects.push(rect(parentX + xStart + xOffset, parentY + yStart + yOffset, xSize, ySize))
+      rects.push(Rect.make(parentX + xStart + xOffset, parentY + yStart + yOffset, xSize, ySize))
     }
   }
 

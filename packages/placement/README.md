@@ -11,20 +11,20 @@ pnpm add placement
 ## Flexbox in five lines
 
 ```ts
-import { applyFlexbox, direction, flexbox } from 'placement/flexbox'
-import { frame } from 'placement/frame'
-import { rect } from 'placement/rect'
+import * as Flexbox from 'placement/flexbox'
+import * as Frame from 'placement/frame'
+import * as Rect from 'placement/rect'
 
-const rects = applyFlexbox(
-  [frame({ width: 100, height: 100 }), frame({ width: 100, height: 100, grow: 1 })],
-  flexbox({ direction: direction.row, columnGap: 10 }),
-  rect(400, 200),
+const rects = Flexbox.apply(
+  [Frame.make({ width: 100, height: 100 }), Frame.make({ width: 100, height: 100, grow: 1 })],
+  Flexbox.make({ direction: Flexbox.direction.row, columnGap: 10 }),
+  Rect.make(400, 200),
 )
 // [Rect (0, 0) 100x100, Rect (110, 0) 290x100]
 ```
 
 A `Frame` describes one item (sizing, min/max, grow/shrink, margins as
-offsets, alignment), a `Flexbox` describes the container, and `applyFlexbox`
+offsets, alignment), a `Flexbox` describes the container, and `Flexbox.apply`
 returns one `Rect` per frame, positioned inside the parent rect. Wrapping,
 reverse directions, gaps, `alignContent`/`alignItems`/`justifyContent`, and
 auto margins (pass `Infinity` as an offset) all behave like their CSS
@@ -36,9 +36,9 @@ Flexbox is two 1D solvers composed. They are exported, and they are often what
 you actually want:
 
 ```ts
-import { sequence } from 'placement/track'
+import * as Track from 'placement/track'
 
-sequence([{ basis: 100 }, { basis: 100, grow: 1 }], { size: 400, gap: 10 })
+Track.sequence([{ basis: 100 }, { basis: 100, grow: 1 }], { size: 400, gap: 10 })
 // Track [[0, 100], [110, 400]]
 ```
 
@@ -58,11 +58,11 @@ call forms — data-first, or data-last for pipelines:
 
 ```ts
 import { pipe } from 'placement/utils'
-import { interval, setSize } from 'placement/interval'
+import * as Interval from 'placement/interval'
 
-setSize(interval(0, 100), 50, 0.5) // Interval [25, 75]
-pipe(interval(0, 100), setSize(50, 0.5)) // same
-interval(0, 100).pipe(setSize(50, 0.5)) // same
+Interval.setSize(Interval.make(0, 100), 50, 0.5) // Interval [25, 75]
+pipe(Interval.make(0, 100), Interval.setSize(50, 0.5)) // same
+Interval.make(0, 100).pipe(Interval.setSize(50, 0.5)) // same
 ```
 
 ## Numerical contract

@@ -32,16 +32,16 @@ export interface OffsetLike {
  * shape of margins, paddings, and insets. What a side means is the consumer's
  * choice: `Rect` reads an `Offset` as insets in `contract` and as outsets in
  * `expand`. Sides pair by axis — `top` and `bottom` along y, `right` and
- * `left` along x — the pairing `offset.xy`, `setX`, and `setY` write.
+ * `left` along x — the pairing `Offset.xy`, `setX`, and `setY` write.
  *
  * Values are immutable, and constructions are exact IEEE 754: every operation
  * returns a new `Offset` carrying exactly what the arithmetic produced, and
  * `equals` compares within a tolerance instead. Any number is a legal side —
  * negative sides are meaningful (a negative inset expands), and
- * `offset.infinity` carries `Infinity` on all four.
+ * `Offset.infinity` carries `Infinity` on all four.
  *
- * Exported type-only: construct through the `offset` factory. Extends
- * `Pipeable`, so operations chain data-last: `o.pipe(add(10), scale(2))`.
+ * Exported type-only: construct through `Offset.make`. Extends `Pipeable`,
+ * so operations chain data-last: `o.pipe(Offset.add(10), Offset.scale(2))`.
  */
 class Offset extends Pipeable implements OffsetLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -91,86 +91,11 @@ class Offset extends Pipeable implements OffsetLike {
 
 export type { Offset }
 
-type OffsetConstructor = {
-  /**
-   * Creates an offset with `value` on all four sides.
-   *
-   * @param value - The value for every side.
-   * @returns The uniform offset.
-   */
-  (value: number): Offset
-
-  /**
-   * Creates an offset from per-axis values: `x` fills the x-axis sides
-   * (`right`, `left`) and `y` the y-axis sides (`top`, `bottom`).
-   *
-   * @param x - The value for `right` and `left`.
-   * @param y - The value for `top` and `bottom`.
-   * @returns The per-axis offset.
-   * @example
-   * ```ts
-   * offset.xy(10, 20) // Offset [20 10 20 10]
-   * ```
-   */
-  xy(x: number, y: number): Offset
-
-  /**
-   * Creates an offset from one to four values with CSS shorthand fallbacks:
-   * a missing `right` or `bottom` mirrors `top`, and a missing `left`
-   * mirrors `right`.
-   *
-   * @param top - The top side.
-   * @param right - The right side. Defaults to `top`.
-   * @param bottom - The bottom side. Defaults to `top`.
-   * @param left - The left side. Defaults to the value used for `right`.
-   * @returns The offset.
-   * @example
-   * ```ts
-   * offset.trbl(1) // Offset [1 1 1 1]
-   * offset.trbl(1, 2) // Offset [1 2 1 2]
-   * offset.trbl(1, 2, 3) // Offset [1 2 3 2]
-   * offset.trbl(1, 2, 3, 4) // Offset [1 2 3 4]
-   * ```
-   */
-  trbl(top: number, right?: number, bottom?: number, left?: number): Offset
-
-  /**
-   * Creates an offset from a point: `point.x` fills the x-axis sides
-   * (`right`, `left`) and `point.y` the y-axis sides (`top`, `bottom`) —
-   * `offset.xy(point.x, point.y)`.
-   *
-   * @param point - The point to read `x` and `y` from.
-   * @returns The per-axis offset.
-   */
-  fromPoint(point: Point): Offset
-
-  /**
-   * Creates an offset of half of each dimension per side: `width / 2` on
-   * `right` and `left`, `height / 2` on `top` and `bottom`. Expanding a
-   * zero-size rect by the result yields a rect of `dimensions` centered on
-   * the rect's position.
-   *
-   * @param dimensions - The dimensions to halve.
-   * @returns The half-dimensions offset.
-   * @example
-   * ```ts
-   * offset.fromDimensions(dimensions(100, 50)) // Offset [25 50 25 50]
-   * ```
-   */
-  fromDimensions(dimensions: Dimensions): Offset
-
-  /** The offset with `0` on every side — the identity of `add` and `subtract`. */
-  zero: Offset
-
-  /** The offset with `Infinity` on every side. */
-  infinity: Offset
-}
-
 /**
  * Creates an `Offset` with `value` on all four sides. The other construction
- * forms live on the function itself: `offset.xy`, `offset.trbl`,
- * `offset.fromPoint`, `offset.fromDimensions`, and the constants
- * `offset.zero` and `offset.infinity`.
+ * forms are module exports: `Offset.xy`, `Offset.trbl`, `Offset.fromPoint`,
+ * `Offset.fromDimensions`, and the constants `Offset.zero` and
+ * `Offset.infinity`.
  *
  * Construction is exact: the sides store exactly the numbers given, with no
  * rounding.
@@ -179,22 +104,71 @@ type OffsetConstructor = {
  * @returns The uniform offset.
  * @example
  * ```ts
- * offset(10) // Offset [10 10 10 10]
- * offset.xy(10, 20) // Offset [20 10 20 10]
+ * Offset.make(10) // Offset [10 10 10 10]
+ * Offset.xy(10, 20) // Offset [20 10 20 10]
  * ```
  */
-const offset = ((value: number): Offset =>
-  new Offset(value, value, value, value)) as OffsetConstructor
+export const make = (value: number): Offset => new Offset(value, value, value, value)
 
-offset.xy = (x: number, y: number) => new Offset(y, x, y, x)
+/**
+ * Creates an offset from per-axis values: `x` fills the x-axis sides
+ * (`right`, `left`) and `y` the y-axis sides (`top`, `bottom`).
+ *
+ * @param x - The value for `right` and `left`.
+ * @param y - The value for `top` and `bottom`.
+ * @returns The per-axis offset.
+ * @example
+ * ```ts
+ * Offset.xy(10, 20) // Offset [20 10 20 10]
+ * ```
+ */
+export const xy = (x: number, y: number): Offset => new Offset(y, x, y, x)
 
-// CSS shorthand fallbacks: bottom mirrors top, left mirrors right.
-offset.trbl = (top: number, right?: number, bottom?: number, left?: number) =>
+/**
+ * Creates an offset from one to four values with CSS shorthand fallbacks:
+ * a missing `right` or `bottom` mirrors `top`, and a missing `left`
+ * mirrors `right`.
+ *
+ * @param top - The top side.
+ * @param right - The right side. Defaults to `top`.
+ * @param bottom - The bottom side. Defaults to `top`.
+ * @param left - The left side. Defaults to the value used for `right`.
+ * @returns The offset.
+ * @example
+ * ```ts
+ * Offset.trbl(1) // Offset [1 1 1 1]
+ * Offset.trbl(1, 2) // Offset [1 2 1 2]
+ * Offset.trbl(1, 2, 3) // Offset [1 2 3 2]
+ * Offset.trbl(1, 2, 3, 4) // Offset [1 2 3 4]
+ * ```
+ */
+export const trbl = (top: number, right?: number, bottom?: number, left?: number): Offset =>
   new Offset(top, right ?? top, bottom ?? top, left ?? right ?? top)
 
-offset.fromPoint = (point: Point) => new Offset(point.y, point.x, point.y, point.x)
+/**
+ * Creates an offset from a point: `point.x` fills the x-axis sides
+ * (`right`, `left`) and `point.y` the y-axis sides (`top`, `bottom`) —
+ * `Offset.xy(point.x, point.y)`.
+ *
+ * @param point - The point to read `x` and `y` from.
+ * @returns The per-axis offset.
+ */
+export const fromPoint = (point: Point): Offset => new Offset(point.y, point.x, point.y, point.x)
 
-offset.fromDimensions = (dimensions: Dimensions) =>
+/**
+ * Creates an offset of half of each dimension per side: `width / 2` on
+ * `right` and `left`, `height / 2` on `top` and `bottom`. Expanding a
+ * zero-size rect by the result yields a rect of `dimensions` centered on
+ * the rect's position.
+ *
+ * @param dimensions - The dimensions to halve.
+ * @returns The half-dimensions offset.
+ * @example
+ * ```ts
+ * Offset.fromDimensions(Dimensions.make(100, 50)) // Offset [25 50 25 50]
+ * ```
+ */
+export const fromDimensions = (dimensions: Dimensions): Offset =>
   new Offset(
     dimensions.height * 0.5,
     dimensions.width * 0.5,
@@ -202,22 +176,23 @@ offset.fromDimensions = (dimensions: Dimensions) =>
     dimensions.width * 0.5,
   )
 
-offset.zero = new Offset(0, 0, 0, 0)
-offset.infinity = new Offset(
+/** The offset with `0` on every side — the identity of `add` and `subtract`. */
+export const zero: Offset = new Offset(0, 0, 0, 0)
+
+/** The offset with `Infinity` on every side. */
+export const infinity: Offset = new Offset(
   Number.POSITIVE_INFINITY,
   Number.POSITIVE_INFINITY,
   Number.POSITIVE_INFINITY,
   Number.POSITIVE_INFINITY,
 )
 
-export { offset }
-
 /**
  * Checks if a value is an `Offset`.
  *
- * True only for values built by the `offset` factory, which carry the brand;
- * a plain `{ top, right, bottom, left }` object fails. For the structural
- * check, use `isOffsetLike`.
+ * True only for values built by this module's constructors, which carry the
+ * brand; a plain `{ top, right, bottom, left }` object fails. For the
+ * structural check, use `isOffsetLike`.
  *
  * @param value - The value to check.
  * @returns `true` if the value is an `Offset`, `false` otherwise.
@@ -333,8 +308,8 @@ export const setY: {
  * @returns The sum.
  * @example
  * ```ts
- * add(offset.trbl(1, 2, 3, 4), 10) // Offset [11 12 13 14]
- * offset(1).pipe(add(offset.trbl(10, 20, 30, 40))) // Offset [11 21 31 41]
+ * Offset.add(Offset.trbl(1, 2, 3, 4), 10) // Offset [11 12 13 14]
+ * Offset.make(1).pipe(Offset.add(Offset.trbl(10, 20, 30, 40))) // Offset [11 21 31 41]
  * ```
  */
 export const add: {
@@ -361,8 +336,8 @@ export const add: {
  * @returns The difference.
  * @example
  * ```ts
- * subtract(offset.trbl(11, 12, 13, 14), 10) // Offset [1 2 3 4]
- * offset(11).pipe(subtract(offset.trbl(1, 2, 3, 4))) // Offset [10 9 8 7]
+ * Offset.subtract(Offset.trbl(11, 12, 13, 14), 10) // Offset [1 2 3 4]
+ * Offset.make(11).pipe(Offset.subtract(Offset.trbl(1, 2, 3, 4))) // Offset [10 9 8 7]
  * ```
  */
 export const subtract: {
@@ -388,8 +363,8 @@ export const subtract: {
  * @returns The scaled offset.
  * @example
  * ```ts
- * scale(offset.trbl(1, 2, 3, 4), 2) // Offset [2 4 6 8]
- * offset.trbl(1, 2, 3, 4).pipe(scale(0.5)) // Offset [0.5 1 1.5 2]
+ * Offset.scale(Offset.trbl(1, 2, 3, 4), 2) // Offset [2 4 6 8]
+ * Offset.trbl(1, 2, 3, 4).pipe(Offset.scale(0.5)) // Offset [0.5 1 1.5 2]
  * ```
  */
 export const scale: {
@@ -409,8 +384,8 @@ export const scale: {
  * @returns The negated offset.
  * @example
  * ```ts
- * negate(offset.trbl(1, -2, 3, -4)) // Offset [-1 2 -3 4]
- * offset.trbl(1, -2, 3, -4).pipe(negate) // Offset [-1 2 -3 4]
+ * Offset.negate(Offset.trbl(1, -2, 3, -4)) // Offset [-1 2 -3 4]
+ * Offset.trbl(1, -2, 3, -4).pipe(Offset.negate) // Offset [-1 2 -3 4]
  * ```
  */
 export const negate = (self: Offset): Offset =>
@@ -424,8 +399,8 @@ export const negate = (self: Offset): Offset =>
  * @returns The offset with every side non-negative.
  * @example
  * ```ts
- * absolute(offset.trbl(1, -2, 3, -4)) // Offset [1 2 3 4]
- * offset.trbl(-1, -2, -3, -4).pipe(absolute) // Offset [1 2 3 4]
+ * Offset.absolute(Offset.trbl(1, -2, 3, -4)) // Offset [1 2 3 4]
+ * Offset.trbl(-1, -2, -3, -4).pipe(Offset.absolute) // Offset [1 2 3 4]
  * ```
  */
 export const absolute = (self: Offset): Offset =>
@@ -446,8 +421,8 @@ export const absolute = (self: Offset): Offset =>
  * @returns Per side, `target * amount + self * (1 - amount)`.
  * @example
  * ```ts
- * lerp(offset(0), offset.trbl(10, 20, 30, 40), 0.5) // Offset [5 10 15 20]
- * offset(0).pipe(lerp(offset.trbl(10, 20, 30, 40), 1)) // Offset [10 20 30 40]
+ * Offset.lerp(Offset.make(0), Offset.trbl(10, 20, 30, 40), 0.5) // Offset [5 10 15 20]
+ * Offset.make(0).pipe(Offset.lerp(Offset.trbl(10, 20, 30, 40), 1)) // Offset [10 20 30 40]
  * ```
  */
 export const lerp: {
@@ -471,7 +446,7 @@ export const lerp: {
  * (`1e-10` and `1e-12`). Rounding noise never fails an equality, and the
  * verdict is invariant under uniform scaling of both operands. Non-finite
  * sides compare exactly: an infinite side equals only the same infinity
- * (`offset.infinity` equals itself), and a `NaN` side equals nothing.
+ * (`Offset.infinity` equals itself), and a `NaN` side equals nothing.
  * Like every tolerant comparison, not transitive. The data-last form
  * omits `self` and returns a function of it.
  *
@@ -480,9 +455,9 @@ export const lerp: {
  * @returns `true` when all four sides coincide within tolerance.
  * @example
  * ```ts
- * equals(offset(0.1 + 0.2), offset(0.3)) // true
- * equals(offset.infinity, offset.infinity) // true
- * offset(1).pipe(equals(offset.trbl(1, 2, 3, 4))) // false
+ * Offset.equals(Offset.make(0.1 + 0.2), Offset.make(0.3)) // true
+ * Offset.equals(Offset.infinity, Offset.infinity) // true
+ * Offset.make(1).pipe(Offset.equals(Offset.trbl(1, 2, 3, 4))) // false
  * ```
  */
 export const equals: {

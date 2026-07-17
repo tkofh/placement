@@ -1,5 +1,5 @@
-import { type Flexbox, flexbox, isFlexbox } from 'placement/flexbox'
-import { type Rect, contract } from 'placement/rect'
+import * as Flexbox from 'placement/flexbox'
+import * as Rect from 'placement/rect'
 import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
 import { useFlexLayout } from '../composables/useFlex.ts'
 import { INSET_PROP_KEYS, type RectProps, SIZE_PROP_KEYS, useRect } from '../composables/useRect.ts'
@@ -15,7 +15,7 @@ import { type JustifyContentInput, useJustifyContent } from '../props/justifyCon
 import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
 
 export interface FlexLayoutProps extends RectProps {
-  layout?: Flexbox
+  layout?: Flexbox.Flexbox
   alignContent?: AlignContentInput
   alignItems?: AlignItemsInput
   flow?: FlowInput
@@ -39,7 +39,7 @@ export const FlexLayout = defineComponent(
 
     const gutter = computedTRBLOffset(gutterTop, gutterRight, gutterBottom, gutterLeft)
 
-    const innerRect = computed(() => rect.value.pipe(contract(gutter.value)))
+    const innerRect = computed(() => rect.value.pipe(Rect.contract(gutter.value)))
 
     const alignContent = useAlignContent(() => props.alignContent)
     const alignItems = useAlignItems(() => props.alignItems)
@@ -48,11 +48,11 @@ export const FlexLayout = defineComponent(
     const justifyContent = useJustifyContent(() => props.justifyContent)
 
     const layout = computed(() => {
-      if (isFlexbox(props.layout)) {
+      if (Flexbox.isFlexbox(props.layout)) {
         return props.layout
       }
 
-      return flexbox({
+      return Flexbox.make({
         ...flow.value,
         ...gap.value,
         ...alignContent.value,
@@ -90,7 +90,7 @@ export const FlexLayout = defineComponent(
       'layout',
     ],
     slots: {} as SlotsType<{
-      default: (props: { rect: Rect }) => Array<VNode>
+      default: (props: { rect: Rect.Rect }) => Array<VNode>
     }>,
   },
 )

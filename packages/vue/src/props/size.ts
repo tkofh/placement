@@ -1,4 +1,4 @@
-import { type Dimensions, dimensions } from 'placement/dimensions'
+import * as Dimensions from 'placement/dimensions'
 import { auto } from 'placement/utils'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 import { computedDimensions } from '../data/dimensions.ts'
@@ -11,9 +11,9 @@ export function useSize(
   width: MaybeRefOrGetter<Size1DInput>,
   height: MaybeRefOrGetter<Size1DInput>,
   aspectRatio?: MaybeRefOrGetter<AspectRatioInput> | undefined,
-  fallback: MaybeRefOrGetter<Dimensions> = dimensions.zero,
-  parent: 'inherit' | MaybeRefOrGetter<Dimensions> = 'inherit',
-): ComputedRef<Dimensions> {
+  fallback: MaybeRefOrGetter<Dimensions.Dimensions> = Dimensions.zero,
+  parent: 'inherit' | MaybeRefOrGetter<Dimensions.Dimensions> = 'inherit',
+): ComputedRef<Dimensions.Dimensions> {
   const parentDimensions = useOverrideableParent(parent)
 
   const widthRef = computed(() =>
@@ -23,7 +23,7 @@ export function useSize(
     resolveSize1D(toValue(height), Number.POSITIVE_INFINITY, toValue(parentDimensions.height)),
   )
 
-  const fallbackRef = computed((previous: Dimensions | undefined) => {
+  const fallbackRef = computed((previous: Dimensions.Dimensions | undefined) => {
     const value = toValue(fallback)
 
     if (

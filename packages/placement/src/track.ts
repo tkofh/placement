@@ -13,16 +13,7 @@ import {
   applyStretch,
   stackTrackItem,
 } from './internal/track/stack.ts'
-import {
-  type Interval,
-  type IntervalLike,
-  alignTo as alignIntervalTo,
-  equals as intervalEquals,
-  interval,
-  normalize as normalizeInterval,
-  remap as remapInterval,
-  setSize as setIntervalSize,
-} from './interval.ts'
+import * as Interval from './interval.ts'
 import { auto } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/track')
@@ -38,14 +29,14 @@ type TypeBrand = typeof TypeBrand
  * difference. Member intervals may have negative sizes, in which case the
  * bounds can invert (`end < start`).
  *
- * Construct with the `track` factory, or solve item specifications with
- * `stack` or `sequence`.
+ * Construct with `make`, or solve item specifications with `stack` or
+ * `sequence`.
  */
 class Track extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
   /** The member intervals, in the order given at construction. */
-  readonly intervals: ReadonlyArray<Interval>
+  readonly intervals: ReadonlyArray<Interval.Interval>
 
   /** The smallest `start` among the member intervals. */
   readonly start: number
@@ -57,7 +48,7 @@ class Track extends Pipeable {
    */
   readonly size: number
 
-  constructor(intervals: ReadonlyArray<Interval>) {
+  constructor(intervals: ReadonlyArray<Interval.Interval>) {
     super()
 
     if (intervals.length === 0) {
@@ -106,13 +97,13 @@ export type { Track }
  * @throws `RangeError` when `intervals` is empty.
  * @example
  * ```ts
- * const t = track([interval(0, 100), interval(150, 50)])
+ * const t = Track.make([Interval.make(0, 100), Interval.make(150, 50)])
  * t.start // 0
  * t.end // 200
  * t.size // 200
  * ```
  */
-export function track(intervals: ReadonlyArray<Interval>): Track {
+export function make(intervals: ReadonlyArray<Interval.Interval>): Track {
   return new Track(intervals)
 }
 
@@ -276,12 +267,12 @@ export interface SequenceOptions extends BaseOptions {
  * @throws `RangeError` when `items` is empty.
  * @example
  * ```ts
- * stack([{ basis: 100 }, { basis: 200 }], { stretch: 1 })
- * // track([interval(0, 200), interval(0, 200)])
+ * Track.stack([{ basis: 100 }, { basis: 200 }], { stretch: 1 })
+ * // Track.make([Interval.make(0, 200), Interval.make(0, 200)])
  *
- * const fill = stack({ stretch: 1 })
+ * const fill = Track.stack({ stretch: 1 })
  * fill([{ basis: 100 }, { basis: 200 }])
- * // track([interval(0, 200), interval(0, 200)])
+ * // Track.make([Interval.make(0, 200), Interval.make(0, 200)])
  * ```
  */
 export const stack: {
@@ -313,13 +304,13 @@ export const stack: {
         // Auto offsets absorb the item's free space; when the item
         // overflows the track they resolve to zero instead of going
         // negative (as in CSS), and the min/max-clamped size stands.
-        return interval(
+        return Interval.make(
           (item.startIsAuto ? Math.max(free, 0) / item.autoOffsetCount : 0) + item.definiteStart,
           item.size,
         )
       }
 
-      return interval(auto(item.place, place) * free + item.definiteStart, item.size)
+      return Interval.make(auto(item.place, place) * free + item.definiteStart, item.size)
     }),
   )
 })
@@ -330,13 +321,13 @@ function sequenceWithoutFreeSpace(
   autoOffset: number,
   start: number,
 ) {
-  const intervals: Array<Interval> = []
+  const intervals: Array<Interval.Interval> = []
 
   let cursor = start
 
   for (const item of items) {
     cursor += autoOffset * Number(item.startIsAuto) + item.definiteStart
-    intervals.push(interval(cursor, item.size))
+    intervals.push(Interval.make(cursor, item.size))
     cursor += item.size + gap + autoOffset * Number(item.endIsAuto) + item.definiteEnd
   }
 
@@ -352,7 +343,7 @@ function sequenceWithFreeSpace(
   space: number,
   spaceOuter: number,
 ) {
-  const intervals: Array<Interval> = []
+  const intervals: Array<Interval.Interval> = []
   const free = size - used
 
   const distributed = free * space
@@ -370,7 +361,7 @@ function sequenceWithFreeSpace(
 
   for (const item of items) {
     cursor += item.definiteStart
-    intervals.push(interval(cursor, item.size))
+    intervals.push(Interval.make(cursor, item.size))
     cursor += item.size + between + item.definiteEnd
   }
 
@@ -406,12 +397,12 @@ function sequenceWithFreeSpace(
  * @throws `RangeError` when `items` is empty.
  * @example
  * ```ts
- * sequence([{ basis: 100, grow: 1 }, { basis: 200 }], { size: 400 })
- * // track([interval(0, 200), interval(200, 200)])
+ * Track.sequence([{ basis: 100, grow: 1 }, { basis: 200 }], { size: 400 })
+ * // Track.make([Interval.make(0, 200), Interval.make(200, 200)])
  *
- * const fit = sequence({ size: 400 })
+ * const fit = Track.sequence({ size: 400 })
  * fit([{ basis: 100, grow: 1 }, { basis: 200 }])
- * // track([interval(0, 200), interval(200, 200)])
+ * // Track.make([Interval.make(0, 200), Interval.make(200, 200)])
  * ```
  */
 export const sequence: {
@@ -464,14 +455,15 @@ export const sequence: {
  * Computes the track's bounding interval.
  *
  * @param self - The track.
- * @returns `interval(self.start, self.size)`.
+ * @returns `Interval.make(self.start, self.size)`.
  * @example
  * ```ts
- * toInterval(track([interval(50, 100), interval(100, 100)])) // interval(50, 150)
+ * Track.toInterval(Track.make([Interval.make(50, 100), Interval.make(100, 100)]))
+ * // Interval.make(50, 150)
  * ```
  */
-export const toInterval = (self: Track): Interval => {
-  return interval(self.start, self.size)
+export const toInterval = (self: Track): Interval.Interval => {
+  return Interval.make(self.start, self.size)
 }
 
 /**
@@ -484,9 +476,9 @@ export const toInterval = (self: Track): Interval => {
  * @returns The shifted `Track`.
  * @example
  * ```ts
- * const t = track([interval(0, 100), interval(100, 100)])
- * translate(t, 10) // track([interval(10, 100), interval(110, 100)])
- * t.pipe(translate(-10)) // track([interval(-10, 100), interval(90, 100)])
+ * const t = Track.make([Interval.make(0, 100), Interval.make(100, 100)])
+ * Track.translate(t, 10) // Track.make([Interval.make(10, 100), Interval.make(110, 100)])
+ * t.pipe(Track.translate(-10)) // Track.make([Interval.make(-10, 100), Interval.make(90, 100)])
  * ```
  */
 export const translate: {
@@ -495,7 +487,7 @@ export const translate: {
 } = dual(
   2,
   (self: Track, amount: number) =>
-    new Track(self.intervals.map((ival) => interval(ival.start + amount, ival.size))),
+    new Track(self.intervals.map((ival) => Interval.make(ival.start + amount, ival.size))),
 )
 
 /**
@@ -513,9 +505,9 @@ export const translate: {
  * @returns The scaled `Track`.
  * @example
  * ```ts
- * const t = track([interval(0, 100), interval(100, 100)])
- * scale(t, 2) // track([interval(0, 200), interval(200, 200)])
- * t.pipe(scale(2, 1)) // track([interval(-200, 200), interval(0, 200)])
+ * const t = Track.make([Interval.make(0, 100), Interval.make(100, 100)])
+ * Track.scale(t, 2) // Track.make([Interval.make(0, 200), Interval.make(200, 200)])
+ * t.pipe(Track.scale(2, 1)) // Track.make([Interval.make(-200, 200), Interval.make(0, 200)])
  * ```
  */
 export const scale: {
@@ -540,8 +532,8 @@ export const scale: {
  * @returns The scaled `Track`.
  * @example
  * ```ts
- * scaleFrom(track([interval(100, 100), interval(200, 100)]), 2, 100)
- * // track([interval(100, 200), interval(300, 200)])
+ * Track.scaleFrom(Track.make([Interval.make(100, 100), Interval.make(200, 100)]), 2, 100)
+ * // Track.make([Interval.make(100, 200), Interval.make(300, 200)])
  * ```
  */
 export const scaleFrom: {
@@ -553,7 +545,7 @@ export const scaleFrom: {
     new Track(
       Array.from(self.intervals, (ival) => {
         const size = ival.size * factor
-        return interval(
+        return Interval.make(
           position + (ival.start - position) * factor + Math.min(size, 0),
           Math.abs(size),
         )
@@ -580,24 +572,24 @@ export const scaleFrom: {
  * @returns The moved `Track`.
  * @example
  * ```ts
- * const t = track([interval(0, 100), interval(100, 100)])
- * alignTo(t, 50, 1) // track([interval(-150, 100), interval(-50, 100)])
- * t.pipe(alignTo(interval(100, 100), 0.5))
- * // track([interval(50, 100), interval(150, 100)])
+ * const t = Track.make([Interval.make(0, 100), Interval.make(100, 100)])
+ * Track.alignTo(t, 50, 1) // Track.make([Interval.make(-150, 100), Interval.make(-50, 100)])
+ * t.pipe(Track.alignTo(Interval.make(100, 100), 0.5))
+ * // Track.make([Interval.make(50, 100), Interval.make(150, 100)])
  * ```
  */
 export const alignTo: {
-  (self: Track, target: number | IntervalLike | Track, origin: number): Track
-  (target: number | IntervalLike | Track, origin: number): (self: Track) => Track
-} = dual(3, (self: Track, target: number | IntervalLike | Track, origin: number) => {
+  (self: Track, target: number | Interval.IntervalLike | Track, origin: number): Track
+  (target: number | Interval.IntervalLike | Track, origin: number): (self: Track) => Track
+} = dual(3, (self: Track, target: number | Interval.IntervalLike | Track, origin: number) => {
   const position = typeof target === 'number' ? target : target.start + target.size * origin
   const delta = position - self.size * origin - self.start
-  return new Track(self.intervals.map((ival) => interval(ival.start + delta, ival.size)))
+  return new Track(self.intervals.map((ival) => Interval.make(ival.start + delta, ival.size)))
 })
 
 /**
  * Scales the track so its bounds span `size`, holding the point at `origin`
- * fixed: `scale(self, size / self.size, origin)`, so item sizes and spacing
+ * fixed: `Track.scale(self, size / self.size, origin)`, so item sizes and spacing
  * change proportionally. A zero-size track divides by zero and yields IEEE
  * `Infinity`/`NaN` coordinates (see PRECISION.md).
  *
@@ -610,9 +602,9 @@ export const alignTo: {
  * @returns The resized `Track`.
  * @example
  * ```ts
- * const t = track([interval(0, 100), interval(100, 100)])
- * setSize(t, 100) // track([interval(0, 50), interval(50, 50)])
- * t.pipe(setSize(100, 0.5)) // track([interval(50, 50), interval(100, 50)])
+ * const t = Track.make([Interval.make(0, 100), Interval.make(100, 100)])
+ * Track.setSize(t, 100) // Track.make([Interval.make(0, 50), Interval.make(50, 50)])
+ * t.pipe(Track.setSize(100, 0.5)) // Track.make([Interval.make(50, 50), Interval.make(100, 50)])
  * ```
  */
 export const setSize: {
@@ -635,12 +627,19 @@ export const setSize: {
  * @returns A `Track` of the mapped intervals.
  */
 export const map: {
-  (self: Track, fn: (interval: Interval, index: number, track: Track) => Interval): Track
-  (fn: (interval: Interval, index: number, track: Track) => Interval): (self: Track) => Track
+  (
+    self: Track,
+    fn: (interval: Interval.Interval, index: number, track: Track) => Interval.Interval,
+  ): Track
+  (
+    fn: (interval: Interval.Interval, index: number, track: Track) => Interval.Interval,
+  ): (self: Track) => Track
 } = dual(
   2,
-  (self: Track, fn: (interval: Interval, index: number, track: Track) => Interval): Track =>
-    new Track(Array.from(self.intervals, (ival, index) => fn(ival, index, self))),
+  (
+    self: Track,
+    fn: (interval: Interval.Interval, index: number, track: Track) => Interval.Interval,
+  ): Track => new Track(Array.from(self.intervals, (ival, index) => fn(ival, index, self))),
 )
 
 /**
@@ -657,8 +656,8 @@ export const map: {
  * @returns The aligned `Track`.
  * @example
  * ```ts
- * alignItemsTo(track([interval(0, 100), interval(100, 100)]), 50)
- * // track([interval(50, 100), interval(50, 100)])
+ * Track.alignItemsTo(Track.make([Interval.make(0, 100), Interval.make(100, 100)]), 50)
+ * // Track.make([Interval.make(50, 100), Interval.make(50, 100)])
  * ```
  */
 export const alignItemsTo: {
@@ -667,7 +666,9 @@ export const alignItemsTo: {
 } = dual(
   (args) => isTrack(args[0]),
   (self: Track, position: number, origin = 0) =>
-    new Track(self.intervals.map((ival) => interval(position - ival.size * origin, ival.size))),
+    new Track(
+      self.intervals.map((ival) => Interval.make(position - ival.size * origin, ival.size)),
+    ),
 )
 
 /**
@@ -684,8 +685,8 @@ export const alignItemsTo: {
  * @returns The aligned `Track`.
  * @example
  * ```ts
- * alignItems(track([interval(0, 100), interval(100, 100)]), 0.5)
- * // track([interval(50, 100), interval(50, 100)])
+ * Track.alignItems(Track.make([Interval.make(0, 100), Interval.make(100, 100)]), 0.5)
+ * // Track.make([Interval.make(50, 100), Interval.make(50, 100)])
  * ```
  */
 export const alignItems: {
@@ -694,13 +695,13 @@ export const alignItems: {
 } = dual(
   (args) => isTrack(args[0]),
   (self: Track, align: number, origin?: number) =>
-    map(self, alignIntervalTo(lerpNumber(align, self.start, self.end), origin ?? align)),
+    map(self, Interval.alignTo(lerpNumber(align, self.start, self.end), origin ?? align)),
 )
 
 /**
  * Mirrors the track about `origin`, reversing the items' spatial order
  * while keeping their sizes. The default origin `0.5` reflects the track in
- * place, within its own bounds. Equivalent to `scale(self, -1, origin)`.
+ * place, within its own bounds. Equivalent to `Track.scale(self, -1, origin)`.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -710,9 +711,9 @@ export const alignItems: {
  * @returns The mirrored `Track`.
  * @example
  * ```ts
- * const t = track([interval(0, 100), interval(100, 100)])
- * reflect(t) // track([interval(100, 100), interval(0, 100)])
- * t.pipe(reflect(0)) // track([interval(-100, 100), interval(-200, 100)])
+ * const t = Track.make([Interval.make(0, 100), Interval.make(100, 100)])
+ * Track.reflect(t) // Track.make([Interval.make(100, 100), Interval.make(0, 100)])
+ * t.pipe(Track.reflect(0)) // Track.make([Interval.make(-100, 100), Interval.make(-200, 100)])
  * ```
  */
 export const reflect: {
@@ -732,20 +733,21 @@ export const reflect: {
  * The data-last form omits `self` and returns a function of it.
  *
  * @param self - The track to normalize.
- * @param target - The reference interval. Defaults to `toInterval(self)`.
+ * @param target - The reference interval. Defaults to `Track.toInterval(self)`.
  * @returns The normalized `Track`.
  * @example
  * ```ts
- * normalize(track([interval(100, 100), interval(200, 100)]))
- * // track([interval(0, 0.5), interval(0.5, 0.5)])
+ * Track.normalize(Track.make([Interval.make(100, 100), Interval.make(200, 100)]))
+ * // Track.make([Interval.make(0, 0.5), Interval.make(0.5, 0.5)])
  * ```
  */
 export const normalize: {
-  (self: Track, target?: Interval): Track
-  (target?: Interval): (self: Track) => Track
+  (self: Track, target?: Interval.Interval): Track
+  (target?: Interval.Interval): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
-  (self: Track, target: Interval = toInterval(self)) => map(self, normalizeInterval(target)),
+  (self: Track, target: Interval.Interval = toInterval(self)) =>
+    map(self, Interval.normalize(target)),
 )
 
 // remap takes a fixed arity: a Track is itself IntervalLike, so a 2-argument
@@ -758,7 +760,7 @@ export const normalize: {
  *
  * The source is always explicit — a 2-argument call is the data-last form,
  * which omits `self` and returns a function of it. To remap from the
- * track's own bounds, pass `toInterval(self)` as `source`.
+ * track's own bounds, pass `Track.toInterval(self)` as `source`.
  *
  * @param self - The track to remap.
  * @param source - The space the intervals currently occupy.
@@ -766,15 +768,19 @@ export const normalize: {
  * @returns The remapped `Track`.
  * @example
  * ```ts
- * remap(track([interval(0, 100), interval(100, 100)]), interval(0, 200), interval(100, 100))
- * // track([interval(100, 50), interval(150, 50)])
+ * Track.remap(
+ *   Track.make([Interval.make(0, 100), Interval.make(100, 100)]),
+ *   Interval.make(0, 200),
+ *   Interval.make(100, 100),
+ * )
+ * // Track.make([Interval.make(100, 50), Interval.make(150, 50)])
  * ```
  */
 export const remap: {
-  (self: Track, source: Interval, target: Interval): Track
-  (source: Interval, target: Interval): (self: Track) => Track
-} = dual(3, (self: Track, source: Interval, target: Interval) =>
-  map(self, remapInterval(source, target)),
+  (self: Track, source: Interval.Interval, target: Interval.Interval): Track
+  (source: Interval.Interval, target: Interval.Interval): (self: Track) => Track
+} = dual(3, (self: Track, source: Interval.Interval, target: Interval.Interval) =>
+  map(self, Interval.remap(source, target)),
 )
 
 /**
@@ -792,8 +798,8 @@ export const remap: {
  * @returns The distributed `Track`.
  * @example
  * ```ts
- * distribute(track([interval(0, 100), interval(0, 100)]), 0.5)
- * // track([interval(-50, 100), interval(50, 100)])
+ * Track.distribute(Track.make([Interval.make(0, 100), Interval.make(0, 100)]), 0.5)
+ * // Track.make([Interval.make(-50, 100), Interval.make(50, 100)])
  * ```
  */
 export const distribute: {
@@ -807,11 +813,11 @@ export const distribute: {
       totalSize += ival.size + gap
     }
 
-    const intervals: Array<Interval> = []
+    const intervals: Array<Interval.Interval> = []
 
     let cursor = self.start + origin * (self.size - totalSize)
     for (const ival of self.intervals) {
-      intervals.push(interval(cursor, ival.size))
+      intervals.push(Interval.make(cursor, ival.size))
       cursor += ival.size + gap
     }
 
@@ -829,20 +835,22 @@ export const distribute: {
  * The data-last form omits `self` and returns a function of it.
  *
  * @param self - The track to distribute.
- * @param target - The interval to span. Defaults to `toInterval(self)`.
+ * @param target - The interval to span. Defaults to `Track.toInterval(self)`.
  * @returns The distributed `Track`.
  * @example
  * ```ts
- * distributeWithin(track([interval(0, 100), interval(0, 50), interval(0, 100)]))
- * // track([interval(0, 100), interval(25, 50), interval(0, 100)])
+ * Track.distributeWithin(
+ *   Track.make([Interval.make(0, 100), Interval.make(0, 50), Interval.make(0, 100)]),
+ * )
+ * // Track.make([Interval.make(0, 100), Interval.make(25, 50), Interval.make(0, 100)])
  * ```
  */
 export const distributeWithin: {
-  (self: Track, target?: Interval): Track
-  (target?: Interval): (self: Track) => Track
+  (self: Track, target?: Interval.Interval): Track
+  (target?: Interval.Interval): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
-  (self: Track, target: Interval = toInterval(self)) => {
+  (self: Track, target: Interval.Interval = toInterval(self)) => {
     let totalSize = 0
     for (const ival of self.intervals) {
       totalSize += ival.size
@@ -850,11 +858,11 @@ export const distributeWithin: {
 
     const between = (target.size - totalSize) / (self.intervals.length - 1)
 
-    const intervals: Array<Interval> = []
+    const intervals: Array<Interval.Interval> = []
 
     let cursor = target.start
     for (const ival of self.intervals) {
-      intervals.push(interval(cursor, ival.size))
+      intervals.push(Interval.make(cursor, ival.size))
       cursor += ival.size + between
     }
 
@@ -876,9 +884,9 @@ export const distributeWithin: {
  * @returns The interpolated `Track`.
  * @example
  * ```ts
- * const a = track([interval(0, 100), interval(100, 100)])
- * a.pipe(lerp(track([interval(50, 100), interval(50, 100)]), 0.5))
- * // track([interval(25, 100), interval(75, 100)])
+ * const a = Track.make([Interval.make(0, 100), Interval.make(100, 100)])
+ * a.pipe(Track.lerp(Track.make([Interval.make(50, 100), Interval.make(50, 100)]), 0.5))
+ * // Track.make([Interval.make(25, 100), Interval.make(75, 100)])
  * ```
  */
 export const lerp: {
@@ -891,9 +899,12 @@ export const lerp: {
       Array.from(
         { length: Math.min(self.intervals.length, other.intervals.length) },
         (_, index) => {
-          const a = self.intervals[index] as Interval
-          const b = other.intervals[index] as Interval
-          return interval(lerpNumber(amount, a.start, b.start), lerpNumber(amount, a.size, b.size))
+          const a = self.intervals[index] as Interval.Interval
+          const b = other.intervals[index] as Interval.Interval
+          return Interval.make(
+            lerpNumber(amount, a.start, b.start),
+            lerpNumber(amount, a.size, b.size),
+          )
         },
       ),
     ),
@@ -911,10 +922,10 @@ export const lerp: {
  * @returns The repositioned `Track`.
  */
 export const mapItemStarts: {
-  (self: Track, fn: (interval: Interval, index: number) => number): Track
-  (fn: (interval: Interval, index: number) => number): (self: Track) => Track
-} = dual(2, (self: Track, fn: (interval: Interval, index: number) => number) =>
-  map(self, (ival, index) => interval(fn(ival, index), ival.size)),
+  (self: Track, fn: (interval: Interval.Interval, index: number) => number): Track
+  (fn: (interval: Interval.Interval, index: number) => number): (self: Track) => Track
+} = dual(2, (self: Track, fn: (interval: Interval.Interval, index: number) => number) =>
+  map(self, (ival, index) => Interval.make(fn(ival, index), ival.size)),
 )
 
 /**
@@ -929,10 +940,10 @@ export const mapItemStarts: {
  * @returns The repositioned `Track`.
  */
 export const mapItemEnds: {
-  (self: Track, fn: (interval: Interval, index: number) => number): Track
-  (fn: (interval: Interval, index: number) => number): (self: Track) => Track
-} = dual(2, (self: Track, fn: (interval: Interval, index: number) => number) =>
-  map(self, (ival, index) => interval(fn(ival, index) - ival.size, ival.size)),
+  (self: Track, fn: (interval: Interval.Interval, index: number) => number): Track
+  (fn: (interval: Interval.Interval, index: number) => number): (self: Track) => Track
+} = dual(2, (self: Track, fn: (interval: Interval.Interval, index: number) => number) =>
+  map(self, (ival, index) => Interval.make(fn(ival, index) - ival.size, ival.size)),
 )
 
 /**
@@ -951,31 +962,31 @@ export const mapItemEnds: {
  * @returns The resized `Track`.
  * @example
  * ```ts
- * const t = track([interval(0, 100), interval(100, 100)])
- * mapItemSizes(t, 0) // track([interval(0, 0), interval(100, 0)])
- * t.pipe(mapItemSizes((ival) => ival.size - 50, 0.5))
- * // track([interval(25, 50), interval(125, 50)])
+ * const t = Track.make([Interval.make(0, 100), Interval.make(100, 100)])
+ * Track.mapItemSizes(t, 0) // Track.make([Interval.make(0, 0), Interval.make(100, 0)])
+ * t.pipe(Track.mapItemSizes((ival) => ival.size - 50, 0.5))
+ * // Track.make([Interval.make(25, 50), Interval.make(125, 50)])
  * ```
  */
 export const mapItemSizes: {
   (
     self: Track,
-    size: number | ((interval: Interval, index: number, track: Track) => number),
-    origin?: number | ((interval: Interval, index: number, track: Track) => number),
+    size: number | ((interval: Interval.Interval, index: number, track: Track) => number),
+    origin?: number | ((interval: Interval.Interval, index: number, track: Track) => number),
   ): Track
   (
-    size: number | ((interval: Interval, index: number, track: Track) => number),
-    origin?: number | ((interval: Interval, index: number, track: Track) => number),
+    size: number | ((interval: Interval.Interval, index: number, track: Track) => number),
+    origin?: number | ((interval: Interval.Interval, index: number, track: Track) => number),
   ): (self: Track) => Track
 } = dual(
   (args) => isTrack(args[0]),
   (
     self: Track,
-    size: number | ((interval: Interval, index: number, track: Track) => number),
-    origin: number | ((interval: Interval, index: number, track: Track) => number) = 0,
+    size: number | ((interval: Interval.Interval, index: number, track: Track) => number),
+    origin: number | ((interval: Interval.Interval, index: number, track: Track) => number) = 0,
   ) => {
     if (typeof size === 'number' && typeof origin === 'number') {
-      return map(self, setIntervalSize(size, origin))
+      return map(self, Interval.setSize(size, origin))
     }
 
     const sizeOf = typeof size === 'number' ? () => size : size
@@ -983,7 +994,7 @@ export const mapItemSizes: {
 
     return map(self, (ival, index, current) => {
       const nextSize = sizeOf(ival, index, current)
-      return interval(
+      return Interval.make(
         ival.start + (ival.size - nextSize) * originOf(ival, index, current),
         nextSize,
       )
@@ -1003,8 +1014,10 @@ export const mapItemSizes: {
  * @returns `true` if the tracks match interval for interval.
  * @example
  * ```ts
- * equals(track([interval(0.1 + 0.2, 1)]), track([interval(0.3, 1)])) // true
- * track([interval(0, 100)]).pipe(equals(track([interval(0, 101)]))) // false
+ * Track.equals(Track.make([Interval.make(0.1 + 0.2, 1)]), Track.make([Interval.make(0.3, 1)]))
+ * // true
+ * Track.make([Interval.make(0, 100)]).pipe(Track.equals(Track.make([Interval.make(0, 101)])))
+ * // false
  * ```
  */
 export const equals: {
@@ -1014,5 +1027,7 @@ export const equals: {
   2,
   (self: Track, other: Track) =>
     self.intervals.length === other.intervals.length &&
-    self.intervals.every((ival, index) => intervalEquals(ival, other.intervals[index] as Interval)),
+    self.intervals.every((ival, index) =>
+      Interval.equals(ival, other.intervals[index] as Interval.Interval),
+    ),
 )

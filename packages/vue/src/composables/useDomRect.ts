@@ -1,4 +1,4 @@
-import { type Rect, rect } from 'placement/rect'
+import * as Rect from 'placement/rect'
 import { type MaybeRefOrGetter, type ShallowRef, shallowRef, toValue, watch } from 'vue'
 
 function useResizeObserver<T extends Element>(
@@ -25,11 +25,11 @@ function useResizeObserver<T extends Element>(
 
 export function useDomRect(
   element: MaybeRefOrGetter<Element | undefined>,
-): Readonly<ShallowRef<Rect>> {
-  const self = shallowRef(rect())
+): Readonly<ShallowRef<Rect.Rect>> {
+  const self = shallowRef(Rect.make())
 
   useResizeObserver(element, (entry) => {
-    self.value = rect.from(entry.contentRect)
+    self.value = Rect.from(entry.contentRect)
   })
 
   return self
@@ -37,11 +37,11 @@ export function useDomRect(
 
 export function useTextRect(
   element: MaybeRefOrGetter<SVGTextElement | undefined>,
-): Readonly<ShallowRef<Rect>> {
-  const self = shallowRef(rect())
+): Readonly<ShallowRef<Rect.Rect>> {
+  const self = shallowRef(Rect.make())
 
   useResizeObserver(element, (entry) => {
-    self.value = rect.from(entry.contentRect)
+    self.value = Rect.from(entry.contentRect)
   })
 
   return self

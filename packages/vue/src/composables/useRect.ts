@@ -1,7 +1,7 @@
 import { clamp } from 'curvy/number'
-import { type Dimensions, clamp as clampDimensions, dimensions } from 'placement/dimensions'
-import { type Point, point } from 'placement/point'
-import { type Rect, align, rect, translate } from 'placement/rect'
+import * as Dimensions from 'placement/dimensions'
+import * as Point from 'placement/point'
+import * as Rect from 'placement/rect'
 import { auto } from 'placement/utils'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 import { computedInterval } from '../data/interval.ts'
@@ -53,7 +53,7 @@ export interface InsetProps {
 export const INSET_PROP_KEYS = ['top', 'right', 'bottom', 'left'] as const
 
 export interface OriginProps {
-  origin?: OriginInput | Point | number
+  origin?: OriginInput | Point.Point | number
 }
 
 export const ORIGIN_PROP_KEYS = ['origin'] as const
@@ -79,49 +79,49 @@ export const RECT_PROP_KEYS = [
 
 export function useBasisSize(
   input: MaybeRefOrGetter<BasisSizeProps>,
-  parent: 'inherit' | MaybeRefOrGetter<Dimensions> = 'inherit',
-): ComputedRef<Dimensions> {
+  parent: 'inherit' | MaybeRefOrGetter<Dimensions.Dimensions> = 'inherit',
+): ComputedRef<Dimensions.Dimensions> {
   return useSize(
     () => toValue(input).width,
     () => toValue(input).height,
     () => toValue(input).aspectRatio,
-    dimensions.infinity,
+    Dimensions.infinity,
     parent,
   )
 }
 
 export function useMinSize(
   input: MaybeRefOrGetter<MinSizeProps>,
-  parent: 'inherit' | MaybeRefOrGetter<Dimensions> = 'inherit',
-): ComputedRef<Dimensions> {
+  parent: 'inherit' | MaybeRefOrGetter<Dimensions.Dimensions> = 'inherit',
+): ComputedRef<Dimensions.Dimensions> {
   return useSize(
     () => toValue(input).minWidth,
     () => toValue(input).minHeight,
     undefined,
-    dimensions.zero,
+    Dimensions.zero,
     parent,
   )
 }
 
 export function useMaxSize(
   input: MaybeRefOrGetter<MaxSizeProps>,
-  parent: 'inherit' | MaybeRefOrGetter<Dimensions> = 'inherit',
-): ComputedRef<Dimensions> {
+  parent: 'inherit' | MaybeRefOrGetter<Dimensions.Dimensions> = 'inherit',
+): ComputedRef<Dimensions.Dimensions> {
   return useSize(
     () => toValue(input).maxWidth,
     () => toValue(input).maxHeight,
     undefined,
-    dimensions.infinity,
+    Dimensions.infinity,
     parent,
   )
 }
 
 export function useConstrainedSize(
-  basis: MaybeRefOrGetter<Dimensions>,
-  min: MaybeRefOrGetter<Dimensions>,
-  max: MaybeRefOrGetter<Dimensions>,
-): ComputedRef<Dimensions> {
-  return computed(() => clampDimensions(toValue(basis), toValue(min), toValue(max)))
+  basis: MaybeRefOrGetter<Dimensions.Dimensions>,
+  min: MaybeRefOrGetter<Dimensions.Dimensions>,
+  max: MaybeRefOrGetter<Dimensions.Dimensions>,
+): ComputedRef<Dimensions.Dimensions> {
+  return computed(() => Dimensions.clamp(toValue(basis), toValue(min), toValue(max)))
 }
 
 export function useAxisInterval(
@@ -177,32 +177,34 @@ export function useAxisInterval(
 
 export function useXYTranslation(
   props: MaybeRefOrGetter<TranslateProps>,
-  self: MaybeRefOrGetter<Rect | Dimensions>,
+  self: MaybeRefOrGetter<Rect.Rect | Dimensions.Dimensions>,
 ) {
   return computed(() => {
     const { x, y } = toValue(props)
     const { width, height } = toValue(self)
 
-    return translate(resolveSize1D(x, 0, width), resolveSize1D(y, 0, height))
+    return Rect.translate(resolveSize1D(x, 0, width), resolveSize1D(y, 0, height))
   })
 }
 
 export function useOriginTranslation(
   props: OriginProps,
-  fallback: MaybeRefOrGetter<Point> = point.zero,
-): ComputedRef<(self: Rect) => Rect> {
+  fallback: MaybeRefOrGetter<Point.Point> = Point.zero,
+): ComputedRef<(self: Rect.Rect) => Rect.Rect> {
   const origin = useOrigin(() => props.origin, fallback)
-  return computed(() => (self: Rect) => align(self, point(self.x, self.y), origin.value))
+  return computed(
+    () => (self: Rect.Rect) => Rect.align(self, Point.make(self.x, self.y), origin.value),
+  )
 }
 
-export function useTransformedRect(rect: MaybeRefOrGetter<Rect>, props: TransformProps) {
+export function useTransformedRect(rect: MaybeRefOrGetter<Rect.Rect>, props: TransformProps) {
   const originTranslation = useOriginTranslation(props)
   const translation = useXYTranslation(props, rect)
 
   return computed(() => toValue(rect).pipe(originTranslation.value, translation.value))
 }
 
-export function useRect(props: RectProps): ComputedRef<Rect> {
+export function useRect(props: RectProps): ComputedRef<Rect.Rect> {
   const parentX = useParentX()
   const parentY = useParentY()
   const parentWidth = useParentWidth()
@@ -237,5 +239,5 @@ export function useRect(props: RectProps): ComputedRef<Rect> {
     () => maxSize.value.height,
   )
 
-  return useTransformedRect(() => rect.fromInterval(x.value, y.value), props)
+  return useTransformedRect(() => Rect.fromInterval(x.value, y.value), props)
 }

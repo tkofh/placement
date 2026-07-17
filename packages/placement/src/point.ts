@@ -31,9 +31,9 @@ export interface PointLike {
  * computed points with `equals`, which tolerates rounding noise, rather
  * than by raw coordinate comparison.
  *
- * Exported type-only: instances come from the `point` factory,
- * `fromPolar`, or any operation in this module. Extends `Pipeable`, so
- * data-last operations chain: `p.pipe(translate(10, 0), scale(2))`.
+ * Exported type-only: instances come from `make`, `fromPolar`, or any
+ * operation in this module. Extends `Pipeable`, so data-last operations
+ * chain: `p.pipe(Point.translate(10, 0), Point.scale(2))`.
  */
 class Point extends Pipeable implements PointLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -81,47 +81,46 @@ export type { Point }
  * Creates a `Point`. No arguments make the origin, one argument fills
  * both components, and two are `x` and `y`.
  *
- * Common points hang off the factory as shared constants: `point.zero`,
- * `point.half`, `point.one`, and `point.infinity`.
+ * Common points are exported as shared constants: `Point.zero`,
+ * `Point.half`, `Point.one`, and `Point.infinity`.
  *
  * @param x - The x coordinate. Defaults to `0`.
  * @param y - The y coordinate. Copies `x` when omitted.
  * @returns The point `(x, y)`.
  * @example
  * ```ts
- * point() // Point (0, 0)
- * point(100) // Point (100, 100)
- * point(50, 100) // Point (50, 100)
+ * Point.make() // Point (0, 0)
+ * Point.make(100) // Point (100, 100)
+ * Point.make(50, 100) // Point (50, 100)
  * ```
  */
-export const point: {
+export const make: {
   (): Point
   (xy: number): Point
   (x: number, y: number): Point
-  /** The origin, `(0, 0)` — the additive identity. */
-  readonly zero: Point
-  /** The point `(0.5, 0.5)` — the center of the unit square. */
-  readonly half: Point
-  /** The point `(1, 1)` — the far corner of the unit square. */
-  readonly one: Point
-  /**
-   * The point `(Infinity, Infinity)` — the identity for componentwise
-   * `min`. One shared instance, so it also serves as an
-   * identity-checked sentinel.
-   */
-  readonly infinity: Point
-} = Object.assign((x?: number, y?: number) => new Point(x ?? 0, y ?? x ?? 0), {
-  zero: new Point(0, 0),
-  half: new Point(0.5, 0.5),
-  one: new Point(1, 1),
-  infinity: new Point(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY),
-})
+} = (x?: number, y?: number) => new Point(x ?? 0, y ?? x ?? 0)
+
+/** The origin, `(0, 0)` — the additive identity. */
+export const zero: Point = new Point(0, 0)
+
+/** The point `(0.5, 0.5)` — the center of the unit square. */
+export const half: Point = new Point(0.5, 0.5)
+
+/** The point `(1, 1)` — the far corner of the unit square. */
+export const one: Point = new Point(1, 1)
+
+/**
+ * The point `(Infinity, Infinity)` — the identity for componentwise
+ * `min`. One shared instance, so it also serves as an identity-checked
+ * sentinel.
+ */
+export const infinity: Point = new Point(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY)
 
 /**
  * Checks whether a value is a `Point`.
  *
- * True only for branded instances built by this module — the `point`
- * factory, `fromPolar`, and the operations. A plain `{ x, y }` record
+ * True only for branded instances built by this module — `make`,
+ * `fromPolar`, and the operations. A plain `{ x, y }` record
  * fails; test for the structural shape with `isPointLike`.
  *
  * @param value - The value to check.
@@ -159,7 +158,7 @@ export const isPointLike = (value: unknown): value is PointLike => {
  * @returns The point `(magnitude * cos(angle), magnitude * sin(angle))`.
  * @example
  * ```ts
- * fromPolar(100, 0) // Point (100, 0)
+ * Point.fromPolar(100, 0) // Point (100, 0)
  * ```
  */
 export const fromPolar = (magnitude: number, angle: number): Point =>
@@ -173,7 +172,7 @@ export const fromPolar = (magnitude: number, angle: number): Point =>
  * @returns The length, always non-negative.
  * @example
  * ```ts
- * magnitude(point(3, 4)) // 5
+ * Point.magnitude(Point.make(3, 4)) // 5
  * ```
  */
 export const magnitude = (self: Point): number => Math.hypot(self.x, self.y)
@@ -189,7 +188,7 @@ export const magnitude = (self: Point): number => Math.hypot(self.x, self.y)
  * @returns The angle in radians, in `[-pi, pi]`.
  * @example
  * ```ts
- * angle(point(0, 100)) // Math.PI / 2 (straight down on screen)
+ * Point.angle(Point.make(0, 100)) // Math.PI / 2 (straight down on screen)
  * ```
  */
 export const angle = (self: Point): number => Math.atan2(self.y, self.x)
@@ -204,7 +203,7 @@ export const angle = (self: Point): number => Math.atan2(self.y, self.x)
  * @returns The centroid, or `(0, 0)` for no points.
  * @example
  * ```ts
- * center([point(0, 0), point(100, 50)]) // Point (50, 25)
+ * Point.center([Point.make(0, 0), Point.make(100, 50)]) // Point (50, 25)
  * ```
  */
 export const center = (points: Iterable<PointLike>): Point => {
@@ -231,7 +230,7 @@ export const center = (points: Iterable<PointLike>): Point => {
  * @returns The point `(x, self.y)`.
  * @example
  * ```ts
- * setX(point(0, 100), 50) // Point (50, 100)
+ * Point.setX(Point.make(0, 100), 50) // Point (50, 100)
  * ```
  */
 export const setX: {
@@ -249,7 +248,7 @@ export const setX: {
  * @returns The point `(self.x, y)`.
  * @example
  * ```ts
- * setY(point(100, 0), 50) // Point (100, 50)
+ * Point.setY(Point.make(100, 0), 50) // Point (100, 50)
  * ```
  */
 export const setY: {
@@ -269,7 +268,7 @@ export const setY: {
  * @returns The point `(self.x + x, self.y + y)`.
  * @example
  * ```ts
- * translate(point(1, 2), 10, 20) // Point (11, 22)
+ * Point.translate(Point.make(1, 2), 10, 20) // Point (11, 22)
  * ```
  */
 export const translate: {
@@ -287,7 +286,7 @@ export const translate: {
  * @returns The point `(self.x + x, self.y)`.
  * @example
  * ```ts
- * translateX(point(1, 2), 10) // Point (11, 2)
+ * Point.translateX(Point.make(1, 2), 10) // Point (11, 2)
  * ```
  */
 export const translateX: {
@@ -305,7 +304,7 @@ export const translateX: {
  * @returns The point `(self.x, self.y + y)`.
  * @example
  * ```ts
- * translateY(point(1, 2), 20) // Point (1, 22)
+ * Point.translateY(Point.make(1, 2), 20) // Point (1, 22)
  * ```
  */
 export const translateY: {
@@ -324,8 +323,8 @@ export const translateY: {
  * @returns The point `(self.x + other.x, self.y + other.y)`.
  * @example
  * ```ts
- * add(point(1, 2), point(3, 4)) // Point (4, 6)
- * point(1, 2).pipe(add({ x: 3, y: 4 })) // Point (4, 6)
+ * Point.add(Point.make(1, 2), Point.make(3, 4)) // Point (4, 6)
+ * Point.make(1, 2).pipe(Point.add({ x: 3, y: 4 })) // Point (4, 6)
  * ```
  */
 export const add: {
@@ -344,7 +343,7 @@ export const add: {
  * @returns The point `(self.x - other.x, self.y - other.y)`.
  * @example
  * ```ts
- * subtract(point(1, 2), point(3, 4)) // Point (-2, -2)
+ * Point.subtract(Point.make(1, 2), Point.make(3, 4)) // Point (-2, -2)
  * ```
  */
 export const subtract: {
@@ -363,8 +362,8 @@ export const subtract: {
  * @returns The point `(self.x * factor, self.y * factor)`.
  * @example
  * ```ts
- * scale(point(100, 50), 0.5) // Point (50, 25)
- * scale(point(100, 50), -1) // Point (-100, -50)
+ * Point.scale(Point.make(100, 50), 0.5) // Point (50, 25)
+ * Point.scale(Point.make(100, 50), -1) // Point (-100, -50)
  * ```
  */
 export const scale: {
@@ -387,8 +386,8 @@ export const scale: {
  * @returns The point `amount` of the way from `self` to `target`.
  * @example
  * ```ts
- * lerp(point(0, 0), point(100, 100), 0.5) // Point (50, 50)
- * point(100, 100).pipe(lerp(point(200, 200), 0.5)) // Point (150, 150)
+ * Point.lerp(Point.make(0, 0), Point.make(100, 100), 0.5) // Point (50, 50)
+ * Point.make(100, 100).pipe(Point.lerp(Point.make(200, 200), 0.5)) // Point (150, 150)
  * ```
  */
 export const lerp: {
@@ -412,7 +411,7 @@ export const lerp: {
  * @returns The point `(min(self.x, other.x), min(self.y, other.y))`.
  * @example
  * ```ts
- * min(point(0, 100), point(100, 0)) // Point (0, 0)
+ * Point.min(Point.make(0, 100), Point.make(100, 0)) // Point (0, 0)
  * ```
  */
 export const min: {
@@ -436,7 +435,7 @@ export const min: {
  * @returns The point `(max(self.x, other.x), max(self.y, other.y))`.
  * @example
  * ```ts
- * max(point(0, 100), point(100, 0)) // Point (100, 100)
+ * Point.max(Point.make(0, 100), Point.make(100, 0)) // Point (100, 100)
  * ```
  */
 export const max: {
@@ -465,7 +464,8 @@ export const max: {
  * @returns The rotated point.
  * @example
  * ```ts
- * orbit(point(0, 100), point(0, 0), Math.PI) // within rounding of Point (0, -100)
+ * // within rounding of Point (0, -100):
+ * Point.orbit(Point.make(0, 100), Point.make(0, 0), Math.PI)
  * ```
  */
 export const orbit: {
@@ -506,8 +506,8 @@ export const orbit: {
  * @returns `self` when already far enough, otherwise a point `gap` away from `target`.
  * @example
  * ```ts
- * avoid(point(3, 4), point(0, 0), 10) // Point (6, 8)
- * point(20, 0).pipe(avoid(point(0, 0), 10)) // the same instance, untouched
+ * Point.avoid(Point.make(3, 4), Point.make(0, 0), 10) // Point (6, 8)
+ * Point.make(20, 0).pipe(Point.avoid(Point.make(0, 0), 10)) // the same instance, untouched
  * ```
  */
 export const avoid: {
@@ -559,7 +559,7 @@ export const avoid: {
  * @returns The unit vector, or `(NaN, NaN)` for the zero vector.
  * @example
  * ```ts
- * normalize(point(3, 4)) // Point (0.6, 0.8)
+ * Point.normalize(Point.make(3, 4)) // Point (0.6, 0.8)
  * ```
  */
 export const normalize = (self: Point): Point => {
@@ -577,7 +577,7 @@ export const normalize = (self: Point): Point => {
  * @returns The distance, always non-negative.
  * @example
  * ```ts
- * distance(point(0, 0), point(100, 0)) // 100
+ * Point.distance(Point.make(0, 0), Point.make(100, 0)) // 100
  * ```
  */
 export const distance: {
@@ -598,8 +598,8 @@ export const distance: {
  * @returns The dot product.
  * @example
  * ```ts
- * dot(point(3, 4), point(1, 2)) // 11
- * dot(point(3, 4), point(4, -3)) // 0 (perpendicular)
+ * Point.dot(Point.make(3, 4), Point.make(1, 2)) // 11
+ * Point.dot(Point.make(3, 4), Point.make(4, -3)) // 0 (perpendicular)
  * ```
  */
 export const dot: {
@@ -623,8 +623,8 @@ export const dot: {
  * @returns The signed cross product.
  * @example
  * ```ts
- * cross(point(5, 0), point(0, 5)) // 25 (a clockwise turn on screen)
- * cross(point(3, 4), point(1, 2)) // 2
+ * Point.cross(Point.make(5, 0), Point.make(0, 5)) // 25 (a clockwise turn on screen)
+ * Point.cross(Point.make(3, 4), Point.make(1, 2)) // 2
  * ```
  */
 export const cross: {
@@ -640,7 +640,7 @@ export const cross: {
  * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)`, so
  * rounding noise never separates points at any magnitude (see
  * `PRECISION.md`). Non-finite coordinates compare exactly: an infinite
- * coordinate equals only the same infinity (`point.infinity` equals
+ * coordinate equals only the same infinity (`Point.infinity` equals
  * itself), and a `NaN` coordinate equals nothing. Like any tolerant
  * equality, it is not transitive.
  *
@@ -651,9 +651,9 @@ export const cross: {
  * @returns `true` when both coordinates coincide within tolerance.
  * @example
  * ```ts
- * equals(point(0.1 + 0.2, 1), point(0.3, 1)) // true
- * equals(point.infinity, point.infinity) // true
- * point(1, 2).pipe(equals(point(1, 3))) // false
+ * Point.equals(Point.make(0.1 + 0.2, 1), Point.make(0.3, 1)) // true
+ * Point.equals(Point.infinity, Point.infinity) // true
+ * Point.make(1, 2).pipe(Point.equals(Point.make(1, 3))) // false
  * ```
  */
 export const equals: {

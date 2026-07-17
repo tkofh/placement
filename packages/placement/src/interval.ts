@@ -17,7 +17,7 @@ type TypeBrand = typeof TypeBrand
  * Operations that compare or combine two intervals (`join`, `intersect`, `contains`,
  * `intersects`, `equals`, and the targets of `alignTo` and `avoid`) accept an `IntervalLike`
  * for the operand measured against `self`, so a plain `{ start, size }` object works there.
- * The `self` position always requires an `Interval` built by `interval`.
+ * The `self` position always requires an `Interval` built by `make`.
  */
 export interface IntervalLike {
   /** The start position of the span. */
@@ -35,8 +35,8 @@ export interface IntervalLike {
  * then lies below `start` — and `min`/`max` expose the orientation-normalized bounds. The
  * predicates (`equals`, `contains`, `intersects`) are tolerance-aware; see `PRECISION.md`.
  *
- * Exported type-only; construct with `interval`. Extends `Pipeable`, so operations chain
- * data-last: `interval(0, 100).pipe(translate(50))`.
+ * Exported type-only; construct with `make`. Extends `Pipeable`, so operations chain data-last:
+ * `Interval.make(0, 100).pipe(Interval.translate(50))`.
  */
 class Interval extends Pipeable implements IntervalLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -74,7 +74,7 @@ class Interval extends Pipeable implements IntervalLike {
 
   /**
    * Serializes to the constructor shape, so `JSON.stringify` emits the two stored fields and
-   * `interval(json.start, json.size)` reconstructs the value.
+   * `Interval.make(json.start, json.size)` reconstructs the value.
    *
    * @returns A plain `{ start, size }` object.
    */
@@ -101,12 +101,12 @@ export type { Interval }
  * @returns The interval.
  * @example
  * ```ts
- * interval() // interval(0, 0)
- * interval(100) // interval(0, 100)
- * interval(50, 100) // interval(50, 100), ending at 150
+ * Interval.make() // Interval.make(0, 0)
+ * Interval.make(100) // Interval.make(0, 100)
+ * Interval.make(50, 100) // Interval.make(50, 100), ending at 150
  * ```
  */
-export const interval: {
+export const make: {
   (): Interval
   (size: number): Interval
   (start: number, size: number): Interval
@@ -117,7 +117,7 @@ export const interval: {
 /**
  * Checks if a value is an `Interval`.
  *
- * True only for values built by `interval`, which carry the brand. A plain `{ start, size }`
+ * True only for values built by `make`, which carry the brand. A plain `{ start, size }`
  * object fails; use `isIntervalLike` for the structural check.
  *
  * @param value - The value to check.
@@ -155,8 +155,8 @@ const targetBounds = (target: number | IntervalLike, gap: number): [number, numb
  * @returns An interval at `start` with `self`'s size.
  * @example
  * ```ts
- * setStart(interval(0, 100), 50) // interval(50, 100)
- * interval(0, 100).pipe(setStart(-50)) // interval(-50, 100)
+ * Interval.setStart(Interval.make(0, 100), 50) // Interval.make(50, 100)
+ * Interval.make(0, 100).pipe(Interval.setStart(-50)) // Interval.make(-50, 100)
  * ```
  */
 export const setStart: {
@@ -175,9 +175,9 @@ export const setStart: {
  * @returns An interval of the given size, starting at `self.start + (self.size - size) * origin`.
  * @example
  * ```ts
- * setSize(interval(0, 100), 50) // interval(0, 50)
- * setSize(interval(0, 100), 50, 0.5) // interval(25, 50)
- * interval(0, 100).pipe(setSize(50, 1)) // interval(50, 50)
+ * Interval.setSize(Interval.make(0, 100), 50) // Interval.make(0, 50)
+ * Interval.setSize(Interval.make(0, 100), 50, 0.5) // Interval.make(25, 50)
+ * Interval.make(0, 100).pipe(Interval.setSize(50, 1)) // Interval.make(50, 50)
  * ```
  */
 export const setSize: {
@@ -198,7 +198,7 @@ export const setSize: {
  * @returns An interval starting at `end - self.size` with `self`'s size.
  * @example
  * ```ts
- * setEnd(interval(0, 100), 50) // interval(-50, 100)
+ * Interval.setEnd(Interval.make(0, 100), 50) // Interval.make(-50, 100)
  * ```
  */
 export const setEnd: {
@@ -215,8 +215,8 @@ export const setEnd: {
  * @returns An interval starting at `self.start + amount` with `self`'s size.
  * @example
  * ```ts
- * translate(interval(0, 100), 50) // interval(50, 100)
- * interval(0, 100).pipe(translate(-50)) // interval(-50, 100)
+ * Interval.translate(Interval.make(0, 100), 50) // Interval.make(50, 100)
+ * Interval.make(0, 100).pipe(Interval.translate(-50)) // Interval.make(-50, 100)
  * ```
  */
 export const translate: {
@@ -236,8 +236,8 @@ export const translate: {
  * @returns An interval of size `self.size * factor`, anchored at `origin`.
  * @example
  * ```ts
- * scale(interval(0, 100), 2) // interval(0, 200)
- * interval(0, 100).pipe(scale(2, 1)) // interval(-100, 200)
+ * Interval.scale(Interval.make(0, 100), 2) // Interval.make(0, 200)
+ * Interval.make(0, 100).pipe(Interval.scale(2, 1)) // Interval.make(-100, 200)
  * ```
  */
 export const scale: {
@@ -262,8 +262,8 @@ export const scale: {
  * `self.size * factor`.
  * @example
  * ```ts
- * scaleFrom(interval(100, 100), 2, 100) // interval(100, 200)
- * interval(100, 100).pipe(scaleFrom(2, 0)) // interval(200, 200)
+ * Interval.scaleFrom(Interval.make(100, 100), 2, 100) // Interval.make(100, 200)
+ * Interval.make(100, 100).pipe(Interval.scaleFrom(2, 0)) // Interval.make(200, 200)
  * ```
  */
 export const scaleFrom: {
@@ -287,8 +287,8 @@ export const scaleFrom: {
  * @returns The interpolated interval.
  * @example
  * ```ts
- * lerp(interval(0, 100), interval(100, 50), 0.5) // interval(50, 75)
- * interval(0, 100).pipe(lerp(interval(100, 100), 1)) // interval(100, 100)
+ * Interval.lerp(Interval.make(0, 100), Interval.make(100, 50), 0.5) // Interval.make(50, 75)
+ * Interval.make(0, 100).pipe(Interval.lerp(Interval.make(100, 100), 1)) // Interval.make(100, 100)
  * ```
  */
 export const lerp: {
@@ -315,8 +315,8 @@ export const lerp: {
  * @returns The normalized interval.
  * @example
  * ```ts
- * normalize(interval(25, 50), interval(0, 100)) // interval(0.25, 0.5)
- * interval(0, 100).pipe(normalize(interval(100, 100))) // interval(-1, 1)
+ * Interval.normalize(Interval.make(25, 50), Interval.make(0, 100)) // Interval.make(0.25, 0.5)
+ * Interval.make(0, 100).pipe(Interval.normalize(Interval.make(100, 100))) // Interval.make(-1, 1)
  * ```
  */
 export const normalize: {
@@ -341,8 +341,10 @@ export const normalize: {
  * @returns The remapped interval.
  * @example
  * ```ts
- * remap(interval(0, 100), interval(0, 100), interval(100, 100)) // interval(100, 100)
- * interval(0, 50).pipe(remap(interval(100, 100), interval(0, 100))) // interval(-100, 50)
+ * Interval.remap(Interval.make(0, 100), Interval.make(0, 100), Interval.make(100, 100))
+ * // Interval.make(100, 100)
+ * Interval.make(0, 50).pipe(Interval.remap(Interval.make(100, 100), Interval.make(0, 100)))
+ * // Interval.make(-100, 50)
  * ```
  */
 export const remap: {
@@ -364,8 +366,8 @@ export const remap: {
  * Positions the interval so its `origin` point coincides with the target, preserving its size.
  * `origin` is a normalized position within the interval: `0` its start, `0.5` its center, `1`
  * its end. A number target is the position itself; an interval target contributes its own
- * `origin` point, so `alignTo(a, b, 1)` puts `a`'s end at `b`'s end. The data-last form omits
- * `self` and returns a function of it.
+ * `origin` point, so `Interval.alignTo(a, b, 1)` puts `a`'s end at `b`'s end. The data-last
+ * form omits `self` and returns a function of it.
  *
  * @param self - The interval to position.
  * @param target - The position to align to, or an interval whose `origin` point is that position.
@@ -374,9 +376,9 @@ export const remap: {
  * @returns An interval of `self`'s size, aligned to the target.
  * @example
  * ```ts
- * alignTo(interval(0, 100), 50, 0.5) // interval(0, 100), centered on 50
- * alignTo(interval(0, 100), interval(200, 50), 0) // interval(200, 100)
- * interval(0, 100).pipe(alignTo(50, 1)) // interval(-50, 100), ending at 50
+ * Interval.alignTo(Interval.make(0, 100), 50, 0.5) // Interval.make(0, 100), centered on 50
+ * Interval.alignTo(Interval.make(0, 100), Interval.make(200, 50), 0) // Interval.make(200, 100)
+ * Interval.make(0, 100).pipe(Interval.alignTo(50, 1)) // Interval.make(-50, 100), ending at 50
  * ```
  */
 export const alignTo: {
@@ -401,9 +403,11 @@ export const alignTo: {
  * @returns `self` when already clear; otherwise an interval shifted out of the zone.
  * @example
  * ```ts
- * avoid(interval(0, 100), 50, 0) // interval(-50, 100), the tie resolved toward the start
- * avoid(interval(0, 100), interval(0, 10), 10) // interval(20, 100)
- * interval(200, 50).pipe(avoid(interval(0, 100), 0)) // the same instance, untouched
+ * Interval.avoid(Interval.make(0, 100), 50, 0)
+ * // Interval.make(-50, 100), the tie resolved toward the start
+ * Interval.avoid(Interval.make(0, 100), Interval.make(0, 10), 10) // Interval.make(20, 100)
+ * Interval.make(200, 50).pipe(Interval.avoid(Interval.make(0, 100), 0))
+ * // the same instance, untouched
  * ```
  */
 export const avoid: {
@@ -434,8 +438,8 @@ export const avoid: {
  * @returns The enclosing interval.
  * @example
  * ```ts
- * join(interval(0, 100), interval(150, 50)) // interval(0, 200)
- * interval(0, 100).pipe(join(interval(-50, 25))) // interval(-50, 150)
+ * Interval.join(Interval.make(0, 100), Interval.make(150, 50)) // Interval.make(0, 200)
+ * Interval.make(0, 100).pipe(Interval.join(Interval.make(-50, 25))) // Interval.make(-50, 150)
  * ```
  */
 export const join: {
@@ -459,9 +463,9 @@ export const join: {
  * @returns The overlapping interval, or a zero-size interval in the gap when there is none.
  * @example
  * ```ts
- * intersect(interval(0, 100), interval(50, 100)) // interval(50, 50)
- * intersect(interval(0, 100), interval(200, 100)) // interval(150, 0)
- * interval(0, 100).pipe(intersect(interval(50, 100))) // interval(50, 50)
+ * Interval.intersect(Interval.make(0, 100), Interval.make(50, 100)) // Interval.make(50, 50)
+ * Interval.intersect(Interval.make(0, 100), Interval.make(200, 100)) // Interval.make(150, 0)
+ * Interval.make(0, 100).pipe(Interval.intersect(Interval.make(50, 100))) // Interval.make(50, 50)
  * ```
  */
 export const intersect: {
@@ -495,10 +499,10 @@ export const intersect: {
  * @returns `true` if `self` contains the target.
  * @example
  * ```ts
- * contains(interval(0, 100), 100) // true
- * contains(interval(0, 100), interval(50, 100)) // false
- * contains(interval(0, 0.3), 0.1 + 0.2) // true, tolerating boundary noise
- * interval(0, 100).pipe(contains(50)) // true
+ * Interval.contains(Interval.make(0, 100), 100) // true
+ * Interval.contains(Interval.make(0, 100), Interval.make(50, 100)) // false
+ * Interval.contains(Interval.make(0, 0.3), 0.1 + 0.2) // true, tolerating boundary noise
+ * Interval.make(0, 100).pipe(Interval.contains(50)) // true
  * ```
  */
 export const contains: {
@@ -527,8 +531,8 @@ export const contains: {
  * @returns `true` if the intervals overlap or touch.
  * @example
  * ```ts
- * intersects(interval(0, 100), interval(100, 50)) // true, touching at 100
- * interval(0, 100).pipe(intersects(interval(150, 50))) // false
+ * Interval.intersects(Interval.make(0, 100), Interval.make(100, 50)) // true, touching at 100
+ * Interval.make(0, 100).pipe(Interval.intersects(Interval.make(150, 50))) // false
  * ```
  */
 export const intersects: {
@@ -555,10 +559,10 @@ export const intersects: {
  * @returns `true` if the intervals' fields coincide.
  * @example
  * ```ts
- * equals(interval(0, 100), interval(0, 100)) // true
- * equals(interval(0.1 + 0.2, 1), interval(0.3, 1)) // true
- * equals(interval(0, Infinity), interval(0, Infinity)) // true
- * interval(0, 100).pipe(equals(interval(0, 101))) // false
+ * Interval.equals(Interval.make(0, 100), Interval.make(0, 100)) // true
+ * Interval.equals(Interval.make(0.1 + 0.2, 1), Interval.make(0.3, 1)) // true
+ * Interval.equals(Interval.make(0, Infinity), Interval.make(0, Infinity)) // true
+ * Interval.make(0, 100).pipe(Interval.equals(Interval.make(0, 101))) // false
  * ```
  */
 export const equals: {

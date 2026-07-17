@@ -1,4 +1,4 @@
-import { rect } from 'placement/rect'
+import * as Rect from 'placement/rect'
 import { defineComponent, h, ref } from 'vue'
 import { useTextRect } from '../composables/useDomRect.ts'
 import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
@@ -55,7 +55,7 @@ export const GraphicText = defineComponent(
       Number.POSITIVE_INFINITY,
     )
 
-    const self = useTransformedRect(() => rect.fromInterval(x.value, y.value), props)
+    const self = useTransformedRect(() => Rect.fromInterval(x.value, y.value), props)
 
     const paint = usePaint(props)
 

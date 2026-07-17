@@ -1,4 +1,4 @@
-import { type Point, isPoint, point } from 'placement/point'
+import * as Point from 'placement/point'
 import { type ParserInput, type ParserValue, parse } from 'valued'
 import { allOf } from 'valued'
 import { juxtapose } from 'valued'
@@ -25,34 +25,34 @@ const origin = oneOf([
 
 export type Origin = typeof origin
 
-export type OriginInput = ParserInput<Origin> | Point | number | undefined
+export type OriginInput = ParserInput<Origin> | Point.Point | number | undefined
 
 export type OriginValue = ParserValue<Origin>
 
-const cache = createCache<string, Point>(512)
+const cache = createCache<string, Point.Point>(512)
 
 function normalize(value: OriginValue) {
   if (isKeywordValue(value)) {
     switch (value.value) {
       case 'center':
-        return point(0.5)
+        return Point.make(0.5)
       case 'left':
-        return point(0, 0.5)
+        return Point.make(0, 0.5)
       case 'right':
-        return point(1, 0.5)
+        return Point.make(1, 0.5)
       case 'top':
-        return point(0.5, 0)
+        return Point.make(0.5, 0)
       case 'bottom':
-        return point(0.5, 1)
+        return Point.make(0.5, 1)
     }
   }
 
   if (isPercentageValue(value)) {
-    return point(value.value / 100)
+    return Point.make(value.value / 100)
   }
 
   if (isNumberValue(value)) {
-    return point(value.value)
+    return Point.make(value.value)
   }
 
   const [first, second] = value
@@ -100,16 +100,16 @@ function normalize(value: OriginValue) {
     }
   }
 
-  return point(x, y)
+  return Point.make(x, y)
 }
 
-export function resolveOrigin(input: OriginInput, auto: Point = point.zero): Point {
-  if (isPoint(input)) {
+export function resolveOrigin(input: OriginInput, auto: Point.Point = Point.zero): Point.Point {
+  if (Point.isPoint(input)) {
     return input
   }
 
   if (typeof input === 'number') {
-    return point(input, input)
+    return Point.make(input, input)
   }
 
   if (input === undefined) {

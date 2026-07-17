@@ -32,7 +32,7 @@ pnpm add @placement/vue placement vue
   ResizeObserver and maps its layout space onto the viewBox via a `fit`
   prop (`'contain' | 'cover' | 'crop'`).
 - `FlexLayout` / `FlexItem` — flexbox containers and items over the core's
-  `applyFlexbox`; items receive their solved `Rect` and re-provide it as the
+  `Flexbox.apply`; items receive their solved `Rect` and re-provide it as the
   sizing context for their children. Both are renderless unless given
   `class`/`style`/`debug`.
 - `GraphicRect`, `GraphicCircle`, `GraphicLine`, `GraphicText`,

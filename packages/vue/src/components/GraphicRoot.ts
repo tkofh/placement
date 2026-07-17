@@ -1,5 +1,5 @@
-import { point } from 'placement/point'
-import { type Rect, align, contain, cover, rect } from 'placement/rect'
+import * as Point from 'placement/point'
+import * as Rect from 'placement/rect'
 import { computed, defineComponent, h, shallowRef } from 'vue'
 import { useDomRect } from '../composables/useDomRect.ts'
 import {
@@ -43,24 +43,24 @@ export const GraphicRoot = defineComponent(
     const size = useConstrainedSize(basisSize, minSize, maxSize)
 
     const rootRect = computed(() =>
-      rect.fromDimensions(autoDimensions(size.value, domDimensions.value)),
+      Rect.fromDimensions(autoDimensions(size.value, domDimensions.value)),
     )
 
-    const origin = useOrigin(() => props.origin, point.half)
+    const origin = useOrigin(() => props.origin, Point.half)
     const translation = useXYTranslation(props, domRect)
 
     const viewBox = computed(() => {
       const fit = props.fit ?? 'crop'
-      let viewBoxRect: Rect
+      let viewBoxRect: Rect.Rect
       if (fit === 'crop') {
-        viewBoxRect = domRect.value.pipe(align(rootRect.value, origin.value))
+        viewBoxRect = domRect.value.pipe(Rect.align(rootRect.value, origin.value))
       } else {
         viewBoxRect = domRect.value.pipe(
           // these are reversed (cover vs contain) because the viewBox is
           // the "parent" rect in this context. when the viewBox "covers"
           // the rootRect, then the rootRect is "contained" by the viewBox
-          fit === 'cover' ? contain(rootRect.value, 0) : cover(rootRect.value, 0),
-          align(rootRect.value, origin.value),
+          fit === 'cover' ? Rect.contain(rootRect.value, 0) : Rect.cover(rootRect.value, 0),
+          Rect.align(rootRect.value, origin.value),
         )
       }
 

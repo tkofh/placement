@@ -3,7 +3,7 @@ import { Pipeable, dual } from 'curvy/utils'
 import type { Dimensions } from './dimensions.ts'
 import type { Interval } from './interval.ts'
 import type { Offset } from './offset.ts'
-import { type Point, type PointLike, isPoint, point } from './point.ts'
+import * as Point from './point.ts'
 import { normalizeTRBL, normalizeXYWH } from './utils/arguments.ts'
 import { isRecord } from './utils/object.ts'
 import { boundsTolerance, fieldsCoincident } from './utils/tolerance.ts'
@@ -15,9 +15,9 @@ type TypeBrand = typeof TypeBrand
  * The minimal structural shape of a rectangle: a position and a signed
  * size in y-down coordinate space.
  *
- * Read-only inputs accept any `RectLike` — `rect.from`, the second operand
+ * Read-only inputs accept any `RectLike` — `from`, the second operand
  * of `join`, `intersect`, and `lerp`, and the predicates — while
- * transforms require a branded `Rect` built by `rect`.
+ * transforms require a branded `Rect` built by `make`.
  */
 export interface RectLike {
   /** The x coordinate of the origin corner — the left edge when `width >= 0`. */
@@ -42,9 +42,8 @@ export interface RectLike {
  * coordinates, while bounds questions (`contains`, `intersects`, `join`,
  * `intersect`) normalize the extent first.
  *
- * Construct values with the `rect` factory — the class is exported
- * type-only. Extends `Pipeable`, so operations chain as
- * `self.pipe(op(...))`.
+ * Construct values with `make` — the class is exported type-only.
+ * Extends `Pipeable`, so operations chain as `self.pipe(op(...))`.
  */
 class Rect extends Pipeable implements RectLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -118,8 +117,8 @@ class Rect extends Pipeable implements RectLike {
   }
 
   /** The center as a `Point`: `(centerX, centerY)`. */
-  get center(): Point {
-    return point(this.centerX, this.centerY)
+  get center(): Point.Point {
+    return Point.make(this.centerX, this.centerY)
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
@@ -144,7 +143,27 @@ class Rect extends Pipeable implements RectLike {
 
 export type { Rect }
 
-interface RectConstructor {
+/**
+ * Creates a `Rect`. Arity picks the meaning of the arguments: none is the
+ * zero rect, one is a square of that size at the origin, two are a width
+ * and height at the origin, three are `x`, `y`, and a square size, and
+ * four are `x`, `y`, `width`, and `height`.
+ *
+ * Inputs are stored exactly as given — no rounding, no normalization — and
+ * negative sizes are legal. The other constructors build rects from other
+ * shapes: `from` copies a rect-like, `fromDimensions` and `fromInterval`
+ * lift the other value types, and `trbl` spans absolute edge coordinates.
+ *
+ * @example
+ * ```ts
+ * Rect.make() // Rect.make(0, 0, 0, 0)
+ * Rect.make(10) // Rect.make(0, 0, 10, 10)
+ * Rect.make(10, 20) // Rect.make(0, 0, 10, 20)
+ * Rect.make(10, 20, 30) // Rect.make(10, 20, 30, 30)
+ * Rect.make(10, 20, 30, 40) // x 10, y 20, width 30, height 40
+ * ```
+ */
+export const make: {
   /**
    * Creates the zero rect.
    *
@@ -185,106 +204,73 @@ interface RectConstructor {
    * @returns The rect at `(x, y)` with the given size.
    */
   (x: number, y: number, width: number, height: number): Rect
-
-  /**
-   * Creates a `Rect` from any value with numeric `x`, `y`, `width`, and
-   * `height` fields, copying the four fields exactly.
-   *
-   * @param rect - The rect-like value to copy.
-   * @returns A new `Rect` with the same position and size.
-   */
-  from(rect: RectLike): Rect
-  /**
-   * Creates a `Rect` with the size of `dimensions` at `position`.
-   *
-   * @param dimensions - The size, from `placement/dimensions`.
-   * @param position - The `(x, y)` position. Defaults to the origin.
-   * @returns A new `Rect` at `position` with the given dimensions.
-   */
-  fromDimensions(dimensions: Dimensions, position?: PointLike): Rect
-  /**
-   * Creates a `Rect` from 1D intervals, one per axis: each interval's
-   * `start` becomes the position coordinate and its `size` the size. With
-   * `y` omitted, `x` is mirrored onto both axes.
-   *
-   * @param x - The horizontal interval (`x` and `width`).
-   * @param y - The vertical interval (`y` and `height`). Defaults to `x`.
-   * @returns A new `Rect` spanning both intervals.
-   */
-  fromInterval(x: Interval, y?: Interval): Rect
-  /**
-   * Creates a `Rect` spanning absolute edge coordinates — not inset
-   * distances. The result runs from `left` to `right` and `top` to
-   * `bottom` exactly as given, so `right < left` (or `bottom < top`)
-   * produces a negative size.
-   *
-   * Omitted arguments fall back CSS-shorthand style: one value places all
-   * four edges (a zero-size rect at `(top, top)`), two are
-   * vertical/horizontal, and three leave `left` mirroring `right`.
-   *
-   * @param top - The y coordinate of the top edge.
-   * @param right - The x coordinate of the right edge. Defaults to `top`.
-   * @param bottom - The y coordinate of the bottom edge. Defaults to `top`.
-   * @param left - The x coordinate of the left edge. Defaults to `right`.
-   * @returns A new `Rect` spanning the given edges.
-   * @example
-   * ```ts
-   * rect.trbl(20, 40, 60, 10) // rect(10, 20, 30, 40)
-   * rect.trbl(10) // rect(10, 10, 0, 0)
-   * ```
-   */
-  trbl(top: number, right?: number, bottom?: number, left?: number): Rect
-
-  /** The rect at `(0, 0)` with zero size — a shared instance. */
-  zero: Rect
-}
+} = (a?: number, b?: number, c?: number, d?: number): Rect => new Rect(...normalizeXYWH(a, b, c, d))
 
 /**
- * Creates a `Rect`. Arity picks the meaning of the arguments: none is the
- * zero rect, one is a square of that size at the origin, two are a width
- * and height at the origin, three are `x`, `y`, and a square size, and
- * four are `x`, `y`, `width`, and `height`.
+ * Creates a `Rect` from any value with numeric `x`, `y`, `width`, and
+ * `height` fields, copying the four fields exactly.
  *
- * Inputs are stored exactly as given — no rounding, no normalization — and
- * negative sizes are legal. The statics build rects from other shapes:
- * `rect.from` copies a rect-like, `rect.fromDimensions` and
- * `rect.fromInterval` lift the other value types, and `rect.trbl` spans
- * absolute edge coordinates.
- *
- * @example
- * ```ts
- * rect() // rect(0, 0, 0, 0)
- * rect(10) // rect(0, 0, 10, 10)
- * rect(10, 20) // rect(0, 0, 10, 20)
- * rect(10, 20, 30) // rect(10, 20, 30, 30)
- * rect(10, 20, 30, 40) // x 10, y 20, width 30, height 40
- * ```
+ * @param rect - The rect-like value to copy.
+ * @returns A new `Rect` with the same position and size.
  */
-const rect = ((a?: number, b?: number, c?: number, d?: number): Rect =>
-  new Rect(...normalizeXYWH(a, b, c, d))) as RectConstructor
+export const from = (rect: RectLike): Rect => new Rect(rect.x, rect.y, rect.width, rect.height)
 
-rect.from = (input: RectLike) => new Rect(input.x, input.y, input.width, input.height)
-
-rect.fromDimensions = (dimensions: Dimensions, position?: PointLike) =>
+/**
+ * Creates a `Rect` with the size of `dimensions` at `position`.
+ *
+ * @param dimensions - The size, from `placement/dimensions`.
+ * @param position - The `(x, y)` position. Defaults to the origin.
+ * @returns A new `Rect` at `position` with the given dimensions.
+ */
+export const fromDimensions = (dimensions: Dimensions, position?: Point.PointLike): Rect =>
   new Rect(position?.x ?? 0, position?.y ?? 0, dimensions.width, dimensions.height)
 
-rect.fromInterval = (x: Interval, y: Interval = x) => new Rect(x.start, y.start, x.size, y.size)
+/**
+ * Creates a `Rect` from 1D intervals, one per axis: each interval's
+ * `start` becomes the position coordinate and its `size` the size. With
+ * `y` omitted, `x` is mirrored onto both axes.
+ *
+ * @param x - The horizontal interval (`x` and `width`).
+ * @param y - The vertical interval (`y` and `height`). Defaults to `x`.
+ * @returns A new `Rect` spanning both intervals.
+ */
+export const fromInterval = (x: Interval, y: Interval = x): Rect =>
+  new Rect(x.start, y.start, x.size, y.size)
 
-// The arguments are absolute edge coordinates (CSS shorthand fallbacks
-// apply): the result spans left to right and top to bottom, exactly as given.
-rect.trbl = (top: number, right?: number, bottom?: number, left?: number) => {
+/**
+ * Creates a `Rect` spanning absolute edge coordinates — not inset
+ * distances. The result runs from `left` to `right` and `top` to
+ * `bottom` exactly as given, so `right < left` (or `bottom < top`)
+ * produces a negative size.
+ *
+ * Omitted arguments fall back CSS-shorthand style: one value places all
+ * four edges (a zero-size rect at `(top, top)`), two are
+ * vertical/horizontal, and three leave `left` mirroring `right`.
+ *
+ * @param top - The y coordinate of the top edge.
+ * @param right - The x coordinate of the right edge. Defaults to `top`.
+ * @param bottom - The y coordinate of the bottom edge. Defaults to `top`.
+ * @param left - The x coordinate of the left edge. Defaults to `right`.
+ * @returns A new `Rect` spanning the given edges.
+ * @example
+ * ```ts
+ * Rect.trbl(20, 40, 60, 10) // Rect.make(10, 20, 30, 40)
+ * Rect.trbl(10) // Rect.make(10, 10, 0, 0)
+ * ```
+ */
+export const trbl = (top: number, right?: number, bottom?: number, left?: number): Rect => {
   const [t, r, b, l] = normalizeTRBL(top, right, bottom, left)
   return new Rect(l, t, r - l, b - t)
 }
 
-rect.zero = new Rect(0, 0, 0, 0)
-
-export { rect }
+/** The rect at `(0, 0)` with zero size — a shared instance. */
+export const zero: Rect = new Rect(0, 0, 0, 0)
 
 /**
  * Checks if a value is a `Rect`.
  *
- * True only for values built by `rect` (or its statics), which carry the
+ * True only for values built by this module's constructors (`make`,
+ * `from`, `fromDimensions`, `fromInterval`, `trbl`), which carry the
  * brand — a plain `{ x, y, width, height }` object is rect-like but not a
  * `Rect`.
  *
@@ -492,8 +478,8 @@ export const translateY: {
  * @returns A new `Rect` moved by `(x, y)`.
  * @example
  * ```ts
- * translate(rect(0, 0, 100), 10, 20) // rect(10, 20, 100, 100)
- * rect(0, 0, 100).pipe(translate(10, 20)) // rect(10, 20, 100, 100)
+ * Rect.translate(Rect.make(0, 0, 100), 10, 20) // Rect.make(10, 20, 100, 100)
+ * Rect.make(0, 0, 100).pipe(Rect.translate(10, 20)) // Rect.make(10, 20, 100, 100)
  * ```
  */
 export const translate: {
@@ -519,8 +505,8 @@ export const translate: {
  * @returns A new `Rect` with `width * factor`, repositioned to hold the origin point.
  * @example
  * ```ts
- * scaleX(rect(10), 2) // rect(0, 0, 20, 10)
- * scaleX(rect(10), 2, 0.5) // rect(-5, 0, 20, 10)
+ * Rect.scaleX(Rect.make(10), 2) // Rect.make(0, 0, 20, 10)
+ * Rect.scaleX(Rect.make(10), 2, 0.5) // Rect.make(-5, 0, 20, 10)
  * ```
  */
 export const scaleX: {
@@ -580,8 +566,8 @@ export const scaleY: {
  * @returns A new `Rect` scaled by `factor`, repositioned to hold the origin point.
  * @example
  * ```ts
- * scale(rect(10), 2, 0.5) // rect(-5, -5, 20, 20)
- * rect(10).pipe(scale(2, 1)) // rect(-10, -10, 20, 20)
+ * Rect.scale(Rect.make(10), 2, 0.5) // Rect.make(-5, -5, 20, 20)
+ * Rect.make(10).pipe(Rect.scale(2, 1)) // Rect.make(-10, -10, 20, 20)
  * ```
  */
 export const scale: {
@@ -611,15 +597,15 @@ export const scale: {
  * @returns A new `Rect` scaled about `position`.
  * @example
  * ```ts
- * scaleFrom(rect(100, 100, 100), 2, point.zero) // rect(200, 200, 200, 200)
+ * Rect.scaleFrom(Rect.make(100, 100, 100), 2, Point.zero) // Rect.make(200, 200, 200, 200)
  * ```
  */
 export const scaleFrom: {
-  (self: Rect, factor: number, position: PointLike): Rect
-  (factor: number, position: PointLike): (self: Rect) => Rect
+  (self: Rect, factor: number, position: Point.PointLike): Rect
+  (factor: number, position: Point.PointLike): (self: Rect) => Rect
 } = dual(
   3,
-  (self: Rect, factor: number, position: PointLike) =>
+  (self: Rect, factor: number, position: Point.PointLike) =>
     new Rect(
       position.x + (self.x - position.x) * factor,
       position.y + (self.y - position.y) * factor,
@@ -642,8 +628,8 @@ export const scaleFrom: {
  * @returns A new `Rect` with `x` clamped.
  * @example
  * ```ts
- * clampX(rect(), 10, 30) // rect(10, 0, 0, 0)
- * clampX(rect(), 30, 10) // rect(30, 0, 0, 0) (crossed bounds: the minimum wins)
+ * Rect.clampX(Rect.make(), 10, 30) // Rect.make(10, 0, 0, 0)
+ * Rect.clampX(Rect.make(), 30, 10) // Rect.make(30, 0, 0, 0) (crossed bounds: the minimum wins)
  * ```
  */
 export const clampX: {
@@ -725,7 +711,7 @@ export const clampHeight: {
  * @returns A new `Rect` with `x` set to `target.x + (target.width - width) * origin`.
  * @example
  * ```ts
- * alignX(rect(100), rect(200), 0.5) // rect(50, 0, 100, 100)
+ * Rect.alignX(Rect.make(100), Rect.make(200), 0.5) // Rect.make(50, 0, 100, 100)
  * ```
  */
 export const alignX: {
@@ -777,20 +763,20 @@ export const alignY: {
  * @returns A new `Rect` aligned to `target`.
  * @example
  * ```ts
- * align(rect(100), rect(200), 0.5) // rect(50, 50, 100, 100)
- * rect(100).pipe(align(point(50, 60), 0.5)) // rect(0, 10, 100, 100)
+ * Rect.align(Rect.make(100), Rect.make(200), 0.5) // Rect.make(50, 50, 100, 100)
+ * Rect.make(100).pipe(Rect.align(Point.make(50, 60), 0.5)) // Rect.make(0, 10, 100, 100)
  * ```
  */
 export const align: {
-  (self: Rect, target: Rect | Point, origin: number | Point): Rect
-  (target: Rect | Point, origin: number | Point): (self: Rect) => Rect
-} = dual(3, (self: Rect, target: Rect | Point, origin: number | Point) => {
-  const originX = isPoint(origin) ? origin.x : origin
-  const originY = isPoint(origin) ? origin.y : origin
+  (self: Rect, target: Rect | Point.Point, origin: number | Point.Point): Rect
+  (target: Rect | Point.Point, origin: number | Point.Point): (self: Rect) => Rect
+} = dual(3, (self: Rect, target: Rect | Point.Point, origin: number | Point.Point) => {
+  const originX = Point.isPoint(origin) ? origin.x : origin
+  const originY = Point.isPoint(origin) ? origin.y : origin
 
   // A point target is a zero-extent rect at that position.
-  const targetWidth = isPoint(target) ? 0 : target.width
-  const targetHeight = isPoint(target) ? 0 : target.height
+  const targetWidth = Point.isPoint(target) ? 0 : target.width
+  const targetHeight = Point.isPoint(target) ? 0 : target.height
 
   return new Rect(
     target.x + (targetWidth - self.width) * originX,
@@ -815,8 +801,8 @@ export const align: {
  * @returns A new `Rect` spanning `top` to the original `bottom`.
  * @example
  * ```ts
- * resizeTop(rect(10, 20, 30, 40), 10) // rect(10, 10, 30, 50)
- * resizeTop(rect(10, 20, 30, 40), 70) // rect(10, 60, 30, 10) (crossed the bottom edge)
+ * Rect.resizeTop(Rect.make(10, 20, 30, 40), 10) // Rect.make(10, 10, 30, 50)
+ * Rect.resizeTop(Rect.make(10, 20, 30, 40), 70) // Rect.make(10, 60, 30, 10) (crossed the bottom edge)
  * ```
  */
 export const resizeTop: {
@@ -899,7 +885,7 @@ export const resizeLeft: {
  * @returns A new `Rect` with `width + delta` and `x` shifted by `-delta * origin`.
  * @example
  * ```ts
- * resizeX(rect(10, 20, 30, 40), 10, 0.5) // rect(5, 20, 40, 40)
+ * Rect.resizeX(Rect.make(10, 20, 30, 40), 10, 0.5) // Rect.make(5, 20, 40, 40)
  * ```
  */
 export const resizeX: {
@@ -951,20 +937,20 @@ export const resizeY: {
  * @returns A new `Rect` resized about the origin point.
  * @example
  * ```ts
- * resize(rect(100), 10, 0.5) // rect(-5, -5, 110, 110)
- * resize(rect(100), point(20, 10), 0.5) // rect(-10, -5, 120, 110)
+ * Rect.resize(Rect.make(100), 10, 0.5) // Rect.make(-5, -5, 110, 110)
+ * Rect.resize(Rect.make(100), Point.make(20, 10), 0.5) // Rect.make(-10, -5, 120, 110)
  * ```
  */
 export const resize: {
-  (self: Rect, delta: number | Point, origin?: number | Point): Rect
-  (delta: number | Point, origin?: number | Point): (self: Rect) => Rect
+  (self: Rect, delta: number | Point.Point, origin?: number | Point.Point): Rect
+  (delta: number | Point.Point, origin?: number | Point.Point): (self: Rect) => Rect
 } = dual(
   (args) => isRect(args[0]),
-  (self: Rect, delta: number | Point, origin: number | Point = 0) => {
-    const deltaX = isPoint(delta) ? delta.x : delta
-    const deltaY = isPoint(delta) ? delta.y : delta
-    const originX = isPoint(origin) ? origin.x : origin
-    const originY = isPoint(origin) ? origin.y : origin
+  (self: Rect, delta: number | Point.Point, origin: number | Point.Point = 0) => {
+    const deltaX = Point.isPoint(delta) ? delta.x : delta
+    const deltaY = Point.isPoint(delta) ? delta.y : delta
+    const originX = Point.isPoint(origin) ? origin.x : origin
+    const originY = Point.isPoint(origin) ? origin.y : origin
 
     return new Rect(
       self.x - deltaX * originX,
@@ -991,9 +977,9 @@ export const resize: {
  * @returns A new `Rect` inset by `value`, its size floored at zero.
  * @example
  * ```ts
- * contract(rect(0, 0, 100), 10) // rect(10, 10, 80, 80)
- * rect(0, 0, 100).pipe(contract(offset.trbl(10, 20, 30, 40))) // rect(40, 10, 40, 60)
- * contract(rect(0, 0, 10), 20) // rect(20, 20, 0, 0) (floored)
+ * Rect.contract(Rect.make(0, 0, 100), 10) // Rect.make(10, 10, 80, 80)
+ * Rect.make(0, 0, 100).pipe(Rect.contract(Offset.trbl(10, 20, 30, 40))) // Rect.make(40, 10, 40, 60)
+ * Rect.contract(Rect.make(0, 0, 10), 20) // Rect.make(20, 20, 0, 0) (floored)
  * ```
  */
 export const contract: {
@@ -1029,8 +1015,8 @@ export const contract: {
  * @returns A new `Rect` grown by `value` on each edge.
  * @example
  * ```ts
- * expand(rect(0, 0, 100), 10) // rect(-10, -10, 120, 120)
- * expand(rect(0, 0, 100), offset.trbl(10, 20, 30, 40)) // rect(-40, -10, 160, 140)
+ * Rect.expand(Rect.make(0, 0, 100), 10) // Rect.make(-10, -10, 120, 120)
+ * Rect.expand(Rect.make(0, 0, 100), Offset.trbl(10, 20, 30, 40)) // Rect.make(-40, -10, 160, 140)
  * ```
  */
 export const expand: {
@@ -1064,7 +1050,7 @@ export const expand: {
  * @returns A new `Rect` covering both inputs.
  * @example
  * ```ts
- * join(rect(10, 10, 0), rect(-10, -20, 0)) // rect(-10, -20, 20, 30)
+ * Rect.join(Rect.make(10, 10, 0), Rect.make(-10, -20, 0)) // Rect.make(-10, -20, 20, 30)
  * ```
  */
 export const join: {
@@ -1096,8 +1082,8 @@ export const join: {
  * @returns A new `Rect` covering the overlap, or a zero-size `Rect` between the centers.
  * @example
  * ```ts
- * intersect(rect(0, 0, 100), rect(50, 50, 100)) // rect(50, 50, 50, 50)
- * intersect(rect(0, 0, 100), rect(300, 0, 100)) // rect(200, 50, 0, 0)
+ * Rect.intersect(Rect.make(0, 0, 100), Rect.make(50, 50, 100)) // Rect.make(50, 50, 50, 50)
+ * Rect.intersect(Rect.make(0, 0, 100), Rect.make(300, 0, 100)) // Rect.make(200, 50, 0, 0)
  * ```
  */
 export const intersect: {
@@ -1150,8 +1136,8 @@ export const intersect: {
  * @returns A new `Rect` inscribed in `target`, or `target` itself when `self` has zero area.
  * @example
  * ```ts
- * contain(rect(0, 0, 100, 200), rect(50, 50, 100)) // rect(75, 50, 50, 100)
- * contain(rect(0, 0, 100, 200), rect(50, 50, 100), 0) // rect(50, 50, 50, 100)
+ * Rect.contain(Rect.make(0, 0, 100, 200), Rect.make(50, 50, 100)) // Rect.make(75, 50, 50, 100)
+ * Rect.contain(Rect.make(0, 0, 100, 200), Rect.make(50, 50, 100), 0) // Rect.make(50, 50, 50, 100)
  * ```
  */
 export const contain: {
@@ -1203,8 +1189,8 @@ export const contain: {
  * @returns A new `Rect` covering `target`, or `target` itself when `self` has zero area.
  * @example
  * ```ts
- * cover(rect(0, 0, 100, 200), rect(50, 50, 100)) // rect(50, 0, 100, 200)
- * cover(rect(0, 0, 100, 200), rect(50, 50, 100), 0) // rect(50, 50, 100, 200)
+ * Rect.cover(Rect.make(0, 0, 100, 200), Rect.make(50, 50, 100)) // Rect.make(50, 0, 100, 200)
+ * Rect.cover(Rect.make(0, 0, 100, 200), Rect.make(50, 50, 100), 0) // Rect.make(50, 50, 100, 200)
  * ```
  */
 export const cover: {
@@ -1248,8 +1234,8 @@ export const cover: {
  * @returns The fitted `Rect`.
  * @example
  * ```ts
- * fit(rect(0, 0, 100, 200), rect(50, 50, 100), 'contain') // rect(75, 50, 50, 100)
- * rect(0, 0, 100, 200).pipe(fit(rect(50, 50, 100), 'cover', 0)) // rect(50, 50, 100, 200)
+ * Rect.fit(Rect.make(0, 0, 100, 200), Rect.make(50, 50, 100), 'contain') // Rect.make(75, 50, 50, 100)
+ * Rect.make(0, 0, 100, 200).pipe(Rect.fit(Rect.make(50, 50, 100), 'cover', 0)) // Rect.make(50, 50, 100, 200)
  * ```
  */
 export const fit: {
@@ -1285,7 +1271,7 @@ export const fit: {
  * @returns A new `Rect` with each field interpolated.
  * @example
  * ```ts
- * lerp(rect(0, 0, 100), rect(100, 100, 50), 0.5) // rect(50, 50, 75, 75)
+ * Rect.lerp(Rect.make(0, 0, 100), Rect.make(100, 100, 50), 0.5) // Rect.make(50, 50, 75, 75)
  * ```
  */
 export const lerp: {
@@ -1321,15 +1307,15 @@ export const lerp: {
  * @returns `true` if `self` covers `target`.
  * @example
  * ```ts
- * contains(rect(0, 0, 100), point(100, 100)) // true (edges count)
- * contains(rect(0, 0, 100), rect(50, 50, 100)) // false
- * contains(rect(0, 0, 0.3, 1), point(0.1 + 0.2, 0.5)) // true (tolerant boundary)
+ * Rect.contains(Rect.make(0, 0, 100), Point.make(100, 100)) // true (edges count)
+ * Rect.contains(Rect.make(0, 0, 100), Rect.make(50, 50, 100)) // false
+ * Rect.contains(Rect.make(0, 0, 0.3, 1), Point.make(0.1 + 0.2, 0.5)) // true (tolerant boundary)
  * ```
  */
 export const contains: {
-  (self: Rect, target: PointLike | RectLike): boolean
-  (target: PointLike | RectLike): (self: Rect) => boolean
-} = dual(2, (self: Rect, target: PointLike | RectLike) => {
+  (self: Rect, target: Point.PointLike | RectLike): boolean
+  (target: Point.PointLike | RectLike): (self: Rect) => boolean
+} = dual(2, (self: Rect, target: Point.PointLike | RectLike) => {
   const [xMin, xMax, yMin, yMax] = bounds(self)
   const toleranceX = boundsTolerance(xMin, xMax)
   const toleranceY = boundsTolerance(yMin, yMax)
@@ -1365,8 +1351,8 @@ export const contains: {
  * @returns `true` if the rects overlap or touch.
  * @example
  * ```ts
- * intersects(rect(0, 0, 100), rect(100, 0, 100)) // true (edge contact counts)
- * rect(0, 0, 100).pipe(intersects(rect(150, 0, 50))) // false
+ * Rect.intersects(Rect.make(0, 0, 100), Rect.make(100, 0, 100)) // true (edge contact counts)
+ * Rect.make(0, 0, 100).pipe(Rect.intersects(Rect.make(150, 0, 50))) // false
  * ```
  */
 export const intersects: {
@@ -1406,8 +1392,8 @@ export const intersects: {
  * @returns `true` if all four fields are pairwise coincident.
  * @example
  * ```ts
- * equals(rect(0.1 + 0.2, 0, 1, 1), rect(0.3, 0, 1, 1)) // true
- * rect(10, 20, 30, 40).pipe(equals(rect(10, 20, 30, 41))) // false
+ * Rect.equals(Rect.make(0.1 + 0.2, 0, 1, 1), Rect.make(0.3, 0, 1, 1)) // true
+ * Rect.make(10, 20, 30, 40).pipe(Rect.equals(Rect.make(10, 20, 30, 41))) // false
  * ```
  */
 export const equals: {

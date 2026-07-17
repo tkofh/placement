@@ -28,9 +28,9 @@ export interface DimensionsLike {
  * exact, and construction is otherwise exact IEEE 754 arithmetic with no
  * post-processing.
  *
- * Values are immutable. The class is exported type-only; construct with the
- * `dimensions` factory. Every operation in this module also applies
- * data-last through `pipe`: `dimensions(100).pipe(scale(2))`.
+ * Values are immutable. The class is exported type-only; construct with
+ * `make`. Every operation in this module also applies data-last through
+ * `pipe`: `Dimensions.make(100).pipe(Dimensions.scale(2))`.
  */
 class Dimensions extends Pipeable implements DimensionsLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -88,9 +88,23 @@ class Dimensions extends Pipeable implements DimensionsLike {
 
 export type { Dimensions }
 
-interface DimensionsConstructor {
+/**
+ * Creates a `Dimensions` from zero, one, or two extents: no arguments is
+ * the zero dimensions, one argument is a square size, and two arguments are
+ * the width and the height. Inputs take their magnitude (dimensions are
+ * magnitudes).
+ *
+ * @example
+ * ```ts
+ * Dimensions.make() // Dimensions [0x0]
+ * Dimensions.make(100) // Dimensions [100x100]
+ * Dimensions.make(100, 50) // Dimensions [100x50]
+ * Dimensions.make(-100, -50) // Dimensions [100x50]
+ * ```
+ */
+export const make: {
   /**
-   * Creates the zero dimensions, `dimensions(0, 0)`.
+   * Creates the zero dimensions, `Dimensions.make(0, 0)`.
    *
    * @returns The zero `Dimensions`.
    */
@@ -110,45 +124,26 @@ interface DimensionsConstructor {
    * @returns The `Dimensions`.
    */
   (width: number, height: number): Dimensions
-
-  /** The 0 by 0 dimensions, a shared constant. */
-  zero: Dimensions
-  /**
-   * The dimensions with both extents `Infinity` — an unconstrained upper
-   * bound for `clamp`.
-   */
-  infinity: Dimensions
+} = (a?: number, b?: number): Dimensions => {
+  return new Dimensions(a ?? 0, b ?? a ?? 0)
 }
 
+/** The 0 by 0 dimensions, a shared constant. */
+export const zero: Dimensions = new Dimensions(0, 0)
+
 /**
- * Creates a `Dimensions` from zero, one, or two extents: no arguments is
- * the zero dimensions, one argument is a square size, and two arguments are
- * the width and the height. Inputs take their magnitude (dimensions are
- * magnitudes).
- *
- * Carries two constants: `dimensions.zero` and `dimensions.infinity`.
- *
- * @example
- * ```ts
- * dimensions() // Dimensions [0x0]
- * dimensions(100) // Dimensions [100x100]
- * dimensions(100, 50) // Dimensions [100x50]
- * dimensions(-100, -50) // Dimensions [100x50]
- * ```
+ * The dimensions with both extents `Infinity` — an unconstrained upper
+ * bound for `clamp`.
  */
-const dimensions = ((a?: number, b?: number): Dimensions => {
-  return new Dimensions(a ?? 0, b ?? a ?? 0)
-}) as DimensionsConstructor
-
-dimensions.zero = new Dimensions(0, 0)
-dimensions.infinity = new Dimensions(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY)
-
-export { dimensions }
+export const infinity: Dimensions = new Dimensions(
+  Number.POSITIVE_INFINITY,
+  Number.POSITIVE_INFINITY,
+)
 
 /**
  * Checks if a value is a `Dimensions`.
  *
- * True only for values built by the `dimensions` factory, which carry the
+ * True only for values built by `make`, which carry the
  * brand. A plain `{ width, height }` record is not a `Dimensions`; use
  * `isDimensionsLike` for the structural check.
  *
@@ -180,8 +175,8 @@ export const isDimensionsLike = (value: unknown): value is DimensionsLike => {
  * @returns A `Dimensions` with the new width and `self`'s height.
  * @example
  * ```ts
- * setWidth(dimensions(100), 200) // Dimensions [200x100]
- * dimensions(100).pipe(setWidth(200)) // Dimensions [200x100]
+ * Dimensions.setWidth(Dimensions.make(100), 200) // Dimensions [200x100]
+ * Dimensions.make(100).pipe(Dimensions.setWidth(200)) // Dimensions [200x100]
  * ```
  */
 export const setWidth: {
@@ -198,8 +193,8 @@ export const setWidth: {
  * @returns A `Dimensions` with `self`'s width and the new height.
  * @example
  * ```ts
- * setHeight(dimensions(100), 200) // Dimensions [100x200]
- * dimensions(100).pipe(setHeight(200)) // Dimensions [100x200]
+ * Dimensions.setHeight(Dimensions.make(100), 200) // Dimensions [100x200]
+ * Dimensions.make(100).pipe(Dimensions.setHeight(200)) // Dimensions [100x200]
  * ```
  */
 export const setHeight: {
@@ -225,9 +220,9 @@ export const setHeight: {
  * @returns A `Dimensions` with aspect ratio `ratio`.
  * @example
  * ```ts
- * setAspectRatio(dimensions(100), 2, 0) // Dimensions [100x50]
- * setAspectRatio(dimensions(100), 2, 1) // Dimensions [200x100]
- * dimensions(100).pipe(setAspectRatio(2)) // Dimensions [150x75]
+ * Dimensions.setAspectRatio(Dimensions.make(100), 2, 0) // Dimensions [100x50]
+ * Dimensions.setAspectRatio(Dimensions.make(100), 2, 1) // Dimensions [200x100]
+ * Dimensions.make(100).pipe(Dimensions.setAspectRatio(2)) // Dimensions [150x75]
  * ```
  */
 export const setAspectRatio: {
@@ -257,8 +252,8 @@ export const setAspectRatio: {
  * @returns A `Dimensions` with the clamped width and `self`'s height.
  * @example
  * ```ts
- * clampWidth(dimensions(250), 100, 200) // Dimensions [200x250]
- * dimensions(50).pipe(clampWidth(100, 200)) // Dimensions [100x50]
+ * Dimensions.clampWidth(Dimensions.make(250), 100, 200) // Dimensions [200x250]
+ * Dimensions.make(50).pipe(Dimensions.clampWidth(100, 200)) // Dimensions [100x50]
  * ```
  */
 export const clampWidth: {
@@ -284,8 +279,8 @@ export const clampWidth: {
  * @returns A `Dimensions` with `self`'s width and the clamped height.
  * @example
  * ```ts
- * clampHeight(dimensions(50), 100, 200) // Dimensions [50x100]
- * dimensions(250).pipe(clampHeight(100, 200)) // Dimensions [250x200]
+ * Dimensions.clampHeight(Dimensions.make(50), 100, 200) // Dimensions [50x100]
+ * Dimensions.make(250).pipe(Dimensions.clampHeight(100, 200)) // Dimensions [250x200]
  * ```
  */
 export const clampHeight: {
@@ -312,9 +307,11 @@ export const clampHeight: {
  * @returns A `Dimensions` with both extents clamped.
  * @example
  * ```ts
- * clamp(dimensions(250), 100, 200) // Dimensions [200x200]
- * clamp(dimensions(150), 200, 100) // Dimensions [200x200] (the minimum wins)
- * dimensions(50).pipe(clamp(dimensions(100, 100), dimensions(200, 200))) // Dimensions [100x100]
+ * Dimensions.clamp(Dimensions.make(250), 100, 200) // Dimensions [200x200]
+ * Dimensions.clamp(Dimensions.make(150), 200, 100) // Dimensions [200x200] (the minimum wins)
+ * Dimensions.make(50).pipe(
+ *   Dimensions.clamp(Dimensions.make(100, 100), Dimensions.make(200, 200)),
+ * ) // Dimensions [100x100]
  * ```
  */
 export const clamp: {
@@ -347,7 +344,7 @@ export const clamp: {
  * factors.
  *
  * The results take their magnitude, so a negative factor acts as its
- * absolute value: `scale(self, -2)` is `scale(self, 2)`. The data-last
+ * absolute value: `Dimensions.scale(self, -2)` is `Dimensions.scale(self, 2)`. The data-last
  * form omits `self` and returns a function of it, with one or two factors.
  *
  * @param self - The source extents. A `Rect` contributes only its width and height.
@@ -356,9 +353,9 @@ export const clamp: {
  * @returns A `Dimensions` with both extents scaled.
  * @example
  * ```ts
- * scale(dimensions(100), 2) // Dimensions [200x200]
- * scale(dimensions(100), 2, 0.5) // Dimensions [200x50]
- * dimensions(100).pipe(scale(2, 0.5)) // Dimensions [200x50]
+ * Dimensions.scale(Dimensions.make(100), 2) // Dimensions [200x200]
+ * Dimensions.scale(Dimensions.make(100), 2, 0.5) // Dimensions [200x50]
+ * Dimensions.make(100).pipe(Dimensions.scale(2, 0.5)) // Dimensions [200x50]
  * ```
  */
 export const scale: {
@@ -386,8 +383,8 @@ export const scale: {
  * @returns A `Dimensions` with `self`'s aspect ratio and, up to floating-point rounding, area `area`.
  * @example
  * ```ts
- * scaleTo(dimensions(100), 40000) // Dimensions [200x200]
- * dimensions(100).pipe(scaleTo(40000)) // Dimensions [200x200]
+ * Dimensions.scaleTo(Dimensions.make(100), 40000) // Dimensions [200x200]
+ * Dimensions.make(100).pipe(Dimensions.scaleTo(40000)) // Dimensions [200x200]
  * ```
  */
 export const scaleTo: {
@@ -411,8 +408,8 @@ export const scaleTo: {
  * @returns A `Dimensions` with the target width and a proportionally scaled height.
  * @example
  * ```ts
- * scaleToWidth(dimensions(100, 50), 200) // Dimensions [200x100]
- * dimensions(100, 50).pipe(scaleToWidth(200)) // Dimensions [200x100]
+ * Dimensions.scaleToWidth(Dimensions.make(100, 50), 200) // Dimensions [200x100]
+ * Dimensions.make(100, 50).pipe(Dimensions.scaleToWidth(200)) // Dimensions [200x100]
  * ```
  */
 export const scaleToWidth: {
@@ -435,8 +432,8 @@ export const scaleToWidth: {
  * @returns A `Dimensions` with a proportionally scaled width and the target height.
  * @example
  * ```ts
- * scaleToHeight(dimensions(100, 50), 200) // Dimensions [400x200]
- * dimensions(100, 50).pipe(scaleToHeight(200)) // Dimensions [400x200]
+ * Dimensions.scaleToHeight(Dimensions.make(100, 50), 200) // Dimensions [400x200]
+ * Dimensions.make(100, 50).pipe(Dimensions.scaleToHeight(200)) // Dimensions [400x200]
  * ```
  */
 export const scaleToHeight: {
@@ -466,9 +463,9 @@ export const scaleToHeight: {
  * @returns The largest `Dimensions` with ratio `ratio` that fit inside `self`.
  * @example
  * ```ts
- * contain(dimensions(100, 50), 4) // Dimensions [100x25]
- * contain(dimensions(100, 50), 1) // Dimensions [50x50]
- * dimensions(100).pipe(contain(2)) // Dimensions [100x50]
+ * Dimensions.contain(Dimensions.make(100, 50), 4) // Dimensions [100x25]
+ * Dimensions.contain(Dimensions.make(100, 50), 1) // Dimensions [50x50]
+ * Dimensions.make(100).pipe(Dimensions.contain(2)) // Dimensions [100x50]
  * ```
  */
 export const contain: {
@@ -512,9 +509,9 @@ export const contain: {
  * @returns The smallest `Dimensions` with ratio `ratio` that cover `self`.
  * @example
  * ```ts
- * cover(dimensions(100, 50), 4) // Dimensions [200x50]
- * cover(dimensions(100, 50), 1) // Dimensions [100x100]
- * dimensions(100).pipe(cover(2)) // Dimensions [200x100]
+ * Dimensions.cover(Dimensions.make(100, 50), 4) // Dimensions [200x50]
+ * Dimensions.cover(Dimensions.make(100, 50), 1) // Dimensions [100x100]
+ * Dimensions.make(100).pipe(Dimensions.cover(2)) // Dimensions [200x100]
  * ```
  */
 export const cover: {
@@ -550,8 +547,8 @@ export const cover: {
  * @returns A `Dimensions` with both extents interpolated.
  * @example
  * ```ts
- * lerp(dimensions(100, 50), dimensions(200, 150), 0.25) // Dimensions [125x75]
- * dimensions(100).pipe(lerp(dimensions(200, 200), 0.5)) // Dimensions [150x150]
+ * Dimensions.lerp(Dimensions.make(100, 50), Dimensions.make(200, 150), 0.25) // Dimensions [125x75]
+ * Dimensions.make(100).pipe(Dimensions.lerp(Dimensions.make(200, 200), 0.5)) // Dimensions [150x150]
  * ```
  */
 export const lerp: {
@@ -574,7 +571,7 @@ export const lerp: {
  * `EPSILON = 1e-10` and `RELATIVE_TOLERANCE = 1e-12`. The band absorbs
  * rounding noise at any magnitude, so uniformly scaling both values never
  * changes the verdict. Non-finite extents compare exactly: an infinite
- * extent equals only `Infinity` (`dimensions.infinity` equals itself),
+ * extent equals only `Infinity` (`Dimensions.infinity` equals itself),
  * and a `NaN` extent equals nothing. Like `coincident`, the comparison is
  * not transitive. The data-last form omits `self` and returns a function
  * of it.
@@ -584,10 +581,10 @@ export const lerp: {
  * @returns `true` if both extents coincide within tolerance, `false` otherwise.
  * @example
  * ```ts
- * equals(dimensions(0.1 + 0.2, 1), dimensions(0.3, 1)) // true
- * equals(dimensions(100, 50), { width: 100, height: 50 }) // true
- * equals(dimensions.infinity, dimensions.infinity) // true
- * dimensions(100, 50).pipe(equals(dimensions(100, 50))) // true
+ * Dimensions.equals(Dimensions.make(0.1 + 0.2, 1), Dimensions.make(0.3, 1)) // true
+ * Dimensions.equals(Dimensions.make(100, 50), { width: 100, height: 50 }) // true
+ * Dimensions.equals(Dimensions.infinity, Dimensions.infinity) // true
+ * Dimensions.make(100, 50).pipe(Dimensions.equals(Dimensions.make(100, 50))) // true
  * ```
  */
 export const equals: {

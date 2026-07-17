@@ -16,14 +16,21 @@ behavior-changing PR (`pnpm changeset`).
 ## Architecture (core)
 
 Everything is an immutable, brand-symbol-tagged class exported **type-only**
-with a lowercase factory function (`interval(0, 100)`), extending `Pipeable`
-from `curvy/utils`. Operations are standalone `dual` functions (Effect-style
-data-first `op(self, ...)` / data-last `self.pipe(op(...))`). The 1D core is
+and consumed through Effect-style namespace imports
+(`import * as Interval from 'placement/interval'`): the factory is `make`
+(`Interval.make(0, 100)`), constants and alternate constructors are plain
+module exports (`Rect.zero`, `Rect.fromInterval`, `Point.fromPolar`), guards
+keep full names (`Rect.isRect`), and types read as `Interval.Interval`.
+Every class extends `Pipeable` from `curvy/utils`. Operations are standalone
+`dual` functions (Effect-style data-first `op(self, ...)` / data-last
+`self.pipe(op(...))`). The 1D core is
 `Interval` (start/size); `Track` is a non-empty list of intervals plus the two
 1D solvers (`sequence` = flexbox main axis, `stack` = cross axis); flexbox is
 two tracks per line plus a track of lines. `Frame` is a flex-item spec,
-`Flexbox` the container spec, and `Rect`/`Point`/`Dimensions`/`Offset` the 2D
-value types.
+`Flexbox` the container spec (solved by `Flexbox.apply`), and
+`Rect`/`Point`/`Dimensions`/`Offset` the 2D value types. Type-only
+cross-module imports may stay flat (`import type { Rect } from ...`);
+namespace imports are for value usage.
 
 **Dual-dispatch ambiguity rule**: an op may use a predicate dual
 (`dual((args) => isX(args[0]), ...)`) with optional trailing args ONLY when the

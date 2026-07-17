@@ -1,4 +1,4 @@
-import { type FlexDirection, type FlexWrap, direction, wrap } from 'placement/flexbox'
+import * as Flexbox from 'placement/flexbox'
 import { type ParserInput, parse } from 'valued'
 import { someOf } from 'valued'
 import { keywords } from 'valued/data/keyword'
@@ -13,14 +13,14 @@ export type Flow = typeof flow
 export type FlowInput = ParserInput<Flow> | undefined
 
 export interface FlowValue {
-  readonly direction: FlexDirection
-  readonly wrap: FlexWrap
+  readonly direction: Flexbox.FlexDirection
+  readonly wrap: Flexbox.FlexWrap
 }
 
 export function resolveFlow(
   input: string | undefined,
-  autoDirection: FlexDirection = 0,
-  autoWrap: FlexWrap = 0,
+  autoDirection: Flexbox.FlexDirection = 0,
+  autoWrap: Flexbox.FlexWrap = 0,
 ): FlowValue {
   if (input == null) {
     return {
@@ -31,36 +31,36 @@ export function resolveFlow(
 
   const result = parse(input, flow)
 
-  let directionResult: FlexDirection = autoDirection
-  let wrapResult: FlexWrap = autoWrap
+  let directionResult: Flexbox.FlexDirection = autoDirection
+  let wrapResult: Flexbox.FlexWrap = autoWrap
 
   if (result.valid) {
     const [directionValue, wrapValue] = result.value
 
     switch (directionValue?.value) {
       case 'row':
-        directionResult = direction.row
+        directionResult = Flexbox.direction.row
         break
       case 'row-reverse':
-        directionResult = direction.rowReverse
+        directionResult = Flexbox.direction.rowReverse
         break
       case 'column':
-        directionResult = direction.column
+        directionResult = Flexbox.direction.column
         break
       case 'column-reverse':
-        directionResult = direction.columnReverse
+        directionResult = Flexbox.direction.columnReverse
         break
     }
 
     switch (wrapValue?.value) {
       case 'wrap':
-        wrapResult = wrap.wrap
+        wrapResult = Flexbox.wrap.wrap
         break
       case 'nowrap':
-        wrapResult = wrap.nowrap
+        wrapResult = Flexbox.wrap.nowrap
         break
       case 'wrap-reverse':
-        wrapResult = wrap.wrapReverse
+        wrapResult = Flexbox.wrap.wrapReverse
         break
     }
   }

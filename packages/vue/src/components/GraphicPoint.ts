@@ -1,4 +1,4 @@
-import { point } from 'placement/point'
+import * as Point from 'placement/point'
 import { auto } from 'placement/utils'
 import { computed, defineComponent } from 'vue'
 import { usePoint } from '../composables/usePointList.ts'
@@ -44,7 +44,7 @@ export const GraphicPoint = defineComponent(
       const x = auto(left.value, parentWidth.value - right.value, 0)
       const y = auto(top.value, parentHeight.value - bottom.value, 0)
 
-      return point(x + offsetX.value + translateX.value, y + offsetY.value + translateY.value)
+      return Point.make(x + offsetX.value + translateX.value, y + offsetY.value + translateY.value)
     })
 
     return () => null

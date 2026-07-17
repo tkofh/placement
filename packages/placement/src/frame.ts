@@ -5,7 +5,7 @@ const TypeBrand: unique symbol = Symbol('placement/frame')
 type TypeBrand = typeof TypeBrand
 
 /**
- * The construction input for `frame`. Every field is optional, and passing
+ * The construction input for `make`. Every field is optional, and passing
  * `undefined` is the same as omitting the field.
  *
  * Omission means different things per group. Offsets, `grow`, and `shrink`
@@ -106,7 +106,7 @@ export interface FrameInput {
 }
 
 /**
- * A flex-item spec: the sizing, margin, and placement inputs `applyFlexbox`
+ * A flex-item spec: the sizing, margin, and placement inputs `Flexbox.apply`
  * (from `placement/flexbox`) reads for one item of a container. A frame
  * carries no position of its own; layout produces `Rect`s.
  *
@@ -125,7 +125,7 @@ export interface FrameInput {
  *
  * The resolution arithmetic is exact IEEE 754 (see PRECISION.md).
  *
- * Created by `frame`.
+ * Created by `make`.
  */
 class Frame extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -232,7 +232,7 @@ class Frame extends Pipeable {
    * conflict.
    *
    * When the raw width is unset it derives from the height through
-   * `aspectRatio` where possible (`frame({ height: 50, aspectRatio: 2 })`
+   * `aspectRatio` where possible (`Frame.make({ height: 50, aspectRatio: 2 })`
    * resolves to `100`), and otherwise falls back to `0`, which `minWidth`
    * can raise.
    */
@@ -246,7 +246,7 @@ class Frame extends Pipeable {
    * conflict.
    *
    * When the raw height is unset it derives from the width through
-   * `aspectRatio` where possible (`frame({ width: 100, aspectRatio: 2 })`
+   * `aspectRatio` where possible (`Frame.make({ width: 100, aspectRatio: 2 })`
    * resolves to `50`), and otherwise falls back to `0`, which `minHeight`
    * can raise.
    */
@@ -258,7 +258,7 @@ class Frame extends Pipeable {
    * The resolved width over the resolved height — the exact IEEE division,
    * whatever the raw `aspectRatio` input was. Degenerate sizes return what
    * division produces: `Infinity` for a positive width over a `0` height,
-   * `NaN` for `0` over `0` (the empty `frame({})`).
+   * `NaN` for `0` over `0` (the empty `Frame.make({})`).
    */
   get aspectRatio(): number {
     return this.#resolved.aspectRatio
@@ -304,11 +304,11 @@ class Frame extends Pipeable {
    * Returns the frame's raw inputs: unset sizing fields come back
    * `undefined`, never their resolved values. Under `JSON.stringify`,
    * unset fields drop out and infinite values (`align`/`stretch` inherit,
-   * auto offsets) become `null` — which `frame` reads back as the field's
+   * auto offsets) become `null` — which `make` reads back as the field's
    * default, so a JSON round trip keeps inheritance but turns auto offsets
    * into `0`.
    *
-   * @returns The raw input record, of the shape `frame` accepts.
+   * @returns The raw input record, of the shape `make` accepts.
    */
   toJSON() {
     return {
@@ -344,15 +344,15 @@ export type { Frame }
  * @returns An immutable `Frame`.
  * @example
  * ```ts
- * const item = frame({ width: 100, aspectRatio: 2 })
+ * const item = Frame.make({ width: 100, aspectRatio: 2 })
  * item.height // 50
- * setWidth(item, 200).height // 100 — the height keeps deriving
+ * Frame.setWidth(item, 200).height // 100 — the height keeps deriving
  * ```
  */
-export const frame = (input: FrameInput): Frame => new Frame(input)
+export const make = (input: FrameInput): Frame => new Frame(input)
 
 /**
- * Checks if a value is a `Frame`. True only for values built by `frame`,
+ * Checks if a value is a `Frame`. True only for values built by `make`,
  * which carry the brand.
  *
  * @param value - The value to check.
@@ -381,8 +381,8 @@ export const isFrame = (value: unknown): value is Frame => {
  * @returns A new frame with the offsets replaced.
  * @example
  * ```ts
- * setOffset(frame({}), 1, 2, 3, 4).offsetLeft // 4
- * frame({}).pipe(setOffset(10, 20)).offsetTop // 10
+ * Frame.setOffset(Frame.make({}), 1, 2, 3, 4).offsetLeft // 4
+ * Frame.make({}).pipe(Frame.setOffset(10, 20)).offsetTop // 10
  * ```
  */
 export const setOffset: {
@@ -525,8 +525,8 @@ export const setOffsetLeft: {
  * @returns A new frame with both dimensions set.
  * @example
  * ```ts
- * setSize(frame({}), 100, 50).height // 50
- * frame({}).pipe(setSize(100)).height // 100
+ * Frame.setSize(Frame.make({}), 100, 50).height // 50
+ * Frame.make({}).pipe(Frame.setSize(100)).height // 100
  * ```
  */
 export const setSize: {
@@ -549,8 +549,8 @@ export const setSize: {
  * @returns A new frame with the width replaced.
  * @example
  * ```ts
- * const item = frame({ width: 100, aspectRatio: 2 })
- * setWidth(item, 200).height // 100 — the height keeps deriving
+ * const item = Frame.make({ width: 100, aspectRatio: 2 })
+ * Frame.setWidth(item, 200).height // 100 — the height keeps deriving
  * ```
  */
 export const setWidth: {
@@ -583,7 +583,7 @@ export const setHeight: {
  * @returns A new frame with the ratio replaced.
  * @example
  * ```ts
- * setAspectRatio(frame({ width: 100 }), 4).height // 25
+ * Frame.setAspectRatio(Frame.make({ width: 100 }), 4).height // 25
  * ```
  */
 export const setAspectRatio: {
@@ -664,9 +664,9 @@ export const setMaxSize: {
  * @returns A new frame with the maximum width replaced.
  * @example
  * ```ts
- * const clamped = frame({ width: 100, maxWidth: 80 })
+ * const clamped = Frame.make({ width: 100, maxWidth: 80 })
  * clamped.width // 80
- * setMaxWidth(clamped, 200).width // 100
+ * Frame.setMaxWidth(clamped, 200).width // 100
  * ```
  */
 export const setMaxWidth: {

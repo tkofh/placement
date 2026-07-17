@@ -1,4 +1,4 @@
-import { frame } from 'placement/frame'
+import * as Frame from 'placement/frame'
 import type { Rect } from 'placement/rect'
 import { parse } from 'valued'
 import { number } from 'valued/data/number'
@@ -38,9 +38,9 @@ function resolveNumber(value: number | `${number}` | undefined): number {
 }
 
 // The sizing composables mark an unset dimension with the old
-// `Number.POSITIVE_INFINITY` sentinel, but `frame` stores non-finite sizing
-// fields as literal infinite preferences (defeating, e.g., an inherited
-// stretch). Translate the sentinel to the core's unset convention.
+// `Number.POSITIVE_INFINITY` sentinel, but `Frame.make` stores non-finite
+// sizing fields as literal infinite preferences (defeating, e.g., an
+// inherited stretch). Translate the sentinel to the core's unset convention.
 function finiteOrUndefined(value: number): number | undefined {
   return Number.isFinite(value) ? value : undefined
 }
@@ -59,7 +59,7 @@ export const FlexItem = defineComponent(
     const margin = computedTRBLOffset(marginTop, marginRight, marginBottom, marginLeft)
 
     const self = computed(() =>
-      frame({
+      Frame.make({
         width: finiteOrUndefined(basisSize.value.width),
         height: finiteOrUndefined(basisSize.value.height),
         minWidth: finiteOrUndefined(minSize.value.width),
