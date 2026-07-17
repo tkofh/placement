@@ -9,6 +9,7 @@
   "dependencies": {
     "@placement/vue": "workspace:^",
     "coily": "^0.14.0",
+    "curvy": "^2.0.0-alpha.17",
     "nuxt": "^4.4.8",
     "placement": "workspace:^",
     "vue": "^3.5.0",

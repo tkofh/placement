@@ -2,6 +2,7 @@
   <GraphicRoot width="1000px" height="640px" fit="contain" origin="center">
     <!-- backdrop -->
     <GraphicRect fill="color(display-p3 0.045 0.055 0.1)" />
+    <GraphicPath :path="backdropWave" fit="fill" stroke="color(srgb 1 1 1 / 0.04) 70px" />
 
     <!-- header -->
     <GraphicText left="24px" top="16px" class="title">SPRINGBOARD</GraphicText>
@@ -47,6 +48,15 @@
             </FlexItem>
           </FlexLayout>
         </FlexItem>
+        <!-- the same composite spring, read as a curve through the bar tops -->
+        <GraphicCurve stroke="color(srgb 1 1 1 / 0.5) 1.5px dashed 2 4">
+          <GraphicPoint
+            v-for="point in overlayPoints"
+            :key="point.key"
+            :left="point.x"
+            :bottom="point.bottom"
+          />
+        </GraphicCurve>
       </FlexLayout>
     </GraphicGroup>
 
@@ -54,14 +64,10 @@
     <GraphicGroup left="608px" top="64px" right="24px" height="252px">
       <GraphicRect fill="color(srgb 1 1 1 / 0.035)" r="14px" />
       <GraphicText left="16px" top="12px" class="label">FOLLOW / spring chains</GraphicText>
-      <GraphicLine
-        v-for="(link, i) in links"
-        :key="i"
-        stroke="color(display-p3 1 0.42 0.75 / 0.55) 2px dashed 5 4"
-      >
-        <GraphicPoint :left="link.x1" :top="link.y1" />
-        <GraphicPoint :left="link.x2" :top="link.y2" />
-      </GraphicLine>
+      <!-- one smooth centripetal Catmull-Rom through the whole chain -->
+      <GraphicCurve stroke="color(display-p3 1 0.42 0.75 / 0.55) 2px dashed 5 4">
+        <GraphicPoint v-for="(node, i) in nodes" :key="i" :left="node.x" :top="node.y" />
+      </GraphicCurve>
       <GraphicCircle
         v-for="(node, i) in nodes"
         :key="i"
@@ -110,6 +116,8 @@
 </template>
 
 <script setup lang="ts">
+import { Cardinal2d } from 'curvy/splines'
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'] as const
 const PALETTE = [
   'color(display-p3 0.35 0.55 1)',
@@ -140,6 +148,18 @@ const bars = useSpring(
 const barGap = useSpring(() => (sorted.value ? 22 : 8), { duration: 800, bounce: 0.45 })
 
 const total = computed(() => barData.value.reduce((sum, value) => sum + value, 0))
+
+// Curve overlay control points: the exact flex-column centers (the chart
+// is 528px wide inside its panel; columns share it with 6 gaps between).
+const overlayPoints = computed(() => {
+  const gap = barGap.value
+  const column = (528 - 6 * gap) / 7
+  return orderedBars.value.map((bar, i) => ({
+    key: bar.month,
+    x: i * (column + gap) + column / 2,
+    bottom: 32 + bar.height,
+  }))
+})
 
 // Sorting reorders the keyed VNodes; the children registry keeps the
 // flexbox order in sync with the template order.
@@ -191,15 +211,6 @@ const nodes = computed(() =>
   })),
 )
 
-const links = computed(() =>
-  nodes.value.slice(1).map((node, i) => ({
-    x1: nodes.value[i]!.x,
-    y1: nodes.value[i]!.y,
-    x2: node.x,
-    y2: node.y,
-  })),
-)
-
 // -- dance floor -------------------------------------------------------
 
 const corner = ref(0)
@@ -224,6 +235,21 @@ const dancers = computed(() => [
   { fill: PALETTE[5]!, size: 40, ratio: 0.75, opacity: 0.6 + dancerPulse.value * 0.4 },
   { fill: PALETTE[3]!, size: 64 - dancerPulse.value * 24, ratio: 1.5, opacity: 0.8 },
 ])
+
+// -- backdrop ----------------------------------------------------------
+
+// A normalized wave, stretched across the whole scene by fit="fill".
+const backdropWave = Cardinal2d.toPath(
+  Cardinal2d.withDuplicatedEndpoints(
+    Cardinal2d.fromTuples([
+      [0, 0.6],
+      [0.2, 0.35],
+      [0.45, 0.7],
+      [0.7, 0.3],
+      [1, 0.55],
+    ]),
+  ),
+)
 
 // -- header dots -------------------------------------------------------
 

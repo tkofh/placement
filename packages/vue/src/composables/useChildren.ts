@@ -10,7 +10,9 @@ import {
   getCurrentInstance,
   inject,
   isVNode,
+  onActivated,
   onBeforeUnmount,
+  onDeactivated,
   onMounted,
   onUpdated,
   provide,
@@ -21,6 +23,13 @@ import {
   watch,
   watchEffect,
 } from 'vue'
+
+// Bundlers statically replace `process.env.NODE_ENV` (the same convention
+// Vue's esm-bundler builds rely on), so guarded blocks drop from production
+// output. The check stays inline at each guard: hoisting it into a const
+// defeats esbuild's dead-branch elimination, and esbuild is Vite's default
+// production minifier.
+declare const process: { env: { NODE_ENV?: string } }
 
 type ChildOutput<O> = [O] extends [never] ? null : ShallowRef<O>
 
@@ -44,13 +53,20 @@ class Child<I, O = never> {
     this.input = input
     this.output = (initial === undefined ? null : shallowRef(initial)) as ChildOutput<O>
 
-    watch(
-      input,
-      () => {
-        context.update(this)
-      },
-      { flush: 'sync' },
-    )
+    // On the client the mappers are reactive effects that track their own
+    // reads of child inputs, so an input change re-runs them directly and only
+    // structural changes need re-resolution. During SSR nothing re-runs on its
+    // own, so an input change must synchronously re-resolve and re-map for
+    // later-rendering children to observe it.
+    if (context.ssr) {
+      watch(
+        input,
+        () => {
+          context.update(this)
+        },
+        { flush: 'sync' },
+      )
+    }
   }
 
   *after() {
@@ -153,8 +169,11 @@ function resolveChildren<I, O>(
   storage: ReadonlyMap<ComponentInternalInstance, ReadonlyArray<Child<I, O>>>,
 ): Array<Child<I, O>> {
   const children = [] as Array<Child<I, O>>
-  const siblingLists = new Map<number, Array<Child<I, O>>>()
-  let depth = 0
+  // The stack of open sibling groups: entering a host element opens a fresh
+  // group, rising closes the deepest ones. Two containers at the same depth
+  // therefore hold distinct groups, and the groups below the top are exactly
+  // the enclosing chain.
+  const groups: Array<Array<Child<I, O>>> = [[]]
 
   let totalChildCount = 0
   for (const refs of storage.values()) {
@@ -176,7 +195,12 @@ function resolveChildren<I, O>(
 
   for (const value of walkChildComponents(parent.vnode, shouldTraverseChildrenOf)) {
     if (typeof value === 'number') {
-      depth = value
+      while (groups.length > value + 1) {
+        groups.pop()
+      }
+      while (groups.length < value + 1) {
+        groups.push([])
+      }
     } else {
       if (value === parent) {
         continue
@@ -186,14 +210,14 @@ function resolveChildren<I, O>(
         continue
       }
 
-      const siblings = siblingLists.get(depth) ?? []
-      siblingLists.set(depth, siblings)
+      const siblings = groups.at(-1)!
 
+      // Snapshot: enclosing groups hold only the members that preceded this
+      // child in the walk, so later same-group children never appear in its
+      // ancestors.
       const ancestors: Array<Child<I, O>> = []
-      for (const list of siblingLists.values()) {
-        if (list !== siblings) {
-          ancestors.push(...list)
-        }
+      for (const group of groups.slice(0, -1)) {
+        ancestors.push(...group)
       }
 
       for (const child of refs) {
@@ -212,23 +236,86 @@ function resolveChildren<I, O>(
   return children
 }
 
+// Dev-only dedupe state for the unreachable-child warning. It lives at module
+// scope inside DEV guards -- not on the class -- because bundlers strip dead
+// branches but not class fields or methods, and production builds should
+// carry none of this.
+let warnState: WeakMap<object, { channel: string; warned: string }> | undefined
+
+// Every failure mode of the vnode walk -- a Vue internal changing shape, a
+// child rendered outside the provider's subtree, a traversal bug -- shows up
+// as a mounted child silently missing from the layout, so surface it loudly
+// in dev. Two states are legitimately unreachable and exempt: unmounted
+// children (mid-patch), and children whose suspense boundary is still
+// pending -- those are already mounted, but into an off-tree container the
+// walk cannot see until the boundary resolves.
+function warnUnreachable<I, O>(
+  context: object,
+  storage: ReadonlyMap<ComponentInternalInstance, ReadonlyArray<Child<I, O>>>,
+  resolved: ReadonlyArray<Child<I, O>>,
+) {
+  const state = warnState?.get(context)
+  if (state === undefined) {
+    return
+  }
+
+  const found = new Set<Child<I, O>>(resolved)
+  const missing = [] as Array<string>
+  let key = ''
+
+  for (const refs of storage.values()) {
+    for (const ref of refs) {
+      if (found.has(ref) || !ref.instance.isMounted) {
+        continue
+      }
+
+      // Present at runtime but absent from the published type: the suspense
+      // boundary the instance was mounted under, if any.
+      const suspense = (ref.instance as unknown as { suspense: { pendingBranch: unknown } | null })
+        .suspense
+      if (suspense?.pendingBranch != null) {
+        continue
+      }
+
+      const type = ref.instance.type as { __name?: string; name?: string }
+      missing.push(type.name || type.__name || '(anonymous)')
+      key += `${ref.uid} `
+    }
+  }
+
+  if (key !== '' && key !== state.warned) {
+    console.warn(
+      `[useChildren] ${missing.length} mounted child(ren) on channel ` +
+        `"${state.channel}" (${missing.join(', ')}) cannot be reached from ` +
+        `the provider's vnode tree and are missing from the resolved list.`,
+    )
+  }
+  state.warned = key
+}
+
 class Context<I, O = never> {
   readonly children: ShallowRef<ReadonlyArray<Child<I, O>>>
+  readonly ssr: boolean
   readonly #parentType: VNodeTypes
   readonly #preMap: ChildrenMapper<I, O> | undefined
-  readonly #ssr: boolean
   readonly #storage: Map<ComponentInternalInstance, Array<Child<I, O>>>
   readonly #updateTrigger: ShallowRef<number>
   readonly #vm: ComponentInternalInstance
 
-  constructor(vm: ComponentInternalInstance, map?: ChildrenMapperOption<I, O>) {
+  constructor(vm: ComponentInternalInstance, channel: string, map?: ChildrenMapperOption<I, O>) {
     this.#vm = vm
     this.#parentType = vm.vnode.type
 
     // `renderToString` provides the SSR context app-wide. Its presence means
     // Vue discards pre-flush watchers, so `invalidate` must resolve and map
     // synchronously instead of going through the scheduler.
-    this.#ssr = inject(ssrContextKey, null) !== null
+    this.ssr = inject(ssrContextKey, null) !== null
+
+    // SSR contexts never warn: partial resolution is by design on the server.
+    if (process.env.NODE_ENV !== 'production' && !this.ssr) {
+      warnState ??= new WeakMap()
+      warnState.set(this, { channel, warned: '' })
+    }
 
     this.#storage = new Map()
     const children = shallowRef<ReadonlyArray<Child<I, O>>>([])
@@ -277,10 +364,14 @@ class Context<I, O = never> {
     if (next.length !== prev.length || next.some((child, index) => child !== prev[index])) {
       this.children.value = next
     }
+
+    if (process.env.NODE_ENV !== 'production') {
+      warnUnreachable(this, this.#storage, next)
+    }
   }
 
   invalidate() {
-    if (this.#ssr) {
+    if (this.ssr) {
       // Children registered later in the same server render are not visible
       // yet, so each child renders from the list resolved so far -- the same
       // partial-layout semantics the index-based system had on the server.
@@ -300,6 +391,11 @@ class Context<I, O = never> {
   register(ref: Child<I, O>) {
     const refs = this.#storage.get(ref.instance)
     if (refs) {
+      // Re-entrant for KeepAlive: `onActivated` also fires after the initial
+      // mount, when setup's registration is still in place.
+      if (refs.includes(ref)) {
+        return
+      }
       refs.push(ref)
     } else {
       this.#storage.set(ref.instance, [ref])
@@ -368,6 +464,18 @@ export function useChild<I, O = never>(
     context.mount(ref)
   })
 
+  // A KeepAlive toggle neither mounts nor unmounts the child, and the provider
+  // may not re-render when it happens, so activation state drives registration
+  // directly: a deactivated child leaves the layout and a reactivated one
+  // rejoins it. Both hooks are inert outside a KeepAlive.
+  onActivated(() => {
+    context.register(ref)
+  })
+
+  onDeactivated(() => {
+    context.unregister(ref)
+  })
+
   onBeforeUnmount(() => {
     context.unregister(ref)
   })
@@ -387,7 +495,7 @@ export function useChildren<I, O = never>(
     throw new Error('useChildren must be called within a Vue component')
   }
 
-  const context = new Context<I, O>(vm, handler)
+  const context = new Context<I, O>(vm, channel, handler)
   provide(Symbol.for(`use-children:${channel}`), context)
 
   // A keyed reorder moves existing children without registering, mounting, or

@@ -38,6 +38,18 @@ pnpm add @placement/vue placement vue
 - `GraphicRect`, `GraphicCircle`, `GraphicLine`, `GraphicText`,
   `GraphicPoint`, `GraphicGroup` — SVG leaves and grouping, positioned with
   inset/size/origin props resolved against the parent context.
+- `GraphicCurve` / `GraphicPath` — curves via
+  [curvy](https://www.npmjs.com/package/curvy): a spline through
+  `GraphicPoint` children (Catmull-Rom by default; basis, cubic Bézier, and
+  polyline via the `curve` prop), or any curvy path/spline object rendered
+  as-is or fit onto the parent rect.
+
+```vue
+<GraphicCurve stroke="2px tomato" tension="0.4">
+  <GraphicPoint v-for="(value, i) in data" :key="i"
+    :left="`${(i / (data.length - 1)) * 100}%`" :bottom="value" />
+</GraphicCurve>
+```
 
 Every component is also available as its own subpath export
 (`@placement/vue/FlexLayout`), and the prop-parsing composables live under
