@@ -1,24 +1,9 @@
-import { type ParserInput, type ParserValue, parse } from 'valued'
-import { juxtapose } from 'valued'
-import { oneOf } from 'valued'
-import { someOf } from 'valued'
+import { type ParserInput, juxtapose, map, oneOf, parse, someOf } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { number } from 'valued/data/number'
 import { percentage } from 'valued/data/percentage'
 import { createCache } from '../cache.ts'
 import { toNormalized } from './normalize.ts'
-
-const alignSelfParser = oneOf([
-  keywords(['auto', 'start', 'end', 'center', 'stretch']),
-  someOf([
-    juxtapose(['place', oneOf([percentage(), number()])]),
-    juxtapose(['stretch', oneOf([percentage(), number()])]),
-  ]),
-])
-
-export type AlignSelf = typeof alignSelfParser
-
-export type AlignSelfInput = ParserInput<AlignSelf> | number | undefined
 
 // `Number.POSITIVE_INFINITY` is the core's inherit sentinel (see
 // `placement/frame`): an infinite `align` inherits the container's
@@ -27,8 +12,6 @@ export interface AlignSelfValue {
   align: number
   stretch: number
 }
-
-const cache = createCache<string, AlignSelfValue>(512)
 
 export const keywordResults = {
   // 'auto' inherits both channels from the container.
@@ -56,29 +39,40 @@ export const keywordResults = {
   },
 } as const
 
-function toValue(value: ParserValue<typeof alignSelfParser>): AlignSelfValue {
-  if (isKeywordValue(value)) {
-    return keywordResults[value.value]
-  }
+const alignSelfParser = map(
+  oneOf([
+    keywords(['auto', 'start', 'end', 'center', 'stretch']),
+    someOf([
+      juxtapose(['place', oneOf([percentage(), number()])]),
+      juxtapose(['stretch', oneOf([percentage(), number()])]),
+    ]),
+  ]),
+  (value): AlignSelfValue => {
+    if (isKeywordValue(value)) {
+      return keywordResults[value.value]
+    }
 
-  const [placeValue, stretchValue] = value
+    const [placeValue, stretchValue] = value
 
-  // A channel the input leaves unset stays at the inherit sentinel.
-  let place = Number.POSITIVE_INFINITY
-  let stretch = Number.POSITIVE_INFINITY
+    // A channel the input leaves unset stays at the inherit sentinel.
+    return {
+      align: placeValue !== null ? toNormalized(placeValue[0]) : Number.POSITIVE_INFINITY,
+      stretch: stretchValue !== null ? toNormalized(stretchValue[0]) : Number.POSITIVE_INFINITY,
+    }
+  },
+)
 
-  if (placeValue !== null) {
-    place = toNormalized(placeValue[0])
-  }
+export type AlignSelf = typeof alignSelfParser
 
-  if (stretchValue !== null) {
-    stretch = toNormalized(stretchValue[0])
-  }
+export type AlignSelfInput = ParserInput<AlignSelf> | number | undefined
 
-  return {
-    align: place,
-    stretch,
-  }
+const cache = createCache<string, AlignSelfValue | null>(512)
+
+function parseAlignSelf(input: string): AlignSelfValue | null {
+  return cache(input, () => {
+    const parsed = parse(input, alignSelfParser)
+    return parsed.valid ? parsed.value : null
+  })
 }
 
 export function resolveAlignSelf(
@@ -93,15 +87,10 @@ export function resolveAlignSelf(
     }
   }
 
-  return cache(`${input}:${autoAlign}:${autoStretch}`, () => {
-    const parsed = parse(input, alignSelfParser)
-    if (!parsed.valid) {
-      return {
-        align: autoAlign,
-        stretch: autoStretch,
-      }
+  return (
+    parseAlignSelf(input) ?? {
+      align: autoAlign,
+      stretch: autoStretch,
     }
-
-    return toValue(parsed.value)
-  })
+  )
 }

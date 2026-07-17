@@ -1,14 +1,11 @@
 import * as Point from 'placement/point'
-import { type ParserInput, type ParserValue, parse } from 'valued'
-import { allOf } from 'valued'
-import { juxtapose } from 'valued'
-import { oneOf } from 'valued'
+import { type ParserInput, type ParserValue, allOf, juxtapose, map, oneOf, parse } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { isNumberValue, number } from 'valued/data/number'
 import { isPercentageValue, percentage } from 'valued/data/percentage'
 import { createCache } from '../cache.ts'
 
-const origin = oneOf([
+const originGrammar = oneOf([
   keywords(['top', 'right', 'bottom', 'left', 'center']),
   percentage(),
   number(),
@@ -23,15 +20,7 @@ const origin = oneOf([
   ]),
 ])
 
-export type Origin = typeof origin
-
-export type OriginInput = ParserInput<Origin> | Point.Point | number | undefined
-
-export type OriginValue = ParserValue<Origin>
-
-const cache = createCache<string, Point.Point>(512)
-
-function normalize(value: OriginValue) {
+const origin = map(originGrammar, (value: ParserValue<typeof originGrammar>): Point.Point => {
   if (isKeywordValue(value)) {
     switch (value.value) {
       case 'center':
@@ -101,6 +90,19 @@ function normalize(value: OriginValue) {
   }
 
   return Point.make(x, y)
+})
+
+export type Origin = typeof origin
+
+export type OriginInput = ParserInput<Origin> | Point.Point | number | undefined
+
+const cache = createCache<string, Point.Point | null>(512)
+
+function parseOrigin(input: string): Point.Point | null {
+  return cache(input, () => {
+    const parsed = parse(input, origin)
+    return parsed.valid ? parsed.value : null
+  })
 }
 
 export function resolveOrigin(input: OriginInput, auto: Point.Point = Point.zero): Point.Point {
@@ -116,13 +118,5 @@ export function resolveOrigin(input: OriginInput, auto: Point.Point = Point.zero
     return auto
   }
 
-  return cache(`${input.toString()}:${auto.x}:${auto.y}`, () => {
-    const parsed = parse(input, origin)
-
-    if (!parsed.valid) {
-      return auto
-    }
-
-    return normalize(parsed.value)
-  })
+  return parseOrigin(input) ?? auto
 }

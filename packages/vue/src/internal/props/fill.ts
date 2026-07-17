@@ -1,16 +1,7 @@
-import { parse } from 'valued'
-import { oneOf } from 'valued'
-import { someOf } from 'valued'
-import { optional } from 'valued'
+import { map, oneOf, optional, parse, someOf } from 'valued'
 import { color } from 'valued/data/color'
 import { isKeywordValue, keyword, keywords } from 'valued/data/keyword'
 import { createCache } from '../cache.ts'
-
-const fillParser = oneOf([
-  keyword('none'),
-  color(),
-  someOf([color(), optional(keywords(['evenodd', 'nonzero']))]),
-])
 
 export type FillInput =
   | `${'evenodd' | 'nonzero'} ${string}`
@@ -33,27 +24,33 @@ export class Fill {
   static empty = new Fill()
 }
 
-const cache = createCache<string, Fill>(512)
+const fillParser = map(
+  oneOf([keyword('none'), color(), someOf([color(), optional(keywords(['evenodd', 'nonzero']))])]),
+  (value): Fill => {
+    if (Array.isArray(value)) {
+      const [fillColor, fillRule] = value
+      return new Fill(fillColor?.serialize('color'), fillRule?.value)
+    }
+    if (isKeywordValue(value)) {
+      return new Fill('transparent')
+    }
+    return new Fill(value.serialize('color'))
+  },
+)
+
+const cache = createCache<string, Fill | null>(512)
+
+function parseFill(input: string): Fill | null {
+  return cache(input, () => {
+    const parsed = parse(input, fillParser)
+    return parsed.valid ? parsed.value : null
+  })
+}
 
 export function resolveFill(input: FillInput, auto = Fill.empty): Fill {
   if (input === undefined) {
     return auto
   }
 
-  return cache(`${input}:${auto.fill}:${auto['fill-rule']}`, () => {
-    const parsed = parse(input, fillParser)
-
-    if (!parsed.valid) {
-      return auto
-    }
-
-    if (Array.isArray(parsed.value)) {
-      const [fillColor, fillRule] = parsed.value
-      return new Fill(fillColor?.serialize('color'), fillRule?.value)
-    }
-    if (isKeywordValue(parsed.value)) {
-      return new Fill('transparent')
-    }
-    return new Fill(parsed.value.serialize('color'))
-  })
+  return parseFill(input) ?? auto
 }

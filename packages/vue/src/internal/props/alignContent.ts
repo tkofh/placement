@@ -1,26 +1,9 @@
-import { type ParserInput, type ParserValue, parse } from 'valued'
-import { juxtapose } from 'valued'
-import { oneOf } from 'valued'
-import { someOf } from 'valued'
-import { between } from 'valued'
+import { type ParserInput, between, juxtapose, map, oneOf, parse, someOf } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { number } from 'valued/data/number'
 import { percentage } from 'valued/data/percentage'
 import { createCache } from '../cache.ts'
 import { toNormalized } from './normalize.ts'
-
-const alignContentParser = oneOf([
-  keywords(['start', 'end', 'center', 'space-between', 'space-around', 'space-evenly', 'stretch']),
-  someOf([
-    juxtapose(['place', oneOf([percentage(), number()])]),
-    juxtapose(['space', between(oneOf([percentage(), number()]), { minLength: 1, maxLength: 2 })]),
-    juxtapose(['stretch', oneOf([percentage(), number()])]),
-  ]),
-])
-
-export type AlignContent = typeof alignContentParser
-
-export type AlignContentInput = ParserInput<AlignContent> | number | undefined
 
 export interface AlignContentValue {
   alignContent: number
@@ -28,8 +11,6 @@ export interface AlignContentValue {
   alignContentSpaceOuter: number
   stretchContent: number
 }
-
-const cache = createCache<string, AlignContentValue>(512)
 
 export const keywordResults = {
   start: {
@@ -76,37 +57,61 @@ export const keywordResults = {
   },
 } as const
 
-function toValue(value: ParserValue<typeof alignContentParser>): AlignContentValue {
-  if (isKeywordValue(value)) {
-    return keywordResults[value.value]
-  }
+const alignContentParser = map(
+  oneOf([
+    keywords([
+      'start',
+      'end',
+      'center',
+      'space-between',
+      'space-around',
+      'space-evenly',
+      'stretch',
+    ]),
+    someOf([
+      juxtapose(['place', oneOf([percentage(), number()])]),
+      juxtapose([
+        'space',
+        between(oneOf([percentage(), number()]), { minLength: 1, maxLength: 2 }),
+      ]),
+      juxtapose(['stretch', oneOf([percentage(), number()])]),
+    ]),
+  ]),
+  (value): AlignContentValue => {
+    if (isKeywordValue(value)) {
+      return keywordResults[value.value]
+    }
 
-  const [placeValue, spaceValue, stretchValue] = value
+    const [placeValue, spaceValue, stretchValue] = value
 
-  let place = 0
-  let space = 0
-  let spaceOuter = 0
-  let stretch = 0
+    let space = 0
+    let spaceOuter = 0
 
-  if (placeValue !== null) {
-    place = toNormalized(placeValue[0])
-  }
+    if (spaceValue !== null) {
+      space = toNormalized(spaceValue[0][0])
+      spaceOuter = spaceValue[0].length === 1 ? 0 : toNormalized(spaceValue[0][1])
+    }
 
-  if (spaceValue !== null) {
-    space = toNormalized(spaceValue[0][0])
-    spaceOuter = spaceValue[0].length === 1 ? 0 : toNormalized(spaceValue[0][1])
-  }
+    return {
+      alignContent: placeValue !== null ? toNormalized(placeValue[0]) : 0,
+      alignContentSpace: space,
+      alignContentSpaceOuter: spaceOuter,
+      stretchContent: stretchValue !== null ? toNormalized(stretchValue[0]) : 0,
+    }
+  },
+)
 
-  if (stretchValue !== null) {
-    stretch = toNormalized(stretchValue[0])
-  }
+export type AlignContent = typeof alignContentParser
 
-  return {
-    alignContent: place,
-    alignContentSpace: space,
-    alignContentSpaceOuter: spaceOuter,
-    stretchContent: stretch,
-  }
+export type AlignContentInput = ParserInput<AlignContent> | number | undefined
+
+const cache = createCache<string, AlignContentValue | null>(512)
+
+function parseAlignContent(input: string): AlignContentValue | null {
+  return cache(input, () => {
+    const parsed = parse(input, alignContentParser)
+    return parsed.valid ? parsed.value : null
+  })
 }
 
 export function resolveAlignContent(
@@ -125,21 +130,12 @@ export function resolveAlignContent(
     }
   }
 
-  return cache(
-    `${input}:${autoAlignContent}:${autoAlignContentSpace}:${autoAlignContentSpaceOuter}:${autoStretchContent}`,
-    () => {
-      const parsed = parse(input, alignContentParser)
-
-      if (!parsed.valid) {
-        return {
-          alignContent: autoAlignContent,
-          alignContentSpace: autoAlignContentSpace,
-          alignContentSpaceOuter: autoAlignContentSpaceOuter,
-          stretchContent: autoStretchContent,
-        }
-      }
-
-      return toValue(parsed.value)
-    },
+  return (
+    parseAlignContent(input) ?? {
+      alignContent: autoAlignContent,
+      alignContentSpace: autoAlignContentSpace,
+      alignContentSpaceOuter: autoAlignContentSpaceOuter,
+      stretchContent: autoStretchContent,
+    }
   )
 }

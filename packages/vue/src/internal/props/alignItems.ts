@@ -1,31 +1,14 @@
-import { type ParserInput, type ParserValue, parse } from 'valued'
-import { juxtapose } from 'valued'
-import { oneOf } from 'valued'
-import { someOf } from 'valued'
+import { type ParserInput, juxtapose, map, oneOf, parse, someOf } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { number } from 'valued/data/number'
 import { percentage } from 'valued/data/percentage'
 import { createCache } from '../cache.ts'
 import { toNormalized } from './normalize.ts'
 
-const alignItemsParser = oneOf([
-  keywords(['start', 'end', 'center', 'stretch']),
-  someOf([
-    juxtapose(['place', oneOf([percentage(), number()])]),
-    juxtapose(['stretch', oneOf([percentage(), number()])]),
-  ]),
-])
-
-export type AlignItems = typeof alignItemsParser
-
-export type AlignItemsInput = ParserInput<AlignItems> | number | undefined
-
 export interface AlignItemsValue {
   alignItems: number
   stretchItems: number
 }
-
-const cache = createCache<string, AlignItemsValue>(512)
 
 export const keywordResults = {
   start: {
@@ -46,28 +29,39 @@ export const keywordResults = {
   },
 } as const
 
-function toValue(value: ParserValue<typeof alignItemsParser>): AlignItemsValue {
-  if (isKeywordValue(value)) {
-    return keywordResults[value.value]
-  }
+const alignItemsParser = map(
+  oneOf([
+    keywords(['start', 'end', 'center', 'stretch']),
+    someOf([
+      juxtapose(['place', oneOf([percentage(), number()])]),
+      juxtapose(['stretch', oneOf([percentage(), number()])]),
+    ]),
+  ]),
+  (value): AlignItemsValue => {
+    if (isKeywordValue(value)) {
+      return keywordResults[value.value]
+    }
 
-  const [placeValue, stretchValue] = value
+    const [placeValue, stretchValue] = value
 
-  let place = 0
-  let stretch = 0
+    return {
+      alignItems: placeValue !== null ? toNormalized(placeValue[0]) : 0,
+      stretchItems: stretchValue !== null ? toNormalized(stretchValue[0]) : 0,
+    }
+  },
+)
 
-  if (placeValue !== null) {
-    place = toNormalized(placeValue[0])
-  }
+export type AlignItems = typeof alignItemsParser
 
-  if (stretchValue !== null) {
-    stretch = toNormalized(stretchValue[0])
-  }
+export type AlignItemsInput = ParserInput<AlignItems> | number | undefined
 
-  return {
-    alignItems: place,
-    stretchItems: stretch,
-  }
+const cache = createCache<string, AlignItemsValue | null>(512)
+
+function parseAlignItems(input: string): AlignItemsValue | null {
+  return cache(input, () => {
+    const parsed = parse(input, alignItemsParser)
+    return parsed.valid ? parsed.value : null
+  })
 }
 
 export function resolveAlignItems(
@@ -82,15 +76,10 @@ export function resolveAlignItems(
     }
   }
 
-  return cache(`${input}:${autoAlign}:${autoStretch}`, () => {
-    const parsed = parse(input, alignItemsParser)
-    if (!parsed.valid) {
-      return {
-        alignItems: autoAlign,
-        stretchItems: autoStretch,
-      }
+  return (
+    parseAlignItems(input) ?? {
+      alignItems: autoAlign,
+      stretchItems: autoStretch,
     }
-
-    return toValue(parsed.value)
-  })
+  )
 }
