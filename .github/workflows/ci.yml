@@ -40,9 +40,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The @placement/vue browser tests run in headless Chromium.
+      # The @placement/vue browser tests run in headless Chromium, WebKit and Firefox.
       - name: Install Playwright browser
-        run: pnpm --filter @placement/vue exec playwright install --with-deps chromium
+        run: pnpm --filter @placement/vue exec playwright install --with-deps chromium webkit firefox
 
       - name: Check, build, test, typecheck
         run: pnpm turbo run check build test typecheck

@@ -23,15 +23,18 @@ export const GraphicText = defineComponent(
     const paint = usePaint(props)
 
     return () => {
-      const { x, y, width, height } = self.value
+      const { x, y } = self.value
       return h(
         'text',
         {
           ref: text,
           x,
-          y: y + height,
-          width,
-          height,
+          y,
+          // SVG text sits on its baseline by default, which leaves the
+          // font's descent hanging below `y`. Anchoring `y` to the top of
+          // the text's own box makes it the same box the observer measures,
+          // with no font metrics needed.
+          'dominant-baseline': 'text-before-edge',
           ...paint.value,
         },
         slots.default?.(),

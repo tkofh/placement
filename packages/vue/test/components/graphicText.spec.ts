@@ -20,6 +20,10 @@ afterEach(() => {
   FakeResizeObserver.reset()
 })
 
+// `y` is the top of the text box, so the browser, not the component, accounts
+// for the font's ascent.
+const TOP_ANCHORED = { 'dominant-baseline': 'text-before-edge' }
+
 async function mountText(props: GraphicTextProps | null) {
   const mounted = mountWithRect(host, () => [h(GraphicText, props, () => 'hello')])
   // The template-ref watch observes the text node on the next tick.
@@ -46,15 +50,14 @@ describe('measurement', () => {
   test('before any measurement the box is zero-size at the parent origin', async () => {
     const { root } = await mountText(null)
 
-    expect(findOne(root, 'text').props).toEqual({ x: 0, y: 0, width: 0, height: 0 })
+    expect(findOne(root, 'text').props).toEqual({ x: 0, y: 0, ...TOP_ANCHORED })
   })
 
-  test('a measurement becomes the box size, with y at the text baseline', async () => {
+  test('a measurement becomes the box size, with y at the top of the text box', async () => {
     const { root } = await mountText(null)
     await measure(root, 40, 10)
 
-    // y attr = solved rect.y + measured height.
-    expect(findOne(root, 'text').props).toEqual({ x: 0, y: 10, width: 40, height: 10 })
+    expect(findOne(root, 'text').props).toEqual({ x: 0, y: 0, ...TOP_ANCHORED })
   })
 
   test('a re-measure updates the box', async () => {
@@ -62,7 +65,8 @@ describe('measurement', () => {
     await measure(root, 40, 10)
     await measure(root, 60, 20)
 
-    expect(findOne(root, 'text').props).toEqual({ x: 0, y: 20, width: 60, height: 20 })
+    // The size is not an attribute, but it feeds the solved position.
+    expect(findOne(root, 'text').props).toEqual({ x: 0, y: 0, ...TOP_ANCHORED })
   })
 })
 
@@ -71,7 +75,7 @@ describe('positioning', () => {
     const { root } = await mountText({ top: 5, left: 10 })
     await measure(root, 40, 10)
 
-    expect(findOne(root, 'text').props).toEqual({ x: 10, y: 15, width: 40, height: 10 })
+    expect(findOne(root, 'text').props).toEqual({ x: 10, y: 5, ...TOP_ANCHORED })
   })
 
   test('percentages resolve against the parent', async () => {
@@ -85,8 +89,8 @@ describe('positioning', () => {
     const { root } = await mountText({ right: 10, bottom: 20 })
     await measure(root, 40, 10)
 
-    // x = 200 - 40 - 10, rect.y = 100 - 10 - 20, y attr adds the height.
-    expect(findOne(root, 'text').props).toEqual({ x: 150, y: 80, width: 40, height: 10 })
+    // x = 200 - 40 - 10, y = 100 - 10 - 20.
+    expect(findOne(root, 'text').props).toEqual({ x: 150, y: 70, ...TOP_ANCHORED })
   })
 })
 

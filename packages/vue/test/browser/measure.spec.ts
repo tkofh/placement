@@ -102,21 +102,41 @@ describe('GraphicText measurement', () => {
     expect(bbox.width).toBeGreaterThan(0)
     expect(bbox.height).toBeGreaterThan(0)
     expect(bbox.x).toBeCloseTo(10, 0)
-    // `y` is the baseline: the top inset plus the measured height.
-    expect(Number(text.getAttribute('y'))).toBeCloseTo(10 + Number(text.getAttribute('height')))
+    expect(text.getAttribute('y')).toBe('10')
+    expect(text.getAttribute('dominant-baseline')).toBe('text-before-edge')
   })
 
-  // SVG text sits on its baseline, but the component treats the measured
-  // box bottom as the baseline, so the font's descent pushes the visible
-  // glyph box below the requested inset. Flip to a plain `test` once fixed.
-  test.fails('the rendered glyph box starts at the top inset', async () => {
+  test.each(['sans-serif', 'serif', 'monospace', 'Georgia'])(
+    'the rendered glyph box starts at the top inset in %s',
+    async (family) => {
+      const { svg } = await mountInRoot(
+        () => [
+          h(
+            GraphicText,
+            { left: 10, top: 10, style: { fontFamily: family, fontSize: '24px' } },
+            { default: () => 'Measure Mgy' },
+          ),
+        ],
+        {},
+        { width: 300, height: 100 },
+      )
+
+      const bbox = one<SVGTextElement>(svg, 'text').getBBox()
+      expect(bbox.y).toBeCloseTo(10, 0)
+      expect(bbox.x).toBeCloseTo(10, 0)
+    },
+  )
+
+  test('bottom insets land the glyph box bottom on the edge', async () => {
     const { svg } = await mountInRoot(
-      () => [h(GraphicText, { left: 10, top: 10 }, { default: () => 'Measure me' })],
+      () => [h(GraphicText, { right: 10, bottom: 10 }, { default: () => 'Measure Mgy' })],
       {},
       { width: 300, height: 100 },
     )
 
-    expect(one<SVGTextElement>(svg, 'text').getBBox().y).toBeCloseTo(10, 0)
+    const bbox = one<SVGTextElement>(svg, 'text').getBBox()
+    expect(bbox.y + bbox.height).toBeCloseTo(90, 0)
+    expect(bbox.x + bbox.width).toBeCloseTo(290, 0)
   })
 
   test('longer text measures wider and re-lays out', async () => {
