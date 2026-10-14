@@ -12,8 +12,8 @@ import {
   ref,
 } from 'vue'
 import { renderToString } from 'vue/server-renderer'
-import { type Child, useChild, useChildren } from '../src/composables/useChildren.ts'
-import { createApp, createRoot } from './renderer.ts'
+import { type Child, useChild, useChildren } from '../../src/composables/useChildren.ts'
+import { createApp, createRoot } from '../renderer.ts'
 
 let warnSpy: MockInstance<Console['warn']>
 
@@ -34,6 +34,10 @@ afterEach(() => {
   warnSpy.mockRestore()
   expect(leaked).toEqual([])
 })
+
+function inputsOf(iterator: Iterable<Child<number>>): Array<number> {
+  return [...iterator].map((child) => child.input.value)
+}
 
 function makeItem(channel: string) {
   return defineComponent({
@@ -445,11 +449,7 @@ describe('suspense', () => {
     release()
     // Suspense resolution invalidates through the children's mount hooks a
     // few microtasks after the gate opens.
-    for (let index = 0; index < 5; index++) {
-      await nextTick()
-    }
-
-    expect(provider.observed).toEqual([1, 2, 3])
+    await vi.waitFor(() => expect(provider.observed).toEqual([1, 2, 3]))
   })
 })
 
@@ -464,10 +464,6 @@ describe('sibling iterators', () => {
     await nextTick()
     expect(provider.observed).toEqual([1, 2, 3, 4])
     return provider.children
-  }
-
-  function inputsOf(iterator: Iterable<Child<number>>): Array<number> {
-    return [...iterator].map((child) => child.input.value)
   }
 
   // The iterators cover a child's own group plus its enclosing chain -- not

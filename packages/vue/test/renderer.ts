@@ -2,17 +2,23 @@ import { createRenderer } from 'vue'
 
 // A minimal object-tree host for driving components without a DOM. Uniform
 // node shape (elements, text, and comments all carry every field) so nodeOps
-// never needs to narrow.
-export interface TestNode {
-  children: Array<TestNode>
-  parent: TestNode | null
-  props: Record<string, unknown>
+// never needs to narrow. A class rather than a plain literal so specs can
+// stub the `Element` global to it and satisfy `instanceof Element` checks.
+export class TestNode {
+  children: Array<TestNode> = []
+  parent: TestNode | null = null
+  props: Record<string, unknown> = {}
   tag: string
   text: string
+
+  constructor(tag: string, text = '') {
+    this.tag = tag
+    this.text = text
+  }
 }
 
 function make(tag: string, text = ''): TestNode {
-  return { children: [], parent: null, props: {}, tag, text }
+  return new TestNode(tag, text)
 }
 
 function detach(node: TestNode): void {

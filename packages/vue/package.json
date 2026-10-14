@@ -141,6 +141,8 @@
   "devDependencies": {
     "@nuxt/kit": "^3.12.4",
     "@nuxt/schema": "^3.12.4",
+    "@vitest/browser-playwright": "4.1.10",
+    "playwright": "^1.64.0",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5",
