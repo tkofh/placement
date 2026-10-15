@@ -103,6 +103,9 @@ radians.
 `placement/frame` · `placement/interval` · `placement/offset` ·
 `placement/point` · `placement/rect` · `placement/track`
 
+`placement/unstable/utils` holds internal helpers that `@placement/vue` uses.
+It is not covered by semver, so an export there can change in any release.
+
 The package is ESM only. Every export has JSDoc, and the types are the
 reference docs.
 

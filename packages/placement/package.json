@@ -53,6 +53,10 @@
     "./track": {
       "types": "./dist/track.d.mts",
       "import": "./dist/track.mjs"
+    },
+    "./unstable/utils": {
+      "types": "./dist/unstable/utils.d.mts",
+      "import": "./dist/unstable/utils.mjs"
     }
   },
   "publishConfig": {

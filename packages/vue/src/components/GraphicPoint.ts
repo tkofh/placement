@@ -1,4 +1,5 @@
 import * as Point from 'placement/point'
+import { auto } from 'placement/unstable/utils'
 import { computed, defineComponent } from 'vue'
 import { usePoint } from '../composables/usePointList.ts'
 import {
@@ -14,7 +15,7 @@ import {
   useParentY,
 } from '../composables/useSizingContext.ts'
 import { resolveSize1D } from '../internal/props/size1d.ts'
-import { auto, boolProp } from '../internal/utils.ts'
+import { boolProp } from '../internal/utils.ts'
 import { useLengthPercentage } from '../props/lengthPercentage.ts'
 
 export interface GraphicPointProps extends InsetProps, TranslateProps {
