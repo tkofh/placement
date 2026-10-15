@@ -32,17 +32,17 @@ function resolveNumber(value: number | `${number}` | undefined): number {
   return parsed.valid ? parsed.value.value : 0
 }
 
-// The prop resolvers mark an unset input with NaN; `Frame.make` wants such
-// fields omitted (a non-finite sizing input to `Frame.make` is a literal
-// infinite preference, defeating e.g. an inherited stretch).
+// The prop resolvers mark an unset input with NaN. `Frame.make` wants such
+// fields omitted, because it reads a non-finite sizing input as a literal
+// infinite preference. That preference defeats an inherited stretch, for example.
 function unsetIfNaN(value: number): number | undefined {
   return Number.isNaN(value) ? undefined : value
 }
 
 export const FlexItem = defineComponent(
   (props: FlexItemProps) => {
-    // Raw per-axis resolution only — the width/height/ratio interplay and
-    // the min/max clamping are the core's job (see `placement/frame`).
+    // This resolves each axis raw. The core owns the width/height/ratio
+    // interaction and the min/max clamping (see `placement/frame`).
     const width = useLengthPercentage(() => props.width, Number.NaN, 'width')
     const height = useLengthPercentage(() => props.height, Number.NaN, 'height')
     const aspectRatio = useAspectRatio(() => props.aspectRatio, Number.NaN)

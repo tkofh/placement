@@ -239,10 +239,10 @@ describe('definite offsets beside auto offsets (regression)', () => {
 })
 
 describe('auto offsets on overflow (regression)', () => {
-  // The auto-offset branch used to hand each auto offset a negative share
-  // of the free space and cap the item at the track size, truncating it
-  // below its min; auto offsets resolve to zero on overflow instead (as in
-  // CSS), and the min/max-clamped size stands.
+  // The auto-offset branch used to give each auto offset a negative share
+  // of the free space and cap the item at the track size. That truncated
+  // the item below its min. Now auto offsets resolve to zero on overflow
+  // (as in CSS), and the min/max-clamped size stays.
   test('an overflowing auto-start item keeps its min-clamped size at offset zero', () => {
     const result = Track.stack([{ basis: 150, min: 150, start: Number.POSITIVE_INFINITY }], {
       size: 100,

@@ -104,7 +104,7 @@ describe('cardinal', () => {
 
   // Uniform alpha, because at the default centripetal alpha a reflected
   // neighbor sits symmetrically and zeroes the endpoint tangent exactly as
-  // a duplicated one does — every padding mode then draws the same curve.
+  // a duplicated one does. Every padding mode then draws the same curve.
   test('each ends mode produces a defined d; reflect and natural differ from duplicate', async () => {
     const byEnds: Record<string, unknown> = {}
     await Promise.all(
@@ -120,9 +120,9 @@ describe('cardinal', () => {
     expect(byEnds['natural']).not.toBe(byEnds['duplicate'])
     expect(byEnds['natural']).not.toBe(byEnds['reflect'])
     // curvy 2.0.0-alpha.17 aliases withInterpolatedEndpoints to
-    // withDuplicatedEndpoints, so the modes cannot be told apart yet. If
-    // this starts failing, curvy grew a real implementation -- flip the
-    // assertion.
+    // withDuplicatedEndpoints, so the test cannot tell the modes apart yet.
+    // If this test fails, curvy has a real implementation, and you must flip
+    // the assertion.
     expect(byEnds['interpolate']).toBe(byEnds['duplicate'])
   })
 

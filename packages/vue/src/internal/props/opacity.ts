@@ -4,8 +4,8 @@ import { percentage } from 'valued/data/percentage'
 import { createCache } from '../cache.ts'
 import { toNormalized } from './normalize.ts'
 
-// Property names are the kebab-case SVG presentation attribute names so an
-// instance can be spread verbatim onto an SVG element's attrs: browsers
+// Property names are the kebab-case SVG presentation attribute names, so that
+// an instance can spread verbatim onto the attrs of an SVG element. Browsers
 // ignore unknown camelCase attributes like `fillOpacity`.
 export class Opacity {
   readonly 'fill-opacity': number | undefined

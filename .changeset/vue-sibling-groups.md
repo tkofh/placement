@@ -2,9 +2,10 @@
 '@placement/vue': patch
 ---
 
-Fix sibling-group resolution in the children context. Sibling groups are now
-one per enclosing element rather than one per nesting depth, so two containers
-at the same depth no longer merge their children into a single group. A
-child's ancestors now contain only earlier children from enclosing groups. As
-a result `before()` and `after()` no longer leak children from sibling
-subtrees, emit out-of-order results, or yield the child itself.
+Fix sibling-group resolution in the children context. Each enclosing element
+now has its own sibling group, instead of one group per nesting depth. Two
+containers at the same depth no longer merge their children into a single
+group. The ancestors of a child now contain only earlier children from
+enclosing groups. As a result, `before()` and `after()` no longer leak
+children from sibling subtrees, return results out of order, or yield the
+child itself.

@@ -22,9 +22,9 @@ const PARENT_RECT_Y: InjectionKey<RectComponentGetter> = Symbol.for('placement/p
 const PARENT_RECT_WIDTH: InjectionKey<RectComponentGetter> = Symbol.for('placement/parent/width')
 const PARENT_RECT_HEIGHT: InjectionKey<RectComponentGetter> = Symbol.for('placement/parent/height')
 
-// The computeds are created eagerly in the provider's effect scope: were they
-// created lazily by the first consumer, that consumer's unmount would dispose
-// them while later consumers still hold them.
+// The provider creates the computeds eagerly in its own effect scope. If the
+// first consumer created them lazily, its unmount disposes them while later
+// consumers still hold them.
 function useRectGetters(rect: MaybeRefOrGetter<Rect>): RectGetters {
   const x = computed(() => toValue(rect).x)
   const y = computed(() => toValue(rect).y)

@@ -4,8 +4,8 @@ Vue 3 components and composables that render
 [placement](https://www.npmjs.com/package/placement) layouts as SVG.
 String props use CSS-flavored grammars parsed by
 [valued](https://www.npmjs.com/package/valued), so `width="50%"`,
-`gap="10px"`, and `align-items="center"` mean what you expect — with numbers
-and placement value objects accepted wherever strings are.
+`gap="10px"`, and `align-items="center"` mean what you expect. Wherever a prop
+accepts a string, it also accepts a number or a placement value object.
 
 ```sh
 pnpm add @placement/vue placement vue
@@ -28,21 +28,21 @@ pnpm add @placement/vue placement vue
 
 ## Components
 
-- `GraphicRoot` — the `<svg>` element. Measures itself with a
-  ResizeObserver and maps its layout space onto the viewBox via a `fit`
+- `GraphicRoot` is the `<svg>` element. It measures itself with a
+  ResizeObserver and maps its layout space onto the viewBox through a `fit`
   prop (`'contain' | 'cover' | 'crop'`).
-- `FlexLayout` / `FlexItem` — flexbox containers and items over the core's
-  `Flexbox.apply`; items receive their solved `Rect` and re-provide it as the
-  sizing context for their children. Both are renderless unless given
-  `class`/`style`/`debug`.
+- `FlexLayout` and `FlexItem` are flexbox containers and items over the core's
+  `Flexbox.apply`. Each item receives its solved `Rect` and provides it again
+  as the sizing context for its children. Both are renderless unless they
+  receive `class`, `style`, or `debug`.
 - `GraphicRect`, `GraphicCircle`, `GraphicLine`, `GraphicText`,
-  `GraphicPoint`, `GraphicGroup` — SVG leaves and grouping, positioned with
-  inset/size/origin props resolved against the parent context.
-- `GraphicCurve` / `GraphicPath` — curves via
-  [curvy](https://www.npmjs.com/package/curvy): a spline through
-  `GraphicPoint` children (Catmull-Rom by default; basis, cubic Bézier, and
-  polyline via the `curve` prop), or any curvy path/spline object rendered
-  as-is or fit onto the parent rect.
+  `GraphicPoint`, and `GraphicGroup` are the SVG leaf and group components.
+  Their inset, size, and origin props resolve against the parent context.
+- `GraphicCurve` and `GraphicPath` draw curves with
+  [curvy](https://www.npmjs.com/package/curvy). `GraphicCurve` draws a spline
+  through its `GraphicPoint` children. It uses Catmull-Rom by default, and the
+  `curve` prop selects basis, cubic Bézier, or polyline. `GraphicPath` renders
+  any curvy path or spline object as-is, or fits it onto the parent rect.
 
 ```vue
 <GraphicCurve stroke="2px tomato" tension="0.4">
@@ -52,8 +52,8 @@ pnpm add @placement/vue placement vue
 ```
 
 Every component is also available as its own subpath export
-(`@placement/vue/FlexLayout`), and the prop-parsing composables live under
-`@placement/vue/props/*` for building your own components.
+(`@placement/vue/FlexLayout`). To build your own components, use the
+prop-parsing composables under `@placement/vue/props/*`.
 
 ## Nuxt
 
@@ -64,7 +64,7 @@ export default defineNuxtConfig({
 ```
 
 The module registers all components globally. `@nuxt/kit` and
-`@nuxt/schema` are optional peer dependencies — plain Vue apps don't
+`@nuxt/schema` are optional peer dependencies, so plain Vue apps do not
 install them.
 
 ## License

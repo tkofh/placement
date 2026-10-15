@@ -25,7 +25,7 @@ describe('explicit parent', () => {
   })
 
   test('a single percentage copies the resolved row gap to the column', () => {
-    // The column copies the row's resolved 50 (of height 100); it is not
+    // The column copies the row's resolved 50 (of height 100). It is not
     // re-resolved against the width.
     expect(useGap(() => '50%', 0, parent).value).toEqual({ rowGap: 50, columnGap: 50 })
   })

@@ -3,4 +3,4 @@
 '@placement/vue': patch
 ---
 
-export prop types, remove unused shorthands
+Export prop types and remove unused shorthands.

@@ -23,8 +23,8 @@ export const PAINT_PROP_KEYS = ['fill', 'opacity', 'stroke'] as const
 export function usePaint(props: PaintProps) {
   const parentWidth = useParentWidth()
 
-  // `!= null` rather than truthiness: numeric 0 (e.g. `:opacity="0"`) is a
-  // meaningful value and must reach the resolvers.
+  // Use `!= null` rather than truthiness, because numeric 0 (for example
+  // `:opacity="0"`) is a meaningful value and must reach the resolvers.
   const fill = computed(() => (props.fill != null ? resolveFill(props.fill) : Fill.empty))
   const opacity = computed(() =>
     props.opacity != null ? resolveOpacity(props.opacity) : Opacity.empty,

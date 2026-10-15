@@ -16,7 +16,7 @@ export const GraphicText = defineComponent(
     const text = ref<SVGTextElement>()
     const domRect = useTextRect(text)
 
-    // The measured DOM rect is the box's explicit size; the inset and
+    // The measured DOM rect is the box's explicit size. The inset and
     // transform props position it.
     const self = useRect(props, { size: domRect })
 
@@ -30,10 +30,10 @@ export const GraphicText = defineComponent(
           ref: text,
           x,
           y,
-          // SVG text sits on its baseline by default, which leaves the
-          // font's descent hanging below `y`. Anchoring `y` to the top of
-          // the text's own box makes it the same box the observer measures,
-          // with no font metrics needed.
+          // SVG text sits on its baseline by default, so the descent of the
+          // font hangs below `y`. Anchoring `y` to the top of the text box
+          // makes it the same box that the observer measures, without font
+          // metrics.
           'dominant-baseline': 'text-before-edge',
           ...paint.value,
         },

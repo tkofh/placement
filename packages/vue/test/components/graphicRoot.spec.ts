@@ -7,8 +7,8 @@ import { GraphicRoot } from '../../src/components/GraphicRoot.ts'
 import { FakeResizeObserver, findAll, findOne } from '../host.ts'
 import { TestNode, createApp, createRoot } from '../renderer.ts'
 
-// The component checks these globals at setup/watch time, so they must be
-// stubbed before mounting.
+// The component checks these globals at setup/watch time, so the test must
+// stub them before mounting.
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', FakeResizeObserver)
   vi.stubGlobal('Element', TestNode)
@@ -52,7 +52,7 @@ describe('viewBox', () => {
     expect(findOne(root, 'svg').props['viewBox']).toBe('0 0 200 100')
   })
 
-  // Explicit 50x50 content in a 200x100 viewport; expectations follow the
+  // Explicit 50x50 content in a 200x100 viewport. Expectations follow the
   // Rect.align / Rect.cover / Rect.contain pipeline in the source.
   test('fit crop (the default) centers the viewport over the content rect without scaling', async () => {
     const root = await mountRoot({ width: 50, height: 50 })
@@ -66,7 +66,7 @@ describe('viewBox', () => {
     const root = await mountRoot({ width: 50, height: 50, fit: 'contain' })
     await measure(root, 200, 100)
 
-    // Viewport aspect 2 covering 50x50: 100x50, centered -> content fits.
+    // Viewport aspect 2 covering 50x50 gives 100x50, centered, so the content fits.
     expect(findOne(root, 'svg').props['viewBox']).toBe('-25 0 100 50')
   })
 
@@ -85,11 +85,11 @@ describe('viewBox', () => {
     expect(findOne(root, 'svg').props['viewBox']).toBe('0 0 200 100')
   })
 
-  // Suspected bug: GraphicRootProps types x/y (via TransformProps) and the
-  // setup pipes them through useXYTranslation, but the runtime props array
-  // omits TRANSLATE_PROP_KEYS -- so x/y stay in attrs, fall through onto
-  // the <svg>, and never translate the viewBox. If this starts failing
-  // with a translated viewBox, the props array was fixed -- update this to
+  // Suspected bug: GraphicRootProps types x/y (via TransformProps), and the
+  // setup pipes them through useXYTranslation. But the runtime props array
+  // omits TRANSLATE_PROP_KEYS, so x/y stay in attrs, fall through onto the
+  // <svg>, and never translate the viewBox. If this test fails with a
+  // translated viewBox, the props array is fixed. Then update this test to
   // expect '-65 -5 200 100' with no x/y attrs on the svg.
   test('x and y do not translate the viewBox: they leak onto the svg as attrs', async () => {
     const root = await mountRoot({ width: 50, height: 50, x: 10, y: 20 })

@@ -6,107 +6,107 @@ import { normalizeTRBL } from './utils/arguments.ts'
 const TypeBrand: unique symbol = Symbol('placement/box')
 type TypeBrand = typeof TypeBrand
 
-// Raw inputs live under a module-private symbol rather than `#private`
+// The raw inputs sit under a module-private symbol, not in `#private`
 // fields, so reads still work through a `Proxy` (Vue's `ref`/`reactive`).
 const Raw: unique symbol = Symbol('placement/box/raw')
 
 type RawInput = { readonly [K in keyof BoxInput]-?: number | undefined }
 
 /**
- * The construction input for `make`. Every field is optional, passing
- * `undefined` is the same as omitting the field, and — unlike `Frame`,
- * where a non-finite size is a literal infinite preference — any non-finite
- * value acts as unset.
+ * The construction input for `make`. Every field is optional, and passing
+ * `undefined` is the same as omitting the field. Any non-finite value acts
+ * as unset. This differs from `Frame`, where a non-finite size is a literal
+ * infinite preference.
  *
- * Unset means different things per group. An unset inset is auto: it
- * neither anchors nor shrinks its axis. Unset sizing fields stay unset
- * until `apply` resolves them against a parent (see `apply` for the
- * resolution order). Unset constraints default to `0` (minimums) and
- * `Infinity` (maximums).
+ * Unset means a different thing in each group. An unset inset is auto: it
+ * does not anchor or shrink its axis. Unset sizing fields stay unset until
+ * `apply` resolves them against a parent (see `apply` for the resolution
+ * order). Unset constraints default to `0` (minimums) and `Infinity`
+ * (maximums).
  */
 export interface BoxInput {
   /**
-   * The gap between the parent's top edge and the box — `top` in CSS
-   * absolute positioning. When set, it anchors the vertical position;
-   * together with `bottom` it also determines an unset height. Unset when
-   * omitted or non-finite.
+   * The gap between the parent's top edge and the box, as `top` in CSS
+   * absolute positioning. When set, it anchors the vertical position.
+   * Together with `bottom`, it also determines an unset height. It is unset
+   * when omitted or non-finite.
    */
   readonly top?: number | undefined
   /**
-   * The gap between the box and the parent's right edge — `right` in CSS
-   * absolute positioning. When set with `top`-side anchoring absent, the
-   * box anchors to the right edge; together with `left` it also determines
-   * an unset width. Unset when omitted or non-finite.
+   * The gap between the box and the parent's right edge, as `right` in CSS
+   * absolute positioning. When it is set and `left` is unset, the box
+   * anchors to the right edge. Together with `left`, it also determines an
+   * unset width. It is unset when omitted or non-finite.
    */
   readonly right?: number | undefined
   /**
-   * The gap between the box and the parent's bottom edge — `bottom` in CSS
-   * absolute positioning. When set with `top` unset, the box anchors to
-   * the bottom edge; together with `top` it also determines an unset
-   * height. Unset when omitted or non-finite.
+   * The gap between the box and the parent's bottom edge, as `bottom` in
+   * CSS absolute positioning. When it is set and `top` is unset, the box
+   * anchors to the bottom edge. Together with `top`, it also determines an
+   * unset height. It is unset when omitted or non-finite.
    */
   readonly bottom?: number | undefined
   /**
-   * The gap between the parent's left edge and the box — `left` in CSS
-   * absolute positioning. When set, it anchors the horizontal position;
-   * together with `right` it also determines an unset width. Unset when
-   * omitted or non-finite.
+   * The gap between the parent's left edge and the box, as `left` in CSS
+   * absolute positioning. When set, it anchors the horizontal position.
+   * Together with `right`, it also determines an unset width. It is unset
+   * when omitted or non-finite.
    */
   readonly left?: number | undefined
   /**
-   * The preferred width. Unset when omitted or non-finite: the resolved
-   * width then derives from the horizontal insets, the height and
-   * `aspectRatio`, or fills the parent (see `apply`).
+   * The preferred width. It is unset when omitted or non-finite. The
+   * resolved width then derives from the horizontal insets, from the height
+   * and `aspectRatio`, or fills the parent (see `apply`).
    */
   readonly width?: number | undefined
   /**
-   * The preferred height. Unset when omitted or non-finite: the resolved
-   * height then derives from the vertical insets, the width and
-   * `aspectRatio`, or fills the parent (see `apply`).
+   * The preferred height. It is unset when omitted or non-finite. The
+   * resolved height then derives from the vertical insets, from the width
+   * and `aspectRatio`, or fills the parent (see `apply`).
    */
   readonly height?: number | undefined
   /**
-   * The width-to-height ratio (`width / height`) that derives whichever
-   * dimension neither an explicit size nor a pair of insets determines.
-   * Non-positive and non-finite ratios act as unset. Unset when omitted.
+   * The width-to-height ratio (`width / height`). It derives the dimension
+   * that no explicit size or pair of insets determines. Non-positive and
+   * non-finite ratios act as unset. It is unset when omitted.
    */
   readonly aspectRatio?: number | undefined
   /**
    * The lower bound on the resolved width. Negative values clamp to `0`.
-   * Defaults to `0`; non-finite values act as unset.
+   * The default is `0`. Non-finite values act as unset.
    */
   readonly minWidth?: number | undefined
   /**
    * The lower bound on the resolved height. Negative values clamp to `0`.
-   * Defaults to `0`; non-finite values act as unset.
+   * The default is `0`. Non-finite values act as unset.
    */
   readonly minHeight?: number | undefined
   /**
-   * The upper bound on the resolved width. Negative values clamp to `0`,
-   * and `minWidth` wins when the bounds cross, as in CSS `clamp()`.
-   * Defaults to `Infinity` (unconstrained); non-finite values act as unset.
+   * The upper bound on the resolved width. Negative values clamp to `0`.
+   * If the bounds cross, `minWidth` wins, as in CSS `clamp()`. The default
+   * is `Infinity` (unconstrained). Non-finite values act as unset.
    */
   readonly maxWidth?: number | undefined
   /**
-   * The upper bound on the resolved height. Negative values clamp to `0`,
-   * and `minHeight` wins when the bounds cross, as in CSS `clamp()`.
-   * Defaults to `Infinity` (unconstrained); non-finite values act as unset.
+   * The upper bound on the resolved height. Negative values clamp to `0`.
+   * If the bounds cross, `minHeight` wins, as in CSS `clamp()`. The default
+   * is `Infinity` (unconstrained). Non-finite values act as unset.
    */
   readonly maxHeight?: number | undefined
 }
 
 /**
- * A positioned-box spec: the inset, sizing, and constraint inputs `apply`
- * resolves against a parent rect — the absolute-positioning counterpart to
- * the flex pair `Frame`/`Flexbox.apply`. A box carries no position of its
- * own; `apply` produces `Rect`s.
+ * A positioned-box spec: the inset, sizing, and constraint inputs that
+ * `apply` resolves against a parent rect. It is the absolute-positioning
+ * counterpart to the flex pair `Frame`/`Flexbox.apply`. A box has no
+ * position of its own. `apply` produces `Rect`s.
  *
- * Values are immutable — every setter returns a new box — and every input
- * is stored raw, with unset-ness preserved: the setters rebuild from the
- * raw inputs, so a dimension left to derive keeps re-deriving after any
- * setter, and `apply` re-resolves against each parent it is given.
+ * Values are immutable, and every setter returns a new box. The box stores
+ * every input raw and keeps unset inputs unset. The setters rebuild from
+ * the raw inputs, so a dimension left to derive keeps re-deriving after any
+ * setter. `apply` resolves the box again against each parent it gets.
  *
- * Created by `make`.
+ * Create a box with `make`.
  */
 class Box extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -133,7 +133,7 @@ class Box extends Pipeable {
   }
 
   /**
-   * The raw top inset: `NaN` when unset. Any non-finite value acts as
+   * The raw top inset, or `NaN` when unset. Any non-finite value acts as
    * unset in `apply`.
    */
   get top(): number {
@@ -141,7 +141,7 @@ class Box extends Pipeable {
   }
 
   /**
-   * The raw right inset: `NaN` when unset. Any non-finite value acts as
+   * The raw right inset, or `NaN` when unset. Any non-finite value acts as
    * unset in `apply`.
    */
   get right(): number {
@@ -149,7 +149,7 @@ class Box extends Pipeable {
   }
 
   /**
-   * The raw bottom inset: `NaN` when unset. Any non-finite value acts as
+   * The raw bottom inset, or `NaN` when unset. Any non-finite value acts as
    * unset in `apply`.
    */
   get bottom(): number {
@@ -157,7 +157,7 @@ class Box extends Pipeable {
   }
 
   /**
-   * The raw left inset: `NaN` when unset. Any non-finite value acts as
+   * The raw left inset, or `NaN` when unset. Any non-finite value acts as
    * unset in `apply`.
    */
   get left(): number {
@@ -165,7 +165,7 @@ class Box extends Pipeable {
   }
 
   /**
-   * The raw preferred width: `NaN` when unset. Any non-finite value acts
+   * The raw preferred width, or `NaN` when unset. Any non-finite value acts
    * as unset in `apply`, which resolves the used width against a parent.
    */
   get width(): number {
@@ -173,7 +173,7 @@ class Box extends Pipeable {
   }
 
   /**
-   * The raw preferred height: `NaN` when unset. Any non-finite value acts
+   * The raw preferred height, or `NaN` when unset. Any non-finite value acts
    * as unset in `apply`, which resolves the used height against a parent.
    */
   get height(): number {
@@ -181,7 +181,7 @@ class Box extends Pipeable {
   }
 
   /**
-   * The raw width-to-height ratio: `NaN` when unset. Non-positive and
+   * The raw width-to-height ratio, or `NaN` when unset. Non-positive and
    * non-finite ratios act as unset in `apply`.
    */
   get aspectRatio(): number {
@@ -189,8 +189,8 @@ class Box extends Pipeable {
   }
 
   /**
-   * The effective lower bound on the resolved width: the raw input clamped
-   * to `>= 0`, and `0` when unset or non-finite.
+   * The effective lower bound on the resolved width. It is the raw input
+   * clamped to `>= 0`, or `0` when unset or non-finite.
    */
   get minWidth(): number {
     const raw = this[Raw].minWidth ?? 0
@@ -198,8 +198,8 @@ class Box extends Pipeable {
   }
 
   /**
-   * The effective lower bound on the resolved height: the raw input
-   * clamped to `>= 0`, and `0` when unset or non-finite.
+   * The effective lower bound on the resolved height. It is the raw input
+   * clamped to `>= 0`, or `0` when unset or non-finite.
    */
   get minHeight(): number {
     const raw = this[Raw].minHeight ?? 0
@@ -207,10 +207,9 @@ class Box extends Pipeable {
   }
 
   /**
-   * The effective upper bound on the resolved width: the raw input clamped
-   * to `>= 0`, and `Infinity` when unset or non-finite. Raised to
-   * `minWidth` when the bounds cross — the minimum wins, as in CSS
-   * `clamp()`.
+   * The effective upper bound on the resolved width. It is the raw input
+   * clamped to `>= 0`, or `Infinity` when unset or non-finite. If the bounds
+   * cross, it rises to `minWidth`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxWidth(): number {
     const raw = this[Raw].maxWidth ?? Number.POSITIVE_INFINITY
@@ -218,10 +217,9 @@ class Box extends Pipeable {
   }
 
   /**
-   * The effective upper bound on the resolved height: the raw input
-   * clamped to `>= 0`, and `Infinity` when unset or non-finite. Raised to
-   * `minHeight` when the bounds cross — the minimum wins, as in CSS
-   * `clamp()`.
+   * The effective upper bound on the resolved height. It is the raw input
+   * clamped to `>= 0`, or `Infinity` when unset or non-finite. If the bounds
+   * cross, it rises to `minHeight`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxHeight(): number {
     const raw = this[Raw].maxHeight ?? Number.POSITIVE_INFINITY
@@ -233,10 +231,10 @@ class Box extends Pipeable {
   }
 
   /**
-   * Returns the box's raw inputs: unset fields come back `undefined`,
-   * never a sentinel. Under `JSON.stringify`, unset fields drop out and
-   * non-finite values become `null`, which `make` reads back as unset — a
-   * JSON round trip preserves every meaning.
+   * Returns the box's raw inputs. Unset fields come back as `undefined`,
+   * never as a sentinel. `JSON.stringify` drops unset fields and writes
+   * non-finite values as `null`. `make` reads `null` back as unset, so a
+   * JSON round trip keeps every meaning.
    *
    * @returns The raw input record, of the shape `make` accepts.
    */
@@ -250,11 +248,11 @@ export type { Box }
 /**
  * Creates a `Box`.
  *
- * Omitted fields are unset, not zero: an unset inset is auto, and an unset
- * dimension keeps deriving from the fields that are set — `apply` resolves
- * whatever remains against the parent.
+ * Omitted fields are unset, not zero. An unset inset is auto, and an unset
+ * dimension keeps deriving from the fields that are set. `apply` resolves
+ * the rest against the parent.
  *
- * @param input - The box's fields; see `BoxInput` for the per-field defaults.
+ * @param input - The box's fields. See `BoxInput` for the per-field defaults.
  * @returns An immutable `Box`.
  * @example
  * ```ts
@@ -265,8 +263,8 @@ export type { Box }
 export const make = (input: BoxInput): Box => new Box(input)
 
 /**
- * Checks if a value is a `Box`. True only for values built by `make`,
- * which carry the brand.
+ * Checks if a value is a `Box`. It returns `true` only for values built by
+ * `make`, which carry the brand.
  *
  * @param value - The value to check.
  * @returns `true` if the value is a `Box`, `false` otherwise.
@@ -276,26 +274,27 @@ export const isBox = (value: unknown): value is Box => {
 }
 
 /**
- * Solves the box against a parent rect — CSS absolute positioning. Each
- * axis resolves independently (the horizontal axis shown; the vertical
- * axis mirrors it with `top`/`bottom`/`height`):
+ * Solves the box against a parent rect, as in CSS absolute positioning.
+ * Each axis resolves independently. The rules below show the horizontal
+ * axis. The vertical axis mirrors them with `top`/`bottom`/`height`.
  *
- * The used width is the first of
+ * The used width is the first of these that applies:
  * - the explicit `width`,
  * - `parent.width - left - right` when both insets are set,
- * - the used height times `aspectRatio`, when the ratio is set and the
- *   height resolved by one of the two rules above,
- * - the fill fallback: `parent.width` minus whichever insets are set,
+ * - the used height times `aspectRatio`, when the ratio is set and one of
+ *   the two rules above resolved the height,
+ * - the fill fallback: `parent.width` minus whichever insets are set.
  *
- * clamped between `minWidth` and `maxWidth` in every case — the minimum
- * wins when the bounds cross, so the fill fallback never goes negative.
- * When neither axis is determined by an explicit size or an inset pair,
- * `aspectRatio` is ignored and both axes fill.
+ * In every case, `minWidth` and `maxWidth` clamp the result. If the bounds
+ * cross, the minimum wins, so the fill fallback never goes negative. If no
+ * explicit size or inset pair determines either axis, `apply` ignores
+ * `aspectRatio` and both axes fill.
  *
- * The box then anchors to `left` when it is set (over-constrained boxes
- * ignore `right`, as in CSS), otherwise to `right` — measured with the
- * used width — and otherwise sits at the parent's left edge, which the
- * fill fallback makes indistinguishable from a `left` of `0`.
+ * The box then anchors to `left` when it is set. An over-constrained box
+ * ignores `right`, as in CSS. Otherwise the box anchors to `right`,
+ * measured with the used width. With neither inset set, the box sits at
+ * the parent's left edge. The fill fallback makes this the same as a
+ * `left` of `0`.
  *
  * The arithmetic is exact IEEE 754 (see PRECISION.md). The data-last form
  * omits `self` and returns a function of it.
@@ -378,20 +377,21 @@ export const apply: {
   return Rect.make(x, y, width, height)
 })
 
-// Setters rebuild from the raw inputs (toJSON), never a resolved value.
-// Those with optional trailing arguments dispatch on isBox: the data-last
+// Setters rebuild from the raw inputs (toJSON), never from a resolved value.
+// Setters with optional trailing arguments dispatch on isBox. The data-last
 // form's first argument is always a number, so the forms cannot collide.
 
 /**
- * Sets all four insets in CSS shorthand order: one value for every edge,
- * two values for vertical then horizontal, three values for top,
- * horizontal, then bottom, four values for top, right, bottom, left. A
+ * Sets all four insets in CSS shorthand order. One value sets every edge.
+ * Two values set vertical, then horizontal. Three values set top,
+ * horizontal, then bottom. Four values set top, right, bottom, left. A
  * non-finite value unsets its edge. The data-last form omits `self` and
  * returns a function of it.
  *
  * @param self - The box to update.
- * @param top - The top inset. As the only value, every edge; as the first of two, both vertical edges.
- * @param right - The right inset. As the second of two values, both horizontal edges.
+ * @param top - The top inset. As the only value, it sets every edge. As the first of
+ *   two, it sets both vertical edges.
+ * @param right - The right inset. As the second of two values, it sets both horizontal edges.
  * @param bottom - The bottom inset.
  * @param left - The left inset.
  * @returns A new box with the insets replaced.
@@ -419,12 +419,12 @@ export const setInset: {
 )
 
 /**
- * Sets the horizontal insets: one value for both edges, two values for
- * left then right. A non-finite value unsets its edge. The data-last form
+ * Sets the horizontal insets. One value sets both edges. Two values set
+ * left, then right. A non-finite value unsets its edge. The data-last form
  * omits `self` and returns a function of it.
  *
  * @param self - The box to update.
- * @param left - The left inset. As the only value, the right inset too.
+ * @param left - The left inset. As the only value, it also sets the right inset.
  * @param right - The right inset.
  * @returns A new box with the horizontal insets replaced.
  */
@@ -440,12 +440,12 @@ export const setInsetX: {
 )
 
 /**
- * Sets the vertical insets: one value for both edges, two values for top
+ * Sets the vertical insets. One value sets both edges. Two values set top,
  * then bottom. A non-finite value unsets its edge. The data-last form
  * omits `self` and returns a function of it.
  *
  * @param self - The box to update.
- * @param top - The top inset. As the only value, the bottom inset too.
+ * @param top - The top inset. As the only value, it also sets the bottom inset.
  * @param bottom - The bottom inset.
  * @returns A new box with the vertical insets replaced.
  */
@@ -461,8 +461,8 @@ export const setInsetY: {
 )
 
 /**
- * Sets the top inset, leaving the other edges alone. A non-finite value
- * unsets it. The data-last form omits `self` and returns a function of it.
+ * Sets the top inset and leaves the other edges unchanged. A non-finite
+ * value unsets it. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The box to update.
  * @param top - The new top inset.
@@ -474,8 +474,8 @@ export const setTop: {
 } = dual(2, (self: Box, top: number) => new Box({ ...self.toJSON(), top }))
 
 /**
- * Sets the right inset, leaving the other edges alone. A non-finite value
- * unsets it. The data-last form omits `self` and returns a function of it.
+ * Sets the right inset and leaves the other edges unchanged. A non-finite
+ * value unsets it. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The box to update.
  * @param right - The new right inset.
@@ -487,8 +487,8 @@ export const setRight: {
 } = dual(2, (self: Box, right: number) => new Box({ ...self.toJSON(), right }))
 
 /**
- * Sets the bottom inset, leaving the other edges alone. A non-finite value
- * unsets it. The data-last form omits `self` and returns a function of it.
+ * Sets the bottom inset and leaves the other edges unchanged. A non-finite
+ * value unsets it. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The box to update.
  * @param bottom - The new bottom inset.
@@ -500,8 +500,8 @@ export const setBottom: {
 } = dual(2, (self: Box, bottom: number) => new Box({ ...self.toJSON(), bottom }))
 
 /**
- * Sets the left inset, leaving the other edges alone. A non-finite value
- * unsets it. The data-last form omits `self` and returns a function of it.
+ * Sets the left inset and leaves the other edges unchanged. A non-finite
+ * value unsets it. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The box to update.
  * @param left - The new left inset.
@@ -513,14 +513,13 @@ export const setLeft: {
 } = dual(2, (self: Box, left: number) => new Box({ ...self.toJSON(), left }))
 
 /**
- * Sets the preferred width and height. Note the order: width first, the
- * opposite of `setInset`'s vertical-first two-value form. One value sets
- * both dimensions. The data-last form omits `self` and returns a function
- * of it.
+ * Sets the preferred width and height. The width comes first, the opposite
+ * of the vertical-first two-value form of `setInset`. One value sets both
+ * dimensions. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The box to update.
  * @param width - The new width.
- * @param height - The new height; the width when omitted.
+ * @param height - The new height. Defaults to the width.
  * @returns A new box with both dimensions set.
  * @example
  * ```ts
@@ -538,10 +537,10 @@ export const setSize: {
 )
 
 /**
- * Sets the preferred width, leaving the other inputs — including an unset
- * height — as they were: a height left to derive keeps deriving against
- * the new width in `apply`. A non-finite value unsets it. The data-last
- * form omits `self` and returns a function of it.
+ * Sets the preferred width and leaves the other inputs as they were, an
+ * unset height included. In `apply`, a height left to derive keeps
+ * deriving against the new width. A non-finite value unsets the width. The
+ * data-last form omits `self` and returns a function of it.
  *
  * @param self - The box to update.
  * @param width - The new width.
@@ -553,9 +552,9 @@ export const setWidth: {
 } = dual(2, (self: Box, width: number) => new Box({ ...self.toJSON(), width }))
 
 /**
- * Sets the preferred height, leaving the other inputs — including an
- * unset width — as they were: a width left to derive keeps deriving
- * against the new height in `apply`. A non-finite value unsets it. The
+ * Sets the preferred height and leaves the other inputs as they were, an
+ * unset width included. In `apply`, a width left to derive keeps deriving
+ * against the new height. A non-finite value unsets the height. The
  * data-last form omits `self` and returns a function of it.
  *
  * @param self - The box to update.
@@ -568,8 +567,8 @@ export const setHeight: {
 } = dual(2, (self: Box, height: number) => new Box({ ...self.toJSON(), height }))
 
 /**
- * Sets the width-to-height ratio that derives whichever dimension is
- * otherwise undetermined in `apply`. Non-positive and non-finite ratios
+ * Sets the width-to-height ratio. In `apply`, the ratio derives the
+ * dimension that nothing else determines. Non-positive and non-finite ratios
  * act as unset. The data-last form omits `self` and returns a function of
  * it.
  *
@@ -588,7 +587,7 @@ export const setAspectRatio: {
  *
  * @param self - The box to update.
  * @param minWidth - The new minimum width.
- * @param minHeight - The new minimum height; the minimum width when omitted.
+ * @param minHeight - The new minimum height. Defaults to the minimum width.
  * @returns A new box with both minimums set.
  */
 export const setMinSize: {
@@ -632,7 +631,7 @@ export const setMinHeight: {
  *
  * @param self - The box to update.
  * @param maxWidth - The new maximum width.
- * @param maxHeight - The new maximum height; the maximum width when omitted.
+ * @param maxHeight - The new maximum height. Defaults to the maximum width.
  * @returns A new box with both maximums set.
  */
 export const setMaxSize: {
@@ -645,9 +644,9 @@ export const setMaxSize: {
 )
 
 /**
- * Sets the maximum width, the upper clamp on the resolved width.
- * Constraints apply at resolution, so raising a maximum un-clamps a width
- * set earlier. The data-last form omits `self` and returns a function of
+ * Sets the maximum width, the upper clamp on the resolved width. The
+ * constraints take effect when `apply` resolves the box, so raising a
+ * maximum un-clamps a width set earlier. The data-last form omits `self` and returns a function of
  * it.
  *
  * @param self - The box to update.
@@ -660,9 +659,9 @@ export const setMaxWidth: {
 } = dual(2, (self: Box, maxWidth: number) => new Box({ ...self.toJSON(), maxWidth }))
 
 /**
- * Sets the maximum height, the upper clamp on the resolved height.
- * Constraints apply at resolution, so raising a maximum un-clamps a
- * height set earlier. The data-last form omits `self` and returns a
+ * Sets the maximum height, the upper clamp on the resolved height. The
+ * constraints take effect when `apply` resolves the box, so raising a
+ * maximum un-clamps a height set earlier. The data-last form omits `self` and returns a
  * function of it.
  *
  * @param self - The box to update.

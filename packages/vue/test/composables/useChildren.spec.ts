@@ -27,8 +27,8 @@ beforeEach(() => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 
-// Every test implicitly asserts the dev unreachable-child warning stays
-// silent; tests that expect it clear the spy after asserting.
+// Every test implicitly asserts that the dev unreachable-child warning stays
+// silent. Tests that expect the warning clear the spy after they assert.
 afterEach(() => {
   const leaked = useChildrenWarnings()
   warnSpy.mockRestore()
@@ -356,11 +356,11 @@ describe('structure changes', () => {
   })
 
   // Known limitation: a keyed move neither registers, unregisters, mounts,
-  // nor unmounts anything, and Vue has no "moved" hook, so a reorder rendered
-  // by an intermediate component (not the provider) triggers nothing. The
-  // list stays stale until the provider's own next render. If this ever
-  // starts passing with a fresh order, the limitation is fixed -- delete the
-  // stale assertion and celebrate.
+  // nor unmounts anything, and Vue has no "moved" hook. A reorder that an
+  // intermediate component (not the provider) renders therefore triggers
+  // nothing. The list stays stale until the next render of the provider. If
+  // this test ever sees a fresh order, the limitation is fixed. Then delete
+  // the stale assertion.
   test('a keyed reorder inside an intermediate component is stale until the provider re-renders', async () => {
     const Item = makeItem('structure:deep-reorder')
     const wrapperOrder = ref([1, 2])
@@ -466,8 +466,8 @@ describe('sibling iterators', () => {
     return provider.children
   }
 
-  // The iterators cover a child's own group plus its enclosing chain -- not
-  // document order: children inside sibling containers (the nested [2, 3])
+  // The iterators cover a child's own group plus its enclosing chain, not
+  // document order. Children inside sibling containers (the nested [2, 3])
   // never appear for the outer children.
   test('before() yields earlier children in the group and enclosing chain', async () => {
     const children = await mountIterators()
@@ -592,9 +592,9 @@ describe('ssr', () => {
 
     const html = await renderToString(createSSRApp(Provider))
 
-    // Each child renders the offset solved at its own point in the stream;
-    // the mutator's own offset reflects the first child's new input (5),
-    // not the value it registered with (1).
+    // Each child renders the offset solved at its own point in the stream.
+    // The mutator's own offset reflects the first child's new input (5), not
+    // the value it registered with (1).
     expect(html).toBe('<div><i>0</i><i>1</i><i>3</i><i>10</i></div>')
   })
 })
@@ -621,8 +621,9 @@ describe('dev warnings', () => {
     await nextTick()
     expect(useChildrenWarnings()).toEqual([])
 
-    // A second app sharing the context via app-level provide: its child is
-    // mounted and registered but lives in a vnode tree the walk cannot reach.
+    // A second app shares the context through app-level provide. Its child is
+    // mounted and registered, but it lives in a vnode tree that the walk
+    // cannot reach.
     const Stray = defineComponent({
       name: 'StrayItem',
       setup() {
@@ -644,7 +645,7 @@ describe('dev warnings', () => {
     await nextTick()
     expect(useChildrenWarnings()).toHaveLength(1)
 
-    // The stray unmounts and unregisters; the condition clears silently.
+    // The stray unmounts and unregisters. The condition clears silently.
     strayApp.unmount()
     await nextTick()
     expect(useChildrenWarnings()).toHaveLength(1)

@@ -5,7 +5,7 @@ import { type PaintProps, usePaint } from '../../src/composables/usePaint.ts'
 import { mountWithRect } from '../host.ts'
 
 // The three prop groups spread into one object of kebab-case SVG attribute
-// keys; an unset group still contributes its keys, valued undefined.
+// keys. An unset group still contributes its keys, with the value undefined.
 const emptyPaint = {
   fill: undefined,
   'fill-rule': undefined,

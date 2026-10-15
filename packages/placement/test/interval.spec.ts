@@ -295,7 +295,7 @@ describeIntervalOperation('avoid', [
 
 describe('avoid partial overlap (regression)', () => {
   test('an interval overlapping the start of the forbidden zone escapes below it', () => {
-    // Old implementation returned [-20, 80], still overlapping [0, 100].
+    // The old implementation returned [-20, 80], which still overlaps [0, 100].
     const result = Interval.avoid(Interval.make(-60, 100), Interval.make(0, 100), 0)
     expect(result).toEqual(Interval.make(-100, 100))
     expect(result.max <= 0 || result.min >= 100).toBe(true)
@@ -364,7 +364,7 @@ describe('contains', () => {
   })
 
   test('boundaries are tolerant of rounding noise', () => {
-    // 0.1 + 0.2 sits an ulp above 0.3, outside the raw bounds; only the
+    // 0.1 + 0.2 is an ulp above 0.3, outside the raw bounds. Only the
     // tolerance band admits it.
     expect(Interval.contains(Interval.make(0, 0.3), 0.1 + 0.2)).toBe(true)
     // Scale invariance: the same geometry at 1e9 gives the same verdict.
@@ -390,11 +390,11 @@ describe('intersects', () => {
   })
 
   test('infinite extents do not blow the tolerance band up (regression)', () => {
-    // Spans -15..-5, clear of 0..Infinity; the band used to be Infinity.
+    // This spans -15..-5, clear of 0..Infinity. The band used to be Infinity.
     expect(
       Interval.intersects(Interval.make(0, Number.POSITIVE_INFINITY), Interval.make(-15, 10)),
     ).toBe(false)
-    // Spans -5..5, overlapping 0..Infinity.
+    // This spans -5..5 and overlaps 0..Infinity.
     expect(
       Interval.intersects(Interval.make(0, Number.POSITIVE_INFINITY), Interval.make(-5, 10)),
     ).toBe(true)
@@ -419,8 +419,8 @@ describe('equals', () => {
   })
 
   test('non-finite fields compare exactly (regression: verdicts were inverted)', () => {
-    // coincident degenerates at Infinity: reflexivity used to fail while
-    // infinite-vs-finite passed.
+    // coincident degenerates at Infinity: reflexivity used to fail while an
+    // infinite-vs-finite comparison passed.
     expect(
       Interval.equals(
         Interval.make(0, Number.POSITIVE_INFINITY),

@@ -364,7 +364,7 @@ describe('serialization', () => {
       width: 100,
       grow: 0,
       shrink: 0,
-      // Infinity (inherit) has no JSON encoding; it serializes as null.
+      // Infinity (inherit) has no JSON encoding, so it serializes as null.
       align: null,
       stretch: null,
     })

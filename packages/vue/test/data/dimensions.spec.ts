@@ -27,7 +27,7 @@ describe('computedDimensions', () => {
     const first = dimensions.value
     expect(runs).toBe(1)
 
-    // A new object identity invalidates the computed; the equal result keeps
+    // A new object identity invalidates the computed. The equal result keeps
     // the cached instance.
     source.value = { w: 10, h: 20 }
     expect(dimensions.value).toBe(first)

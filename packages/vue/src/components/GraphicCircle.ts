@@ -11,8 +11,8 @@ export const GraphicCircle = defineComponent(
   (props: GraphicCircleProps) => {
     const radius = useRadius(props, Point.infinity)
 
-    // A set radius overrides the sizing props, and recenters the default
-    // origin: the inset props then position the center, not the corner.
+    // A set radius overrides the sizing props and recenters the default
+    // origin. The inset props then position the center, not the corner.
     const size = computed(() =>
       radius.value === Point.infinity
         ? undefined

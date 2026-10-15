@@ -28,7 +28,7 @@ describe('computedInterval', () => {
     const first = interval.value
     expect(runs).toBe(1)
 
-    // A new object identity invalidates the computed; the equal result keeps
+    // A new object identity invalidates the computed. The equal result keeps
     // the cached instance.
     source.value = { start: 10, size: 20 }
     expect(interval.value).toBe(first)

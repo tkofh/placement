@@ -16,17 +16,17 @@ export interface GraphicCurveProps extends PaintProps {
   /**
    * The spline family drawn through the `GraphicPoint` children:
    * `'cardinal'` (default) interpolates every point, `'basis'` smooths
-   * past them, `'bezier'` reads them as cubic control points (needs
-   * 3n+1), `'linear'` is a polyline.
+   * past them, `'bezier'` reads them as cubic control points (it needs
+   * 3n+1), and `'linear'` is a polyline.
    */
   curve?: CurveKind
   /**
    * How the curve treats its first and last points. Cardinal and basis
-   * splines only span their interior control points, so the endpoints are
-   * padded — `'duplicate'` (default), `'reflect'`, or `'interpolate'` —
-   * to pull the curve through every point; `'natural'` leaves the control
-   * points as authored (the curve starts at the second point, and needs
-   * four). Ignored by `'bezier'` and `'linear'`; basis treats every
+   * splines span only their interior control points. To pull the curve
+   * through every point, `'duplicate'` (default), `'reflect'`, and
+   * `'interpolate'` pad the endpoints. `'natural'` leaves the control
+   * points as authored, so the curve starts at the second point and needs
+   * four. `'bezier'` and `'linear'` ignore this prop. Basis treats every
    * padding choice as endpoint triplication.
    */
   ends?: CurveEnds
@@ -38,8 +38,8 @@ export interface GraphicCurveProps extends PaintProps {
   closed?: boolean
 }
 
-// Each family's minimum registered-point count; below it the path is
-// simply not drawn (points mount progressively).
+// The minimum count of registered points for each family. Below it, the
+// component does not draw the path (points mount progressively).
 function hasEnoughPoints(kind: CurveKind, ends: CurveEnds, count: number): boolean {
   switch (kind) {
     case 'basis':
@@ -126,7 +126,7 @@ export const GraphicCurve = defineComponent(
               d: boolProp(props.closed) ? `${d} Z` : d,
               ...attrs,
               ...paint.value,
-              // An SVG path with no fill attribute fills black; a curve
+              // An SVG path with no fill attribute fills black. A curve
               // through points is a stroke by default.
               fill: paint.value.fill ?? 'none',
             }),

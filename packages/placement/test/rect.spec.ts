@@ -74,8 +74,8 @@ describe('constructors', () => {
     expect(Rect.fromDimensions(Dimensions.make(30, 40), Point.make(10, 20))).toEqual(
       Rect.make(10, 20, 30, 40),
     )
-    // The old signature read a trailing number as a precision; the second
-    // argument is point-like only now, and inputs are stored exactly.
+    // The old signature read a trailing number as a precision. Now the second
+    // argument is point-like only, and inputs are stored exactly.
     expect(Rect.fromDimensions(Dimensions.make(30, 40), { x: 0.1, y: 1e9 + 0.25 }).y).toBe(
       1e9 + 0.25,
     )
@@ -477,8 +477,8 @@ describe('align', () => {
 })
 
 // The resize* edge cases below are the old adjust* suite translated to
-// absolute edge coordinates (rect1234's edges: left 10, top 20, right 40,
-// bottom 60).
+// absolute edge coordinates (the edges of rect1234: left 10, top 20,
+// right 40, bottom 60).
 describeRectOperation(
   'resizeTop',
   [
@@ -844,7 +844,7 @@ describe('contains', () => {
   })
 
   test('boundaries are tolerant of rounding noise', () => {
-    // 0.1 + 0.2 sits an ulp above 0.3; a raw comparison would exclude it.
+    // 0.1 + 0.2 is an ulp above 0.3. Without tolerance, the comparison excludes it.
     expect(Rect.contains(Rect.make(0, 0, 0.3, 1), Point.make(0.1 + 0.2, 0.5))).toBe(true)
     // Scale invariance: the same geometry at 1e9 gives the same verdict.
     expect(

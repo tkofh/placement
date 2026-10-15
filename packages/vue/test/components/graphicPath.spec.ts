@@ -54,7 +54,7 @@ describe('fit', () => {
       h(GraphicPath, { path: square, fit: 'contain' }),
     ])
 
-    // min(20, 10) = 10 -> 100x100, centered horizontally at x 50.
+    // min(20, 10) = 10 gives 100x100, centered horizontally at x 50.
     expect(findOne(root, 'path').props['d']).toBe(transformed(10, 10, 50, 0))
   })
 
@@ -63,7 +63,7 @@ describe('fit', () => {
       h(GraphicPath, { path: square, fit: 'cover' }),
     ])
 
-    // max(20, 10) = 20 -> 200x200, centered vertically at y -50.
+    // max(20, 10) = 20 gives 200x200, centered vertically at y -50.
     expect(findOne(root, 'path').props['d']).toBe(transformed(20, 20, 0, -50))
   })
 
@@ -81,7 +81,7 @@ describe('fit', () => {
       h(GraphicPath, { path: offsetSquare, fit: 'contain' }),
     ])
 
-    // Scale 10 about the box origin (20, 30), then land centered:
+    // Scale 10 about the box origin (20, 30), then center the box:
     // x = 50 - 20 * 10 = -150, y = 0 - 30 * 10 = -300.
     const expected = LinearPath2d.toPathData(
       LinearPath2d.transform(

@@ -9,12 +9,13 @@ const TypeBrand: unique symbol = Symbol('placement/offset')
 type TypeBrand = typeof TypeBrand
 
 /**
- * The structural shape of an offset: one number per side, in CSS order —
+ * The structural shape of an offset: one number per side, in the CSS order
  * `top`, `right`, `bottom`, `left`.
  *
- * Read-only operations (`equals`) accept any `OffsetLike`, so plain objects
- * compare without constructing. Operations that build new values take the
- * branded `Offset`. `isOffsetLike` is the runtime check for this shape.
+ * Read-only operations (`equals`) accept any `OffsetLike`, so you can compare
+ * plain objects without constructing an `Offset`. Operations that build new
+ * values take the branded `Offset`. `isOffsetLike` is the runtime check for
+ * this shape.
  */
 export interface OffsetLike {
   /** The top side's value. */
@@ -28,20 +29,22 @@ export interface OffsetLike {
 }
 
 /**
- * A per-side quantity in CSS order — `top`, `right`, `bottom`, `left` — the
- * shape of margins, paddings, and insets. What a side means is the consumer's
- * choice: `Rect` reads an `Offset` as insets in `contract` and as outsets in
- * `expand`. Sides pair by axis — `top` and `bottom` along y, `right` and
- * `left` along x — the pairing `Offset.xy`, `setX`, and `setY` write.
+ * A per-side quantity in the CSS order `top`, `right`, `bottom`, `left`.
+ * Margins, paddings, and insets have this shape. The consumer chooses what a
+ * side means. For example, `Rect` reads an `Offset` as insets in `contract`
+ * and as outsets in `expand`. Sides pair by axis: `top` and `bottom` along y,
+ * `right` and `left` along x. `Offset.xy`, `setX`, and `setY` write this
+ * pairing.
  *
- * Values are immutable, and constructions are exact IEEE 754: every operation
- * returns a new `Offset` carrying exactly what the arithmetic produced, and
- * `equals` compares within a tolerance instead. Any number is a legal side —
- * negative sides are meaningful (a negative inset expands), and
- * `Offset.infinity` carries `Infinity` on all four.
+ * Values are immutable, and constructions are exact IEEE 754. Every operation
+ * returns a new `Offset` that holds exactly what the arithmetic produced.
+ * `equals` compares within a tolerance instead. Any number is a legal side.
+ * Negative sides have a meaning (a negative inset expands), and
+ * `Offset.infinity` has `Infinity` on all four sides.
  *
- * Exported type-only: construct through `Offset.make`. Extends `Pipeable`,
- * so operations chain data-last: `o.pipe(Offset.add(10), Offset.scale(2))`.
+ * The module exports this class as a type only. To construct one, use
+ * `Offset.make`. The class extends `Pipeable`, so operations chain data-last:
+ * `o.pipe(Offset.add(10), Offset.scale(2))`.
  */
 class Offset extends Pipeable implements OffsetLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -97,7 +100,7 @@ export type { Offset }
  * `Offset.fromDimensions`, and the constants `Offset.zero` and
  * `Offset.infinity`.
  *
- * Construction is exact: the sides store exactly the numbers given, with no
+ * Construction is exact. The sides store exactly the given numbers, with no
  * rounding.
  *
  * @param value - The value for every side.
@@ -111,8 +114,8 @@ export type { Offset }
 export const make = (value: number): Offset => new Offset(value, value, value, value)
 
 /**
- * Creates an offset from per-axis values: `x` fills the x-axis sides
- * (`right`, `left`) and `y` the y-axis sides (`top`, `bottom`).
+ * Creates an offset from per-axis values. `x` fills the x-axis sides
+ * (`right`, `left`), and `y` fills the y-axis sides (`top`, `bottom`).
  *
  * @param x - The value for `right` and `left`.
  * @param y - The value for `top` and `bottom`.
@@ -146,9 +149,9 @@ export const trbl = (top: number, right?: number, bottom?: number, left?: number
   new Offset(top, right ?? top, bottom ?? top, left ?? right ?? top)
 
 /**
- * Creates an offset from a point: `point.x` fills the x-axis sides
- * (`right`, `left`) and `point.y` the y-axis sides (`top`, `bottom`) —
- * `Offset.xy(point.x, point.y)`.
+ * Creates an offset from a point. `point.x` fills the x-axis sides
+ * (`right`, `left`), and `point.y` fills the y-axis sides (`top`, `bottom`).
+ * The result is the same as `Offset.xy(point.x, point.y)`.
  *
  * @param point - The point to read `x` and `y` from.
  * @returns The per-axis offset.
@@ -157,9 +160,9 @@ export const fromPoint = (point: Point): Offset => new Offset(point.y, point.x, 
 
 /**
  * Creates an offset of half of each dimension per side: `width / 2` on
- * `right` and `left`, `height / 2` on `top` and `bottom`. Expanding a
- * zero-size rect by the result yields a rect of `dimensions` centered on
- * the rect's position.
+ * `right` and `left`, and `height / 2` on `top` and `bottom`. If you expand a
+ * zero-size rect by the result, you get a rect of `dimensions` centered on
+ * the position of the zero-size rect.
  *
  * @param dimensions - The dimensions to halve.
  * @returns The half-dimensions offset.
@@ -176,7 +179,7 @@ export const fromDimensions = (dimensions: Dimensions): Offset =>
     dimensions.width * 0.5,
   )
 
-/** The offset with `0` on every side — the identity of `add` and `subtract`. */
+/** The offset with `0` on every side, which is the identity of `add` and `subtract`. */
 export const zero: Offset = new Offset(0, 0, 0, 0)
 
 /** The offset with `Infinity` on every side. */
@@ -190,9 +193,9 @@ export const infinity: Offset = new Offset(
 /**
  * Checks if a value is an `Offset`.
  *
- * True only for values built by this module's constructors, which carry the
- * brand; a plain `{ top, right, bottom, left }` object fails. For the
- * structural check, use `isOffsetLike`.
+ * True only for values that this module's constructors build, because they
+ * carry the brand. A plain `{ top, right, bottom, left }` object fails. For
+ * the structural check, use `isOffsetLike`.
  *
  * @param value - The value to check.
  * @returns `true` if the value is an `Offset`, `false` otherwise.
@@ -204,7 +207,7 @@ export const isOffset = (value: unknown): value is Offset => {
 /**
  * Checks if a value has the structural shape of an offset: an object with
  * numeric `top`, `right`, `bottom`, and `left`. Every `Offset` passes, and
- * so does any plain object carrying the four sides.
+ * so does any plain object with the four sides.
  *
  * @param value - The value to check.
  * @returns `true` if the value is an `OffsetLike`, `false` otherwise.
@@ -220,7 +223,7 @@ export const isOffsetLike = (value: unknown): value is OffsetLike => {
 }
 
 /**
- * Replaces the top side, keeping the other three. The data-last form omits
+ * Replaces the top side and keeps the other three. The data-last form omits
  * `self` and returns a function of it.
  *
  * @param self - The offset to update.
@@ -233,8 +236,8 @@ export const setTop: {
 } = dual(2, (self: Offset, top: number) => new Offset(top, self.right, self.bottom, self.left))
 
 /**
- * Replaces the right side, keeping the other three. The data-last form omits
- * `self` and returns a function of it.
+ * Replaces the right side and keeps the other three. The data-last form
+ * omits `self` and returns a function of it.
  *
  * @param self - The offset to update.
  * @param right - The new right side.
@@ -246,7 +249,7 @@ export const setRight: {
 } = dual(2, (self: Offset, right: number) => new Offset(self.top, right, self.bottom, self.left))
 
 /**
- * Replaces the bottom side, keeping the other three. The data-last form
+ * Replaces the bottom side and keeps the other three. The data-last form
  * omits `self` and returns a function of it.
  *
  * @param self - The offset to update.
@@ -259,7 +262,7 @@ export const setBottom: {
 } = dual(2, (self: Offset, bottom: number) => new Offset(self.top, self.right, bottom, self.left))
 
 /**
- * Replaces the left side, keeping the other three. The data-last form omits
+ * Replaces the left side and keeps the other three. The data-last form omits
  * `self` and returns a function of it.
  *
  * @param self - The offset to update.
@@ -272,7 +275,7 @@ export const setLeft: {
 } = dual(2, (self: Offset, left: number) => new Offset(self.top, self.right, self.bottom, left))
 
 /**
- * Replaces both x-axis sides (`right` and `left`) with one value, keeping
+ * Replaces both x-axis sides (`right` and `left`) with one value and keeps
  * `top` and `bottom`. The data-last form omits `self` and returns a function
  * of it.
  *
@@ -286,7 +289,7 @@ export const setX: {
 } = dual(2, (self: Offset, x: number) => new Offset(self.top, x, self.bottom, x))
 
 /**
- * Replaces both y-axis sides (`top` and `bottom`) with one value, keeping
+ * Replaces both y-axis sides (`top` and `bottom`) with one value and keeps
  * `right` and `left`. The data-last form omits `self` and returns a function
  * of it.
  *
@@ -300,8 +303,9 @@ export const setY: {
 } = dual(2, (self: Offset, y: number) => new Offset(y, self.right, y, self.left))
 
 /**
- * Adds to every side: a number adds uniformly, an `OffsetLike` adds side
- * by side. The data-last form omits `self` and returns a function of it.
+ * Adds to every side. A number adds the same amount to each side, and an
+ * `OffsetLike` adds side by side. The data-last form omits `self` and returns
+ * a function of it.
  *
  * @param self - The offset to add to.
  * @param value - A number for every side, or per-side amounts (any `OffsetLike`).
@@ -327,9 +331,9 @@ export const add: {
 )
 
 /**
- * Subtracts from every side: a number subtracts uniformly, an
- * `OffsetLike` subtracts side by side. The data-last form omits `self` and returns a
- * function of it.
+ * Subtracts from every side. A number subtracts the same amount from each
+ * side, and an `OffsetLike` subtracts side by side. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The offset to subtract from.
  * @param value - A number for every side, or per-side amounts (any `OffsetLike`).
@@ -355,8 +359,9 @@ export const subtract: {
 )
 
 /**
- * Multiplies every side by `factor`. Nothing clamps: a negative factor flips
- * every sign. The data-last form omits `self` and returns a function of it.
+ * Multiplies every side by `factor`. The function does not clamp, so a
+ * negative factor flips every sign. The data-last form omits `self` and
+ * returns a function of it.
  *
  * @param self - The offset to scale.
  * @param factor - The multiplier applied to each side.
@@ -377,8 +382,8 @@ export const scale: {
 )
 
 /**
- * Flips the sign of every side. Not a dual: pass the bare function to
- * `.pipe`.
+ * Flips the sign of every side. This function is not a dual, so pass the
+ * bare function to `.pipe`.
  *
  * @param self - The offset to negate.
  * @returns The negated offset.
@@ -392,8 +397,8 @@ export const negate = (self: Offset): Offset =>
   new Offset(-self.top, -self.right, -self.bottom, -self.left)
 
 /**
- * Takes the magnitude of every side (`Math.abs`). Not a dual: pass the bare
- * function to `.pipe`.
+ * Takes the magnitude of every side (`Math.abs`). This function is not a
+ * dual, so pass the bare function to `.pipe`.
  *
  * @param self - The offset to take magnitudes of.
  * @returns The offset with every side non-negative.
@@ -408,16 +413,16 @@ export const absolute = (self: Offset): Offset =>
 
 /**
  * Linearly interpolates each side from `self` (at `amount = 0`) toward
- * `target` (at `amount = 1`). `amount` is not clamped: values outside
- * `[0, 1]` extrapolate along the same line. The data-last form omits `self`
- * and returns a function of it.
+ * `target` (at `amount = 1`). The function does not clamp `amount`, so
+ * values outside `[0, 1]` extrapolate along the same line. The data-last
+ * form omits `self` and returns a function of it.
  *
- * Exact at the endpoints for finite sides. An infinite side makes the
- * opposite endpoint `NaN` (`Infinity * 0`).
+ * For finite sides, the result is exact at the endpoints. An infinite side
+ * makes the opposite endpoint `NaN` (`Infinity * 0`).
  *
  * @param self - The offset at `amount = 0`.
  * @param target - The offset at `amount = 1`.
- * @param amount - The interpolation parameter. Not restricted to `[0, 1]`.
+ * @param amount - The interpolation parameter. It is not restricted to `[0, 1]`.
  * @returns Per side, `target * amount + self * (1 - amount)`.
  * @example
  * ```ts
@@ -441,13 +446,13 @@ export const lerp: {
 
 /**
  * Compares two offsets side by side within the tolerance band of
- * `coincident` from `curvy/number`:
- * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)` per side
+ * `coincident` from `curvy/number`. Two sides are equal when
+ * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)`
  * (`1e-10` and `1e-12`). Rounding noise never fails an equality, and the
- * verdict is invariant under uniform scaling of both operands. Non-finite
- * sides compare exactly: an infinite side equals only the same infinity
+ * result is invariant under uniform scaling of both operands. Non-finite
+ * sides compare exactly. An infinite side equals only the same infinity
  * (`Offset.infinity` equals itself), and a `NaN` side equals nothing.
- * Like every tolerant comparison, not transitive. The data-last form
+ * Like every tolerant comparison, it is not transitive. The data-last form
  * omits `self` and returns a function of it.
  *
  * @param self - The offset to compare.

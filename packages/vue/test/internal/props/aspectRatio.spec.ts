@@ -31,8 +31,8 @@ describe('strings', () => {
     expected: number
   }
 
-  // The declared ratio template wants spaces around the slash; the runtime
-  // tokenizer does not, hence the casts on the compact forms.
+  // The declared ratio template wants spaces around the slash, but the
+  // runtime tokenizer does not. That is why the compact forms need casts.
   const cases: ReadonlyArray<StringCase> = [
     { input: '3 / 2', expected: 1.5 },
     { input: '3/2' as AspectRatioInput, expected: 1.5 },
@@ -49,7 +49,7 @@ describe('strings', () => {
     expect(resolveAspectRatio('16 / 9', 1)).toBeCloseTo(16 / 9, 12)
   })
 
-  // A zero numerator is degenerate too, not just a zero denominator.
+  // A zero numerator is degenerate too, like a zero denominator.
   test.each(['auto', '1/0', '0/5', 'garbage'])('%j falls back to auto', (input) => {
     expect(resolveAspectRatio(input as AspectRatioInput, 4)).toBe(4)
   })

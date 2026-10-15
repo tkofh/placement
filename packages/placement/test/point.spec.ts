@@ -395,7 +395,7 @@ describe('avoid semantics', () => {
   })
 
   test('the boundary decision is tolerant of rounding noise, at any magnitude', () => {
-    // 0.1 + 0.2 sits an ulp above 0.3; a raw comparison would nudge the point.
+    // 0.1 + 0.2 is an ulp above 0.3. Without tolerance, the comparison nudges the point.
     const noisy = Point.make(0.3, 0)
     expect(Point.avoid(noisy, Point.make(0, 0), 0.1 + 0.2)).toBe(noisy)
     // Scale invariance: the same geometry at 1e9 gives the same verdict.

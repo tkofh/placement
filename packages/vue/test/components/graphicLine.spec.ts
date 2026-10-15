@@ -1,5 +1,5 @@
-// Also covers GraphicPoint, which renders nothing on its own: every point
-// behavior is observed through the line it feeds.
+// This file also covers GraphicPoint, which renders nothing on its own. The
+// tests observe every point behavior through the line that it feeds.
 import * as Rect from 'placement/rect'
 import { describe, expect, test } from 'vitest'
 import { h, nextTick, ref } from 'vue'
@@ -59,9 +59,9 @@ describe('endpoints', () => {
   })
 
   // `global` adds the parent origin to the point itself, and the line then
-  // translates every point by the same origin — so a global point is
-  // shifted twice. Suspicious (a "global" point presumably wants to land at
-  // its absolute coordinates exactly once), but it is what the code does.
+  // translates every point by the same origin. A global point therefore
+  // shifts twice. This looks wrong, because a "global" point presumably
+  // belongs at its absolute coordinates once, but it is what the code does.
   test('a global point is translated twice: once by the point, once by the line', async () => {
     const { root } = await mountLine([
       { top: 20, left: 10, global: true },
@@ -134,7 +134,7 @@ describe('reactivity', () => {
     show.value = false
     await nextTick()
 
-    // The remaining point becomes the first endpoint; the second falls back.
+    // The remaining point becomes the first endpoint. The second falls back.
     expect(findAll(root, 'line')[0]?.props).toEqual({ x1: 37, y1: 51, x2: 7, y2: 11 })
   })
 })

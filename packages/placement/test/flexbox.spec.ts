@@ -460,7 +460,7 @@ describe('auto margin offsets', () => {
 
   test('an auto main-start offset pushes the item to the main end (regression)', () => {
     // The sequence walkers used to add the raw Infinity sentinel instead of
-    // the definite offset, producing Infinity positions.
+    // the definite offset, and that produced Infinity positions.
     expect(
       Flexbox.apply(
         [Frame.make({ width: 100, height: 100, offsetLeft: Number.POSITIVE_INFINITY })],
@@ -655,7 +655,7 @@ describe('serialization', () => {
 
 describe('wrap with a lone overflowing frame (regression)', () => {
   // The flush branch used to emit an overflowing first frame on its own line
-  // AND at the head of the next, returning more rects than frames.
+  // AND at the head of the next line. It then returned more rects than frames.
   test('one frame wider than the container yields exactly one rect', () => {
     const result = Flexbox.apply(
       [Frame.make({ width: 200, height: 200 })],
@@ -697,8 +697,8 @@ describe('non-finite stretch inherits (regression)', () => {
 })
 
 describe('cross min lands on the joined line (regression)', () => {
-  // minCrossSize used to accumulate before the wrap flush, folding a
-  // wrapping item's cross min into the height of the line it is NOT on.
+  // minCrossSize used to accumulate before the wrap flush. That folded the
+  // cross min of a wrapping item into the height of the line it is NOT on.
   test('a wrapping item contributes its cross min to its own line', () => {
     expect(
       Flexbox.apply(
@@ -716,7 +716,7 @@ describe('cross min lands on the joined line (regression)', () => {
 describe('wrap decision is tolerance-aware (regression)', () => {
   // The overflow check used a raw float comparison, so rounding residue
   // (0.1 * 3 sums past 0.3) wrapped a line that the same layout scaled by
-  // 10 kept whole — breaking PRECISION.md scale invariance.
+  // 10 kept whole. That broke scale invariance (see PRECISION.md).
   test('0.1-wide items in a 0.3-wide parent stay on one line, like the layout scaled by 10', () => {
     const small = Flexbox.apply(
       Array.from({ length: 3 }, () => Frame.make({ width: 0.1, height: 1 })),
@@ -736,7 +736,7 @@ describe('wrap decision is tolerance-aware (regression)', () => {
 
 describe('offsets are physical in reversed flows (regression)', () => {
   // The main track is laid out logically and reflected afterward, margins
-  // included; computeItem swaps the offset sources in reversed flows so
+  // included. In reversed flows, computeItem swaps the offset sources so
   // each margin lands on its named physical side.
   test('rowReverse keeps offsetLeft on the physical left of the item', () => {
     expect(

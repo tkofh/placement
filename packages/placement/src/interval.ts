@@ -22,16 +22,16 @@ export interface IntervalLike {
 }
 
 /**
- * A one-dimensional span: a `start` position and a signed `size`. The 1D core of placement's
- * layout model.
+ * A one-dimensional span: a `start` position and a signed `size`. It is the 1D core of the
+ * layout model in placement.
  *
- * Values are immutable, and construction is exact IEEE 754: the fields hold exactly what the
- * arithmetic produced, with no rounding or normalization. A negative `size` is legal — `end`
- * then lies below `start` — and `min`/`max` expose the orientation-normalized bounds. The
- * predicates (`equals`, `contains`, `intersects`) are tolerance-aware; see `PRECISION.md`.
+ * Values are immutable, and construction is exact IEEE 754. The fields hold exactly what the
+ * arithmetic produced, with no rounding or normalization. A negative `size` is legal, and then
+ * `end` lies below `start`. `min`/`max` give the orientation-normalized bounds. The predicates
+ * (`equals`, `contains`, `intersects`) are tolerance-aware. See `PRECISION.md`.
  *
- * Exported type-only; construct with `make`. Extends `Pipeable`, so operations chain data-last:
- * `Interval.make(0, 100).pipe(Interval.translate(50))`.
+ * The class is exported type-only. Use `make` to construct it. It extends `Pipeable`, so
+ * operations chain data-last: `Interval.make(0, 100).pipe(Interval.translate(50))`.
  */
 class Interval extends Pipeable implements IntervalLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -48,7 +48,7 @@ class Interval extends Pipeable implements IntervalLike {
     this.size = size
   }
 
-  /** The position where the span ends: `start + size`. Below `start` when `size` is negative. */
+  /** The end position: `start + size`. It lies below `start` when `size` is negative. */
   get end(): number {
     return this.start + this.size
   }
@@ -84,12 +84,12 @@ class Interval extends Pipeable implements IntervalLike {
 export type { Interval }
 
 /**
- * Creates an `Interval`. Arity selects the construction: no arguments make the zero interval,
- * one argument is a `size` for an interval starting at `0`, and two arguments are `start` and
- * `size`.
+ * Creates an `Interval`. The number of arguments selects the construction: no arguments make
+ * the zero interval, one argument is a `size` for an interval that starts at `0`, and two
+ * arguments are `start` and `size`.
  *
- * Construction is exact: the fields store the given values unchanged, and a negative `size` is
- * preserved rather than normalized.
+ * Construction is exact. The fields store the given values unchanged, and `make` keeps a
+ * negative `size` instead of normalizing it.
  *
  * @param start - The start position. Defaults to `0` in the zero- and one-argument forms.
  * @param size - The signed size. Defaults to `0` in the zero-argument form.
@@ -112,8 +112,8 @@ export const make: {
 /**
  * Checks if a value is an `Interval`.
  *
- * True only for values built by `make`, which carry the brand. A plain `{ start, size }`
- * object fails; use `isIntervalLike` for the structural check.
+ * It returns `true` only for values built by `make`, which carry the brand. A plain
+ * `{ start, size }` object fails. Use `isIntervalLike` for the structural check.
  *
  * @param value - The value to check.
  * @returns `true` if the value is an `Interval`, `false` otherwise.
@@ -142,7 +142,7 @@ const targetBounds = (target: number | IntervalLike, gap: number): [number, numb
 }
 
 /**
- * Moves the interval so it starts at `start`, preserving its size. The data-last form omits
+ * Moves the interval so it starts at `start` and keeps its size. The data-last form omits
  * `self` and returns a function of it.
  *
  * @param self - The interval to move.
@@ -160,9 +160,9 @@ export const setStart: {
 } = dual(2, (self: Interval, start: number) => new Interval(start, self.size))
 
 /**
- * Resizes the interval to `size`, anchored at `origin` — the normalized position within the
- * interval that keeps its place: `0` fixes the start, `0.5` the center, `1` the end. The
- * data-last form omits `self` and returns a function of it.
+ * Resizes the interval to `size`, anchored at `origin`. `origin` is the normalized position
+ * within the interval that keeps its place: `0` fixes the start, `0.5` the center, and `1` the
+ * end. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The interval to resize.
  * @param size - The new size.
@@ -185,7 +185,7 @@ export const setSize: {
 )
 
 /**
- * Moves the interval so its end (`start + size`) lands at `end`, preserving its size. The
+ * Moves the interval so its end (`start + size`) lands at `end` and keeps its size. The
  * data-last form omits `self` and returns a function of it.
  *
  * @param self - The interval to move.
@@ -202,7 +202,7 @@ export const setEnd: {
 } = dual(2, (self: Interval, end: number) => new Interval(end - self.size, self.size))
 
 /**
- * Shifts the interval by `amount`, preserving its size. The data-last form omits `self` and
+ * Shifts the interval by `amount` and keeps its size. The data-last form omits `self` and
  * returns a function of it.
  *
  * @param self - The interval to shift.
@@ -220,10 +220,10 @@ export const translate: {
 } = dual(2, (self: Interval, amount: number) => new Interval(self.start + amount, self.size))
 
 /**
- * Scales the interval's size by `factor`, anchored at `origin` — the normalized position within
- * the interval that stays fixed: `0` fixes the start, `0.5` the center, `1` the end. A negative
- * factor mirrors the interval about the anchor, producing a negative size. The data-last form
- * omits `self` and returns a function of it.
+ * Scales the size of the interval by `factor`, anchored at `origin`. `origin` is the normalized
+ * position within the interval that stays fixed: `0` fixes the start, `0.5` the center, and `1`
+ * the end. A negative factor mirrors the interval about the anchor and gives a negative size.
+ * The data-last form omits `self` and returns a function of it.
  *
  * @param self - The interval to scale.
  * @param factor - The size multiplier.
@@ -245,10 +245,10 @@ export const scale: {
 )
 
 /**
- * Scales the interval's size by `factor` about an absolute `position` on the axis, which stays
- * fixed. Where `scale` anchors at a normalized position within the interval, `scaleFrom`
- * anchors at a coordinate, so one shared `position` scales several intervals in concert. The
- * data-last form omits `self` and returns a function of it.
+ * Scales the size of the interval by `factor` about an absolute `position` on the axis. That
+ * position stays fixed. `scale` anchors at a normalized position within the interval, but
+ * `scaleFrom` anchors at a coordinate. One shared `position` can therefore scale several
+ * intervals together. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The interval to scale.
  * @param factor - The size multiplier.
@@ -271,14 +271,15 @@ export const scaleFrom: {
 )
 
 /**
- * Linearly interpolates from `self` toward `target`, per field: `start` and `size` each move by
- * `amount` along the line between the two intervals. Exact at the endpoints — `0` reproduces
- * `self`'s fields, `1` reproduces `target`'s — and not clamped: values outside `[0, 1]`
- * extrapolate. The data-last form omits `self` and returns a function of it.
+ * Linearly interpolates from `self` toward `target`, per field. `start` and `size` each move by
+ * `amount` along the line between the two intervals. The result is exact at the endpoints: `0`
+ * reproduces the fields of `self`, and `1` reproduces those of `target`. The factor is not
+ * clamped, so values outside `[0, 1]` extrapolate. The data-last form omits `self` and returns
+ * a function of it.
  *
  * @param self - The interval at `amount = 0`.
  * @param target - The interval at `amount = 1`.
- * @param amount - The interpolation factor. Not restricted to `[0, 1]`.
+ * @param amount - The interpolation factor. It is not restricted to `[0, 1]`.
  * @returns The interpolated interval.
  * @example
  * ```ts
@@ -298,12 +299,12 @@ export const lerp: {
     ),
 )
 
-// localize, normalize, and denormalize take fixed arities: their target may
-// itself be an Interval.
+// localize, normalize, and denormalize take fixed arities because their target
+// can itself be an Interval.
 /**
- * Re-expresses a position or interval relative to `self`'s start: the result is measured from
- * `self.start` instead of the axis origin. An interval target keeps its size; only its start
- * shifts. A number target is a position on the axis. The data-last form omits `self` and
+ * Re-expresses a position or interval relative to the start of `self`. The result is measured
+ * from `self.start` instead of the axis origin. An interval target keeps its size, and only its
+ * start shifts. A number target is a position on the axis. The data-last form omits `self` and
  * returns a function of it.
  *
  * @param self - The interval whose start becomes the new `0`.
@@ -328,10 +329,10 @@ export const localize: {
 
 /**
  * Expresses a position or interval as fractions of `self`: `self.start` is `0` and `self.end`
- * is `1`, so a position inside `self` lands in `[0, 1]`. An interval target also divides its
- * size by `self.size`. Not clamped. The inverse of `denormalize`. A zero-size `self` divides by
- * zero, producing IEEE `Infinity` or `NaN`. The data-last form omits `self` and returns a
- * function of it.
+ * is `1`, so a position inside `self` lands in `[0, 1]`. For an interval target, `normalize`
+ * also divides the size by `self.size`. The result is not clamped. This is the inverse of
+ * `denormalize`. A zero-size `self` divides by zero and produces IEEE `Infinity` or `NaN`. The
+ * data-last form omits `self` and returns a function of it.
  *
  * @param self - The reference interval whose span maps to `[0, 1]`.
  * @param target - The position or interval to normalize.
@@ -356,9 +357,10 @@ export const normalize: {
 
 /**
  * Maps a position or interval given as fractions of `self` back onto the axis: `0` is
- * `self.start`, `1` is `self.end`, and `0.5` the midpoint. An interval target also scales its
- * size by `self.size`. Not clamped: fractions outside `[0, 1]` land outside `self`. The inverse
- * of `normalize`. The data-last form omits `self` and returns a function of it.
+ * `self.start`, `1` is `self.end`, and `0.5` is the midpoint. For an interval target,
+ * `denormalize` also multiplies the size by `self.size`. The result is not clamped, so fractions
+ * outside `[0, 1]` land outside `self`. This is the inverse of `normalize`. The data-last form
+ * omits `self` and returns a function of it.
  *
  * @param self - The reference interval.
  * @param target - The position or interval, in units of `self`.
@@ -381,14 +383,14 @@ export const denormalize: {
 )
 
 /**
- * Maps the interval from `source`'s coordinate space to `target`'s: `start` keeps its relative
- * position (`source.start` maps to `target.start`, `source.end` to `target.end`), and `size`
- * scales by `target.size / source.size`. Not clamped. A zero-size `source` divides by zero,
- * producing IEEE `Infinity` or `NaN`. The data-last form omits `self` and returns a function
- * of it.
+ * Maps the interval from the coordinate space of `source` to that of `target`. `start` keeps
+ * its relative position (`source.start` maps to `target.start`, `source.end` to `target.end`),
+ * and `size` scales by `target.size / source.size`. The result is not clamped. A zero-size
+ * `source` divides by zero and produces IEEE `Infinity` or `NaN`. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The interval to remap.
- * @param source - The space `self` is currently expressed in.
+ * @param source - The space that `self` is expressed in now.
  * @param target - The space to express it in.
  * @returns The remapped interval.
  * @example
@@ -411,15 +413,15 @@ export const remap: {
     ),
 )
 
-// alignTo and avoid take fixed arities: their target may itself be an
-// Interval, so a trailing optional would make 2-argument calls ambiguous
-// between the data-first and data-last forms.
+// alignTo and avoid take fixed arities because their target can itself be an
+// Interval. With a trailing optional, a 2-argument call is ambiguous between
+// the data-first and data-last forms.
 /**
- * Positions the interval so its `origin` point coincides with the target, preserving its size.
- * `origin` is a normalized position within the interval: `0` its start, `0.5` its center, `1`
- * its end. A number target is the position itself; an interval target contributes its own
- * `origin` point, so `Interval.alignTo(a, b, 1)` puts `a`'s end at `b`'s end. The data-last
- * form omits `self` and returns a function of it.
+ * Positions the interval so its `origin` point coincides with the target, and keeps its size.
+ * `origin` is a normalized position within the interval: `0` is its start, `0.5` its center,
+ * and `1` its end. A number target is the position itself. An interval target gives its own
+ * `origin` point, so `Interval.alignTo(a, b, 1)` puts the end of `a` at the end of `b`. The
+ * data-last form omits `self` and returns a function of it.
  *
  * @param self - The interval to position.
  * @param target - The position to align to, or an interval whose `origin` point is that position.
@@ -442,17 +444,17 @@ export const alignTo: {
 })
 
 /**
- * Moves the interval clear of a forbidden zone: the target's bounds expanded by `gap` on both
- * sides. An interval already clear of the zone is returned unchanged — the same instance, with
- * touching counting as clear, judged within tolerance (see `PRECISION.md`). An overlapping
- * interval escapes by the smaller shift, landing flush against the zone's nearer edge with its
- * size preserved; ties resolve toward the start. The data-last form omits `self` and returns a
- * function of it.
+ * Moves the interval clear of a forbidden zone. The zone is the bounds of the target, expanded
+ * by `gap` on both sides. If the interval is already clear of the zone, `avoid` returns the
+ * same instance unchanged. Touching counts as clear, judged within tolerance (see
+ * `PRECISION.md`). An overlapping interval escapes by the smaller shift and lands flush against
+ * the nearer edge of the zone, with its size preserved. Ties resolve toward the start. The
+ * data-last form omits `self` and returns a function of it.
  *
  * @param self - The interval to move.
  * @param target - The obstacle: a position, or an interval whose bounds define the zone.
  * @param gap - The clearance added on both sides of the target.
- * @returns `self` when already clear; otherwise an interval shifted out of the zone.
+ * @returns `self` when already clear, otherwise an interval shifted out of the zone.
  * @example
  * ```ts
  * Interval.avoid(Interval.make(0, 100), 50, 0)
@@ -473,17 +475,17 @@ export const avoid: {
     return self
   }
 
-  // Escape by the smaller shift; ties resolve toward the start.
+  // Escape by the smaller shift. Ties resolve toward the start.
   const shiftDown = self.max - lo
   const shiftUp = hi - self.min
   return new Interval(self.start + (shiftDown <= shiftUp ? -shiftDown : shiftUp), self.size)
 })
 
 /**
- * The smallest interval containing both operands — the enclosing hull of their spans. The
- * result is orientation-normalized: it starts at the combined minimum and its size is
- * non-negative, whatever the operands' signs. The data-last form omits `self` and returns a
- * function of it.
+ * Returns the smallest interval that contains both operands, which is the enclosing hull of
+ * their spans. The result is orientation-normalized. It starts at the combined minimum, and its
+ * size is non-negative whatever the signs of the operands. The data-last form omits `self` and
+ * returns a function of it.
  *
  * @param self - The first interval.
  * @param other - The second interval.
@@ -505,10 +507,10 @@ export const join: {
 })
 
 /**
- * The overlap of the two intervals. Disjoint operands produce a zero-size interval at the
- * midpoint of the gap between their nearest edges. The result is orientation-normalized: it
- * starts at the overlap's minimum and its size is non-negative, whatever the operands' signs.
- * The data-last form omits `self` and returns a function of it.
+ * Returns the overlap of the two intervals. Disjoint operands produce a zero-size interval at
+ * the midpoint of the gap between their nearest edges. The result is orientation-normalized. It
+ * starts at the minimum of the overlap, and its size is non-negative whatever the signs of the
+ * operands. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The first interval.
  * @param other - The second interval.
@@ -529,8 +531,8 @@ export const intersect: {
   const max = Math.min(self.max, otherMax)
 
   if (min > max) {
-    // Disjoint: zero-size interval at the midpoint of the gap between the
-    // nearest edges.
+    // The operands are disjoint. Return a zero-size interval at the midpoint
+    // of the gap between the nearest edges.
     return new Interval((min + max) / 2, 0)
   }
 
@@ -539,12 +541,12 @@ export const intersect: {
 
 /**
  * Checks whether the interval contains a position or another interval, boundaries included.
- * The comparison is tolerance-aware: a target within rounding distance of a boundary counts as
- * inside, in a band scaled to `self`'s finite bounds so the verdict is magnitude-invariant (see
- * `PRECISION.md`). An infinite bound contributes nothing to the band — a half-infinite interval
- * still judges its finite boundary tolerantly. Negative sizes are normalized — containment is
- * judged on `min`/`max` bounds on both sides. The data-last form omits `self` and returns a
- * function of it.
+ * The comparison is tolerance-aware. A target within rounding distance of a boundary counts as
+ * inside. The band scales to the finite bounds of `self`, so the verdict is magnitude-invariant
+ * (see `PRECISION.md`). An infinite bound adds nothing to the band, so a half-infinite interval
+ * still judges its finite boundary with tolerance. Negative sizes are normalized, and
+ * containment is judged on `min`/`max` bounds on both sides. The data-last form omits `self`
+ * and returns a function of it.
  *
  * @param self - The containing interval.
  * @param target - A position, or an interval that must lie entirely within `self`.
@@ -572,9 +574,9 @@ export const contains: {
 })
 
 /**
- * Checks whether the two intervals overlap, with touching counting: intervals sharing only a
- * boundary intersect. The comparison is tolerance-aware — a gap within rounding distance of
- * zero counts as touching (see `PRECISION.md`) — and orientation-normalized, so negative sizes
+ * Checks whether the two intervals overlap. Touching counts, so intervals that share only a
+ * boundary intersect. The comparison is tolerance-aware: a gap within rounding distance of zero
+ * counts as touching (see `PRECISION.md`). It is also orientation-normalized, so negative sizes
  * compare by their `min`/`max` bounds. The data-last form omits `self` and returns a function
  * of it.
  *
@@ -597,14 +599,14 @@ export const intersects: {
 })
 
 /**
- * Checks the two intervals for equality, per field: `start` against `start` and `size` against
- * `size`, each within the `coincident` band of `curvy/number` —
- * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)` — so rounding noise never separates
- * two computed intervals, at any magnitude (see `PRECISION.md`). Non-finite fields compare
- * exactly: an infinite field equals only the same infinity, and a `NaN` field equals nothing.
- * Orientation matters: an interval and its negative-size mirror cover the same span but are not
- * equal. Like `coincident`, not transitive. The data-last form omits `self` and returns a
- * function of it.
+ * Checks the two intervals for equality, per field. It compares `start` against `start` and
+ * `size` against `size`, each within the `coincident` band of `curvy/number`:
+ * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)`. Rounding noise therefore never
+ * separates two computed intervals, at any magnitude (see `PRECISION.md`). Non-finite fields
+ * compare exactly: an infinite field equals only the same infinity, and a `NaN` field equals
+ * nothing. Orientation matters. An interval and its negative-size mirror cover the same span
+ * but are not equal. Like `coincident`, the check is not transitive. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The first interval.
  * @param other - The second interval.

@@ -15,14 +15,14 @@ type TypeBrand = typeof TypeBrand
  * The minimal structural shape of a rectangle: a position and a signed
  * size in y-down coordinate space.
  *
- * Read-only inputs accept any `RectLike` — `from`, the second operand
- * of `join`, `intersect`, and `lerp`, and the predicates — while
- * transforms require a branded `Rect` built by `make`.
+ * Read-only inputs accept any `RectLike`. These are `from`, the second
+ * operand of `join`, `intersect`, and `lerp`, and the predicates. The
+ * transforms require a branded `Rect` that `make` builds.
  */
 export interface RectLike {
-  /** The x coordinate of the origin corner — the left edge when `width >= 0`. */
+  /** The x coordinate of the origin corner, the left edge when `width >= 0`. */
   readonly x: number
-  /** The y coordinate of the origin corner — the top edge when `height >= 0` (y points down). */
+  /** The y coordinate of the origin corner, the top edge when `height >= 0` (y points down). */
   readonly y: number
   /** The signed horizontal size. Negative values extend leftward from `x`. */
   readonly width: number
@@ -32,25 +32,25 @@ export interface RectLike {
 
 /**
  * An axis-aligned rectangle: a position (`x`, `y`) plus a signed size
- * (`width`, `height`), in y-down screen space — `top === y`, and `bottom`
+ * (`width`, `height`), in y-down screen space. `top === y`, and `bottom`
  * is `y + height`.
  *
- * Values are immutable, and constructions are exact IEEE 754: fields hold
+ * Values are immutable, and constructions are exact IEEE 754. Fields hold
  * exactly what the arithmetic produced, with no rounding and no stored
- * precision (see `PRECISION.md`). Negative sizes are legal — a negative
+ * precision (see `PRECISION.md`). Negative sizes are legal. A negative
  * `width` extends the rect leftward from `x`. The edge getters report raw
  * coordinates, while bounds questions (`contains`, `intersects`, `join`,
  * `intersect`) normalize the extent first.
  *
- * Construct values with `make` — the class is exported type-only.
- * Extends `Pipeable`, so operations chain as `self.pipe(op(...))`.
+ * Construct values with `make`, because the class is exported type-only.
+ * The class extends `Pipeable`, so operations chain as `self.pipe(op(...))`.
  */
 class Rect extends Pipeable implements RectLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
-  /** The x coordinate of the origin corner — the left edge when `width >= 0`. */
+  /** The x coordinate of the origin corner, the left edge when `width >= 0`. */
   readonly x: number
-  /** The y coordinate of the origin corner — the top edge when `height >= 0` (y points down). */
+  /** The y coordinate of the origin corner, the top edge when `height >= 0` (y points down). */
   readonly y: number
   /** The signed horizontal size. Negative values extend leftward from `x`. */
   readonly width: number
@@ -67,9 +67,9 @@ class Rect extends Pipeable implements RectLike {
   }
 
   /**
-   * The y coordinate of the top edge — identical to `y`, since the y axis
-   * points down. Raw, not normalized: with a negative `height`,
-   * `bottom < top`.
+   * The y coordinate of the top edge. It is identical to `y` because the y
+   * axis points down. The value is raw, not normalized: with a negative
+   * `height`, `bottom < top`.
    */
   get top(): number {
     return this.y
@@ -81,8 +81,8 @@ class Rect extends Pipeable implements RectLike {
   }
 
   /**
-   * The x coordinate of the left edge — identical to `x`. Raw, not
-   * normalized: with a negative `width`, `right < left`.
+   * The x coordinate of the left edge, identical to `x`. The value is raw,
+   * not normalized: with a negative `width`, `right < left`.
    */
   get left(): number {
     return this.x
@@ -93,7 +93,7 @@ class Rect extends Pipeable implements RectLike {
     return this.x + this.width
   }
 
-  /** The signed area, `width * height` — negative when exactly one size is negative. */
+  /** The signed area, `width * height`. It is negative when exactly one size is negative. */
   get area(): number {
     return this.width * this.height
   }
@@ -149,10 +149,11 @@ export type { Rect }
  * and height at the origin, three are `x`, `y`, and a square size, and
  * four are `x`, `y`, `width`, and `height`.
  *
- * Inputs are stored exactly as given — no rounding, no normalization — and
- * negative sizes are legal. The other constructors build rects from other
- * shapes: `from` copies a rect-like, `fromDimensions` and `fromInterval`
- * lift the other value types, and `trbl` spans absolute edge coordinates.
+ * `make` stores the inputs exactly as given, with no rounding and no
+ * normalization. Negative sizes are legal. The other constructors build
+ * rects from other shapes: `from` copies a rect-like, `fromDimensions` and
+ * `fromInterval` lift the other value types, and `trbl` spans absolute
+ * edge coordinates.
  *
  * @example
  * ```ts
@@ -240,7 +241,7 @@ export const fromDimensions = (dimensions: Dimensions, position?: Point.PointLik
 
 /**
  * Creates a `Rect` from 1D intervals, one per axis: each interval's
- * `start` becomes the position coordinate and its `size` the size. With
+ * `start` becomes the position coordinate and its `size` becomes the size. With
  * `y` omitted, `x` is mirrored onto both axes.
  *
  * @param x - The horizontal interval (`x` and `width`).
@@ -251,14 +252,14 @@ export const fromInterval = (x: Interval, y: Interval = x): Rect =>
   new Rect(x.start, y.start, x.size, y.size)
 
 /**
- * Creates a `Rect` spanning absolute edge coordinates — not inset
+ * Creates a `Rect` that spans absolute edge coordinates, not inset
  * distances. The result runs from `left` to `right` and `top` to
  * `bottom` exactly as given, so `right < left` (or `bottom < top`)
  * produces a negative size.
  *
- * Omitted arguments fall back CSS-shorthand style: one value places all
- * four edges (a zero-size rect at `(top, top)`), two are
- * vertical/horizontal, and three leave `left` mirroring `right`.
+ * Omitted arguments fall back as in CSS shorthand. One value places all
+ * four edges (a zero-size rect at `(top, top)`). Two values give the
+ * vertical and the horizontal coordinates. With three, `left` copies `right`.
  *
  * @param top - The y coordinate of the top edge.
  * @param right - The x coordinate of the right edge. Defaults to `top`.
@@ -276,7 +277,7 @@ export const trbl = (top: number, right?: number, bottom?: number, left?: number
   return new Rect(l, t, r - l, b - t)
 }
 
-/** The rect at `(0, 0)` with zero size — a shared instance. */
+/** The rect at `(0, 0)` with zero size, as one shared instance. */
 export const zero: Rect = new Rect(0, 0, 0, 0)
 
 /**
@@ -284,7 +285,7 @@ export const zero: Rect = new Rect(0, 0, 0, 0)
  *
  * True only for values built by this module's constructors (`make`,
  * `from`, `fromDimensions`, `fromInterval`, `trbl`), which carry the
- * brand — a plain `{ x, y, width, height }` object is rect-like but not a
+ * brand. A plain `{ x, y, width, height }` object is rect-like but not a
  * `Rect`.
  *
  * @param value - The value to check.
@@ -375,7 +376,7 @@ export const setPosition: {
  * The data-last form omits `self` and returns a function of it.
  *
  * @param self - The rect to resize.
- * @param width - The new width. May be negative.
+ * @param width - The new width. Can be negative.
  * @returns A new `Rect` with `width` replaced.
  */
 export const setWidth: {
@@ -389,7 +390,7 @@ export const setWidth: {
  * The data-last form omits `self` and returns a function of it.
  *
  * @param self - The rect to resize.
- * @param height - The new height. May be negative.
+ * @param height - The new height. Can be negative.
  * @returns A new `Rect` with `height` replaced.
  */
 export const setHeight: {
@@ -507,7 +508,7 @@ export const translate: {
  * Scales the width by `factor` about a fixed point on the x axis.
  *
  * `origin` names the fixed point as a fraction of the width: `0` holds the
- * left edge, `0.5` the center, `1` the right edge — the coordinate
+ * left edge, `0.5` the center, and `1` the right edge. The coordinate
  * `x + width * origin` does not move. `y` and the height are untouched.
  *
  * The data-last form omits `self` and returns a function of it.
@@ -540,7 +541,7 @@ export const scaleX: {
  * Scales the height by `factor` about a fixed point on the y axis.
  *
  * `origin` names the fixed point as a fraction of the height: `0` holds
- * the top edge, `0.5` the center, `1` the bottom edge — the coordinate
+ * the top edge, `0.5` the center, and `1` the bottom edge. The coordinate
  * `y + height * origin` does not move. `x` and the width are untouched.
  *
  * The data-last form omits `self` and returns a function of it.
@@ -567,8 +568,8 @@ export const scaleY: {
 /**
  * Scales both sizes by `factor` about a shared fixed point.
  *
- * `origin` is the fraction along each axis that stays put: `0` holds the
- * top-left corner, `0.5` the center, `1` the bottom-right corner. To scale
+ * `origin` is the fraction along each axis that does not move: `0` holds
+ * the top-left corner, `0.5` the center, and `1` the bottom-right corner. To scale
  * about an absolute point instead, use `scaleFrom`.
  *
  * The data-last form omits `self` and returns a function of it.
@@ -707,13 +708,13 @@ export const clampHeight: {
   return new Rect(self.x, self.y, self.width, clampNumber(self.height, min, Math.max(min, max)))
 })
 
-// The align family takes fixed arities: the target is itself a Rect (or a
-// Point), so a trailing optional origin would make 2-argument calls
+// The align functions take fixed arities because the target is itself a
+// Rect (or a Point). With a trailing optional origin, 2-argument calls are
 // ambiguous between the data-first and data-last forms.
 /**
  * Positions the rect horizontally within `target` by a normalized origin:
  * `0` aligns the left edges, `0.5` centers, `1` aligns the right edges.
- * Values outside `[0, 1]` keep going in proportion. `y` and the size are
+ * Values outside `[0, 1]` extrapolate. `y` and the size are
  * untouched.
  *
  * The data-last form omits `self` and returns a function of it.
@@ -739,7 +740,7 @@ export const alignX: {
 /**
  * Positions the rect vertically within `target` by a normalized origin:
  * `0` aligns the top edges, `0.5` centers, `1` aligns the bottom edges.
- * Values outside `[0, 1]` keep going in proportion. `x` and the size are
+ * Values outside `[0, 1]` extrapolate. `x` and the size are
  * untouched.
  *
  * The data-last form omits `self` and returns a function of it.
@@ -764,7 +765,7 @@ export const alignY: {
  * right/bottom edges. The size is untouched.
  *
  * A `Point` target acts as a zero-size rect at that position, so `origin`
- * picks which point of `self` lands on it — `0` the top-left corner, `1`
+ * picks which point of `self` lands on it: `0` the top-left corner, `1`
  * the bottom-right. A `Point` origin aligns each axis independently
  * (`origin.x` for x, `origin.y` for y).
  *
@@ -800,8 +801,8 @@ export const align: {
 })
 
 // resizeTop/resizeRight/resizeBottom/resizeLeft move one edge to an absolute
-// coordinate with the opposite edge fixed; crossing edges flip (size stays
-// non-negative) rather than clamp.
+// coordinate with the opposite edge fixed. Crossing edges flip rather than
+// clamp, so the size stays non-negative.
 /**
  * Moves the top edge to an absolute y coordinate, keeping the `bottom`
  * edge fixed. Crossing the fixed edge flips rather than clamps: the result
@@ -884,11 +885,11 @@ export const resizeLeft: {
 })
 
 /**
- * Adds `delta` to the width, with `origin` deciding where the change
- * happens: it names the fixed point as a fraction of the width, so `0`
- * holds the left edge (the rect grows rightward), `0.5` splits the change
- * evenly, and `1` holds the right edge. Negative deltas shrink, and may
- * drive the width negative — nothing clamps.
+ * Adds `delta` to the width. `origin` decides where the change happens.
+ * It names the fixed point as a fraction of the width: `0` holds the left
+ * edge (the rect grows rightward), `0.5` splits the change evenly, and `1`
+ * holds the right edge. Negative deltas shrink the rect and can drive the
+ * width negative. Nothing clamps.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -911,11 +912,11 @@ export const resizeX: {
 )
 
 /**
- * Adds `delta` to the height, with `origin` deciding where the change
- * happens: it names the fixed point as a fraction of the height, so `0`
- * holds the top edge (the rect grows downward), `0.5` splits the change
- * evenly, and `1` holds the bottom edge. Negative deltas shrink, and may
- * drive the height negative — nothing clamps.
+ * Adds `delta` to the height. `origin` decides where the change happens.
+ * It names the fixed point as a fraction of the height: `0` holds the top
+ * edge (the rect grows downward), `0.5` splits the change evenly, and `1`
+ * holds the bottom edge. Negative deltas shrink the rect and can drive the
+ * height negative. Nothing clamps.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -939,7 +940,7 @@ export const resizeY: {
  * `1` the right/bottom edge.
  *
  * A `Point` delta resizes each axis by its own amount (`delta.x` to the
- * width, `delta.y` to the height); a `Point` origin fixes each axis
+ * width, `delta.y` to the height). A `Point` origin fixes each axis
  * independently. Numbers apply to both axes.
  *
  * The data-last form omits `self` and returns a function of it.
@@ -975,13 +976,13 @@ export const resize: {
 )
 
 /**
- * Insets the rect's edges inward, as padding does: a number insets all
- * four edges uniformly, an `Offset` (from `placement/offset`) insets each
- * edge by its own field.
+ * Insets the rect's edges inward, as padding does. A number insets all
+ * four edges uniformly, and an `Offset` (from `placement/offset`) insets
+ * each edge by its own field.
  *
- * The size floors at zero — opposing insets larger than the rect collapse
- * it rather than turning it inside out — but the position still moves by
- * the full `left`/`top` inset. `expand` is the un-floored inverse.
+ * The size floors at zero. Opposing insets larger than the rect collapse
+ * it rather than turning it inside out. The position still moves by the
+ * full `left`/`top` inset. `expand` is the inverse without the floor.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1004,7 +1005,7 @@ export const contract: {
   const bottom = typeof value === 'number' ? value : value.bottom
   const left = typeof value === 'number' ? value : value.left
 
-  // Contraction floors the size at zero; expansion (its inverse) does not.
+  // Contraction floors the size at zero. Expansion (its inverse) does not.
   return new Rect(
     self.x + left,
     self.y + top,
@@ -1014,11 +1015,11 @@ export const contract: {
 })
 
 /**
- * Outsets the rect's edges outward, as margin does: a number outsets all
- * four edges uniformly, an `Offset` (from `placement/offset`) outsets each
- * edge by its own field.
+ * Outsets the rect's edges outward, as margin does. A number outsets all
+ * four edges uniformly, and an `Offset` (from `placement/offset`) outsets
+ * each edge by its own field.
  *
- * The inverse of `contract`, minus the floor: nothing clamps here, so
+ * This is the inverse of `contract` without the floor. Nothing clamps, so
  * negative components shrink the rect and can drive its size negative.
  *
  * The data-last form omits `self` and returns a function of it.
@@ -1050,11 +1051,11 @@ export const expand: {
 })
 
 /**
- * Computes the smallest rect enclosing both `self` and `other` — the
- * bounding hull.
+ * Computes the bounding hull: the smallest rect that encloses both `self`
+ * and `other`.
  *
- * Negative sizes are normalized before the hull is taken, so the result
- * always has a non-negative size, positioned at the minimum corner.
+ * `join` normalizes negative sizes before it takes the hull. The result
+ * always has a non-negative size and sits at the minimum corner.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1082,11 +1083,11 @@ export const join: {
 /**
  * Computes the overlap of `self` and `other`, on their normalized extents.
  *
- * When the extents do not strictly overlap on both axes — disjoint, or
- * merely edge-touching — the result is a zero-size rect at the midpoint of
- * the two centers. That decision is exact, unlike the tolerant
- * `intersects` predicate: rects touching within rounding noise take the
- * disjoint path.
+ * If the extents do not strictly overlap on both axes, the result is a
+ * zero-size rect at the midpoint of the two centers. This includes
+ * disjoint rects and rects that only touch at an edge. The test is exact,
+ * unlike the tolerant `intersects` predicate. Rects that touch within
+ * rounding noise take the disjoint path.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1115,8 +1116,8 @@ export const intersect: {
     return new Rect(xMin, yMin, xMax - xMin, yMax - yMin)
   }
 
-  // Disjoint (or merely edge-touching): zero-size rect at the midpoint of
-  // the two centers.
+  // Disjoint or edge-touching rects give a zero-size rect at the midpoint
+  // of the two centers.
   return new Rect(
     (self.centerX + other.x + other.width / 2) / 2,
     (self.centerY + other.y + other.height / 2) / 2,
@@ -1127,19 +1128,19 @@ export const intersect: {
 
 // contain/cover/fit dispatch on isRect(args[1]): the data-first form's second
 // argument is always the target Rect, while the data-last form's second
-// argument is a number, a string, or absent — never ambiguous.
+// argument is a number, a string, or absent. The dispatch is never ambiguous.
 /**
- * Scales `self` uniformly to the largest size that fits inside `target`,
- * preserving `self`'s aspect ratio, then positions it with the leftover
- * space on the loose axis distributed by `origin`: `0` packs toward the
- * left/top, `0.5` centers, `1` packs toward the right/bottom.
+ * Scales `self` uniformly to the largest size that fits inside `target`
+ * and keeps the aspect ratio of `self`. Then `origin` places the result
+ * along the loose axis by its leftover space: `0` packs toward the
+ * left/top, `0.5` centers, and `1` packs toward the right/bottom.
  *
- * The aspect ratio comes from `self`'s normalized extents (`|width|` by
- * `|height|`), so a negative-size `self` fits like its positive mirror
+ * The aspect ratio comes from the normalized extents of `self` (`|width|`
+ * by `|height|`). A negative-size `self` fits like its positive mirror,
  * and the result's size is always non-negative.
  *
- * A zero-area `self` carries no aspect ratio to preserve; the `target`
- * instance itself is returned.
+ * A zero-area `self` has no aspect ratio to keep, so `contain` returns the
+ * `target` instance itself.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1163,8 +1164,8 @@ export const contain: {
       return target
     }
 
-    // Normalized extents: a negative size would flip the factor's sign and
-    // place the result outside the target.
+    // Use the normalized extents. A negative size flips the factor's sign
+    // and places the result outside the target.
     const selfWidth = Math.abs(self.width)
     const selfHeight = Math.abs(self.height)
     const factor = Math.min(target.width / selfWidth, target.height / selfHeight)
@@ -1181,18 +1182,17 @@ export const contain: {
 )
 
 /**
- * Scales `self` uniformly to the smallest size that covers `target`,
- * preserving `self`'s aspect ratio, then positions it with the overflow
- * on the long axis distributed by `origin`: `0` aligns the left/top edges
- * (overflow spills right/down), `0.5` centers, `1` aligns the
- * right/bottom edges.
+ * Scales `self` uniformly to the smallest size that covers `target` and
+ * keeps the aspect ratio of `self`. Then `origin` places the result along
+ * the long axis by its overflow: `0` aligns the left/top edges (overflow
+ * spills right/down), `0.5` centers, and `1` aligns the right/bottom edges.
  *
- * The aspect ratio comes from `self`'s normalized extents (`|width|` by
- * `|height|`), so a negative-size `self` covers like its positive mirror
+ * The aspect ratio comes from the normalized extents of `self` (`|width|`
+ * by `|height|`). A negative-size `self` covers like its positive mirror,
  * and the result's size is always non-negative.
  *
- * A zero-area `self` carries no aspect ratio to preserve; the `target`
- * instance itself is returned.
+ * A zero-area `self` has no aspect ratio to keep, so `cover` returns the
+ * `target` instance itself.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1216,8 +1216,8 @@ export const cover: {
       return target
     }
 
-    // Normalized extents, as in contain: a negative size would flip the
-    // factor's sign and place the result outside the target.
+    // Use the normalized extents, as in contain. A negative size flips the
+    // factor's sign and places the result outside the target.
     const selfWidth = Math.abs(self.width)
     const selfHeight = Math.abs(self.height)
     const factor = Math.max(target.width / selfWidth, target.height / selfHeight)
@@ -1234,9 +1234,9 @@ export const cover: {
 )
 
 /**
- * Fits `self` to `target` by mode: `'contain'` and `'cover'` scale as the
- * functions of those names do, and `'crop'` is `intersect(self, target)`
- * — no scaling, and `origin` is ignored.
+ * Fits `self` to `target` by mode. `'contain'` and `'cover'` scale as the
+ * functions of those names do. `'crop'` is `intersect(self, target)`,
+ * which does not scale and ignores `origin`.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1270,11 +1270,11 @@ export const fit: {
 )
 
 /**
- * Linearly interpolates every field — `x`, `y`, `width`, and `height` —
+ * Linearly interpolates every field (`x`, `y`, `width`, and `height`)
  * from `self` (at `amount = 0`) toward `target` (at `amount = 1`).
  *
- * Exact at the endpoints, and not clamped: amounts outside `[0, 1]`
- * extrapolate along the same line.
+ * The result is exact at the endpoints and not clamped. Amounts outside
+ * `[0, 1]` extrapolate along the same line.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1302,14 +1302,14 @@ export const lerp: {
 )
 
 /**
- * Re-expresses a point or rect in `self`'s local coordinates: the result
+ * Re-expresses a point or rect in `self`'s local coordinates. The result
  * is relative to `self`'s origin corner `(x, y)` instead of the space both
- * live in. A rect target keeps its size; only its position shifts. The
- * inverse of translating by `self`'s position.
+ * live in. A rect target keeps its size, and only its position shifts.
+ * This is the inverse of translating by `self`'s position.
  *
- * A target carrying the four rect fields is treated as a rect (every
- * `Rect` is also point-like, so the rect reading wins), and anything else
- * point-like as a point.
+ * A target with the four rect fields counts as a rect, and anything else
+ * point-like counts as a point. Every `Rect` is also point-like, so the
+ * rect reading wins.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1337,11 +1337,11 @@ export const localize: {
  * Expresses a point or rect as fractions of `self`: `(0, 0)` is `self`'s
  * origin corner and `(1, 1)` the opposite corner, so a point inside
  * `self` lands in the unit square. A rect target also divides its size by
- * `self`'s. The inverse of `denormalize`.
+ * `self`'s. This is the inverse of `denormalize`.
  *
- * Exact IEEE division: a zero-size axis of `self` yields `Infinity` or
- * `NaN` on that axis. A target carrying the four rect fields is treated
- * as a rect, and anything else point-like as a point.
+ * The division is exact IEEE: a zero-size axis of `self` gives `Infinity`
+ * or `NaN` on that axis. A target with the four rect fields counts as a
+ * rect, and anything else point-like counts as a point.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1374,11 +1374,11 @@ export const normalize: {
  * Maps a point or rect given as fractions of `self` back into the space
  * `self` lives in: `(0, 0)` is `self`'s origin corner, `(1, 1)` the
  * opposite corner, and `Point.half` its center. A rect target also scales
- * its size by `self`'s. The inverse of `normalize`.
+ * its size by `self`'s. This is the inverse of `normalize`.
  *
- * Not clamped: fractions outside `[0, 1]` land outside `self`. A target
- * carrying the four rect fields is treated as a rect, and anything else
- * point-like as a point.
+ * Nothing clamps, so fractions outside `[0, 1]` land outside `self`. A
+ * target with the four rect fields counts as a rect, and anything else
+ * point-like counts as a point.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1408,16 +1408,16 @@ export const denormalize: {
 )
 
 /**
- * Checks whether `self` covers a point or a whole rect. A target carrying
- * the four rect fields is tested as a rect — its normalized extent must
- * lie within `self`'s — and anything point-like is tested as a point.
- * Edges count as inside.
+ * Checks whether `self` covers a point or a whole rect. A target with the
+ * four rect fields is tested as a rect, and its normalized extent must lie
+ * within `self`'s. Anything else point-like is tested as a point. Edges
+ * count as inside.
  *
- * Boundary comparisons are tolerant per `PRECISION.md`: a target within
+ * Boundary comparisons are tolerant per `PRECISION.md`. A target within
  * rounding noise of an edge counts as contained, at any magnitude. The
- * band scales to `self`'s finite bounds — an infinite bound contributes
- * nothing, so a half-infinite rect still judges its finite edges
- * tolerantly. Negative sizes are normalized on both sides.
+ * band scales to the finite bounds of `self`. An infinite bound adds
+ * nothing to the band, so a half-infinite rect still tests its finite
+ * edges tolerantly. Negative sizes are normalized on both sides.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -1493,9 +1493,9 @@ export const intersects: {
 })
 
 /**
- * Tolerance-aware equality: `true` when each field — `x`, `y`, `width`,
- * and `height` — is coincident with `other`'s within the hybrid band of
- * `PRECISION.md`, so rounding noise never separates two rects, at any
+ * Tolerance-aware equality. Returns `true` when each field (`x`, `y`,
+ * `width`, and `height`) is coincident with `other`'s within the hybrid
+ * band of `PRECISION.md`. Rounding noise never separates two rects, at any
  * magnitude.
  *
  * Non-finite fields compare exactly: an infinite field equals only the

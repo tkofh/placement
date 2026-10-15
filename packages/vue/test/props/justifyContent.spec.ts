@@ -17,8 +17,8 @@ describe('useJustifyContent', () => {
 
   test('a numeric input zeroes the space channels, ignoring the fallback', () => {
     // Unlike useAlignContent, the numeric path spreads keywordResults.start
-    // rather than the fallback autos. Current behavior -- the two resolvers
-    // disagree here.
+    // rather than the fallback autos. This is current behavior, and the two
+    // resolvers disagree here.
     expect(useJustifyContent(() => 0.25, keywordResults['space-between']).value).toEqual({
       justifyContent: 0.25,
       justifyContentSpace: 0,

@@ -10,8 +10,8 @@ import { auto } from '../utils/arguments.ts'
  * The main-axis directions, encoded as numbers: `row` is `0`, `rowReverse`
  * is `1`, `column` is `2`, `columnReverse` is `3`.
  *
- * The encoding is meaningful: directions `<= 1` are horizontal, and the odd
- * directions run the main axis backward, laying the first item at the far
+ * The encoding carries meaning. Directions `<= 1` are horizontal. The odd
+ * directions run the main axis backward and put the first item at the far
  * edge.
  */
 export const direction = {
@@ -27,11 +27,12 @@ export const direction = {
  *
  * - `nowrap` keeps every item on one line, which overflows the parent when
  *   the items do not fit.
- * - `wrap` starts a new line whenever the next item would overflow the
- *   main size. Overflow is judged within tolerance (see PRECISION.md), so
- *   rounding residue never wraps a line.
- * - `wrapReverse` wraps identically but stacks the lines in the opposite
- *   cross direction — upward in a row container, since y points down.
+ * - `wrap` starts a new line when the next item overflows the main size.
+ *   The overflow test uses a tolerance (see PRECISION.md), so rounding
+ *   residue never wraps a line.
+ * - `wrapReverse` wraps the same way but stacks the lines in the opposite
+ *   cross direction. In a row container, that direction is upward, because
+ *   y points down.
  */
 export const wrap = {
   nowrap: 0,
@@ -52,7 +53,7 @@ export type FlexDirection = (typeof direction)[keyof typeof direction]
 export type FlexWrap = (typeof wrap)[keyof typeof wrap]
 
 /**
- * The configuration accepted by `make`. Every property is optional: an
+ * The configuration that `make` accepts. Every property is optional. An
  * empty input is a non-wrapping row with no alignment, spacing, or gaps.
  */
 export interface FlexboxInput {
@@ -73,10 +74,10 @@ export interface FlexboxInput {
    */
   readonly justifyContent?: number
   /**
-   * The fraction of main-axis free space distributed as spacing between
-   * items instead of being placed by `justifyContent`: `0` none, `1` all
-   * of it. Takes effect with at least two items on the line. Defaults
-   * to `0`.
+   * The fraction of main-axis free space that becomes spacing between
+   * items instead of going to `justifyContent`: `0` none, `1` all of it.
+   * It takes effect only with at least two items on the line. Defaults to
+   * `0`.
    */
   readonly justifyContentSpace?: number
   /**
@@ -88,20 +89,21 @@ export interface FlexboxInput {
   readonly justifyContentSpaceOuter?: number
   /**
    * Cross-axis placement of each item within its line: `0` start, `0.5`
-   * center, `1` end. A frame with a finite `align` overrides it; the frame
+   * center, `1` end. A frame with a finite `align` overrides it. The frame
    * default of `Infinity` inherits it. Defaults to `0`.
    */
   readonly alignItems?: number
   /**
    * The cross-axis stretch for items: `0` leaves an item at its own cross
-   * size, `1` stretches it to its line's, and fractions land
-   * proportionally between. The line's cross size is the parent's while
-   * the layout is a single line, and the line's own once it wraps.
+   * size, `1` stretches it to the cross size of its line, and a fraction
+   * gives a proportional size between the two. In a single-line layout,
+   * the line's cross size is the parent's. After wrapping, each line has
+   * its own cross size.
    *
-   * A frame with a finite `stretch` overrides it; a non-finite frame
+   * A frame with a finite `stretch` overrides it. A non-finite frame
    * `stretch` (the default is `Infinity`) inherits it. An auto (`Infinity`)
-   * cross offset defeats stretching, and min/max constraints still clamp
-   * the result. Defaults to `0`.
+   * cross offset stops stretching, and min/max constraints still clamp the
+   * result. Defaults to `0`.
    */
   readonly stretchItems?: number
   /**
@@ -125,7 +127,7 @@ export interface FlexboxInput {
   /**
    * How far lines grow to fill leftover cross space when wrapping produces
    * more than one: `0` keeps each line at the size of its largest item,
-   * `1` fills the parent. Clamped to `[0, 1]` at use. Defaults to `0`.
+   * `1` fills the parent. `apply` clamps it to `[0, 1]`. Defaults to `0`.
    */
   readonly stretchContent?: number
   /**
@@ -153,13 +155,13 @@ const wrapNames = ['nowrap', 'wrap', 'wrap-reverse'] as const
  * wrapping mode, alignment and spacing ratios, and gaps that `apply`
  * consumes together with the `Frame` item specs.
  *
- * Alignment is continuous rather than keyword-based: the placement
- * properties are ratios where `0` is the start, `0.5` the center, and `1`
- * the end, so any in-between or out-of-range position is expressible.
- * Construction applies defaults and stores the values as given, without
- * validation or clamping.
+ * Alignment is continuous, not keyword-based. The placement properties are
+ * ratios where `0` is the start, `0.5` the center, and `1` the end, so they
+ * can express any position between or outside those points. Construction
+ * applies defaults and stores the values as given, without validation or
+ * clamping.
  *
- * Exported type-only; construct with `make`.
+ * The class is exported type-only. Construct it with `make`.
  */
 class Flexbox extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
@@ -185,12 +187,12 @@ class Flexbox extends Pipeable {
   readonly justifyContentSpaceOuter: number
   /**
    * Cross-axis placement of each item within its line: `0` start, `0.5`
-   * center, `1` end. Inherited by frames whose `align` is `Infinity`.
+   * center, `1` end. A frame whose `align` is `Infinity` inherits it.
    */
   readonly alignItems: number
   /**
-   * The cross-axis stretch for items: `0` none, `1` fills the line.
-   * Inherited by frames whose `stretch` is `Infinity`.
+   * The cross-axis stretch for items: `0` none, `1` fills the line. A
+   * frame whose `stretch` is `Infinity` inherits it.
    */
   readonly stretchItems: number
   /**
@@ -210,7 +212,7 @@ class Flexbox extends Pipeable {
   readonly alignContentSpaceOuter: number
   /**
    * How far lines grow to fill leftover cross space in a multi-line
-   * layout: `0` none, `1` fills the parent. Clamped to `[0, 1]` at use.
+   * layout: `0` none, `1` fills the parent. `apply` clamps it to `[0, 1]`.
    */
   readonly stretchContent: number
   /**
@@ -319,7 +321,7 @@ export const make = (input: FlexboxInput): Flexbox => new Flexbox(input)
 /**
  * Checks if a value is a `Flexbox`.
  *
- * True only for values built by `make`, which carry the brand — a
+ * True only for values that `make` built, which carry the brand. A
  * structural look-alike does not pass.
  *
  * @param value - The value to check.
@@ -334,8 +336,8 @@ export const isFlexbox = (value: unknown): value is Flexbox => {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
 
-// Frame and Rect property names for the main and cross axes, selected once
-// per apply call from the flexbox direction.
+// Frame and Rect property names for the main and cross axes. `apply` selects
+// them once per call from the flexbox direction.
 interface AxisView {
   readonly mainDimension: 'width' | 'height'
   readonly mainDimensionMin: 'minWidth' | 'minHeight'
@@ -377,10 +379,10 @@ const columnAxes: AxisView = {
 
 function computeItem(frame: Frame, flexbox: Flexbox, axes: AxisView) {
   const basisMain = frame[axes.mainDimension]
-  // Frame offsets are physical (offsetLeft always names the left edge), but
-  // a reversed flow lays the main track out logically and reflects it
-  // afterward, margins included — so the sources swap here for each offset
-  // to land on its named physical side after the reflection.
+  // Frame offsets are physical (offsetLeft always names the left edge). A
+  // reversed flow lays the main track out logically and then reflects it,
+  // margins included. So the sources swap here, and each offset lands on its
+  // named physical side after the reflection.
   const mainStart = frame[flexbox.isReverse ? axes.mainOffsetEnd : axes.mainOffsetStart]
   const mainEnd = frame[flexbox.isReverse ? axes.mainOffsetStart : axes.mainOffsetEnd]
 
@@ -469,10 +471,10 @@ function computeTracks(
 
     const requiredMainSize = totalMainSize + outerHypotheticalSize
 
-    // Flush only when the line already has items: a lone overflowing frame
-    // keeps its own line (flushing it here AND pushing it below would emit
-    // more rects than frames). Overflow is judged within tolerance (see
-    // PRECISION.md): rounding residue past the main size must not wrap a
+    // Flush only when the line already has items. A lone overflowing frame
+    // keeps its own line, because flushing it here AND pushing it below emits
+    // more rects than frames. The overflow test uses a tolerance (see
+    // PRECISION.md). Rounding residue past the main size must not wrap a
     // line that the same layout at another scale keeps whole.
     if (
       flexbox.wrap !== wrap.nowrap &&
@@ -502,8 +504,8 @@ function computeTracks(
     }
     totalMainSize += outerHypotheticalSize + flexbox.mainGap
 
-    // Accumulated after the flush so the min lands on the line the item
-    // actually joins, not the line just closed.
+    // This runs after the flush, so the min goes to the line that the item
+    // joins, not to the line that just closed.
     minCrossSize = Math.max(minCrossSize, crossItem.min)
 
     mainItems.push(mainItem)
@@ -537,27 +539,28 @@ function computeTracks(
  * in frame order, in `parent`'s coordinate space.
  *
  * The main axis follows `flexbox.direction` and wrapping follows
- * `flexbox.wrap`. Free space is distributed by the frames' `grow` and
- * `shrink` before the justify and align ratios place what remains. A frame
- * whose `align` or `stretch` is non-finite (both default to `Infinity`)
- * inherits the container's
- * `alignItems` or `stretchItems`. Frame offsets are physical in every
- * direction: `offsetLeft` pads the item's left edge even in `rowReverse`,
- * and a non-finite offset is an auto margin that absorbs free space on its
- * named physical side. The space is y-down: cross
- * positions grow toward `parent.bottom`, and `wrapReverse` stacks lines
- * upward instead.
+ * `flexbox.wrap`. The frames' `grow` and `shrink` distribute free space
+ * first. Then the justify and align ratios place the rest. A frame whose
+ * `align` or `stretch` is non-finite (both default to `Infinity`) inherits
+ * the container's `alignItems` or `stretchItems`.
  *
- * Results are exact IEEE 754 arithmetic, never rounded, and are not
- * clipped to `parent`: a `nowrap` line that does not fit extends past the
- * parent's edge, as do lines wrapped beyond the cross size.
+ * Frame offsets are physical in every direction. `offsetLeft` pads the
+ * item's left edge even in `rowReverse`. A non-finite offset is an auto
+ * margin that absorbs free space on its named physical side. The y axis
+ * points down, so cross positions grow toward `parent.bottom`, and
+ * `wrapReverse` stacks lines upward instead.
  *
- * With no frames there is nothing to solve: an empty input returns an
- * empty array immediately, without consulting `flexbox` or `parent`.
+ * The results come from exact IEEE 754 arithmetic. `apply` never rounds
+ * them and does not clip them to `parent`. A `nowrap` line that does not
+ * fit extends past the parent's edge, and so do lines wrapped beyond the
+ * cross size.
+ *
+ * An empty `frames` input returns an empty array at once and does not read
+ * `flexbox` or `parent`.
  *
  * @param frames - The flex-item specifications, one rect each in the result.
  * @param flexbox - The container specification.
- * @param parent - The rect to lay out within; its origin offsets every result.
+ * @param parent - The rect to lay out within. Its origin offsets every result.
  * @returns The laid-out rects, in `frames` order.
  * @example
  * ```ts

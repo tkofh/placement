@@ -106,8 +106,9 @@ export function applyGrow(
 
   const growable = new Set(initialGrowable)
 
-  // Free space this small relative to what distribution started with is
-  // rounding residue, not layout; treat it as consumed (see PRECISION.md).
+  // Free space this small, relative to the free space at the start of
+  // distribution, is rounding residue and not layout. Treat it as consumed
+  // (see PRECISION.md).
   const tolerance = RELATIVE_TOLERANCE * initialFreeSpace
 
   let freeSpace = initialFreeSpace
@@ -136,13 +137,13 @@ export function applyGrow(
     item.adjustment *= ratio
   }
 
-  // The consumption reported back scales with the adjustments: the growth a
+  // The reported consumption scales with the adjustments. The growth that a
   // fractional ratio withholds stays free for space and place.
   return (initialFreeSpace - freeSpace) * ratio
 }
 
-// Returns the change in consumed size: zero or negative, so callers can sum
-// it with the non-negative result of applyGrow.
+// Returns the change in consumed size. The value is zero or negative, so
+// callers can add it to the non-negative result of applyGrow.
 export function applyShrink(
   initialShrinkable: Set<InternalSequenceTrackItem>,
   initialFreeSpace: number,
@@ -157,8 +158,9 @@ export function applyShrink(
 
   const initialExcess = Math.abs(initialFreeSpace)
 
-  // Excess this small relative to what distribution started with is rounding
-  // residue, not layout; treat it as consumed (see PRECISION.md).
+  // Excess this small, relative to the excess at the start of distribution,
+  // is rounding residue and not layout. Treat it as consumed (see
+  // PRECISION.md).
   const tolerance = RELATIVE_TOLERANCE * initialExcess
 
   let excess = initialExcess
@@ -193,7 +195,7 @@ export function applyShrink(
     item.adjustment *= ratio
   }
 
-  // The consumption reported back scales with the adjustments: the
-  // shrinkage a fractional ratio withholds still counts as used space.
+  // The reported consumption scales with the adjustments. The shrinkage that
+  // a fractional ratio withholds still counts as used space.
   return (excess - initialExcess) * ratio
 }

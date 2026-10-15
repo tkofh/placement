@@ -6,8 +6,8 @@ import { createCache } from '../cache.ts'
 import { toNormalized } from './normalize.ts'
 
 // `Number.POSITIVE_INFINITY` is the core's inherit sentinel (see
-// `placement/frame`): an infinite `align` inherits the container's
-// `alignItems`, an infinite `stretch` inherits its `stretchItems`.
+// `placement/frame`). An infinite `align` inherits the container's
+// `alignItems`, and an infinite `stretch` inherits its `stretchItems`.
 export interface AlignSelfValue {
   align: number
   stretch: number
@@ -19,7 +19,7 @@ export const keywordResults = {
     align: Number.POSITIVE_INFINITY,
     stretch: Number.POSITIVE_INFINITY,
   },
-  // The placement keywords are complete specifications: like CSS
+  // The placement keywords are complete specifications. Like CSS
   // `align-self`, an explicit placement defeats an inherited stretch.
   start: {
     align: 0,

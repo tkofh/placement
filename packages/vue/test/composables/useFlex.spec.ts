@@ -64,8 +64,8 @@ describe('solving', () => {
     ])
     await nextTick()
 
-    // The batch resolves during mount itself; only at setup time does the
-    // returned ref still hold the zero rect.
+    // The batch resolves during mount itself. The returned ref holds the zero
+    // rect only at setup time.
     expect(initials).toEqual([Rect.make(), Rect.make()])
     expect(rects[0]!.value).toEqual(Rect.make(0, 0, 30, 50))
     expect(rects[1]!.value).toEqual(Rect.make(30, 0, 70, 50))

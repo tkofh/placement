@@ -3,8 +3,8 @@ import * as Flexbox from '../src/flexbox.ts'
 import * as Frame from '../src/frame.ts'
 import * as Rect from '../src/rect.ts'
 
-// Deterministic size cycles stand in for varied content; no randomness, so
-// runs are comparable.
+// Deterministic size cycles stand in for varied content. They use no
+// randomness, so runs are comparable.
 const widths = [100, 60, 140, 80, 120, 90, 110, 70, 130, 50] as const
 const heights = [80, 120, 60, 100, 90, 70, 110, 130, 50, 140] as const
 

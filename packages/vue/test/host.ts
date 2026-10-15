@@ -8,8 +8,8 @@ export interface Host {
   root: TestNode
 }
 
-// Mounts content inside a sizing context rooted at `rect` — what
-// `GraphicRoot` provides, minus the DOM measurement.
+// Mounts content inside a sizing context rooted at `rect`. This is what
+// `GraphicRoot` provides, without the DOM measurement.
 export function mountWithRect(
   rect: MaybeRefOrGetter<Rect>,
   content: () => VNodeArrayChildren,
@@ -54,8 +54,8 @@ interface FakeContentRect {
   height: number
 }
 
-// Stand-in for the DOM ResizeObserver: records observed targets and lets the
-// test dispatch measurements. Specs stub the `ResizeObserver` global to this
+// A stand-in for the DOM ResizeObserver. It records observed targets and lets
+// the test dispatch measurements. Specs stub the `ResizeObserver` global to this
 // class (and `Element` to `TestNode`) before mounting, then drive resizes
 // with `FakeResizeObserver.resize` and await `nextTick`.
 export class FakeResizeObserver {

@@ -20,8 +20,8 @@ export type PathInput =
   | Basis2d.Basis2d
   | RationalBezier2d.RationalBezier2d
 
-// The three kinds with direct SVG path data emission; rational forms are
-// approximated into cubics during normalization.
+// The three kinds that emit SVG path data directly. Normalization
+// approximates rational forms as cubics.
 export type RenderablePath =
   | { readonly kind: 'linear'; readonly path: LinearPath2d.LinearPath2d }
   | { readonly kind: 'quadratic'; readonly path: QuadraticPath2d.QuadraticPath2d }
@@ -103,8 +103,8 @@ export function pathData(renderable: RenderablePath): string {
 }
 
 /**
- * Parses a number-or-numeric-string prop (the `grow="1"` template idiom);
- * non-finite results are unset.
+ * Parses a number-or-numeric-string prop (the `grow="1"` template idiom).
+ * A non-finite result is unset.
  */
 export function finiteNumber(value: number | `${number}` | undefined): number | undefined {
   const parsed = typeof value === 'number' ? value : value != null ? Number(value) : Number.NaN

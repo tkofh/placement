@@ -12,7 +12,7 @@ import { cleanup, mountInRoot, one, settle } from './mount.ts'
 
 afterEach(cleanup)
 
-// These cover the browser round trips the unit suite fakes: a real
+// These cover the browser round trips that the unit suite fakes: a real
 // ResizeObserver on an <svg>, real text metrics, and the viewBox mapping
 // user units onto device pixels. They assert wiring, not solver output.
 describe('GraphicRoot measurement', () => {
@@ -70,7 +70,7 @@ describe('GraphicRoot measurement', () => {
     )
 
     // The 100x100 content rect keeps its proportions inside the 200x100
-    // svg: a centered square, not a stretched rectangle.
+    // svg. It is a centered square, not a stretched rectangle.
     const svgBox = svg.getBoundingClientRect()
     const rectBox = one<SVGRectElement>(svg, 'rect').getBoundingClientRect()
     expect(rectBox.width).toBeCloseTo(rectBox.height)

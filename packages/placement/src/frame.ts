@@ -4,8 +4,8 @@ import { type NormalizedSizing, normalizeSizing, normalizeTRBL } from './utils/a
 const TypeBrand: unique symbol = Symbol('placement/frame')
 type TypeBrand = typeof TypeBrand
 
-// Sizing state lives under module-private symbols rather than `#private`
-// fields, so reads still work through a `Proxy` (Vue's `ref`/`reactive`).
+// Sizing state uses module-private symbols, not `#private` fields, so reads
+// still work through a `Proxy` (Vue's `ref`/`reactive`).
 const Raw: unique symbol = Symbol('placement/frame/raw')
 const Sizing: unique symbol = Symbol('placement/frame/sizing')
 
@@ -21,55 +21,57 @@ type RawSizing = {
 }
 
 /**
- * The construction input for `make`. Every field is optional, and passing
+ * The construction input for `make`. Every field is optional. Passing
  * `undefined` is the same as omitting the field.
  *
- * Omission means different things per group. Offsets, `grow`, and `shrink`
- * default to `0`; `align` and `stretch` default to the inherit sentinel
- * (`Number.POSITIVE_INFINITY`). The sizing fields — `width`, `height`,
- * `aspectRatio`, and the min/max constraints — are stored unset rather than
- * defaulted, so the frame derives them from the fields that are set (see
- * `Frame`).
+ * Each group of fields treats omission differently. Offsets, `grow`, and
+ * `shrink` default to `0`. The fields `align` and `stretch` default to the
+ * inherit sentinel (`Number.POSITIVE_INFINITY`). The sizing fields stay
+ * unset and get no default. These are `width`, `height`, `aspectRatio`, and
+ * the min/max constraints. The frame derives them from the fields that are
+ * set (see `Frame`).
  */
 export interface FrameInput {
   /**
-   * Space reserved above the frame — its top margin in the container. A
-   * non-finite value requests an auto margin: layout hands the edge an
-   * equal share of the free space on its axis. Defaults to `0`.
+   * Space reserved above the frame, which is its top margin in the
+   * container. A non-finite value requests an auto margin. Layout then gives
+   * the edge an equal share of the free space on its axis. Defaults to `0`.
    */
   readonly offsetTop?: number | undefined
   /**
-   * Space reserved to the right of the frame — its right margin. A
-   * non-finite value requests an auto margin: layout hands the edge an
+   * Space reserved to the right of the frame, which is its right margin. A
+   * non-finite value requests an auto margin. Layout then gives the edge an
    * equal share of the free space on its axis. Defaults to `0`.
    */
   readonly offsetRight?: number | undefined
   /**
-   * Space reserved below the frame — its bottom margin. A non-finite value
-   * requests an auto margin: layout hands the edge an equal share of the
-   * free space on its axis. Defaults to `0`.
+   * Space reserved below the frame, which is its bottom margin. A non-finite
+   * value requests an auto margin. Layout then gives the edge an equal share
+   * of the free space on its axis. Defaults to `0`.
    */
   readonly offsetBottom?: number | undefined
   /**
-   * Space reserved to the left of the frame — its left margin. A
-   * non-finite value requests an auto margin: layout hands the edge an
+   * Space reserved to the left of the frame, which is its left margin. A
+   * non-finite value requests an auto margin. Layout then gives the edge an
    * equal share of the free space on its axis. Defaults to `0`.
    */
   readonly offsetLeft?: number | undefined
   /**
-   * The preferred width. Unset when omitted: the resolved width then
-   * derives from the height and `aspectRatio`, or falls back to `0`.
+   * The preferred width. If you omit it, the width is unset. The resolved
+   * width then derives from the height and `aspectRatio`, or falls back to
+   * `0`.
    */
   readonly width?: number | undefined
   /**
-   * The preferred height. Unset when omitted: the resolved height then
-   * derives from the width and `aspectRatio`, or falls back to `0`.
+   * The preferred height. If you omit it, the height is unset. The resolved
+   * height then derives from the width and `aspectRatio`, or falls back to
+   * `0`.
    */
   readonly height?: number | undefined
   /**
-   * The width-to-height ratio (`width / height`) that derives whichever of
-   * `width` and `height` is unset. Non-positive and `NaN` ratios act as
-   * unset. Unset when omitted.
+   * The width-to-height ratio (`width / height`). The frame uses it to
+   * derive whichever of `width` and `height` is unset. Non-positive and
+   * `NaN` ratios act as unset. If you omit it, the ratio is unset.
    */
   readonly aspectRatio?: number | undefined
   /**
@@ -95,96 +97,97 @@ export interface FrameInput {
   /**
    * The flex grow factor: the frame's share of positive free space along
    * the container's main axis, in proportion to the other items' factors.
-   * Non-positive factors never grow. Defaults to `0`.
+   * A frame with a non-positive factor never grows. Defaults to `0`.
    */
   readonly grow?: number | undefined
   /**
    * The flex shrink factor: the frame's share of main-axis overflow, in
-   * proportion to factor times base size (as in CSS). Non-positive factors
-   * never shrink. Defaults to `0` — where CSS defaults to `1`.
+   * proportion to factor times base size (as in CSS). A frame with a
+   * non-positive factor never shrinks. Defaults to `0`, but CSS defaults
+   * to `1`.
    */
   readonly shrink?: number | undefined
   /**
-   * Where the frame sits in its line's free cross-axis space, as a
-   * fraction: `0` at the cross start, `0.5` centered, `1` at the cross
-   * end. Defaults to `Number.POSITIVE_INFINITY`, the inherit sentinel: the
-   * container's `alignItems` applies.
+   * The position of the frame in the free cross-axis space of its line, as
+   * a fraction: `0` at the cross start, `0.5` centered, `1` at the cross
+   * end. Defaults to `Number.POSITIVE_INFINITY`, the inherit sentinel,
+   * which applies the container's `alignItems`.
    */
   readonly align?: number | undefined
   /**
    * How much of the free cross-axis space the frame absorbs into its size,
    * as a fraction: `0` keeps the resolved size, `1` fills the line. The
    * min/max constraints still apply. Defaults to
-   * `Number.POSITIVE_INFINITY`, the inherit sentinel: the container's
-   * `stretchItems` applies.
+   * `Number.POSITIVE_INFINITY`, the inherit sentinel, which applies the
+   * container's `stretchItems`.
    */
   readonly stretch?: number | undefined
 }
 
 /**
- * A flex-item spec: the sizing, margin, and placement inputs `Flexbox.apply`
- * (from `placement/flexbox`) reads for one item of a container. A frame
- * carries no position of its own; layout produces `Rect`s.
+ * A flex-item spec: the sizing, margin, and placement inputs that
+ * `Flexbox.apply` (from `placement/flexbox`) reads for one item of a
+ * container. A frame has no position of its own. Layout produces `Rect`s.
  *
- * Values are immutable — every setter returns a new frame — and the sizing
- * inputs are stored raw, with unset-ness preserved: the sizing getters
- * resolve lazily from whatever is set, and the setters rebuild from the raw
+ * Values are immutable. Every setter returns a new frame. The frame stores
+ * the sizing inputs raw and keeps track of which ones are unset. The sizing
+ * getters resolve from whatever is set. The setters rebuild from the raw
  * inputs, so a derived dimension keeps re-deriving after any setter.
  *
- * Width and height resolve in order:
- * - both set: each clamps to its own min/max constraints
- * - one set plus a positive `aspectRatio`: the set dimension clamps, and
- *   the other derives from it through the ratio, then clamps
- * - `aspectRatio` alone: the ratio applies against the clamped `0`
- *   fallbacks, so a positive minimum on one axis drives the other
- * - nothing set: both dimensions fall back to `0`, clamped
+ * Width and height resolve in this order:
+ * - If both are set, each clamps to its own min/max constraints.
+ * - If one is set and `aspectRatio` is positive, the set dimension clamps.
+ *   The other derives from it through the ratio, then clamps.
+ * - If only `aspectRatio` is set, the ratio applies against the clamped `0`
+ *   fallbacks. A positive minimum on one axis then drives the other.
+ * - If nothing is set, both dimensions fall back to `0`, clamped.
  *
  * The resolution arithmetic is exact IEEE 754 (see PRECISION.md).
  *
- * Created by `make`.
+ * Create a frame with `make`.
  */
 class Frame extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
   /**
-   * Space reserved above the frame — its top margin in the container. A
-   * non-finite value is an auto margin: layout hands the edge an equal
-   * share of the free space on its axis.
+   * Space reserved above the frame, which is its top margin in the
+   * container. A non-finite value is an auto margin. Layout then gives the
+   * edge an equal share of the free space on its axis.
    */
   readonly offsetTop: number
   /**
-   * Space reserved to the right of the frame — its right margin. A
-   * non-finite value is an auto margin: layout hands the edge an equal
+   * Space reserved to the right of the frame, which is its right margin. A
+   * non-finite value is an auto margin. Layout then gives the edge an equal
    * share of the free space on its axis.
    */
   readonly offsetRight: number
   /**
-   * Space reserved below the frame — its bottom margin. A non-finite value
-   * is an auto margin: layout hands the edge an equal share of the free
-   * space on its axis.
+   * Space reserved below the frame, which is its bottom margin. A non-finite
+   * value is an auto margin. Layout then gives the edge an equal share of
+   * the free space on its axis.
    */
   readonly offsetBottom: number
   /**
-   * Space reserved to the left of the frame — its left margin. A
-   * non-finite value is an auto margin: layout hands the edge an equal
+   * Space reserved to the left of the frame, which is its left margin. A
+   * non-finite value is an auto margin. Layout then gives the edge an equal
    * share of the free space on its axis.
    */
   readonly offsetLeft: number
   /**
    * The flex grow factor: the frame's share of positive free space along
    * the container's main axis, in proportion to the other items' factors.
-   * Non-positive factors never grow.
+   * A frame with a non-positive factor never grows.
    */
   readonly grow: number
   /**
    * The flex shrink factor: the frame's share of main-axis overflow, in
-   * proportion to factor times base size (as in CSS). Non-positive factors
-   * never shrink.
+   * proportion to factor times base size (as in CSS). A frame with a
+   * non-positive factor never shrinks.
    */
   readonly shrink: number
   /**
-   * Where the frame sits in its line's free cross-axis space, as a
-   * fraction: `0` at the cross start, `0.5` centered, `1` at the cross
+   * The position of the frame in the free cross-axis space of its line, as
+   * a fraction: `0` at the cross start, `0.5` centered, `1` at the cross
    * end. `Number.POSITIVE_INFINITY` (the default) inherits the container's
    * `alignItems`.
    */
@@ -197,8 +200,9 @@ class Frame extends Pipeable {
    */
   readonly stretch: number
 
-  // Sizing inputs are stored raw (undefined = unset), so unset-ness survives
-  // setter round-trips, and resolved once at construction.
+  // The frame stores sizing inputs raw (undefined means unset) so that
+  // unset-ness survives setter round trips. It resolves them once at
+  // construction.
   readonly [Raw]: RawSizing
   readonly [Sizing]: NormalizedSizing
 
@@ -236,38 +240,39 @@ class Frame extends Pipeable {
   }
 
   /**
-   * The resolved width: the raw input clamped between `minWidth` and
-   * `maxWidth`, never negative. The minimum wins when the constraints
-   * conflict.
+   * The resolved width. It is the raw input clamped between `minWidth` and
+   * `maxWidth`, and it is never negative. If the constraints conflict, the
+   * minimum wins.
    *
-   * When the raw width is unset it derives from the height through
+   * If the raw width is unset, it derives from the height through
    * `aspectRatio` where possible (`Frame.make({ height: 50, aspectRatio: 2 })`
-   * resolves to `100`), and otherwise falls back to `0`, which `minWidth`
-   * can raise.
+   * resolves to `100`). Otherwise it falls back to `0`, which `minWidth` can
+   * raise.
    */
   get width(): number {
     return this[Sizing].width
   }
 
   /**
-   * The resolved height: the raw input clamped between `minHeight` and
-   * `maxHeight`, never negative. The minimum wins when the constraints
-   * conflict.
+   * The resolved height. It is the raw input clamped between `minHeight` and
+   * `maxHeight`, and it is never negative. If the constraints conflict, the
+   * minimum wins.
    *
-   * When the raw height is unset it derives from the width through
+   * If the raw height is unset, it derives from the width through
    * `aspectRatio` where possible (`Frame.make({ width: 100, aspectRatio: 2 })`
-   * resolves to `50`), and otherwise falls back to `0`, which `minHeight`
-   * can raise.
+   * resolves to `50`). Otherwise it falls back to `0`, which `minHeight` can
+   * raise.
    */
   get height(): number {
     return this[Sizing].height
   }
 
   /**
-   * The resolved width over the resolved height — the exact IEEE division,
-   * whatever the raw `aspectRatio` input was. Degenerate sizes return what
-   * division produces: `Infinity` for a positive width over a `0` height,
-   * `NaN` for `0` over `0` (the empty `Frame.make({})`).
+   * The resolved width over the resolved height, by exact IEEE division.
+   * The getter always divides the resolved sizes and never returns the raw
+   * `aspectRatio` input. For degenerate sizes, it returns what the division
+   * produces: `Infinity` for a positive width over a `0` height, and `NaN`
+   * for `0` over `0` (the empty `Frame.make({})`).
    */
   get aspectRatio(): number {
     return this[Sizing].aspectRatio
@@ -291,8 +296,8 @@ class Frame extends Pipeable {
 
   /**
    * The effective upper bound on `width`: the raw input clamped to
-   * `>= 0`, and `Infinity` when unset. Raised to `minWidth` when the
-   * bounds cross — the minimum wins, as in CSS `clamp()`.
+   * `>= 0`, and `Infinity` when unset. If the bounds cross, it rises to
+   * `minWidth`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxWidth(): number {
     return this[Sizing].maxWidth
@@ -300,8 +305,8 @@ class Frame extends Pipeable {
 
   /**
    * The effective upper bound on `height`: the raw input clamped to
-   * `>= 0`, and `Infinity` when unset. Raised to `minHeight` when the
-   * bounds cross — the minimum wins, as in CSS `clamp()`.
+   * `>= 0`, and `Infinity` when unset. If the bounds cross, it rises to
+   * `minHeight`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxHeight(): number {
     return this[Sizing].maxHeight
@@ -312,12 +317,12 @@ class Frame extends Pipeable {
   }
 
   /**
-   * Returns the frame's raw inputs: unset sizing fields come back
-   * `undefined`, never their resolved values. Under `JSON.stringify`,
-   * unset fields drop out and infinite values (`align`/`stretch` inherit,
-   * auto offsets) become `null` — which `make` reads back as the field's
-   * default, so a JSON round trip keeps inheritance but turns auto offsets
-   * into `0`.
+   * Returns the raw inputs of the frame. Unset sizing fields come back as
+   * `undefined`, never as their resolved values. `JSON.stringify` drops the
+   * unset fields and writes infinite values (`align`/`stretch` inherit, auto
+   * offsets) as `null`. The `make` factory reads `null` back as the default
+   * of the field. A JSON round trip therefore keeps inheritance but turns
+   * auto offsets into `0`.
    *
    * @returns The raw input record, of the shape `make` accepts.
    */
@@ -347,11 +352,10 @@ export type { Frame }
 /**
  * Creates a `Frame`.
  *
- * Omitted sizing fields are unset, not zero: the frame keeps deriving them
- * as other fields change, where an explicit value — even `0` — pins a
- * dimension.
+ * Omitted sizing fields are unset, not zero. The frame keeps deriving them
+ * as other fields change. An explicit value, even `0`, pins a dimension.
  *
- * @param input - The frame's fields; see `FrameInput` for the per-field defaults.
+ * @param input - The frame's fields. See `FrameInput` for the default of each field.
  * @returns An immutable `Frame`.
  * @example
  * ```ts
@@ -363,8 +367,8 @@ export type { Frame }
 export const make = (input: FrameInput): Frame => new Frame(input)
 
 /**
- * Checks if a value is a `Frame`. True only for values built by `make`,
- * which carry the brand.
+ * Checks if a value is a `Frame`. Only values that `make` builds carry the
+ * brand, so only they pass.
  *
  * @param value - The value to check.
  * @returns `true` if the value is a `Frame`, `false` otherwise.
@@ -373,20 +377,22 @@ export const isFrame = (value: unknown): value is Frame => {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
 
-// Setters rebuild from the raw inputs (toJSON), never the resolved sizing.
-// Those with optional trailing arguments dispatch on isFrame: the data-last
-// form's first argument is always a number, so the forms cannot collide.
+// Setters rebuild from the raw inputs (toJSON), never from the resolved
+// sizing. Setters with optional trailing arguments dispatch on isFrame. The
+// first argument of the data-last form is always a number, so the two forms
+// cannot collide.
 
 /**
- * Sets all four offsets in CSS shorthand order: one value for every edge,
- * two values for vertical then horizontal, three values for top,
- * horizontal, then bottom, four values for top, right,
- * bottom, left. The data-last form omits `self` and returns a function of
- * it.
+ * Sets all four offsets in CSS shorthand order. One value sets every edge.
+ * Two values set the vertical edges, then the horizontal edges. Three values
+ * set top, horizontal, then bottom. Four values set top, right, bottom, and
+ * left. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param offsetTop - The top offset. As the only value, every edge; as the first of two, both vertical edges.
- * @param offsetRight - The right offset. As the second of two values, both horizontal edges.
+ * @param offsetTop - The top offset. As the only value, it sets every edge. As the
+ * first of two, it sets both vertical edges.
+ * @param offsetRight - The right offset. As the second of two values, it sets both
+ * horizontal edges.
  * @param offsetBottom - The bottom offset.
  * @param offsetLeft - The left offset.
  * @returns A new frame with the offsets replaced.
@@ -431,12 +437,12 @@ export const setOffset: {
 )
 
 /**
- * Sets the horizontal offsets: one value for both edges, two values for
- * left then right. The data-last form omits `self` and returns a function
+ * Sets the horizontal offsets. One value sets both edges. Two values set
+ * left, then right. The data-last form omits `self` and returns a function
  * of it.
  *
  * @param self - The frame to update.
- * @param offsetLeft - The left offset. As the only value, the right offset too.
+ * @param offsetLeft - The left offset. As the only value, it also sets the right offset.
  * @param offsetRight - The right offset.
  * @returns A new frame with the horizontal offsets replaced.
  */
@@ -452,12 +458,12 @@ export const setOffsetX: {
 )
 
 /**
- * Sets the vertical offsets: one value for both edges, two values for top
+ * Sets the vertical offsets. One value sets both edges. Two values set top,
  * then bottom. The data-last form omits `self` and returns a function of
  * it.
  *
  * @param self - The frame to update.
- * @param offsetTop - The top offset. As the only value, the bottom offset too.
+ * @param offsetTop - The top offset. As the only value, it also sets the bottom offset.
  * @param offsetBottom - The bottom offset.
  * @returns A new frame with the vertical offsets replaced.
  */
@@ -473,8 +479,8 @@ export const setOffsetY: {
 )
 
 /**
- * Sets the top offset, leaving the other edges alone. The data-last form
- * omits `self` and returns a function of it.
+ * Sets the top offset and keeps the other edges. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The frame to update.
  * @param offset - The new top offset.
@@ -486,8 +492,8 @@ export const setOffsetTop: {
 } = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetTop: offset }))
 
 /**
- * Sets the right offset, leaving the other edges alone. The data-last form
- * omits `self` and returns a function of it.
+ * Sets the right offset and keeps the other edges. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The frame to update.
  * @param offset - The new right offset.
@@ -499,8 +505,8 @@ export const setOffsetRight: {
 } = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetRight: offset }))
 
 /**
- * Sets the bottom offset, leaving the other edges alone. The data-last
- * form omits `self` and returns a function of it.
+ * Sets the bottom offset and keeps the other edges. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The frame to update.
  * @param offset - The new bottom offset.
@@ -512,8 +518,8 @@ export const setOffsetBottom: {
 } = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetBottom: offset }))
 
 /**
- * Sets the left offset, leaving the other edges alone. The data-last form
- * omits `self` and returns a function of it.
+ * Sets the left offset and keeps the other edges. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The frame to update.
  * @param offset - The new left offset.
@@ -525,14 +531,14 @@ export const setOffsetLeft: {
 } = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetLeft: offset }))
 
 /**
- * Sets the preferred width and height. Note the order: width first, the
- * opposite of `setOffset`'s vertical-first two-value form. One value sets
- * both dimensions. The data-last form omits `self` and returns a function
- * of it.
+ * Sets the preferred width and height. The width comes first. This is the
+ * opposite of the two-value form of `setOffset`, which puts the vertical
+ * edges first. One value sets both dimensions. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The frame to update.
  * @param width - The new width.
- * @param height - The new height; the width when omitted.
+ * @param height - The new height. Defaults to the width.
  * @returns A new frame with both dimensions set.
  * @example
  * ```ts
@@ -550,10 +556,10 @@ export const setSize: {
 )
 
 /**
- * Sets the preferred width, leaving the other sizing inputs — including an
- * unset height — as they were: a height left to derive from `aspectRatio`
- * re-derives against the new width. The data-last form omits `self` and
- * returns a function of it.
+ * Sets the preferred width and keeps the other sizing inputs, including an
+ * unset height. If the height derives from `aspectRatio`, it re-derives
+ * against the new width. The data-last form omits `self` and returns a
+ * function of it.
  *
  * @param self - The frame to update.
  * @param width - The new width.
@@ -570,10 +576,10 @@ export const setWidth: {
 } = dual(2, (self: Frame, width: number) => new Frame({ ...self.toJSON(), width }))
 
 /**
- * Sets the preferred height, leaving the other sizing inputs — including
- * an unset width — as they were: a width left to derive from `aspectRatio`
- * re-derives against the new height. The data-last form omits `self` and
- * returns a function of it.
+ * Sets the preferred height and keeps the other sizing inputs, including an
+ * unset width. If the width derives from `aspectRatio`, it re-derives
+ * against the new height. The data-last form omits `self` and returns a
+ * function of it.
  *
  * @param self - The frame to update.
  * @param height - The new height.
@@ -585,9 +591,9 @@ export const setHeight: {
 } = dual(2, (self: Frame, height: number) => new Frame({ ...self.toJSON(), height }))
 
 /**
- * Sets the width-to-height ratio that derives whichever dimension is
- * unset. Non-positive and `NaN` ratios act as unset. The data-last form
- * omits `self` and returns a function of it.
+ * Sets the width-to-height ratio. The frame uses it to derive whichever
+ * dimension is unset. Non-positive and `NaN` ratios act as unset. The
+ * data-last form omits `self` and returns a function of it.
  *
  * @param self - The frame to update.
  * @param aspectRatio - The new ratio, as `width / height`.
@@ -608,7 +614,7 @@ export const setAspectRatio: {
  *
  * @param self - The frame to update.
  * @param minWidth - The new minimum width.
- * @param minHeight - The new minimum height; the minimum width when omitted.
+ * @param minHeight - The new minimum height. Defaults to the minimum width.
  * @returns A new frame with both minimums set.
  */
 export const setMinSize: {
@@ -652,7 +658,7 @@ export const setMinHeight: {
  *
  * @param self - The frame to update.
  * @param maxWidth - The new maximum width.
- * @param maxHeight - The new maximum height; the maximum width when omitted.
+ * @param maxHeight - The new maximum height. Defaults to the maximum width.
  * @returns A new frame with both maximums set.
  */
 export const setMaxSize: {
@@ -703,8 +709,8 @@ export const setMaxHeight: {
 /**
  * Sets the flex grow factor: the frame's share of positive free space
  * along the container's main axis, in proportion to the other items'
- * factors. Non-positive factors never grow. The data-last form omits
- * `self` and returns a function of it.
+ * factors. A frame with a non-positive factor never grows. The data-last
+ * form omits `self` and returns a function of it.
  *
  * @param self - The frame to update.
  * @param grow - The new grow factor.
@@ -717,9 +723,9 @@ export const setGrow: {
 
 /**
  * Sets the flex shrink factor: the frame's share of main-axis overflow, in
- * proportion to factor times base size (as in CSS). Non-positive factors
- * never shrink. The data-last form omits `self` and returns a function of
- * it.
+ * proportion to factor times base size (as in CSS). A frame with a
+ * non-positive factor never shrinks. The data-last form omits `self` and
+ * returns a function of it.
  *
  * @param self - The frame to update.
  * @param shrink - The new shrink factor.
@@ -731,10 +737,11 @@ export const setShrink: {
 } = dual(2, (self: Frame, shrink: number) => new Frame({ ...self.toJSON(), shrink }))
 
 /**
- * Sets the frame's own cross-axis placement, overriding the container's
- * `alignItems`: `0` at the cross start, `0.5` centered, `1` at the cross
- * end. `Number.POSITIVE_INFINITY` restores inheritance. The data-last form
- * omits `self` and returns a function of it.
+ * Sets the cross-axis placement of the frame, which overrides the
+ * container's `alignItems`. The value is a fraction: `0` at the cross
+ * start, `0.5` centered, `1` at the cross end. `Number.POSITIVE_INFINITY`
+ * restores inheritance. The data-last form omits `self` and returns a
+ * function of it.
  *
  * @param self - The frame to update.
  * @param align - The placement fraction, or `Number.POSITIVE_INFINITY` to inherit.
@@ -747,9 +754,9 @@ export const setAlign: {
 
 /**
  * Sets how much of the free cross-axis space the frame absorbs into its
- * size, overriding the container's `stretchItems`: `0` keeps the resolved
- * size, `1` fills the line, within the min/max constraints.
- * `Number.POSITIVE_INFINITY` restores inheritance. The data-last form
+ * size, which overrides the container's `stretchItems`. The value is a
+ * fraction: `0` keeps the resolved size, `1` fills the line, within the
+ * min/max constraints. `Number.POSITIVE_INFINITY` restores inheritance. The data-last form
  * omits `self` and returns a function of it.
  *
  * @param self - The frame to update.

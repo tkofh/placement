@@ -1,18 +1,19 @@
 import { EPSILON, RELATIVE_TOLERANCE, coincident } from 'curvy/number'
 
 /**
- * Compares two fields of a value type for identity, tolerantly for finite
- * pairs and exactly otherwise.
+ * Compares two fields of a value type for identity. Finite pairs compare
+ * with a tolerance. All other pairs compare exactly.
  *
  * Finite pairs use `coincident` from `curvy/number`:
  * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)`. That band
- * degenerates when either value is non-finite — `|Inf - Inf|` is `NaN`
- * (an infinity would not equal itself) while `|100 - Inf| <= Inf` holds
- * (an infinity would equal every finite value) — so non-finite pairs fall
- * back to `===`: an infinity equals only the same-signed infinity, and
- * `NaN` equals nothing.
+ * fails when either value is non-finite. `|Inf - Inf|` is `NaN`, so the
+ * band rejects an infinity against itself. `|100 - Inf| <= Inf` holds, so
+ * the band accepts an infinity against every finite value. Non-finite
+ * pairs therefore fall back to `===`. An infinity equals only the infinity
+ * with the same sign, and `NaN` equals nothing.
  *
- * Backs the per-field `equals` of every value type (see PRECISION.md).
+ * The per-field `equals` of every value type uses this function (see
+ * PRECISION.md).
  *
  * @param a - The first field.
  * @param b - The second field.
@@ -28,12 +29,12 @@ const finiteMagnitude = (value: number): number => (Number.isFinite(value) ? Mat
  * `intersects`, `avoid`), scaled to the magnitudes that enter the question
  * (see PRECISION.md).
  *
- * Only finite bounds contribute to the relative term — an infinite bound
- * would blow the band up to `Infinity` and accept everything. A
- * half-infinite extent keeps a band scaled to its finite bound, a fully
- * infinite one falls back to the absolute `EPSILON`, and comparisons
- * against the infinite bound itself need no band: every finite value
- * already satisfies `x <= Infinity`.
+ * Only finite bounds contribute to the relative term. An infinite bound is
+ * left out because it turns the band into `Infinity`, which accepts
+ * everything. A half-infinite extent keeps a band scaled to its finite
+ * bound. A fully infinite extent falls back to the absolute `EPSILON`.
+ * Comparisons against the infinite bound itself need no band, because
+ * every finite value already satisfies `x <= Infinity`.
  *
  * @param min - The lesser bound of the extent under question.
  * @param max - The greater bound of the extent under question.

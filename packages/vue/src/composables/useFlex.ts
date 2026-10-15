@@ -10,8 +10,8 @@ export function useFlexLayout(
   layout: MaybeRefOrGetter<Flexbox.Flexbox>,
   innerRect: MaybeRefOrGetter<Rect.Rect>,
 ): void {
-  // The mapper is a reactive effect: reads of the layout, the inner rect, and
-  // every child frame are tracked, so any of them changing re-runs the solve.
+  // The mapper is a reactive effect. It tracks reads of the layout, the inner
+  // rect, and every child frame, so a change to any of them re-runs the solve.
   useChildren<Frame, Rect.Rect>('placement/flex', (children) => {
     const rects = Flexbox.apply(
       children.map((child) => child.input.value),

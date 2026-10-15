@@ -25,10 +25,10 @@ import {
 } from 'vue'
 
 // Bundlers statically replace `process.env.NODE_ENV` (the same convention
-// Vue's esm-bundler builds rely on), so guarded blocks drop from production
-// output. The check stays inline at each guard: hoisting it into a const
-// defeats esbuild's dead-branch elimination, and esbuild is Vite's default
-// production minifier.
+// that the esm-bundler builds of Vue use), so production output drops the
+// guarded blocks. The check stays inline at each guard, because hoisting it
+// into a const defeats the dead-branch elimination of esbuild. esbuild is the
+// default production minifier of Vite.
 declare const process: { env: { NODE_ENV?: string } }
 
 type ChildOutput<O> = [O] extends [never] ? null : ShallowRef<O>
@@ -53,11 +53,11 @@ class Child<I, O = never> {
     this.input = input
     this.output = (initial === undefined ? null : shallowRef(initial)) as ChildOutput<O>
 
-    // On the client the mappers are reactive effects that track their own
-    // reads of child inputs, so an input change re-runs them directly and only
-    // structural changes need re-resolution. During SSR nothing re-runs on its
-    // own, so an input change must synchronously re-resolve and re-map for
-    // later-rendering children to observe it.
+    // On the client, the mappers are reactive effects that track their own
+    // reads of child inputs. An input change re-runs them directly, and only
+    // structural changes need re-resolution. During SSR, nothing re-runs on
+    // its own. An input change must re-resolve and re-map synchronously, so
+    // that children that render later observe it.
     if (context.ssr) {
       watch(
         input,
@@ -169,10 +169,10 @@ function resolveChildren<I, O>(
   storage: ReadonlyMap<ComponentInternalInstance, ReadonlyArray<Child<I, O>>>,
 ): Array<Child<I, O>> {
   const children = [] as Array<Child<I, O>>
-  // The stack of open sibling groups: entering a host element opens a fresh
-  // group, rising closes the deepest ones. Two containers at the same depth
-  // therefore hold distinct groups, and the groups below the top are exactly
-  // the enclosing chain.
+  // The stack of open sibling groups. Entering a host element opens a new
+  // group, and rising closes the deepest ones. Two containers at the same
+  // depth therefore hold distinct groups, and the groups below the top are
+  // exactly the enclosing chain.
   const groups: Array<Array<Child<I, O>>> = [[]]
 
   let totalChildCount = 0
@@ -212,9 +212,9 @@ function resolveChildren<I, O>(
 
       const siblings = groups.at(-1)!
 
-      // Snapshot: enclosing groups hold only the members that preceded this
-      // child in the walk, so later same-group children never appear in its
-      // ancestors.
+      // Take a snapshot. The enclosing groups hold only the members that
+      // preceded this child in the walk, so later children of the same group
+      // never appear in its ancestors.
       const ancestors: Array<Child<I, O>> = []
       for (const group of groups.slice(0, -1)) {
         ancestors.push(...group)
@@ -237,18 +237,18 @@ function resolveChildren<I, O>(
 }
 
 // Dev-only dedupe state for the unreachable-child warning. It lives at module
-// scope inside DEV guards -- not on the class -- because bundlers strip dead
-// branches but not class fields or methods, and production builds should
-// carry none of this.
+// scope inside DEV guards, not on the class. Bundlers strip dead branches but
+// not class fields or methods, and production builds must carry none of this.
 let warnState: WeakMap<object, { channel: string; warned: string }> | undefined
 
-// Every failure mode of the vnode walk -- a Vue internal changing shape, a
-// child rendered outside the provider's subtree, a traversal bug -- shows up
-// as a mounted child silently missing from the layout, so surface it loudly
-// in dev. Two states are legitimately unreachable and exempt: unmounted
-// children (mid-patch), and children whose suspense boundary is still
-// pending -- those are already mounted, but into an off-tree container the
-// walk cannot see until the boundary resolves.
+// Every failure mode of the vnode walk shows up as a mounted child that is
+// silently missing from the layout. Examples are a change in the shape of a
+// Vue internal, a child rendered outside the subtree of the provider, and a
+// traversal bug. Dev builds therefore warn about it. Two states are
+// legitimately unreachable and exempt: unmounted children (mid-patch), and
+// children whose suspense boundary is still pending. Those children are
+// already mounted, but into an off-tree container that the walk cannot see
+// until the boundary resolves.
 function warnUnreachable<I, O>(
   context: object,
   storage: ReadonlyMap<ComponentInternalInstance, ReadonlyArray<Child<I, O>>>,
@@ -269,8 +269,8 @@ function warnUnreachable<I, O>(
         continue
       }
 
-      // Present at runtime but absent from the published type: the suspense
-      // boundary the instance was mounted under, if any.
+      // The suspense boundary that the instance mounted under, if any. It is
+      // present at runtime but absent from the published type.
       const suspense = (ref.instance as unknown as { suspense: { pendingBranch: unknown } | null })
         .suspense
       if (suspense?.pendingBranch != null) {
@@ -311,7 +311,7 @@ class Context<I, O = never> {
     // synchronously instead of going through the scheduler.
     this.ssr = inject(ssrContextKey, null) !== null
 
-    // SSR contexts never warn: partial resolution is by design on the server.
+    // SSR contexts never warn, because partial resolution on the server is by design.
     if (process.env.NODE_ENV !== 'production' && !this.ssr) {
       warnState ??= new WeakMap()
       warnState.set(this, { channel, warned: '' })
@@ -334,8 +334,8 @@ class Context<I, O = never> {
     const postMap = typeof map === 'function' ? undefined : map?.post
     this.#preMap = preMap
 
-    // The mappers run over the empty list too: when the last child leaves,
-    // downstream state must observe the empty resolution or it goes stale.
+    // The mappers also run over the empty list. When the last child leaves,
+    // downstream state must observe the empty resolution, or it goes stale.
     if (preMap !== undefined) {
       watchEffect(
         () => {
@@ -372,9 +372,9 @@ class Context<I, O = never> {
 
   invalidate() {
     if (this.ssr) {
-      // Children registered later in the same server render are not visible
-      // yet, so each child renders from the list resolved so far -- the same
-      // partial-layout semantics the index-based system had on the server.
+      // Children that register later in the same server render are not
+      // visible yet, so each child renders from the list resolved so far. The
+      // index-based system had the same partial-layout semantics on the server.
       this.#resolve()
       this.#preMap?.(this.children.value)
     } else {
@@ -391,8 +391,8 @@ class Context<I, O = never> {
   register(ref: Child<I, O>) {
     const refs = this.#storage.get(ref.instance)
     if (refs) {
-      // Re-entrant for KeepAlive: `onActivated` also fires after the initial
-      // mount, when setup's registration is still in place.
+      // This is re-entrant for KeepAlive, because `onActivated` also fires
+      // after the initial mount, when the setup registration is still in place.
       if (refs.includes(ref)) {
         return
       }
@@ -465,9 +465,9 @@ export function useChild<I, O = never>(
   })
 
   // A KeepAlive toggle neither mounts nor unmounts the child, and the provider
-  // may not re-render when it happens, so activation state drives registration
-  // directly: a deactivated child leaves the layout and a reactivated one
-  // rejoins it. Both hooks are inert outside a KeepAlive.
+  // does not always re-render when it happens. Activation state therefore
+  // drives registration directly. A deactivated child leaves the layout, and
+  // a reactivated one rejoins it. Both hooks are inert outside a KeepAlive.
   onActivated(() => {
     context.register(ref)
   })
@@ -501,7 +501,7 @@ export function useChildren<I, O = never>(
   // A keyed reorder moves existing children without registering, mounting, or
   // unmounting anything, so nothing above re-fires. Re-resolving on every
   // provider update is cheap (one vnode walk), and the resolution is dropped
-  // unless the ordered list actually changed.
+  // unless the ordered list changed.
   onUpdated(() => {
     context.invalidate()
   })

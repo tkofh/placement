@@ -15,7 +15,7 @@ describe('useFlow', () => {
     const fallback = { direction: Flexbox.direction.column, wrap: Flexbox.wrap.wrap }
 
     expect(useFlow(() => undefined, fallback).value).toEqual(fallback)
-    // The input sets only the direction; the wrap channel falls back.
+    // The input sets only the direction. The wrap channel falls back.
     expect(useFlow(() => 'row-reverse', fallback).value).toEqual({
       direction: Flexbox.direction.rowReverse,
       wrap: Flexbox.wrap.wrap,

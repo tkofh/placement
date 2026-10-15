@@ -137,9 +137,9 @@ function roll() {
 const barData = ref(roll())
 const sorted = ref(false)
 
-// One composite spring animates every bar; retargeting keeps momentum.
-// Composite configs take SpringDefinitions (a plain object would be read
-// as a per-channel shape mirroring the array).
+// One composite spring animates every bar. A retarget keeps the momentum.
+// Composite configs take SpringDefinitions, because a plain object reads as
+// a per-channel shape that mirrors the array.
 const bars = useSpring(
   () => barData.value,
   defineSpring({ tension: 170, damping: 24 }),
@@ -148,9 +148,9 @@ const barGap = useSpring(() => (sorted.value ? 22 : 8), { duration: 800, bounce:
 
 const total = computed(() => barData.value.reduce((sum, value) => sum + value, 0))
 
-// Columns keep a fixed slot in the template; sorting only changes each
-// column's target rank. A second composite spring animates the ranks, so a
-// re-sort glides the columns into place instead of swapping keyed VNodes.
+// Columns keep a fixed slot in the template. A sort changes only the target
+// rank of each column. A second composite spring animates the ranks, so a
+// re-sort moves the columns into place instead of swapping keyed VNodes.
 const rankTargets = computed(() => {
   const indices = MONTHS.map((_, i) => i)
   if (sorted.value) {
@@ -164,7 +164,7 @@ const rankTargets = computed(() => {
 })
 const ranks = useSpring(() => rankTargets.value, defineSpring({ tension: 120, damping: 18 }))
 
-// The chart is 528px wide inside its panel; columns share it with 6 gaps.
+// The chart is 528px wide inside its panel. The columns share it with 6 gaps.
 const columns = computed(() => {
   const gap = barGap.value
   const width = (528 - 6 * gap) / 7
@@ -204,8 +204,8 @@ const headY = useSpring(() => 136 + 74 * Math.sin(1.3 * angle.value), {
   mass: 1,
 })
 
-// Each follower springs toward the previous spring's live value — the
-// subscription bypasses Vue reactivity entirely.
+// Each follower springs toward the live value of the previous spring. The
+// subscription bypasses Vue reactivity.
 const chainX = [headX]
 const chainY = [headY]
 for (let i = 0; i < 4; i++) {

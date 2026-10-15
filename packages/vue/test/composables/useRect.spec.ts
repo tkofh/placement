@@ -12,8 +12,8 @@ import {
 import { type RectProps, type UseRectOptions, useRect } from '../../src/composables/useRect.ts'
 import { mountWithRect } from '../host.ts'
 
-// Host rect: width 200 and height 100 are the two percent bases; unset
-// props act as Box's unset sentinel, so an undetermined axis fills the
+// Host rect: width 200 and height 100 are the two percent bases. Unset props
+// act as the unset sentinel of Box, so an undetermined axis fills the
 // parent.
 function mountRect(
   props: RectProps,

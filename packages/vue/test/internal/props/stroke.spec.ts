@@ -24,7 +24,7 @@ describe('parsing', () => {
       expected: { stroke: 'color(srgb 1 0 0)', 'stroke-dasharray': '4 2' },
     },
     {
-      // Negative dash segments are absolute-valued; the dash offset keeps
+      // Negative dash segments are absolute-valued. The dash offset keeps
       // its sign.
       input: 'red dashed 4 -2 offset 1',
       parentWidth: 100,
@@ -90,8 +90,8 @@ describe('empty results', () => {
   })
 
   test('a unitless width invalidates the whole declaration', () => {
-    // Widths are `px`/`%` only; the bare `3` fails the parse outright rather
-    // than being ignored, so even the color is dropped.
+    // Widths are `px`/`%` only. The bare `3` fails the whole parse instead of
+    // being ignored, so even the color is dropped.
     expect(resolveStroke('red 3', 100)).toBe(Stroke.empty)
   })
 })

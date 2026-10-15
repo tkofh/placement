@@ -1,4 +1,4 @@
-// an LRU cache implementation
+// An LRU cache implementation.
 
 class Node<K, V> {
   key: K
@@ -69,7 +69,7 @@ class LRUCache<K, V> {
     }
   }
 
-  // Relinks the list around the node without touching the map: eviction
+  // Relinks the list around the node and leaves the map unchanged. Eviction
   // (`#removeTail`) deletes the map entry separately, and `#moveToHead` must
   // keep it.
   #unlink(node: Node<K, V>) {

@@ -52,10 +52,10 @@ describe('namespaces and element classes', () => {
   })
 })
 
-// Vue patches SVG elements through setAttribute, never DOM properties --
-// SVG geometry properties are read-only SVGAnimatedLength objects, so a
-// property write would throw or silently no-op. The live baseVal confirms the
-// browser parsed what we wrote.
+// Vue patches SVG elements through setAttribute, never through DOM
+// properties. SVG geometry properties are read-only SVGAnimatedLength
+// objects, so a property write throws or silently does nothing. The live
+// baseVal shows that the browser parsed what the test wrote.
 describe('geometry attributes', () => {
   test('rect writes attributes the browser parses into live lengths', async () => {
     const { svg } = await mountInRoot(() => [

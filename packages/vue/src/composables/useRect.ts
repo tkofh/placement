@@ -110,9 +110,9 @@ export function useTransformedRect(
 
 export interface UseRectOptions {
   /**
-   * Replaces the `width`/`height` props as the box's explicit size — for
-   * dimensions that come from somewhere other than props, like a measured
-   * DOM rect or a radius. `undefined` falls back to the props.
+   * Replaces the `width`/`height` props as the explicit size of the box. Use
+   * it for dimensions that come from somewhere other than props, like a
+   * measured DOM rect or a radius. `undefined` falls back to the props.
    */
   size?: MaybeRefOrGetter<{ readonly width: number; readonly height: number } | undefined>
   /** The origin the `origin` prop falls back to when unset. */
@@ -125,7 +125,7 @@ export function useRect(props: RectProps, options: UseRectOptions = {}): Compute
   const parentWidth = useParentWidth()
   const parentHeight = useParentHeight()
 
-  // NaN is the core's unset sentinel: unset props parse to NaN and Box
+  // NaN is the unset sentinel of the core. Unset props parse to NaN, and Box
   // treats them as auto/unset (see `placement/box`).
   const width = useLengthPercentage(() => props.width, Number.NaN, 'width')
   const height = useLengthPercentage(() => props.height, Number.NaN, 'height')

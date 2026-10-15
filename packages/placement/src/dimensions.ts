@@ -10,8 +10,8 @@ type TypeBrand = typeof TypeBrand
 /**
  * The structural shape of a dimensions value: numeric `width` and `height`.
  * `Dimensions` and `Rect` both satisfy it, as does a plain object literal.
- * Operations that only read extents — the `lerp` target, the `equals`
- * operand — accept any `DimensionsLike`.
+ * Inputs that only supply extents, such as the `lerp` target and the
+ * `equals` operand, accept any `DimensionsLike`.
  */
 export interface DimensionsLike {
   /** The horizontal extent. */
@@ -24,12 +24,12 @@ export interface DimensionsLike {
  * A 2D extent: a width and a height, with no position.
  *
  * Dimensions are magnitudes. Construction takes `Math.abs` of both inputs,
- * so the extents are never negative — a domain rule, not rounding: `abs` is
- * exact, and construction is otherwise exact IEEE 754 arithmetic with no
- * post-processing.
+ * so the extents are never negative. This is a domain rule, not rounding.
+ * `abs` is exact, and construction is otherwise exact IEEE 754 arithmetic
+ * with no post-processing.
  *
- * Values are immutable. The class is exported type-only; construct with
- * `make`. Every operation in this module also applies data-last through
+ * Values are immutable. The class is exported type-only, so construct a
+ * value with `make`. Every operation in this module also applies data-last through
  * `pipe`: `Dimensions.make(100).pipe(Dimensions.scale(2))`.
  */
 class Dimensions extends Pipeable implements DimensionsLike {
@@ -43,8 +43,8 @@ class Dimensions extends Pipeable implements DimensionsLike {
   constructor(width: number, height: number) {
     super()
 
-    // Dimensions are magnitudes: abs is a domain rule, not rounding (it is
-    // exact — see PRECISION.md).
+    // Dimensions are magnitudes. abs is a domain rule, not rounding, and it
+    // is exact (see PRECISION.md).
     this.width = Math.abs(width)
     this.height = Math.abs(height)
   }
@@ -89,10 +89,10 @@ class Dimensions extends Pipeable implements DimensionsLike {
 export type { Dimensions }
 
 /**
- * Creates a `Dimensions` from zero, one, or two extents: no arguments is
+ * Creates a `Dimensions` from zero, one, or two extents. No arguments give
  * the zero dimensions, one argument is a square size, and two arguments are
- * the width and the height. Inputs take their magnitude (dimensions are
- * magnitudes).
+ * the width and the height. Inputs take their magnitude, because dimensions
+ * are magnitudes.
  *
  * @example
  * ```ts
@@ -110,7 +110,7 @@ export const make: {
    */
   (): Dimensions
   /**
-   * Creates square dimensions: `size` is both extents.
+   * Creates square dimensions. `size` is both extents.
    *
    * @param size - The width and the height. Takes its magnitude.
    * @returns The square `Dimensions`.
@@ -132,8 +132,8 @@ export const make: {
 export const zero: Dimensions = new Dimensions(0, 0)
 
 /**
- * The dimensions with both extents `Infinity` — an unconstrained upper
- * bound for `clamp`.
+ * The dimensions with both extents `Infinity`. Use it as an unconstrained
+ * upper bound for `clamp`.
  */
 export const infinity: Dimensions = new Dimensions(
   Number.POSITIVE_INFINITY,
@@ -143,8 +143,8 @@ export const infinity: Dimensions = new Dimensions(
 /**
  * Checks if a value is a `Dimensions`.
  *
- * True only for values built by `make`, which carry the
- * brand. A plain `{ width, height }` record is not a `Dimensions`; use
+ * It returns `true` only for values built by `make`, which carry the brand.
+ * A plain `{ width, height }` record is not a `Dimensions`. Use
  * `isDimensionsLike` for the structural check.
  *
  * @param value - The value to check.
@@ -202,16 +202,16 @@ export const setHeight: {
   (height: number): (self: Dimensions | Rect) => Dimensions
 } = dual(2, (self: Dimensions | Rect, height: number) => new Dimensions(self.width, height))
 
-// Self may be a Rect, so the predicate routes on the Like shape; the
+// Self can be a Rect, so the predicate routes on the Like shape. The
 // data-last form's first argument is always a number, never DimensionsLike.
 /**
- * Sets the aspect ratio (`width / height`), blending between keeping the
+ * Sets the aspect ratio (`width / height`) as a blend between keeping the
  * width and keeping the height.
  *
- * Two candidates have the requested ratio: keep `self`'s width and derive
- * the height (bias 0), or keep the height and derive the width (bias 1).
- * Intermediate biases interpolate the candidates, and every blend still has
- * the requested ratio. The data-last form omits `self` and returns a
+ * Two candidates have the requested ratio. One keeps `self`'s width and
+ * derives the height (bias 0). The other keeps the height and derives the
+ * width (bias 1). A bias between 0 and 1 interpolates the candidates, and
+ * every blend still has the requested ratio. The data-last form omits `self` and returns a
  * function of it.
  *
  * @param self - The source extents. A `Rect` contributes only its width and height.
@@ -231,8 +231,8 @@ export const setAspectRatio: {
 } = dual(
   (args) => isDimensionsLike(args[0]),
   (self: Dimensions | Rect, ratio: number, bias = 0.5) =>
-    // Lerps from keeping the width (bias 0) to keeping the height (bias 1);
-    // every blend still has the requested ratio, since height = width / ratio.
+    // Lerps from keeping the width (bias 0) to keeping the height (bias 1).
+    // Every blend still has the requested ratio, because height = width / ratio.
     new Dimensions(
       lerpNumber(bias, self.width, self.height * ratio),
       lerpNumber(bias, self.width / ratio, self.height),
@@ -242,9 +242,9 @@ export const setAspectRatio: {
 /**
  * Clamps the width into `[minWidth, maxWidth]`, keeping the height.
  *
- * The minimum wins when the bounds cross, as in CSS `clamp()`: the
- * effective upper bound is `max(minWidth, maxWidth)`. The data-last form
- * omits `self` and returns a function of it.
+ * If the bounds cross, the minimum wins, as in CSS `clamp()`. The effective
+ * upper bound is `max(minWidth, maxWidth)`. The data-last form omits `self`
+ * and returns a function of it.
  *
  * @param self - The source extents. A `Rect` contributes only its width and height.
  * @param minWidth - The lower bound on the width.
@@ -269,9 +269,9 @@ export const clampWidth: {
 /**
  * Clamps the height into `[minHeight, maxHeight]`, keeping the width.
  *
- * The minimum wins when the bounds cross, as in CSS `clamp()`: the
- * effective upper bound is `max(minHeight, maxHeight)`. The data-last form
- * omits `self` and returns a function of it.
+ * If the bounds cross, the minimum wins, as in CSS `clamp()`. The effective
+ * upper bound is `max(minHeight, maxHeight)`. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The source extents. A `Rect` contributes only its width and height.
  * @param minHeight - The lower bound on the height.
@@ -293,17 +293,17 @@ export const clampHeight: {
 )
 
 /**
- * Clamps both extents at once. Each bound is a number, applied to both
- * axes, or a `Dimensions`/`Rect` supplying per-axis bounds.
+ * Clamps both extents at once. Each bound is a number for both axes, or a
+ * `Dimensions`/`Rect` with per-axis bounds.
  *
- * The width is clamped into the bounds' widths and the height into their
- * heights, independently. The minimum wins on each axis when the bounds
- * cross, as in CSS `clamp()`. The data-last form omits `self` and returns
+ * The width clamps to the widths of the bounds and the height to their
+ * heights, independently. On each axis, if the bounds cross, the minimum
+ * wins, as in CSS `clamp()`. The data-last form omits `self` and returns
  * a function of it.
  *
  * @param self - The source extents. A `Rect` contributes only its width and height.
  * @param min - The lower bound: a number for both axes, or per-axis extents.
- * @param max - The upper bound, likewise. Loses to `min` when the bounds cross.
+ * @param max - The upper bound, in the same form. Loses to `min` when the bounds cross.
  * @returns A `Dimensions` with both extents clamped.
  * @example
  * ```ts
@@ -340,12 +340,12 @@ export const clamp: {
 )
 
 /**
- * Scales the extents by a factor: one uniform factor, or separate x and y
- * factors.
+ * Scales the extents by one uniform factor, or by separate x and y factors.
  *
  * The results take their magnitude, so a negative factor acts as its
- * absolute value: `Dimensions.scale(self, -2)` is `Dimensions.scale(self, 2)`. The data-last
- * form omits `self` and returns a function of it, with one or two factors.
+ * absolute value. `Dimensions.scale(self, -2)` is `Dimensions.scale(self, 2)`.
+ * The data-last form omits `self` and returns a function of it, with one or
+ * two factors.
  *
  * @param self - The source extents. A `Rect` contributes only its width and height.
  * @param x - The width factor, and the height factor when `y` is omitted.
@@ -370,12 +370,12 @@ export const scale: {
 )
 
 /**
- * Scales both extents by the same factor so the area becomes `area`,
- * preserving the aspect ratio. The factor is `sqrt(area / self.area)`.
+ * Scales both extents by the same factor so that the area becomes `area`.
+ * The aspect ratio stays the same. The factor is `sqrt(area / self.area)`.
  *
- * A zero-area `self` returns what IEEE arithmetic produces: the factor is
- * `Infinity`, so a zero extent becomes `NaN` and a nonzero one `Infinity`.
- * No fallback values are invented. The data-last form omits `self` and
+ * A zero-area `self` returns what IEEE arithmetic produces. The factor is
+ * `Infinity`, so a zero extent becomes `NaN` and a nonzero one becomes
+ * `Infinity`. The function invents no fallback values. The data-last form omits `self` and
  * returns a function of it.
  *
  * @param self - The source extents. A `Rect` contributes only its width and height.
@@ -444,18 +444,18 @@ export const scaleToHeight: {
 })
 
 /**
- * Fits an aspect ratio inside `self`: the largest dimensions with the
- * requested `width / height` ratio whose extents do not exceed `self`'s —
- * the extents analogue of CSS `object-fit: contain`.
+ * Fits an aspect ratio inside `self`. The result is the largest dimensions
+ * with the requested `width / height` ratio whose extents do not exceed
+ * `self`'s. It is the extents analogue of CSS `object-fit: contain`.
  *
  * A ratio wider than `self`'s keeps the width and shrinks the height. A
  * narrower ratio keeps the height and shrinks the width. A ratio
  * coincident with `self`'s aspect ratio (the same per-field tolerance as
  * `equals`) keeps the exact input extents instead of recomputing them
- * through a division; a degenerate aspect ratio (`Infinity` or `NaN`,
+ * through a division. A degenerate aspect ratio (`Infinity` or `NaN`,
  * from a zero extent) matches only the identical ratio. A zero-extent
- * `self` with a finite positive ratio collapses to the zero dimensions —
- * nothing larger fits. The data-last form omits `self` and returns a
+ * `self` with a finite positive ratio collapses to the zero dimensions,
+ * because nothing larger fits. The data-last form omits `self` and returns a
  * function of it.
  *
  * @param self - The extents to fit inside. A `Rect` contributes only its width and height.
@@ -474,10 +474,11 @@ export const contain: {
 } = dual(2, (self: Dimensions | Rect, ratio: number) => {
   const aspectRatio = self.width / self.height
 
-  // A coincident ratio keeps the exact input extents (rewrapped: self may
-  // be a Rect) rather than round-tripping them through a division. The
-  // finite-only check matters: coincident(x, Infinity) is true for every x,
-  // which would freeze zero-height inputs at their input extents.
+  // A coincident ratio keeps the exact input extents instead of
+  // round-tripping them through a division. They are rewrapped because self
+  // can be a Rect. The check must be finite-only. coincident(x, Infinity) is
+  // true for every x, so a plain coincident check freezes zero-height inputs
+  // at their input extents.
   if (fieldsCoincident(ratio, aspectRatio)) {
     return new Dimensions(self.width, self.height)
   }
@@ -490,18 +491,18 @@ export const contain: {
 })
 
 /**
- * Covers `self` with an aspect ratio: the smallest dimensions with the
- * requested `width / height` ratio whose extents are at least `self`'s —
- * the extents analogue of CSS `object-fit: cover`.
+ * Covers `self` with an aspect ratio. The result is the smallest dimensions
+ * with the requested `width / height` ratio whose extents are at least
+ * `self`'s. It is the extents analogue of CSS `object-fit: cover`.
  *
  * A ratio wider than `self`'s keeps the height and grows the width. A
  * narrower ratio keeps the width and grows the height. A ratio coincident
  * with `self`'s aspect ratio (the same per-field tolerance as `equals`)
- * keeps the exact input extents; a degenerate aspect ratio (`Infinity` or
+ * keeps the exact input extents. A degenerate aspect ratio (`Infinity` or
  * `NaN`, from a zero extent) matches only the identical ratio. A
  * zero-extent `self` with a finite positive ratio keeps its nonzero
- * extent and derives the other through the ratio — the smallest covering
- * dimensions. The data-last form omits `self` and returns a function of
+ * extent and derives the other through the ratio. The result is the
+ * smallest covering dimensions. The data-last form omits `self` and returns a function of
  * it.
  *
  * @param self - The extents to cover. A `Rect` contributes only its width and height.
@@ -520,9 +521,9 @@ export const cover: {
 } = dual(2, (self: Dimensions | Rect, ratio: number) => {
   const aspectRatio = self.width / self.height
 
-  // Finite-only coincidence, as in contain: coincident(x, Infinity) is true
-  // for every x, which would freeze zero-height inputs at their input
-  // extents.
+  // The check is finite-only, as in contain. coincident(x, Infinity) is true
+  // for every x, so a plain coincident check freezes zero-height inputs at
+  // their input extents.
   if (fieldsCoincident(ratio, aspectRatio)) {
     return new Dimensions(self.width, self.height)
   }

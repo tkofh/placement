@@ -27,12 +27,12 @@ export function normalizeTRBL(
 
 /**
  * Resolves a chain of candidate values to the first finite one, or to the
- * last candidate when none is finite. This is the resolver behind the
- * library's `Infinity`-as-auto sentinels: `auto(value, fallback)` reads as
- * "value, unless it is auto, then fallback".
+ * last candidate when none is finite. The library uses it to resolve its
+ * `Infinity`-as-auto sentinels. Read `auto(value, fallback)` as "value,
+ * unless it is auto, then fallback".
  *
  * @param a - The preferred value.
- * @param b - The next candidate, consulted when `a` is not finite.
+ * @param b - The next candidate, used when `a` is not finite.
  * @param c - The next candidate after `b`.
  * @param tail - Any further candidates, in order of preference.
  * @returns The first finite candidate, or the last candidate when every one
@@ -84,12 +84,13 @@ export interface NormalizedSizing {
   readonly maxHeight: number
 }
 
-// Resolves a width/height pair from potentially-unset inputs (NaN = unset)
-// and an optional aspect ratio (0 = unset). Resolution order: two definite
-// dimensions win; one definite dimension plus a ratio derives the other; a
-// ratio alone is applied against the clamped zero fallbacks; otherwise both
-// fall back to clamped zero. Crossed constraints resolve as CSS clamp()
-// does: the maximum is raised to the minimum, so the minimum wins.
+// Resolves a width/height pair from inputs that can be unset (NaN means
+// unset) and an optional aspect ratio (0 means unset). If both dimensions are
+// definite, they win. If one dimension is definite and a ratio is set, the
+// ratio derives the other. A ratio alone applies against the clamped zero
+// fallbacks. Otherwise, both fall back to clamped zero. Crossed constraints
+// resolve as CSS clamp() does: the maximum rises to the minimum, so the
+// minimum wins.
 export function normalizeSizing(
   aspectRatio: number,
   width: number,

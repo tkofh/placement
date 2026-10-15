@@ -42,7 +42,7 @@ describe('strings', () => {
   })
 
   test('a single percentage resolves against the width for both components', () => {
-    // y copies the width-resolved x; it is not re-resolved against the height.
+    // y copies the width-resolved x. It is not re-resolved against the height.
     expect(resolveRadius('50%', auto, 200, 100)).toEqual(Point.make(100, 100))
   })
 

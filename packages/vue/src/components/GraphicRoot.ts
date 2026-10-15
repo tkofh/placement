@@ -30,8 +30,8 @@ export const GraphicRoot = defineComponent(
     const svg = shallowRef<SVGElement>()
     const domRect = useDomRect(svg)
 
-    // The measured <svg> is both the percent basis and the fill target: a
-    // dimension the props leave undetermined falls back to the measured
+    // The measured <svg> is both the percent basis and the fill target. A
+    // dimension that the props leave undetermined falls back to the measured
     // size, constrained (see `placement/box`).
     const box = computed(() =>
       Box.make({
@@ -59,9 +59,9 @@ export const GraphicRoot = defineComponent(
         viewBoxRect = domRect.value.pipe(Rect.align(rootRect.value, origin.value))
       } else {
         viewBoxRect = domRect.value.pipe(
-          // these are reversed (cover vs contain) because the viewBox is
-          // the "parent" rect in this context. when the viewBox "covers"
-          // the rootRect, then the rootRect is "contained" by the viewBox
+          // These are reversed (cover vs contain) because the viewBox is
+          // the "parent" rect here. When the viewBox "covers" the rootRect,
+          // the rootRect is "contained" by the viewBox.
           fit === 'cover' ? Rect.contain(rootRect.value, 0) : Rect.cover(rootRect.value, 0),
           Rect.align(rootRect.value, origin.value),
         )

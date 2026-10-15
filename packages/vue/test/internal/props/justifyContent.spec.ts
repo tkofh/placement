@@ -18,8 +18,8 @@ describe('keywords', () => {
 
 describe('numeric and undefined input', () => {
   // The numeric path spreads keywordResults.start, so the space channels are
-  // forced to 0 even when the auto arguments say otherwise -- unlike
-  // alignContent, whose numeric path keeps its space autos.
+  // forced to 0 even when the auto arguments say otherwise. In alignContent,
+  // the numeric path keeps its space autos.
   test('a number zeroes the space channels regardless of the autos', () => {
     expect(resolveJustifyContent(0.25)).toEqual({
       justifyContent: 0.25,

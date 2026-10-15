@@ -23,15 +23,15 @@ export type PathFit = 'none' | 'contain' | 'cover' | 'fill'
 
 export interface GraphicPathProps extends PaintProps {
   /**
-   * A curvy path or spline. Splines convert through their `toPath`;
-   * rational forms are approximated as cubic paths to `tolerance`.
+   * A curvy path or spline. Splines convert through their `toPath`. The
+   * component approximates rational forms as cubic paths to `tolerance`.
    */
   path?: PathInput
   /**
-   * How the path's coordinates meet the parent rect: `'none'` (default)
-   * reads them as parent-local pixels; the others map the path's bounding
-   * box onto the parent — `'fill'` stretches each axis, `'contain'` and
-   * `'cover'` scale uniformly and center.
+   * How the path coordinates relate to the parent rect. `'none'` (default)
+   * reads them as parent-local pixels. The other values map the bounding
+   * box of the path onto the parent. `'fill'` stretches each axis, and
+   * `'contain'` and `'cover'` scale uniformly and center.
    */
   fit?: PathFit
   /** Certified Hausdorff bound for rational approximation, in output pixels. */
@@ -89,8 +89,8 @@ export const GraphicPath = defineComponent(
         scaleY = scale
       }
 
-      // Scale about the box origin, then land it centered in the parent
-      // (fill centering is exact: the scaled box equals the parent).
+      // Scale about the box origin, then center the box in the parent. Fill
+      // centering is exact, because the scaled box equals the parent.
       const x = parentX.value + (parentWidth.value - boxWidth * scaleX) / 2 - box.x.start * scaleX
       const y = parentY.value + (parentHeight.value - boxHeight * scaleY) / 2 - box.y.start * scaleY
 
@@ -111,8 +111,8 @@ export const GraphicPath = defineComponent(
         d: pathData(path),
         ...attrs,
         ...paint.value,
-        // An SVG path with no fill attribute fills black; default to a
-        // stroke-only shape and let an explicit fill opt in.
+        // An SVG path with no fill attribute fills black. The default is a
+        // stroke-only shape, and an explicit fill opts in.
         fill: paint.value.fill ?? 'none',
       })
     }

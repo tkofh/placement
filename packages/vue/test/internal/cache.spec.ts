@@ -72,8 +72,8 @@ describe('createCache', () => {
   })
 
   test('re-setting an existing key updates in place without evicting', () => {
-    // An undefined result still stores a node, so its rerun flows through the
-    // update path of `set` -- which skips the size check.
+    // An undefined result still stores a node, so its rerun goes through the
+    // update path of `set`. That path skips the size check.
     const cache = createCache<string, number | undefined>(2)
     let aRuns = 0
     const a = () => {
@@ -90,9 +90,10 @@ describe('createCache', () => {
   })
 
   test('an undefined result still occupies an LRU slot', () => {
-    // Never returnable from cache, yet stored -- so it exerts eviction
-    // pressure on live entries. Current behavior; in-repo factories return
-    // null (which caches) rather than undefined, so this stays theoretical.
+    // The cache stores it but never returns it, so it exerts eviction
+    // pressure on live entries. This is current behavior. In-repo factories
+    // return null (which caches) rather than undefined, so this stays
+    // theoretical.
     const cache = createCache<string, number | undefined>(2)
     let aRuns = 0
     const a = () => {

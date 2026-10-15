@@ -7,7 +7,7 @@ export default defineConfig({
     'no-empty': 'off',
     'no-empty-pattern': 'off',
     // Effect-style modules export ops (track, flexbox, center, angle) whose
-    // names are also the natural parameter names; shadowing is pervasive and
+    // names are also the natural parameter names. Shadowing is frequent and
     // intentional here.
     'no-shadow': 'off',
     'no-underscore-dangle': 'off',

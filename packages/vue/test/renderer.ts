@@ -1,9 +1,10 @@
 import { createRenderer } from 'vue'
 
-// A minimal object-tree host for driving components without a DOM. Uniform
-// node shape (elements, text, and comments all carry every field) so nodeOps
-// never needs to narrow. A class rather than a plain literal so specs can
-// stub the `Element` global to it and satisfy `instanceof Element` checks.
+// A minimal object-tree host that drives components without a DOM. The node
+// shape is uniform (elements, text, and comments all carry every field), so
+// nodeOps never needs to narrow. It is a class rather than a plain literal,
+// so specs can stub the `Element` global to it and satisfy `instanceof
+// Element` checks.
 export class TestNode {
   children: Array<TestNode> = []
   parent: TestNode | null = null
@@ -36,7 +37,7 @@ const renderer = createRenderer<TestNode, TestNode>({
   createComment: (text) => make('#comment', text),
   createElement: (tag) => make(tag),
   createText: (text) => make('#text', text),
-  // Detach first: KeepAlive and keyed patches move nodes between parents.
+  // Detach first, because KeepAlive and keyed patches move nodes between parents.
   insert(node, parent, anchor) {
     detach(node)
     node.parent = parent

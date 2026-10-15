@@ -336,8 +336,8 @@ describe('contain', () => {
   })
 
   test('non-square inputs', () => {
-    // A ratio wider than the input fits against the width, narrower fits
-    // against the height.
+    // A ratio wider than the input fits against the width, and a narrower
+    // one fits against the height.
     expect(Dimensions.contain(Dimensions.make(100, 50), 4)).toEqual(Dimensions.make(100, 25))
     expect(Dimensions.contain(Dimensions.make(100, 50), 1)).toEqual(Dimensions.make(50, 50))
   })
@@ -402,7 +402,7 @@ describe('cover', () => {
   })
 
   test('zero-extent inputs derive the smallest covering extents (regression)', () => {
-    // The coincident shortcut used to fire on an Infinity aspect ratio:
+    // The coincident shortcut used to fire on an Infinity aspect ratio, so
     // Dimensions.cover(Dimensions.make(100, 0), 2) returned 100x0.
     expect(Dimensions.cover(Dimensions.make(100, 0), 2)).toEqual(Dimensions.make(100, 50))
     expect(Dimensions.cover(Dimensions.make(0, 100), 2)).toEqual(Dimensions.make(200, 100))

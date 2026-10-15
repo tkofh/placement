@@ -41,7 +41,7 @@ describe('strings', () => {
   })
 
   // Bare numbers parse with `min: 0`, so a negative needs a unit ('-10px'
-  // above) to survive. The cast is deliberate: the declared input type
+  // above) to survive. The cast is deliberate. The declared input type
   // excludes malformed strings, but the runtime must absorb them.
   test.each(['-12', 'garbage', '10em', '10 20', ''])(
     'invalid input %j falls back to auto',

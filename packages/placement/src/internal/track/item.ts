@@ -27,9 +27,9 @@ export class TrackItem {
 
   readonly initialSize: number
 
-  // Inputs are immutable; only adjustment mutates after construction, so
-  // everything else is precomputed here and only the adjustment-dependent
-  // values are getters.
+  // Inputs are immutable. Only adjustment changes after construction, so the
+  // constructor precomputes everything else. Only the values that depend on
+  // adjustment are getters.
   adjustment = 0
 
   readonly #baseSize: number

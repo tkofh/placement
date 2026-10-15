@@ -3,9 +3,9 @@ import { GraphicRoot, type GraphicRootProps } from '../../src/components/Graphic
 
 const mounted: Array<{ app: App; container: HTMLElement }> = []
 
-// Browser specs drive the real components in real Chromium; the geometry
-// math is covered by the unit suite, so these helpers only get content
-// onto a measured <svg> and settle the ResizeObserver round trip.
+// Browser specs drive the real components in real Chromium. The unit suite
+// covers the geometry math, so these helpers only get content onto a
+// measured <svg> and settle the ResizeObserver round trip.
 export interface Mounted {
   container: HTMLElement
   svg: SVGSVGElement
@@ -31,8 +31,8 @@ export async function mountInRoot(
   if (svg === null) {
     throw new Error('GraphicRoot did not render an <svg>')
   }
-  // `svg` fills its container (the browser default for a block-level box
-  // with width/height 100% is applied here so the observer reports it).
+  // `svg` fills its container. This code applies the browser default for a
+  // block-level box with width/height 100%, so that the observer reports it.
   svg.style.width = '100%'
   svg.style.height = '100%'
   svg.style.display = 'block'
@@ -41,8 +41,8 @@ export async function mountInRoot(
   return { container, svg, app }
 }
 
-// ResizeObserver delivers before the next paint; the viewBox then flows back
-// through a Vue render. Two frames plus a tick covers the round trip.
+// ResizeObserver delivers before the next paint. The viewBox then flows back
+// through a Vue render. Two frames plus a tick cover the round trip.
 export async function settle(): Promise<void> {
   await nextTick()
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))

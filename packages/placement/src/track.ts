@@ -20,14 +20,14 @@ const TypeBrand: unique symbol = Symbol('placement/track')
 type TypeBrand = typeof TypeBrand
 
 /**
- * A non-empty, ordered collection of `Interval`s along one axis — the shape
- * of a solved 1D layout, holding one interval per item in item order.
+ * A non-empty, ordered collection of `Interval`s along one axis. It is the
+ * shape of a solved 1D layout, with one interval per item in item order.
  *
- * Immutable: every operation returns a new `Track`. The bounds are exact
- * IEEE 754 arithmetic over the members (see PRECISION.md): `start` is the
- * smallest member start, `end` the largest member end, and `size` their
- * difference. Member intervals may have negative sizes, in which case the
- * bounds can invert (`end < start`).
+ * A `Track` is immutable. Every operation returns a new `Track`. The bounds
+ * come from exact IEEE 754 arithmetic over the members (see PRECISION.md).
+ * `start` is the smallest member start, `end` the largest member end, and
+ * `size` their difference. Member intervals can have negative sizes. In
+ * that case, the bounds can invert (`end < start`).
  *
  * Construct with `make`, or solve item specifications with `stack` or
  * `sequence`.
@@ -110,8 +110,8 @@ export function make(intervals: ReadonlyArray<Interval.Interval>): Track {
 /**
  * Checks if a value is a `Track`.
  *
- * True only for values built by this module's constructors, which carry the
- * brand — a structural record of intervals is not a `Track`.
+ * True only for values that this module's constructors built, which carry
+ * the brand. A structural record of intervals is not a `Track`.
  *
  * @param value - The value to check.
  * @returns `true` if the value is a `Track`, `false` otherwise.
@@ -124,21 +124,22 @@ export const isTrack = (value: unknown): value is Track => {
  * An item to lay out with `stack`: a size specification plus per-item
  * placement. Every field is optional:
  *
- * - `basis` — the item's size before stretching, clamped to `[min, max]`.
+ * - `basis`: the item's size before stretching, clamped to `[min, max]`.
  *   Defaults to `0`.
- * - `min` / `max` — bounds the final size never escapes. Negative values
- *   clamp to `0`. Default to `0` and `Infinity`.
- * - `start` / `end` — definite offsets reserved before and after the item.
- *   A non-finite value marks the offset auto: auto offsets absorb the
- *   item's free space (an auto `start` pushes the item to the track's end,
- *   auto offsets on both sides center it), and the item ignores `place` and
- *   never stretches. When the item overflows the track, auto offsets
+ * - `min` / `max`: the bounds of the final size. Negative values clamp to
+ *   `0`. Default to `0` and `Infinity`.
+ * - `start` / `end`: definite offsets reserved before and after the item.
+ *   A non-finite value makes the offset auto. Auto offsets absorb the
+ *   item's free space: an auto `start` pushes the item to the track's end,
+ *   and auto offsets on both sides center it. The item then ignores `place`
+ *   and never stretches. If the item overflows the track, auto offsets
  *   resolve to `0` instead of going negative. Default to `0`.
- * - `stretch` — the item's own stretch fraction, overriding the track-level
- *   `stretch`. Non-finite (the default) inherits the track's value.
- * - `place` — the item's own normalized position within its free space,
- *   overriding the track-level `place`. Non-finite (the default) inherits
- *   the track's value.
+ * - `stretch`: the item's own stretch fraction. It overrides the
+ *   track-level `stretch`. A non-finite value (the default) inherits the
+ *   track's value.
+ * - `place`: the item's own normalized position within its free space. It
+ *   overrides the track-level `place`. A non-finite value (the default)
+ *   inherits the track's value.
  */
 export type StackItem = StackTrackItem
 
@@ -146,20 +147,20 @@ export type StackItem = StackTrackItem
  * An item to lay out with `sequence`: a flexbox-style main-axis
  * specification. Every field is optional:
  *
- * - `basis` — the item's size before growing or shrinking, clamped to
+ * - `basis`: the item's size before growing or shrinking, clamped to
  *   `[min, max]`. Defaults to `0`.
- * - `min` / `max` — bounds the final size never escapes, even under grow or
- *   shrink pressure. Negative values clamp to `0`. Default to `0` and
+ * - `min` / `max`: the bounds of the final size, which hold even under grow
+ *   or shrink pressure. Negative values clamp to `0`. Default to `0` and
  *   `Infinity`.
- * - `start` / `end` — definite offsets reserved before and after the item,
- *   like margins. A non-finite value marks the offset auto: under a
+ * - `start` / `end`: definite offsets reserved before and after the item,
+ *   like margins. A non-finite value makes the offset auto. Under a
  *   definite track `size`, every auto offset in the sequence absorbs an
- *   equal share of the free space (an auto `start` pushes the item toward
- *   the end, auto offsets on both sides center it); without one they
- *   resolve to `0`. Default to `0`.
- * - `grow` — the item's share of positive free space, relative to the other
+ *   equal share of the free space: an auto `start` pushes the item toward
+ *   the end, and auto offsets on both sides center it. Without a definite
+ *   `size`, auto offsets resolve to `0`. Default to `0`.
+ * - `grow`: the item's share of positive free space, relative to the other
  *   items' `grow` factors. Defaults to `0`.
- * - `shrink` — the item's share of negative free space, scaled by its
+ * - `shrink`: the item's share of negative free space, scaled by its
  *   `basis` so larger items give up proportionally more (as in CSS
  *   flexbox). Defaults to `0`, unlike CSS's `1`.
  */
@@ -171,29 +172,29 @@ interface BaseOptions {
    * packs to the start, `0.5` centers, `1` packs to the end. Values outside
    * `[0, 1]` extrapolate. Defaults to `0`.
    *
-   * `stack` positions each item independently; `sequence` positions the
+   * `stack` positions each item independently. `sequence` positions the
    * whole run of items together.
    */
   place?: number
   /**
    * The size to lay out against. Omitted or `Number.POSITIVE_INFINITY`
    * means auto: `stack` uses its largest item's size, and `sequence` skips
-   * free-space distribution entirely, keeping items at their natural sizes.
+   * free-space distribution and keeps items at their natural sizes.
    */
   size?: number
 }
 
 /**
- * Options for `stack`. Every field is optional: an empty options object
+ * Options for `stack`. Every field is optional. An empty options object
  * lays each item out at its basis size, packed to the start.
  */
 export interface StackOptions extends BaseOptions {
   /**
-   * The fraction of each item's free space — the track size minus the
-   * item's outer size — added to its size: `0` (the default) keeps items at
-   * their basis, `1` stretches them to fill the track, negative values
-   * shrink them. Results clamp to each item's `[min, max]`; items with auto
-   * offsets never stretch.
+   * The fraction of each item's free space that is added to its size. The
+   * free space is the track size minus the item's outer size. `0` (the
+   * default) keeps items at their basis, `1` stretches them to fill the
+   * track, and negative values shrink them. Results clamp to each item's
+   * `[min, max]`. Items with auto offsets never stretch.
    *
    * Items with a finite `stretch` of their own override this value.
    */
@@ -201,12 +202,12 @@ export interface StackOptions extends BaseOptions {
 }
 
 /**
- * Options for `sequence`. Every field is optional: an empty options object
+ * Options for `sequence`. Every field is optional. An empty options object
  * lays items end to end at their basis sizes, starting at `0`.
  */
 export interface SequenceOptions extends BaseOptions {
   /**
-   * Space between adjacent items — never before the first or after the
+   * Space between adjacent items, never before the first item or after the
    * last. Negative values overlap items. Gaps count toward the used size
    * that growing, shrinking, and free-space distribution work against.
    * Defaults to `0`.
@@ -214,8 +215,8 @@ export interface SequenceOptions extends BaseOptions {
   gap?: number
   /**
    * The fraction of the free space left after growing and shrinking that
-   * becomes spacing between the items; the rest is positioned by `place`.
-   * Negative values (or negative free space) overlap items. Takes effect
+   * becomes spacing between the items. `place` positions the rest.
+   * Negative values (or negative free space) overlap items. It takes effect
    * only with a definite `size`, more than one item, and no auto offsets.
    * Defaults to `0`.
    */
@@ -223,41 +224,43 @@ export interface SequenceOptions extends BaseOptions {
   /**
    * How much of the spacing distributed by `space` reaches the track's
    * edges: `0` (the default) keeps it all between items (space-between),
-   * `1` spreads it evenly around them (space-evenly). Inert unless `space`
-   * distributes something.
+   * `1` spreads it evenly around them (space-evenly). It has no effect
+   * unless `space` distributes some spacing.
    */
   spaceOuter?: number
   /**
-   * The fraction of its computed growth each item actually receives: `1`
-   * (the default) grows fully, `0` disables growing. Growth is distributed
-   * and clamped against `[min, max]` first, then scaled; the growth a
-   * fractional ratio withholds stays free for `space` and `place`.
+   * The fraction of its computed growth that each item receives: `1` (the
+   * default) grows fully, `0` disables growing. The solver first
+   * distributes the growth and clamps it against `[min, max]`, then scales
+   * it. The growth that a fractional ratio withholds stays free for `space`
+   * and `place`.
    */
   growRatio?: number
   /**
-   * The fraction of its computed shrinkage each item actually receives: `1`
-   * (the default) shrinks fully, `0` disables shrinking. Shrinkage is
-   * distributed and clamped against `[min, max]` first, then scaled; the
-   * shrinkage a fractional ratio withholds still counts as used space for
-   * `space` and `place`.
+   * The fraction of its computed shrinkage that each item receives: `1`
+   * (the default) shrinks fully, `0` disables shrinking. The solver first
+   * distributes the shrinkage and clamps it against `[min, max]`, then
+   * scales it. The shrinkage that a fractional ratio withholds still counts
+   * as used space for `space` and `place`.
    */
   shrinkRatio?: number
 }
 
 /**
- * Solves a stack layout — flexbox's cross axis: items are laid over one
- * another against a shared origin at `0`, one interval per item in item
- * order.
+ * Solves a stack layout, the cross axis of flexbox. The items lie over one
+ * another against a shared origin at `0`, with one interval per item in
+ * item order.
  *
- * The track size is `options.size`, or the largest item's size when omitted
- * or non-finite. Each item takes its clamped `basis`, stretches by `stretch`
- * toward the track size, and lands at `place * free + start`, where `free`
- * is the track size minus the item's outer size (its size plus its
- * `start`/`end` offsets). An item with auto (non-finite) offsets ignores
- * `place`: the auto offsets absorb its free space instead, so an auto
- * `start` pushes it to the end and auto offsets on both sides center it.
- * When the item overflows the track, its auto offsets resolve to `0`
- * instead of going negative and its clamped size stands.
+ * The track size is `options.size`. If `options.size` is omitted or
+ * non-finite, the track size is the largest item's size. Each item takes
+ * its clamped `basis`, stretches by `stretch` toward the track size, and
+ * lands at `place * free + start`. Here `free` is the track size minus the
+ * item's outer size (its size plus its `start`/`end` offsets). An item with
+ * auto (non-finite) offsets ignores `place`. Its auto offsets absorb its
+ * free space instead, so an auto `start` pushes it to the end and auto
+ * offsets on both sides center it. If the item overflows the track, its
+ * auto offsets resolve to `0` instead of going negative, and the item
+ * keeps its clamped size.
  *
  * The data-last form omits `items` and returns a function of them.
  *
@@ -301,9 +304,9 @@ export const stack: {
       const free = size - item.definiteOuterSize
 
       if (item.autoOffsetCount > 0) {
-        // Auto offsets absorb the item's free space; when the item
-        // overflows the track they resolve to zero instead of going
-        // negative (as in CSS), and the min/max-clamped size stands.
+        // Auto offsets absorb the item's free space. If the item overflows
+        // the track, they resolve to zero instead of going negative (as in
+        // CSS), and the item keeps its min/max-clamped size.
         return Interval.make(
           (item.startIsAuto ? Math.max(free, 0) / item.autoOffsetCount : 0) + item.definiteStart,
           item.size,
@@ -369,21 +372,21 @@ function sequenceWithFreeSpace(
 }
 
 /**
- * Solves a sequence layout — flexbox's main axis: items are placed one
+ * Solves a sequence layout, the main axis of flexbox. The items go one
  * after another, separated by `gap` and their own `start`/`end` offsets,
- * one interval per item in item order.
+ * with one interval per item in item order.
  *
- * With a definite `size`, the free space — `size` minus the items' outer
- * sizes and the gaps — resolves in priority order:
+ * With a definite `size`, the free space is `size` minus the items' outer
+ * sizes and the gaps. It resolves in priority order:
  *
- * - Auto (non-finite) `start`/`end` offsets, when any are present, absorb
- *   equal shares of the free space; growing, shrinking, and `space` are
- *   skipped.
- * - Otherwise items grow into positive free space or shrink to fit negative
- *   free space, weighted by their `grow`/`shrink` factors and clamped to
- *   their `[min, max]` bounds.
- * - Free space still left becomes spacing per `space` and `spaceOuter`, and
- *   the remainder positions the run per `place`.
+ * - If any auto (non-finite) `start`/`end` offsets are present, they absorb
+ *   equal shares of the free space. The solver skips growing, shrinking,
+ *   and `space`.
+ * - Otherwise, items grow into positive free space or shrink to fit
+ *   negative free space. Their `grow`/`shrink` factors weight the change,
+ *   and their `[min, max]` bounds clamp it.
+ * - The free space that is still left becomes spacing per `space` and
+ *   `spaceOuter`. The remainder positions the run per `place`.
  *
  * Without a `size` (omitted or `Infinity`), items keep their natural sizes,
  * auto offsets resolve to `0`, and `place` aligns the run relative to
@@ -424,7 +427,7 @@ export const sequence: {
 
   if (totals.autoOffsetCount > 0) {
     // Auto offsets absorb all the free space, so place has nothing left to
-    // position (as in CSS, auto margins win over justification); when the
+    // position (as in CSS, auto margins win over justification). If the
     // items overflow, the auto offsets resolve to zero instead of going
     // negative.
     return sequenceWithoutFreeSpace(
@@ -467,7 +470,7 @@ export const toInterval = (self: Track): Interval.Interval => {
 }
 
 /**
- * Shifts every interval by `amount`, preserving sizes.
+ * Shifts every interval by `amount`. Sizes do not change.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -493,7 +496,7 @@ export const translate: {
 /**
  * Scales the track about a point given as a normalized position within its
  * bounds: origin `0` holds `start` fixed, `1` holds `end`, `0.5` the
- * midpoint. Positions and sizes both scale; a negative `factor` mirrors
+ * midpoint. Positions and sizes both scale. A negative `factor` mirrors
  * positions while sizes stay non-negative.
  *
  * The data-last form omits `self` and returns a function of it.
@@ -520,7 +523,7 @@ export const scale: {
 )
 
 /**
- * Scales the track about an absolute coordinate — the fixed-position
+ * Scales the track about an absolute coordinate. It is the fixed-position
  * counterpart of `scale`, whose origin is normalized. A negative `factor`
  * mirrors positions while sizes stay non-negative.
  *
@@ -553,16 +556,16 @@ export const scaleFrom: {
     ),
 )
 
-// alignTo takes a fixed arity: its target may itself be a Track, so a
-// trailing optional would make 2-argument calls ambiguous between the
-// data-first and data-last forms.
+// alignTo takes a fixed arity. Its target can itself be a Track, so a
+// trailing optional makes 2-argument calls ambiguous between the data-first
+// and data-last forms.
 /**
- * Moves the track rigidly — item layout preserved — so the point at
- * `origin` within its bounds lands on the corresponding point of `target`:
- * a number is the position itself, while an interval or track contributes
- * `target.start + target.size * origin`.
+ * Moves the track rigidly, without a change to the item layout, so that the
+ * point at `origin` within its bounds lands on the matching point of
+ * `target`. A number target is the position itself. An interval or track
+ * target gives the position `target.start + target.size * origin`.
  *
- * Both `target` and `origin` are always required: a 2-argument call is the
+ * Both `target` and `origin` are always required. A 2-argument call is the
  * data-last form, which omits `self` and returns a function of it.
  *
  * @param self - The track to move.
@@ -588,9 +591,9 @@ export const alignTo: {
 })
 
 /**
- * Scales the track so its bounds span `size`, holding the point at `origin`
- * fixed: `Track.scale(self, size / self.size, origin)`, so item sizes and spacing
- * change proportionally. A zero-size track divides by zero and yields IEEE
+ * Scales the track so its bounds span `size` and the point at `origin` stays
+ * fixed. It is `Track.scale(self, size / self.size, origin)`, so item sizes
+ * and spacing change proportionally. A zero-size track divides by zero and yields IEEE
  * `Infinity`/`NaN` coordinates (see PRECISION.md).
  *
  * The data-last form omits `self` and returns a function of it.
@@ -616,13 +619,13 @@ export const setSize: {
 )
 
 /**
- * Maps every interval through `fn`; the results become the new track's
+ * Maps every interval through `fn`. The results become the new track's
  * intervals, in the same order.
  *
  * The data-last form omits `self` and returns a function of it.
  *
  * @param self - The track to map.
- * @param fn - Receives each interval, its index, and the whole track;
+ * @param fn - Receives each interval, its index, and the whole track, and
  * returns the replacement interval.
  * @returns A `Track` of the mapped intervals.
  */
@@ -644,13 +647,13 @@ export const map: {
 
 /**
  * Aligns every item to the same absolute coordinate: each interval's point
- * at `origin` (normalized within the item) lands on `position`. Sizes are
- * preserved, so the items end up overlapping.
+ * at `origin` (normalized within the item) lands on `position`. Sizes do
+ * not change, so the items overlap.
  *
  * The data-last form omits `self` and returns a function of it.
  *
  * @param self - The track whose items to align.
- * @param position - The coordinate every item is aligned to.
+ * @param position - The coordinate to align every item to.
  * @param origin - The anchor within each item: `0` its start, `0.5` its
  * center, `1` its end. Defaults to `0`.
  * @returns The aligned `Track`.
@@ -673,8 +676,8 @@ export const alignItemsTo: {
 
 /**
  * Aligns every item to the same normalized position within the track's
- * bounds: `0` the start, `0.5` the center, `1` the end. Sizes are
- * preserved, so the items end up overlapping.
+ * bounds: `0` the start, `0.5` the center, `1` the end. Sizes do not
+ * change, so the items overlap.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -725,10 +728,10 @@ export const reflect: {
 )
 
 /**
- * Re-expresses every interval as a fraction of `target`: starts map to
- * their normalized position within it, sizes to their share of its size.
- * With the default target — the track's own bounds — the result spans
- * `[0, 1]`.
+ * Re-expresses every interval as a fraction of `target`. Starts map to
+ * their normalized position within it, and sizes map to their share of its
+ * size. With the default target, which is the track's own bounds, the
+ * result spans `[0, 1]`.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -750,15 +753,15 @@ export const normalize: {
     map(self, (interval) => Interval.normalize(target, interval)),
 )
 
-// remap takes a fixed arity: a Track is itself IntervalLike, so a 2-argument
-// data-first convenience could not be disambiguated from the data-last form.
-// Callers pass toInterval(self) as the source explicitly.
+// remap takes a fixed arity. A Track is itself IntervalLike, so the
+// dispatcher cannot tell a 2-argument data-first convenience from the
+// data-last form. Callers pass toInterval(self) as the source explicitly.
 /**
  * Maps every interval from the `source` coordinate space into the `target`
- * space: starts remap between the spaces, sizes rescale by the ratio of the
- * spaces' sizes.
+ * space. Starts remap between the spaces, and sizes rescale by the ratio of
+ * the spaces' sizes.
  *
- * The source is always explicit — a 2-argument call is the data-last form,
+ * The source is always explicit. A 2-argument call is the data-last form,
  * which omits `self` and returns a function of it. To remap from the
  * track's own bounds, pass `Track.toInterval(self)` as `source`.
  *
@@ -784,8 +787,8 @@ export const remap: {
 )
 
 /**
- * Lays the items end to end in array order, preserving sizes, with `gap`
- * between adjacent items. The run starts at
+ * Lays the items end to end in array order, with `gap` between adjacent
+ * items. Sizes do not change. The run starts at
  * `start + origin * (size - runSize)`, so `origin` positions the packed run
  * within the track's current bounds: `0` at the start, `1` at the end.
  *
@@ -828,9 +831,9 @@ export const distribute: {
 /**
  * Spreads the items across `target` in array order: the first item starts
  * at `target.start`, the last ends at `target.end`, and the space left over
- * splits into equal gaps between adjacent items. Sizes are preserved; the
- * gaps are negative when the items oversize the target. A single item is
- * placed at `target.start`.
+ * splits into equal gaps between adjacent items. Sizes do not change. The
+ * gaps are negative when the items are larger in total than the target. A
+ * single item goes at `target.start`.
  *
  * The data-last form omits `self` and returns a function of it.
  *
@@ -911,14 +914,14 @@ export const lerp: {
 )
 
 /**
- * Repositions each interval to start at the coordinate returned by `fn`,
- * preserving sizes.
+ * Repositions each interval to start at the coordinate that `fn` returns.
+ * Sizes do not change.
  *
  * The data-last form omits `self` and returns a function of it.
  *
  * @param self - The track to reposition.
- * @param fn - Receives each interval and its index; returns the interval's
- * new start.
+ * @param fn - Receives each interval and its index, and returns the
+ * interval's new start.
  * @returns The repositioned `Track`.
  */
 export const mapItemStarts: {
@@ -929,14 +932,14 @@ export const mapItemStarts: {
 )
 
 /**
- * Repositions each interval to end at the coordinate returned by `fn`,
- * preserving sizes.
+ * Repositions each interval to end at the coordinate that `fn` returns.
+ * Sizes do not change.
  *
  * The data-last form omits `self` and returns a function of it.
  *
  * @param self - The track to reposition.
- * @param fn - Receives each interval and its index; returns the interval's
- * new end.
+ * @param fn - Receives each interval and its index, and returns the
+ * interval's new end.
  * @returns The repositioned `Track`.
  */
 export const mapItemEnds: {
@@ -947,9 +950,9 @@ export const mapItemEnds: {
 )
 
 /**
- * Resizes every item in place: each interval takes the size given by
- * `size`, anchored so its point at `origin` (normalized within the item:
- * `0` start, `0.5` center, `1` end) keeps its coordinate. `size` and
+ * Resizes every item in place. Each interval takes the size given by
+ * `size`, and its point at `origin` (normalized within the item: `0` start,
+ * `0.5` center, `1` end) keeps its coordinate. `size` and
  * `origin` each accept a number or a per-item function.
  *
  * The data-last form omits `self` and returns a function of it.
@@ -957,8 +960,8 @@ export const mapItemEnds: {
  * @param self - The track to resize.
  * @param size - The new item size, or a function of each interval, its
  * index, and the track.
- * @param origin - The per-item anchor, or a function computing one.
- * Defaults to `0`, holding starts fixed.
+ * @param origin - The per-item anchor, or a function that computes one.
+ * Defaults to `0`, which holds starts fixed.
  * @returns The resized `Track`.
  * @example
  * ```ts
@@ -1003,9 +1006,10 @@ export const mapItemSizes: {
 )
 
 /**
- * Checks two tracks for equality: the same number of intervals, with each
- * pair equal within tolerance (`coincident` per field — see PRECISION.md),
- * so rounding noise at any magnitude does not break equality.
+ * Checks two tracks for equality. The tracks must have the same number of
+ * intervals, and each pair must be equal within tolerance (`coincident` per
+ * field, see PRECISION.md). Rounding noise at any magnitude does not break
+ * equality.
  *
  * The data-last form omits `self` and returns a function of it.
  *

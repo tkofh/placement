@@ -20,7 +20,7 @@ describe('undefined', () => {
 
 describe('single keywords', () => {
   // Each case picks an auto for the untouched channel that differs from the
-  // keyword's own mapping, so a wrong write-through would be visible.
+  // keyword's own mapping, so a wrong write-through is visible.
   test.each([
     { input: 'row', expected: Flexbox.direction.row },
     { input: 'row-reverse', expected: Flexbox.direction.rowReverse },

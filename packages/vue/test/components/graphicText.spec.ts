@@ -8,8 +8,8 @@ import { TestNode } from '../renderer.ts'
 
 const host = Rect.make(0, 0, 200, 100)
 
-// The component checks these globals at setup/watch time, so they must be
-// stubbed before mounting.
+// The component checks these globals at setup/watch time, so the test must
+// stub them before mounting.
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', FakeResizeObserver)
   vi.stubGlobal('Element', TestNode)
@@ -32,8 +32,8 @@ async function mountText(props: GraphicTextProps | null) {
 }
 
 // GraphicText holds its element in a deep `ref` (not `shallowRef`), and Vue
-// only exempts real DOM element types from reactive conversion -- so the
-// observer watches a reactive proxy of the TestNode. Unwrap to match.
+// only exempts real DOM element types from reactive conversion. The observer
+// therefore watches a reactive proxy of the TestNode. Unwrap to match.
 async function measure(root: TestNode, width: number, height: number) {
   const node = findOne(root, 'text')
   for (const instance of FakeResizeObserver.instances) {

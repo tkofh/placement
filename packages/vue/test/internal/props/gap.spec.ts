@@ -34,7 +34,7 @@ describe('strings', () => {
   })
 
   test('a single percentage resolves against the height for both gaps', () => {
-    // columnGap copies the height-resolved rowGap; it never sees the width.
+    // columnGap copies the height-resolved rowGap. It never sees the width.
     expect(resolveGap('50%', 1, 2, 400, 200)).toEqual({ rowGap: 100, columnGap: 100 })
   })
 

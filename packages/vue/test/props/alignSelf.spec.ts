@@ -5,7 +5,7 @@ import { type AlignSelfInput, useAlignSelf } from '../../src/props/alignSelf.ts'
 
 describe('useAlignSelf', () => {
   test("the wrapper defaults the fallback to start, not the resolver's inherit sentinels", () => {
-    // resolveAlignSelf's own defaults are the Infinity inherit sentinels; the
+    // resolveAlignSelf's own defaults are the Infinity inherit sentinels. The
     // wrapper pins the fallback to keywordResults.start.
     expect(useAlignSelf(() => undefined).value).toEqual(keywordResults.start)
   })

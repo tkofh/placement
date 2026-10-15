@@ -9,8 +9,8 @@ export type FillInput =
   | (string & {})
   | undefined
 
-// Property names are the kebab-case SVG presentation attribute names so an
-// instance can be spread verbatim onto an SVG element's attrs: browsers
+// Property names are the kebab-case SVG presentation attribute names, so that
+// an instance can spread verbatim onto the attrs of an SVG element. Browsers
 // ignore unknown camelCase attributes like `fillRule`.
 export class Fill {
   readonly fill: string | undefined

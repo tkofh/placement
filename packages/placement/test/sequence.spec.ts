@@ -188,7 +188,7 @@ describe('with shrink', () => {
   })
 
   test('2:1 shrink shares land within rounding distance of exact thirds', () => {
-    // The shares put thirds through cancellation; construction is exact
+    // The shares put thirds through cancellation. Construction is exact
     // IEEE, so the result carries an ulp of rounding (see PRECISION.md).
     const result = Track.sequence(
       [
@@ -696,9 +696,9 @@ describe('dual forms', () => {
 })
 
 describe('float-dust termination (regression)', () => {
-  // Distribution rounds leave remainders manufactured by cancellation; the
+  // Distribution rounds leave remainders that cancellation produces. The
   // loop treats anything below RELATIVE_TOLERANCE of the initial free space
-  // as consumed instead of distributing subatomic sizes (see PRECISION.md).
+  // as consumed, instead of distributing tiny sizes (see PRECISION.md).
   test('growing by non-dyadic factors terminates with sizes summing to the available space', () => {
     const result = Track.sequence(
       [
@@ -726,8 +726,8 @@ describe('float-dust termination (regression)', () => {
 })
 
 describe('auto offsets (regression)', () => {
-  // Auto (non-finite) start/end offsets absorb the free space; the walkers
-  // must use definiteStart/definiteEnd or the Infinity sentinel leaks into
+  // Auto (non-finite) start/end offsets absorb the free space. The walkers
+  // must use definiteStart/definiteEnd, or the Infinity sentinel leaks into
   // interval positions.
   test('an auto start offset pushes the item to the end', () => {
     const result = Track.sequence([{ basis: 100, start: Number.POSITIVE_INFINITY }], { size: 500 })
@@ -778,9 +778,9 @@ describe('auto offsets win over place (regression)', () => {
 })
 
 describe('fractional ratios report scaled consumption (regression)', () => {
-  // applyGrow/applyShrink scale each item's adjustment by the ratio but
-  // used to report the unscaled distribution as consumed, so place and
-  // space saw less free space than actually remained.
+  // applyGrow/applyShrink scale the adjustment of each item by the ratio,
+  // but they used to report the unscaled distribution as consumed. Then
+  // place and space saw less free space than remained.
   test('growRatio 0.5 leaves the ungrown half of the free space for place', () => {
     const result = Track.sequence([{ basis: 0, grow: 1 }], { size: 100, growRatio: 0.5, place: 1 })
     expect(result.intervals).toEqual([Interval.make(50, 50)])
