@@ -35,8 +35,8 @@ track of lines. `Frame` is a flex-item spec. `Flexbox` is the container spec,
 and `Flexbox.apply` solves it. `Box` is a positioned-box spec (CSS absolute
 positioning). `Box.apply` solves it against a parent rect, and every
 non-finite input acts as unset. `Hierarchy` is a layered graph layout spec.
-`Hierarchy.apply` solves a `Map` of key to `Frame` plus `Edge` specs (which
-reference node keys) through the phases in `internal/hierarchy/`: acyclic,
+`Hierarchy.apply` solves `Frame`s with ids plus `Edge` specs (which
+reference frame ids) through the phases in `internal/hierarchy/`: acyclic,
 rank (network simplex), order, position (Brandes-Köpf), and layout (bands,
 ports, routes). `Rect`, `Point`, `Dimensions`, and `Offset`
 are the 2D value types. Type-only cross-module imports can stay flat

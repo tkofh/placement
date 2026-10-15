@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest'
+import * as Flexbox from '../src/flexbox.ts'
 import * as Frame from '../src/frame.ts'
+import * as Rect from '../src/rect.ts'
 
 describe('frame', () => {
   test('empty input applies the defaults', () => {
@@ -378,5 +380,51 @@ describe('frame through a Proxy', () => {
     expect(frame.height).toBe(50)
     expect(frame.toJSON()).toMatchObject({ width: 100, height: undefined, aspectRatio: 2 })
     expect(Frame.setWidth(frame, 40).height).toBe(20)
+  })
+
+  describe('id', () => {
+    test('an omitted id is undefined', () => {
+      const frame: Frame.Frame<undefined> = Frame.make({ width: 10 })
+      expect(frame.id).toBeUndefined()
+      expect(JSON.parse(JSON.stringify(frame))).not.toHaveProperty('id')
+    })
+
+    test('make keeps the literal id type', () => {
+      const frame: Frame.Frame<'start'> = Frame.make({ id: 'start', width: 10 })
+      expect(frame.id).toBe('start')
+      // @ts-expect-error -- the id type is the literal 'start'
+      const other: Frame.Frame<'end'> = frame
+      expect(other.id).toBe('start')
+    })
+
+    test('a JSON round trip keeps the id', () => {
+      const frame = Frame.make({ id: 'a', width: 10 })
+      expect(Frame.make(JSON.parse(JSON.stringify(frame))).id).toBe('a')
+    })
+
+    test('setId works in both forms and retypes the frame', () => {
+      const base = Frame.make({ width: 10 })
+      const named: Frame.Frame<'a'> = Frame.setId(base, 'a')
+      const renamed: Frame.Frame<'b'> = named.pipe(Frame.setId('b'))
+      const cleared: Frame.Frame<undefined> = Frame.setId(renamed, undefined)
+      expect([named.id, renamed.id, cleared.id]).toEqual(['a', 'b', undefined])
+      expect(renamed.width).toBe(10)
+    })
+
+    test('setters keep the id and its type', () => {
+      const frame = Frame.make({ id: 'a', width: 10 })
+      const wider: Frame.Frame<'a'> = Frame.setWidth(frame, 20)
+      const offset: Frame.Frame<'a'> = frame.pipe(Frame.setOffset(1, 2))
+      expect([wider.id, offset.id]).toEqual(['a', 'a'])
+    })
+
+    test('layouts that ignore ids accept any frame', () => {
+      const rects = Flexbox.apply(
+        [Frame.make({ id: 'a', width: 10 }), Frame.make({ width: 10 })],
+        Flexbox.make({}),
+        Rect.make(100),
+      )
+      expect(rects).toHaveLength(2)
+    })
   })
 })

@@ -197,14 +197,17 @@ export interface HierarchyRoute {
 /**
  * The result of `apply`.
  *
- * - `nodes`: one rect per node, keyed and ordered like the input map.
+ * - `nodes`: one rect per frame, keyed by frame `id`. The record has no
+ *   prototype, so any id is safe as a key. Its key order is the JavaScript
+ *   property order, which lists integer-like ids first. Iterate the input
+ *   frames for input order.
  * - `edges`: one route per edge, in input order.
  * - `bounds`: the rect enclosing every node, label, and route point. Its
  *   origin is always `(0, 0)`.
  */
-export interface HierarchyLayout<K> {
-  /** One rect per node, keyed and ordered like the input map. */
-  readonly nodes: ReadonlyMap<K, Rect.Rect>
+export interface HierarchyLayout<K extends string> {
+  /** One rect per frame, keyed by frame `id`. */
+  readonly nodes: Readonly<Record<K, Rect.Rect>>
   /** One route per edge, in input order. */
   readonly edges: ReadonlyArray<HierarchyRoute>
   /** The rect enclosing the whole drawing, with its origin at `(0, 0)`. */
@@ -229,48 +232,59 @@ export interface HierarchyLayout<K> {
  * 5. It stacks each rank's nodes inside the rank's thickness with the
  *    frames' `align` and `stretch`, and routes edges through their ports.
  *
- * Nodes are `Frame`s. Their sizes resolve as usual. Offsets across the flow
- * add clearance. Offsets along the flow add clearance within the rank, and
+ * Nodes are `Frame`s with an `id`, and edges reference them by it. The
+ * types check both. The literal ids of `frames` form the allowed ids, so a
+ * frame without an id is a type error, and so is an edge that names an id
+ * no frame has. The result's `nodes` record has exactly those keys. Ids
+ * known only at runtime widen to `string`, and the runtime checks still
+ * apply.
+ *
+ * Frame sizes resolve as usual. Offsets across the flow add clearance. Offsets along the flow add clearance within the rank, and
  * auto (non-finite) offsets along the flow position the node in the rank as
  * auto margins do in flexbox. Auto offsets across the flow act as `0`. The
  * frames' `grow` and `shrink` have no effect.
  *
- * Every input is deterministic: the same nodes and edges always produce
- * the same layout. Ties fall back to input order, the map order for nodes
- * and the array order for edges.
+ * Every input is deterministic: the same frames and edges always produce
+ * the same layout. Ties fall back to the order of the input arrays.
  *
  * The geometry comes from exact IEEE 754 arithmetic and is never rounded
  * (see PRECISION.md). The whole drawing translates so that `bounds` starts
  * at the origin. Place it elsewhere by translating the results, for example
  * into a rect that `Box.apply` solves for `bounds`'s size.
  *
- * @param nodes - The node specs, keyed by any value. The map order is the tie-breaking order.
- * @param edges - The edge specs, referencing nodes by key.
+ * @param frames - The node specs, each with a unique `id`. Their order is the tie-breaking order.
+ * @param edges - The edge specs, referencing frames by `id`.
  * @param hierarchy - The layout specification.
  * @returns The node rects, edge routes, and bounds.
- * @throws `RangeError` when an edge references a key that `nodes` does not contain.
+ * @throws `RangeError` when a frame has no `id`, when two frames share an
+ * `id`, or when an edge references an `id` that no frame has.
  * @example
  * ```ts
- * const nodes = new Map([
- *   ['a', Frame.make({ width: 100, height: 40 })],
- *   ['b', Frame.make({ width: 100, height: 40 })],
- * ])
+ * const frames = [
+ *   Frame.make({ id: 'a', width: 100, height: 40 }),
+ *   Frame.make({ id: 'b', width: 100, height: 40 }),
+ * ]
  * const edges = [Edge.make({ source: 'a', target: 'b' })]
- * const layout = Hierarchy.apply(nodes, edges, Hierarchy.make({ rankGap: 50 }))
- * layout.nodes.get('b') // Rect [0, 90, 100, 40]
+ * const layout = Hierarchy.apply(frames, edges, Hierarchy.make({ rankGap: 50 }))
+ * layout.nodes.b // Rect [0, 90, 100, 40]
  * layout.edges[0]?.points // [Point (50, 40), Point (50, 90)]
  * ```
  */
-export function apply<K>(
-  nodes: ReadonlyMap<K, Frame>,
-  edges: ReadonlyArray<Edge<K>>,
+export function apply<const T extends ReadonlyArray<Frame<string>>>(
+  frames: T,
+  edges: ReadonlyArray<Edge<NoInfer<T[number]['id']>>>,
   hierarchy: Hierarchy,
-): HierarchyLayout<K> {
-  const keys = [...nodes.keys()]
-  const frames = [...nodes.values()]
-  const index = new Map<K, number>()
-  for (const [i, key] of keys.entries()) {
-    index.set(key, i)
+): HierarchyLayout<T[number]['id']> {
+  const index = new Map<string, number>()
+  for (const [i, frame] of frames.entries()) {
+    const id: unknown = frame.id
+    if (typeof id !== 'string') {
+      throw new RangeError(`Frame ${i} has no id`)
+    }
+    if (index.has(id)) {
+      throw new RangeError(`Frames share the id "${id}"`)
+    }
+    index.set(id, i)
   }
 
   const vertical = hierarchy.isVertical
@@ -299,7 +313,7 @@ export function apply<K>(
     const source = index.get(edge.source)
     const target = index.get(edge.target)
     if (source === undefined || target === undefined) {
-      throw new RangeError(`Edge ${i} references a node key that is not in the nodes map`)
+      throw new RangeError(`Edge ${i} references an id that no frame has`)
     }
     return {
       source,
@@ -327,8 +341,10 @@ export function apply<K>(
     }
   })
 
-  if (keys.length === 0) {
-    return { nodes: new Map(), edges: [], bounds: Rect.make() }
+  const layoutNodes = Object.create(null) as Record<T[number]['id'], Rect.Rect>
+
+  if (frames.length === 0) {
+    return { nodes: layoutNodes, edges: [], bounds: Rect.make() }
   }
 
   const result = solve(solveNodes, solveEdges, hierarchy)
@@ -368,9 +384,10 @@ export function apply<K>(
     Rect.make(x - minX, y - minY, w, h)
   const point = ([x, y]: [number, number]): Point.Point => Point.make(x - minX, y - minY)
 
-  const layoutNodes = new Map<K, Rect.Rect>()
-  for (const [i, key] of keys.entries()) {
-    layoutNodes.set(key, rect(nodeRects[i] as [number, number, number, number]))
+  for (const [i, frame] of frames.entries()) {
+    layoutNodes[frame.id as T[number]['id']] = rect(
+      nodeRects[i] as [number, number, number, number],
+    )
   }
 
   return {

@@ -18,17 +18,19 @@ describe('edge', () => {
     expect(edge.labels).toEqual([])
   })
 
-  test('keys can be objects compared by identity', () => {
-    const a = { id: 1 }
-    const b = { id: 2 }
-    const edge = Edge.make({ source: a, target: b })
-    expect(edge.source).toBe(a)
-    expect(edge.target).toBe(b)
+  test('ids keep their literal types', () => {
+    const edge: Edge.Edge<'a' | 'b'> = Edge.make({ source: 'a', target: 'b' })
+    // setSource adds the new id to the type.
+    const moved: Edge.Edge<'a' | 'b' | 'c'> = edge.pipe(Edge.setSource('c'))
+    expect(moved.source).toBe('c')
+    // @ts-expect-error -- 'c' is not among the ids of `edge`
+    const narrow: Edge.Edge<'a' | 'b'> = moved
+    expect(narrow.target).toBe('b')
   })
 
   test('isEdge accepts edges and rejects everything else', () => {
-    expect(Edge.isEdge(Edge.make({ source: 0, target: 1 }))).toBe(true)
-    expect(Edge.isEdge({ source: 0, target: 1 })).toBe(false)
+    expect(Edge.isEdge(Edge.make({ source: 'a', target: 'b' }))).toBe(true)
+    expect(Edge.isEdge({ source: 'a', target: 'b' })).toBe(false)
     expect(Edge.isEdge(null)).toBe(false)
     expect(Edge.isEdge(label)).toBe(false)
   })

@@ -52,10 +52,10 @@ export interface EdgeLabel {
  * required. Passing `undefined` for an optional field is the same as
  * omitting it.
  */
-export interface EdgeInput<K> {
-  /** The key of the node that the edge leaves. */
+export interface EdgeInput<K extends string> {
+  /** The `id` of the frame that the edge leaves. */
   readonly source: K
-  /** The key of the node that the edge enters. */
+  /** The `id` of the frame that the edge enters. */
   readonly target: K
   /**
    * How strongly layout keeps the edge short and straight, relative to the
@@ -96,23 +96,23 @@ export interface EdgeInput<K> {
 }
 
 /**
- * A directed edge spec: the two node keys it connects, plus the weight,
- * length, port, and label inputs that `Hierarchy.apply` (from
+ * A directed edge spec: the ids of the two frames it connects, plus the
+ * weight, length, port, and label inputs that `Hierarchy.apply` (from
  * `placement/hierarchy`) reads. An edge has no geometry of its own. Layout
  * produces its route.
  *
- * The key type `K` is whatever the caller keys its nodes by: strings,
- * numbers, symbols, or objects compared by identity.
+ * The type parameter `K` is the union of the literal ids the edge can
+ * reference. `Hierarchy.apply` checks it against the ids of its frames.
  *
  * Values are immutable. Every setter returns a new edge. Create an edge
  * with `make`.
  */
-class Edge<K> extends Pipeable {
+class Edge<K extends string> extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
-  /** The key of the node that the edge leaves. */
+  /** The `id` of the frame that the edge leaves. */
   readonly source: K
-  /** The key of the node that the edge enters. */
+  /** The `id` of the frame that the edge enters. */
   readonly target: K
   /** The raw weight input. Layout treats negative and non-finite values as `0`. */
   readonly weight: number
@@ -185,7 +185,7 @@ export type { Edge }
  * edge.weight // 1
  * ```
  */
-export const make = <K>(input: EdgeInput<K>): Edge<K> => new Edge(input)
+export const make = <const K extends string>(input: EdgeInput<K>): Edge<K> => new Edge(input)
 
 /**
  * Checks if a value is an `Edge`. Only values that `make` builds carry the
@@ -194,20 +194,21 @@ export const make = <K>(input: EdgeInput<K>): Edge<K> => new Edge(input)
  * @param value - The value to check.
  * @returns `true` if the value is an `Edge`, `false` otherwise.
  */
-export const isEdge = (value: unknown): value is Edge<unknown> => {
+export const isEdge = (value: unknown): value is Edge<string> => {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
 
-// Setters rebuild from toJSON. setSource and setTarget take a key, and a key
-// can be any value (even an edge), so their arity is fixed. The port setters
-// take a numeric side first, so they can dispatch on isEdge.
+// Setters rebuild from toJSON. setSource and setTarget take an id, and the
+// port and label setters take a side or a frame first, so none of them can
+// receive an edge as their first data-last argument.
 
 /**
- * Sets the source node key. The data-last form omits `self` and returns a
- * function of it.
+ * Sets the source frame id. The result's type parameter keeps the old ids
+ * and adds the new one, since the type cannot tell which ids are still in
+ * use. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The edge to update.
- * @param source - The new source key.
+ * @param source - The new source id.
  * @returns A new edge with the source replaced.
  * @example
  * ```ts
@@ -215,16 +216,21 @@ export const isEdge = (value: unknown): value is Edge<unknown> => {
  * ```
  */
 export const setSource: {
-  <K>(self: Edge<K>, source: K): Edge<K>
-  <K>(source: K): (self: Edge<K>) => Edge<K>
-} = dual(2, <K>(self: Edge<K>, source: K) => new Edge({ ...self.toJSON(), source }))
+  <K extends string, const J extends string>(self: Edge<K>, source: J): Edge<K | J>
+  <const J extends string>(source: J): <K extends string>(self: Edge<K>) => Edge<K | J>
+} = dual(
+  2,
+  <K extends string, J extends string>(self: Edge<K>, source: J): Edge<K | J> =>
+    new Edge<K | J>({ ...self.toJSON(), source }),
+)
 
 /**
- * Sets the target node key. The data-last form omits `self` and returns a
- * function of it.
+ * Sets the target frame id. As with `setSource`, the result's type
+ * parameter adds the new id to the old ones. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The edge to update.
- * @param target - The new target key.
+ * @param target - The new target id.
  * @returns A new edge with the target replaced.
  * @example
  * ```ts
@@ -232,9 +238,13 @@ export const setSource: {
  * ```
  */
 export const setTarget: {
-  <K>(self: Edge<K>, target: K): Edge<K>
-  <K>(target: K): (self: Edge<K>) => Edge<K>
-} = dual(2, <K>(self: Edge<K>, target: K) => new Edge({ ...self.toJSON(), target }))
+  <K extends string, const J extends string>(self: Edge<K>, target: J): Edge<K | J>
+  <const J extends string>(target: J): <K extends string>(self: Edge<K>) => Edge<K | J>
+} = dual(
+  2,
+  <K extends string, J extends string>(self: Edge<K>, target: J): Edge<K | J> =>
+    new Edge<K | J>({ ...self.toJSON(), target }),
+)
 
 /**
  * Sets the weight: how strongly layout keeps the edge short and straight.
@@ -245,9 +255,12 @@ export const setTarget: {
  * @returns A new edge with the weight replaced.
  */
 export const setWeight: {
-  <K>(self: Edge<K>, weight: number): Edge<K>
-  (weight: number): <K>(self: Edge<K>) => Edge<K>
-} = dual(2, <K>(self: Edge<K>, weight: number) => new Edge({ ...self.toJSON(), weight }))
+  <K extends string>(self: Edge<K>, weight: number): Edge<K>
+  (weight: number): <K extends string>(self: Edge<K>) => Edge<K>
+} = dual(
+  2,
+  <K extends string>(self: Edge<K>, weight: number) => new Edge({ ...self.toJSON(), weight }),
+)
 
 /**
  * Sets the minimum number of ranks that the edge spans. The data-last form
@@ -258,9 +271,12 @@ export const setWeight: {
  * @returns A new edge with the minimum length replaced.
  */
 export const setMinLength: {
-  <K>(self: Edge<K>, minLength: number): Edge<K>
-  (minLength: number): <K>(self: Edge<K>) => Edge<K>
-} = dual(2, <K>(self: Edge<K>, minLength: number) => new Edge({ ...self.toJSON(), minLength }))
+  <K extends string>(self: Edge<K>, minLength: number): Edge<K>
+  (minLength: number): <K extends string>(self: Edge<K>) => Edge<K>
+} = dual(
+  2,
+  <K extends string>(self: Edge<K>, minLength: number) => new Edge({ ...self.toJSON(), minLength }),
+)
 
 /**
  * Sets the source port. An omitted `at` makes the position along the side
@@ -279,11 +295,11 @@ export const setMinLength: {
  * ```
  */
 export const setSourcePort: {
-  <K>(self: Edge<K>, side: number, at?: number): Edge<K>
-  (side: number, at?: number): <K>(self: Edge<K>) => Edge<K>
+  <K extends string>(self: Edge<K>, side: number, at?: number): Edge<K>
+  (side: number, at?: number): <K extends string>(self: Edge<K>) => Edge<K>
 } = dual(
   (args) => isEdge(args[0]),
-  <K>(self: Edge<K>, side: number, at?: number) =>
+  <K extends string>(self: Edge<K>, side: number, at?: number) =>
     new Edge({ ...self.toJSON(), sourceSide: side, sourceAt: at }),
 )
 
@@ -303,11 +319,11 @@ export const setSourcePort: {
  * ```
  */
 export const setTargetPort: {
-  <K>(self: Edge<K>, side: number, at?: number): Edge<K>
-  (side: number, at?: number): <K>(self: Edge<K>) => Edge<K>
+  <K extends string>(self: Edge<K>, side: number, at?: number): Edge<K>
+  (side: number, at?: number): <K extends string>(self: Edge<K>) => Edge<K>
 } = dual(
   (args) => isEdge(args[0]),
-  <K>(self: Edge<K>, side: number, at?: number) =>
+  <K extends string>(self: Edge<K>, side: number, at?: number) =>
     new Edge({ ...self.toJSON(), targetSide: side, targetAt: at }),
 )
 
@@ -320,11 +336,12 @@ export const setTargetPort: {
  * @returns A new edge with the labels replaced.
  */
 export const setLabels: {
-  <K>(self: Edge<K>, labels: ReadonlyArray<EdgeLabel>): Edge<K>
-  (labels: ReadonlyArray<EdgeLabel>): <K>(self: Edge<K>) => Edge<K>
+  <K extends string>(self: Edge<K>, labels: ReadonlyArray<EdgeLabel>): Edge<K>
+  (labels: ReadonlyArray<EdgeLabel>): <K extends string>(self: Edge<K>) => Edge<K>
 } = dual(
   2,
-  <K>(self: Edge<K>, labels: ReadonlyArray<EdgeLabel>) => new Edge({ ...self.toJSON(), labels }),
+  <K extends string>(self: Edge<K>, labels: ReadonlyArray<EdgeLabel>) =>
+    new Edge({ ...self.toJSON(), labels }),
 )
 
 /**
@@ -343,10 +360,10 @@ export const setLabels: {
  * ```
  */
 export const addLabel: {
-  <K>(self: Edge<K>, frame: Frame, at?: number): Edge<K>
-  (frame: Frame, at?: number): <K>(self: Edge<K>) => Edge<K>
+  <K extends string>(self: Edge<K>, frame: Frame, at?: number): Edge<K>
+  (frame: Frame, at?: number): <K extends string>(self: Edge<K>) => Edge<K>
 } = dual(
   (args) => isEdge(args[0]),
-  <K>(self: Edge<K>, frame: Frame, at?: number) =>
+  <K extends string>(self: Edge<K>, frame: Frame, at?: number) =>
     new Edge({ ...self.toJSON(), labels: [...self.labels, { frame, at }] }),
 )
