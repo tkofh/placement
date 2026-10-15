@@ -1,21 +1,24 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["**/.env.*local"],
-  "ui": "tui",
   "tasks": {
-    "build": {
+    "build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".output/**", ".nuxt/**"] },
+    "test": { "dependsOn": ["^build"] },
+    "typecheck": { "dependsOn": ["^build"] },
+    "bench": { "dependsOn": ["^build"], "cache": false },
+    "test:watch": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
-    },
-    "test:run": {
-      "dependsOn": ["^build"],
-      "cache": true
+      "cache": false,
+      "persistent": true,
+      "interactive": true
     },
     "dev": {
       "dependsOn": ["^build"],
       "outputs": [".nuxt/**", ".output/**"],
-      "persistent": true,
-      "cache": false
-    }
+      "cache": false,
+      "persistent": true
+    },
+    "//#check": {},
+    "//#check:fix": { "cache": false }
   }
 }

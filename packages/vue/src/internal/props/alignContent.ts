@@ -1,36 +1,9 @@
-import { type ParserInput, type ParserValue, parse } from 'valued'
-import { juxtapose } from 'valued/combinators/juxtapose'
-import { oneOf } from 'valued/combinators/oneOf'
-import { someOf } from 'valued/combinators/someOf'
+import { type ParserInput, between, juxtapose, map, oneOf, parse, someOf } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
-import { type NumberValue, isNumberValue, number } from 'valued/data/number'
-import { type PercentageValue, percentage } from 'valued/data/percentage'
-import { between } from 'valued/multipliers/between'
-import { createCache } from '../cache'
-
-const alignContentParser = oneOf([
-  keywords([
-    'start',
-    'end',
-    'center',
-    'space-between',
-    'space-around',
-    'space-evenly',
-    'stretch',
-  ]),
-  someOf([
-    juxtapose(['place', oneOf([percentage(), number()])]),
-    juxtapose([
-      'space',
-      between(oneOf([percentage(), number()]), { minLength: 1, maxLength: 2 }),
-    ]),
-    juxtapose(['stretch', oneOf([percentage(), number()])]),
-  ]),
-])
-
-export type AlignContent = typeof alignContentParser
-
-export type AlignContentInput = ParserInput<AlignContent> | number | undefined
+import { number } from 'valued/data/number'
+import { percentage } from 'valued/data/percentage'
+import { createCache } from '../cache.ts'
+import { toNormalized } from './normalize.ts'
 
 export interface AlignContentValue {
   alignContent: number
@@ -38,8 +11,6 @@ export interface AlignContentValue {
   alignContentSpaceOuter: number
   stretchContent: number
 }
-
-const cache = createCache<string, AlignContentValue>(512)
 
 export const keywordResults = {
   start: {
@@ -86,46 +57,61 @@ export const keywordResults = {
   },
 } as const
 
-function toNormalized(input: NumberValue | PercentageValue): number {
-  if (isNumberValue(input)) {
-    return input.value
-  }
-  return input.value / 100
-}
+const alignContentParser = map(
+  oneOf([
+    keywords([
+      'start',
+      'end',
+      'center',
+      'space-between',
+      'space-around',
+      'space-evenly',
+      'stretch',
+    ]),
+    someOf([
+      juxtapose(['place', oneOf([percentage(), number()])]),
+      juxtapose([
+        'space',
+        between(oneOf([percentage(), number()]), { minLength: 1, maxLength: 2 }),
+      ]),
+      juxtapose(['stretch', oneOf([percentage(), number()])]),
+    ]),
+  ]),
+  (value): AlignContentValue => {
+    if (isKeywordValue(value)) {
+      return keywordResults[value.value]
+    }
 
-function toValue(
-  value: ParserValue<typeof alignContentParser>,
-): AlignContentValue {
-  if (isKeywordValue(value)) {
-    return keywordResults[value.value]
-  }
+    const [placeValue, spaceValue, stretchValue] = value
 
-  const [placeValue, spaceValue, stretchValue] = value
+    let space = 0
+    let spaceOuter = 0
 
-  let place = 0
-  let space = 0
-  let spaceOuter = 0
-  let stretch = 0
+    if (spaceValue !== null) {
+      space = toNormalized(spaceValue[0][0])
+      spaceOuter = spaceValue[0].length === 1 ? 0 : toNormalized(spaceValue[0][1])
+    }
 
-  if (placeValue !== null) {
-    place = toNormalized(placeValue[0])
-  }
+    return {
+      alignContent: placeValue !== null ? toNormalized(placeValue[0]) : 0,
+      alignContentSpace: space,
+      alignContentSpaceOuter: spaceOuter,
+      stretchContent: stretchValue !== null ? toNormalized(stretchValue[0]) : 0,
+    }
+  },
+)
 
-  if (spaceValue !== null) {
-    space = toNormalized(spaceValue[0][0])
-    spaceOuter = spaceValue[0].length === 1 ? 0 : toNormalized(spaceValue[0][1])
-  }
+export type AlignContent = typeof alignContentParser
 
-  if (stretchValue !== null) {
-    stretch = toNormalized(stretchValue[0])
-  }
+export type AlignContentInput = ParserInput<AlignContent> | number | undefined
 
-  return {
-    alignContent: place,
-    alignContentSpace: space,
-    alignContentSpaceOuter: spaceOuter,
-    stretchContent: stretch,
-  }
+const cache = createCache<string, AlignContentValue | null>(512)
+
+function parseAlignContent(input: string): AlignContentValue | null {
+  return cache(input, () => {
+    const parsed = parse(input, alignContentParser)
+    return parsed.valid ? parsed.value : null
+  })
 }
 
 export function resolveAlignContent(
@@ -144,21 +130,12 @@ export function resolveAlignContent(
     }
   }
 
-  return cache(
-    `${input}:${autoAlignContent}:${autoAlignContentSpace}:${autoAlignContentSpaceOuter}:${autoStretchContent}`,
-    () => {
-      const parsed = parse(input, alignContentParser)
-
-      if (!parsed.valid) {
-        return {
-          alignContent: autoAlignContent,
-          alignContentSpace: autoAlignContentSpace,
-          alignContentSpaceOuter: autoAlignContentSpaceOuter,
-          stretchContent: autoStretchContent,
-        }
-      }
-
-      return toValue(parsed.value)
-    },
+  return (
+    parseAlignContent(input) ?? {
+      alignContent: autoAlignContent,
+      alignContentSpace: autoAlignContentSpace,
+      alignContentSpaceOuter: autoAlignContentSpaceOuter,
+      stretchContent: autoStretchContent,
+    }
   )
 }

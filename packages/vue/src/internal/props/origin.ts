@@ -1,30 +1,18 @@
-import { type Point, isPoint, point } from 'placement/point'
-import { type ParserInput, type ParserValue, parse } from 'valued'
-import { allOf } from 'valued/combinators/allOf'
-import { juxtapose } from 'valued/combinators/juxtapose'
-import { oneOf } from 'valued/combinators/oneOf'
+import * as Point from 'placement/point'
+import { type ParserInput, type ParserValue, allOf, juxtapose, map, oneOf, parse } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
 import { isNumberValue, number } from 'valued/data/number'
 import { isPercentageValue, percentage } from 'valued/data/percentage'
-import { createCache } from '../cache'
+import { createCache } from '../cache.ts'
 
-const origin = oneOf([
+const originGrammar = oneOf([
   keywords(['top', 'right', 'bottom', 'left', 'center']),
   percentage(),
   number(),
-  allOf([
-    keywords(['left', 'center', 'right']),
-    keywords(['top', 'center', 'bottom']),
-  ]),
+  allOf([keywords(['left', 'center', 'right']), keywords(['top', 'center', 'bottom'])]),
   juxtapose([
-    oneOf([
-      keywords(['left', 'center', 'right']),
-      oneOf([percentage(), number()]),
-    ]),
-    oneOf([
-      keywords(['top', 'center', 'bottom']),
-      oneOf([percentage(), number()]),
-    ]),
+    oneOf([keywords(['left', 'center', 'right']), oneOf([percentage(), number()])]),
+    oneOf([keywords(['top', 'center', 'bottom']), oneOf([percentage(), number()])]),
   ]),
   allOf([
     juxtapose([keywords(['left', 'right']), oneOf([percentage(), number()])]),
@@ -32,37 +20,28 @@ const origin = oneOf([
   ]),
 ])
 
-export type Origin = typeof origin
-
-export type OriginInput = ParserInput<Origin> | Point | number | undefined
-
-export type OriginValue = ParserValue<Origin>
-
-const cache = createCache<string, Point>(512)
-
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: will be simpler soon
-function normalize(value: OriginValue) {
+const origin = map(originGrammar, (value: ParserValue<typeof originGrammar>): Point.Point => {
   if (isKeywordValue(value)) {
     switch (value.value) {
       case 'center':
-        return point(0.5)
+        return Point.make(0.5)
       case 'left':
-        return point(0, 0.5)
+        return Point.make(0, 0.5)
       case 'right':
-        return point(1, 0.5)
+        return Point.make(1, 0.5)
       case 'top':
-        return point(0.5, 0)
+        return Point.make(0.5, 0)
       case 'bottom':
-        return point(0.5, 1)
+        return Point.make(0.5, 1)
     }
   }
 
   if (isPercentageValue(value)) {
-    return point(value.value / 100)
+    return Point.make(value.value / 100)
   }
 
   if (isNumberValue(value)) {
-    return point(value.value)
+    return Point.make(value.value)
   }
 
   const [first, second] = value
@@ -110,32 +89,34 @@ function normalize(value: OriginValue) {
     }
   }
 
-  return point(x, y)
+  return Point.make(x, y)
+})
+
+export type Origin = typeof origin
+
+export type OriginInput = ParserInput<Origin> | Point.Point | number | undefined
+
+const cache = createCache<string, Point.Point | null>(512)
+
+function parseOrigin(input: string): Point.Point | null {
+  return cache(input, () => {
+    const parsed = parse(input, origin)
+    return parsed.valid ? parsed.value : null
+  })
 }
 
-export function resolveOrigin(
-  input: OriginInput,
-  auto: Point = point.zero,
-): Point {
-  if (isPoint(input)) {
+export function resolveOrigin(input: OriginInput, auto: Point.Point = Point.zero): Point.Point {
+  if (Point.isPoint(input)) {
     return input
   }
 
   if (typeof input === 'number') {
-    return point(input, input)
+    return Point.make(input, input)
   }
 
   if (input === undefined) {
     return auto
   }
 
-  return cache(`${input.toString()}:${auto.x}:${auto.y}`, () => {
-    const parsed = parse(input, origin)
-
-    if (!parsed.valid) {
-      return auto
-    }
-
-    return normalize(parsed.value)
-  })
+  return parseOrigin(input) ?? auto
 }

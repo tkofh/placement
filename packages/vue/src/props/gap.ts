@@ -1,7 +1,7 @@
 import type { Dimensions } from 'placement/dimensions'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
-import { useOverrideableParent } from '../internal/parent'
-import { type GapInput, type GapValue, resolveGap } from '../internal/props/gap'
+import { useOverrideableParent } from '../internal/parent.ts'
+import { type GapInput, type GapValue, resolveGap } from '../internal/props/gap.ts'
 
 export type { GapValue, GapInput }
 
@@ -24,14 +24,11 @@ export function useGap(
 ): ComputedRef<GapValue> {
   const parentDimensions = useOverrideableParent(parent)
 
-  return computed(() => {
+  return computed((previous: GapValue | undefined) => {
     const fallbackValue = toValue(fallback)
-    const fallbackRow =
-      typeof fallbackValue === 'number' ? fallbackValue : fallbackValue.rowGap
+    const fallbackRow = typeof fallbackValue === 'number' ? fallbackValue : fallbackValue.rowGap
     const fallbackColumn =
-      typeof fallbackValue === 'number'
-        ? fallbackValue
-        : fallbackValue.columnGap
+      typeof fallbackValue === 'number' ? fallbackValue : fallbackValue.columnGap
 
     return preferCachedGap(
       resolveGap(
@@ -41,6 +38,7 @@ export function useGap(
         toValue(parentDimensions.width),
         toValue(parentDimensions.height),
       ),
+      previous,
     )
   })
 }

@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "useTabs": false,
+  "tabWidth": 2,
+  "printWidth": 100,
+  "singleQuote": true,
+  "jsxSingleQuote": false,
+  "quoteProps": "as-needed",
+  "trailingComma": "all",
+  "semi": false,
+  "arrowParens": "always",
+  "bracketSameLine": false,
+  "bracketSpacing": true,
+  "ignorePatterns": [
+    "apps/playground",
+    ".claude/skills/simple-english/**",
+    ".claude/skills/unslop/**"
+  ],
+  "sortImports": {
+    "newlinesBetween": false,
+    "groups": [
+      ["builtin", "external"],
+      ["internal", "subpath"],
+      "parent",
+      "sibling",
+      "index",
+      "unknown"
+    ]
+  }
+}

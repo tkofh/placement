@@ -1,29 +1,44 @@
-import { direction, wrap } from 'placement/flexbox'
-import { type ParserInput, parse } from 'valued'
-import { someOf } from 'valued/combinators/someOf'
+import * as Flexbox from 'placement/flexbox'
+import { type ParserInput, map, parse, someOf } from 'valued'
 import { keywords } from 'valued/data/keyword'
 
-const flow = someOf([
-  keywords(['row', 'row-reverse', 'column', 'column-reverse']),
-  keywords(['wrap', 'nowrap', 'wrap-reverse']),
-])
+const directions = {
+  row: Flexbox.direction.row,
+  'row-reverse': Flexbox.direction.rowReverse,
+  column: Flexbox.direction.column,
+  'column-reverse': Flexbox.direction.columnReverse,
+} as const
+
+const wraps = {
+  wrap: Flexbox.wrap.wrap,
+  nowrap: Flexbox.wrap.nowrap,
+  'wrap-reverse': Flexbox.wrap.wrapReverse,
+} as const
+
+const flow = map(
+  someOf([
+    keywords(['row', 'row-reverse', 'column', 'column-reverse']),
+    keywords(['wrap', 'nowrap', 'wrap-reverse']),
+  ]),
+  ([direction, wrap]) => ({
+    direction: direction !== null ? directions[direction.value] : undefined,
+    wrap: wrap !== null ? wraps[wrap.value] : undefined,
+  }),
+)
 
 export type Flow = typeof flow
 
 export type FlowInput = ParserInput<Flow> | undefined
 
-type Direction = (typeof direction)[keyof typeof direction]
-type Wrap = (typeof wrap)[keyof typeof wrap]
-
 export interface FlowValue {
-  readonly direction: Direction
-  readonly wrap: Wrap
+  readonly direction: Flexbox.FlexDirection
+  readonly wrap: Flexbox.FlexWrap
 }
 
 export function resolveFlow(
   input: string | undefined,
-  autoDirection: Direction = 0,
-  autoWrap: Wrap = 0,
+  autoDirection: Flexbox.FlexDirection = 0,
+  autoWrap: Flexbox.FlexWrap = 0,
 ): FlowValue {
   if (input == null) {
     return {
@@ -32,44 +47,17 @@ export function resolveFlow(
     }
   }
 
-  const result = parse(input, flow)
+  const parsed = parse(input, flow)
 
-  let directionResult: Direction = autoDirection
-  let wrapResult: Wrap = autoWrap
-
-  if (result.valid) {
-    const [directionValue, wrapValue] = result.value
-
-    switch (directionValue?.value) {
-      case 'row':
-        directionResult = direction.row
-        break
-      case 'row-reverse':
-        directionResult = direction.rowReverse
-        break
-      case 'column':
-        directionResult = direction.column
-        break
-      case 'column-reverse':
-        directionResult = direction.columnReverse
-        break
-    }
-
-    switch (wrapValue?.value) {
-      case 'wrap':
-        wrapResult = wrap.wrap
-        break
-      case 'nowrap':
-        wrapResult = wrap.nowrap
-        break
-      case 'wrap-reverse':
-        wrapResult = wrap.wrapReverse
-        break
+  if (!parsed.valid) {
+    return {
+      direction: autoDirection,
+      wrap: autoWrap,
     }
   }
 
   return {
-    direction: directionResult,
-    wrap: wrapResult,
+    direction: parsed.value.direction ?? autoDirection,
+    wrap: parsed.value.wrap ?? autoWrap,
   }
 }

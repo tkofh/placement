@@ -1,45 +1,15 @@
-import { type ParserInput, parse } from 'valued'
-import { juxtapose } from 'valued/combinators/juxtapose'
-import { oneOf } from 'valued/combinators/oneOf'
-import { someOf } from 'valued/combinators/someOf'
+import { type ParserInput, between, juxtapose, map, oneOf, parse, someOf } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
-import { type NumberValue, isNumberValue, number } from 'valued/data/number'
-import { type PercentageValue, percentage } from 'valued/data/percentage'
-import { between } from 'valued/multipliers/between'
-import { createCache } from '../cache'
-
-const justifyContentParser = oneOf([
-  keywords([
-    'start',
-    'end',
-    'center',
-    'space-between',
-    'space-around',
-    'space-evenly',
-  ]),
-  someOf([
-    juxtapose(['place', oneOf([percentage(), number()])]),
-    juxtapose([
-      'space',
-      between(oneOf([percentage(), number()]), { minLength: 1, maxLength: 2 }),
-    ]),
-  ]),
-])
-
-export type JustifyContent = typeof justifyContentParser
-
-export type JustifyContentInput =
-  | ParserInput<JustifyContent>
-  | number
-  | undefined
+import { number } from 'valued/data/number'
+import { percentage } from 'valued/data/percentage'
+import { createCache } from '../cache.ts'
+import { toNormalized } from './normalize.ts'
 
 export interface JustifyContentValue {
   justifyContent: number
   justifyContentSpace: number
   justifyContentSpaceOuter: number
 }
-
-const cache = createCache<string, JustifyContentValue>(512)
 
 export const keywordResults = {
   start: {
@@ -74,11 +44,51 @@ export const keywordResults = {
   },
 } as const
 
-function toNormalized(input: NumberValue | PercentageValue): number {
-  if (isNumberValue(input)) {
-    return input.value
-  }
-  return input.value / 100
+const justifyContentParser = map(
+  oneOf([
+    keywords(['start', 'end', 'center', 'space-between', 'space-around', 'space-evenly']),
+    someOf([
+      juxtapose(['place', oneOf([percentage(), number()])]),
+      juxtapose([
+        'space',
+        between(oneOf([percentage(), number()]), { minLength: 1, maxLength: 2 }),
+      ]),
+    ]),
+  ]),
+  (value): JustifyContentValue => {
+    if (isKeywordValue(value)) {
+      return keywordResults[value.value]
+    }
+
+    const [placeValue, spaceValue] = value
+
+    let space = 0
+    let spaceOuter = 0
+
+    if (spaceValue !== null) {
+      space = toNormalized(spaceValue[0][0])
+      spaceOuter = spaceValue[0].length === 1 ? 0 : toNormalized(spaceValue[0][1])
+    }
+
+    return {
+      justifyContent: placeValue !== null ? toNormalized(placeValue[0]) : 0,
+      justifyContentSpace: space,
+      justifyContentSpaceOuter: spaceOuter,
+    }
+  },
+)
+
+export type JustifyContent = typeof justifyContentParser
+
+export type JustifyContentInput = ParserInput<JustifyContent> | number | undefined
+
+const cache = createCache<string, JustifyContentValue | null>(512)
+
+function parseJustifyContent(input: string): JustifyContentValue | null {
+  return cache(input, () => {
+    const parsed = parse(input, justifyContentParser)
+    return parsed.valid ? parsed.value : null
+  })
 }
 
 export function resolveJustifyContent(
@@ -102,46 +112,11 @@ export function resolveJustifyContent(
     }
   }
 
-  return cache(
-    `${input}:${autoContent}:${autoContentSpace}:${autoContentSpaceOuter}`,
-    () => {
-      const parsed = parse(input, justifyContentParser)
-
-      if (!parsed.valid) {
-        return {
-          justifyContent: autoContent,
-          justifyContentSpace: autoContentSpace,
-          justifyContentSpaceOuter: autoContentSpaceOuter,
-        }
-      }
-
-      const value = parsed.value
-
-      if (isKeywordValue(value)) {
-        return keywordResults[value.value]
-      }
-
-      const [placeValue, spaceValue] = value
-
-      let place = 0
-      let space = 0
-      let spaceOuter = 0
-
-      if (placeValue !== null) {
-        place = toNormalized(placeValue[0])
-      }
-
-      if (spaceValue !== null) {
-        space = toNormalized(spaceValue[0][0])
-        spaceOuter =
-          spaceValue[0].length === 1 ? 0 : toNormalized(spaceValue[0][1])
-      }
-
-      return {
-        justifyContent: place,
-        justifyContentSpace: space,
-        justifyContentSpaceOuter: spaceOuter,
-      }
-    },
+  return (
+    parseJustifyContent(input) ?? {
+      justifyContent: autoContent,
+      justifyContentSpace: autoContentSpace,
+      justifyContentSpaceOuter: autoContentSpaceOuter,
+    }
   )
 }

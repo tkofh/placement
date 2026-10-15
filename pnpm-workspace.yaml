@@ -1,4 +1,11 @@
 packages:
-  - "packages/*"
-  - "playground/*"
-  - "tooling/*"
+  - 'packages/*'
+  - 'apps/*'
+linkWorkspacePackages: true
+preferWorkspacePackages: true
+shamefullyHoist: true
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  oxfmt: true
+  oxlint: true

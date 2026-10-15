@@ -1,89 +1,30 @@
-import { type Flexbox, applyFlexbox } from 'placement/flexbox'
+import * as Flexbox from 'placement/flexbox'
 import type { Frame } from 'placement/frame'
-import { type Rect, rect } from 'placement/rect'
-import {
-  type InjectionKey,
-  type MaybeRefOrGetter,
-  type Ref,
-  computed,
-  inject,
-  provide,
-  ref,
-  toValue,
-  watch,
-} from 'vue'
-import { useChildIndex, useIndexParent } from './useChildIndex'
+import * as Rect from 'placement/rect'
+import { type MaybeRefOrGetter, type Ref, toValue } from 'vue'
+import { useChild, useChildren } from './useChildren.ts'
 
-const FLEX_FRAMES = Symbol() as InjectionKey<Ref<ReadonlyArray<Frame>>>
-
-const FLEX_RECTS = Symbol() as InjectionKey<Ref<ReadonlyArray<Rect>>>
+const zero = Rect.make()
 
 export function useFlexLayout(
-  flexbox: MaybeRefOrGetter<Flexbox>,
-  rect: MaybeRefOrGetter<Rect>,
-): {
-  frames: Readonly<Ref<ReadonlyArray<Frame>>>
-  rects: Readonly<Ref<ReadonlyArray<Rect>>>
-} {
-  const length = useIndexParent()
+  layout: MaybeRefOrGetter<Flexbox.Flexbox>,
+  innerRect: MaybeRefOrGetter<Rect.Rect>,
+): void {
+  // The mapper is a reactive effect. It tracks reads of the layout, the inner
+  // rect, and every child frame, so a change to any of them re-runs the solve.
+  useChildren<Frame, Rect.Rect>('placement/flex', (children) => {
+    const rects = Flexbox.apply(
+      children.map((child) => child.input.value),
+      toValue(layout),
+      toValue(innerRect),
+    )
 
-  const frames = ref<Array<Frame>>([])
-
-  watch(length, (length) => {
-    frames.value.length = length
+    for (const [index, child] of children.entries()) {
+      child.output.value = rects[index] ?? zero
+    }
   })
-
-  provide(FLEX_FRAMES, frames)
-
-  const rects = computed(() => {
-    return applyFlexbox(frames.value, toValue(flexbox), toValue(rect))
-  })
-
-  provide(FLEX_RECTS, rects)
-
-  return { frames, rects }
 }
 
-const zero = rect()
-
-export function useFlexItem(input: MaybeRefOrGetter<Frame>) {
-  const index = useChildIndex()
-
-  const frames = inject(FLEX_FRAMES)
-  const rects = inject(FLEX_RECTS)
-
-  if (frames === undefined || rects === undefined) {
-    throw new Error('no flex parent')
-  }
-
-  watch(
-    index,
-    (current, previous) => {
-      const frame = toValue(input)
-
-      if (previous === undefined || previous === -1) {
-        frames.value = frames.value.toSpliced(current, 0, frame)
-      } else if (current === -1) {
-        frames.value = frames.value.toSpliced(previous, 1)
-      } else {
-        frames.value = frames.value.with(current, frame)
-      }
-    },
-    { immediate: true, flush: 'sync' },
-  )
-
-  watch(
-    () => toValue(input),
-    (frame) => {
-      frames.value =
-        index.value >= frames.value.length
-          ? frames.value.concat(frame)
-          : frames.value.with(index.value, frame)
-    },
-    { immediate: true },
-  )
-
-  return computed(() =>
-    index.value === -1 ? zero : rects.value.at(index.value) ?? zero,
-  )
+export function useFlexItem(frame: MaybeRefOrGetter<Frame>): Readonly<Ref<Rect.Rect>> {
+  return useChild('placement/flex', frame, zero)
 }

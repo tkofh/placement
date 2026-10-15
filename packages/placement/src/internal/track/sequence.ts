@@ -1,4 +1,5 @@
-import { TrackItem, type TrackItemInput } from './item'
+import { RELATIVE_TOLERANCE } from 'curvy/number'
+import { TrackItem, type TrackItemInput } from './item.ts'
 
 export interface SequenceTrackItem extends TrackItemInput {
   grow?: number
@@ -6,6 +7,8 @@ export interface SequenceTrackItem extends TrackItemInput {
 }
 
 class InternalSequenceTrackItem extends TrackItem {
+  readonly grow: number
+
   readonly definiteOuterSizeMin: number
   readonly definiteOuterSizeMax: number
 
@@ -17,10 +20,12 @@ class InternalSequenceTrackItem extends TrackItem {
     basis: number,
     min: number,
     max: number,
-    readonly grow: number,
+    grow: number,
     shrink: number,
   ) {
     super(start, end, basis, min, max)
+
+    this.grow = grow
 
     this.definiteOuterSizeMin = this.min + this.definiteStart + this.definiteEnd
     this.definiteOuterSizeMax = this.max + this.definiteStart + this.definiteEnd
@@ -101,10 +106,15 @@ export function applyGrow(
 
   const growable = new Set(initialGrowable)
 
+  // Free space this small, relative to the free space at the start of
+  // distribution, is rounding residue and not layout. Treat it as consumed
+  // (see PRECISION.md).
+  const tolerance = RELATIVE_TOLERANCE * initialFreeSpace
+
   let freeSpace = initialFreeSpace
   let totalGrow = initialTotalGrow
 
-  while (freeSpace > 0 && growable.size > 0) {
+  while (freeSpace > tolerance && growable.size > 0) {
     const growthUnit = freeSpace / totalGrow
     for (const item of growable) {
       const growth = Math.min(item.availableGrowth, growthUnit * item.grow)
@@ -119,13 +129,21 @@ export function applyGrow(
     }
   }
 
-  for (const item of initialGrowable) {
-    item.adjustment = item.adjustment * ratio
+  if (freeSpace <= tolerance) {
+    freeSpace = 0
   }
 
-  return initialFreeSpace - freeSpace
+  for (const item of initialGrowable) {
+    item.adjustment *= ratio
+  }
+
+  // The reported consumption scales with the adjustments. The growth that a
+  // fractional ratio withholds stays free for space and place.
+  return (initialFreeSpace - freeSpace) * ratio
 }
 
+// Returns the change in consumed size. The value is zero or negative, so
+// callers can add it to the non-negative result of applyGrow.
 export function applyShrink(
   initialShrinkable: Set<InternalSequenceTrackItem>,
   initialFreeSpace: number,
@@ -139,16 +157,22 @@ export function applyShrink(
   const shrinkable = new Set(initialShrinkable)
 
   const initialExcess = Math.abs(initialFreeSpace)
+
+  // Excess this small, relative to the excess at the start of distribution,
+  // is rounding residue and not layout. Treat it as consumed (see
+  // PRECISION.md).
+  const tolerance = RELATIVE_TOLERANCE * initialExcess
+
   let excess = initialExcess
   let totalScaledShrink = initialTotalScaledShrink
 
-  while (excess > 0 && shrinkable.size > 0) {
+  while (excess > tolerance && shrinkable.size > 0) {
     let excessReduction = 0
     let totalScaledShrinkReduction = 0
 
     for (const item of shrinkable) {
-      const ratio = item.scaledShrinkFactor / totalScaledShrink
-      const shrink = Math.min(item.availableShrinkage, excess * ratio)
+      const share = item.scaledShrinkFactor / totalScaledShrink
+      const shrink = Math.min(item.availableShrinkage, excess * share)
 
       if (shrink === item.availableShrinkage) {
         shrinkable.delete(item)
@@ -163,9 +187,15 @@ export function applyShrink(
     totalScaledShrink -= totalScaledShrinkReduction
   }
 
-  for (const item of initialShrinkable) {
-    item.adjustment = item.adjustment * ratio
+  if (excess <= tolerance) {
+    excess = 0
   }
 
-  return excess - initialExcess
+  for (const item of initialShrinkable) {
+    item.adjustment *= ratio
+  }
+
+  // The reported consumption scales with the adjustments. The shrinkage that
+  // a fractional ratio withholds still counts as used space.
+  return (excess - initialExcess) * ratio
 }

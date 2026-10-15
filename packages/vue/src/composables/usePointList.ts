@@ -1,67 +1,17 @@
 import type { Point } from 'placement/point'
-import {
-  type InjectionKey,
-  type MaybeRefOrGetter,
-  type Ref,
-  inject,
-  provide,
-  ref,
-  toValue,
-  watch,
-} from 'vue'
-import { useIndexParent } from './useChildIndex'
-
-const POINTS: InjectionKey<Ref<Array<Point>>> = Symbol()
+import { type MaybeRefOrGetter, type Ref, shallowRef } from 'vue'
+import { useChild, useChildren } from './useChildren.ts'
 
 export function usePointList(): Readonly<Ref<ReadonlyArray<Point>>> {
-  const length = useIndexParent()
+  const points = shallowRef<ReadonlyArray<Point>>([])
 
-  const points = ref<Array<Point>>([])
-
-  // biome-ignore lint/suspicious/noExplicitAny: vue ref type mapping is dumb sometimes
-  provide(POINTS, points as any)
-
-  watch(length, (length) => {
-    points.value.length = length
+  useChildren<Point>('placement/points', (children) => {
+    points.value = children.map((child) => child.input.value)
   })
 
-  // biome-ignore lint/suspicious/noExplicitAny: vue ref type mapping is dumb sometimes
-  return points as any
+  return points
 }
 
-export function usePoint(input: MaybeRefOrGetter<Point>) {
-  const index = useIndexParent()
-
-  const points = inject(POINTS)
-
-  if (points === undefined) {
-    throw new Error('no point parent')
-  }
-
-  watch(
-    index,
-    (current, previous) => {
-      const point = toValue(input)
-
-      if (previous === undefined || previous === -1) {
-        points.value = points.value.toSpliced(current, 0, point)
-      } else if (current === -1) {
-        points.value = points.value.toSpliced(previous, 1)
-      } else {
-        points.value = points.value.with(current, point)
-      }
-    },
-    { immediate: true, flush: 'sync' },
-  )
-
-  watch(
-    () => toValue(input),
-    (point) => {
-      points.value =
-        index.value >= points.value.length
-          ? points.value.concat(point)
-          : points.value.with(index.value, point)
-    },
-    { immediate: true },
-  )
+export function usePoint(input: MaybeRefOrGetter<Point>): void {
+  useChild('placement/points', input)
 }

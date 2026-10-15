@@ -1,32 +1,17 @@
-import { frame } from 'placement/frame'
+import * as Frame from 'placement/frame'
 import type { Rect } from 'placement/rect'
 import { parse } from 'valued'
 import { number } from 'valued/data/number'
 import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
-import { useFlexItem } from '../composables/useFlex'
-import {
-  SIZE_PROP_KEYS,
-  type SizeProps,
-  useBasisSize,
-  useMaxSize,
-  useMinSize,
-} from '../composables/useRect'
-import { useParentRectRegistration } from '../composables/useSizingContext'
-import { computedTRBLOffset } from '../data/offset'
-import {
-  type AlignSelfInput,
-  resolveAlignSelf,
-} from '../internal/props/alignSelf'
-import {
-  type JustifySelfInput,
-  resolveJustifySelf,
-} from '../internal/props/justifySelf'
-import { useGroupRenderer } from '../internal/render'
-import { boolProp } from '../internal/utils'
-import {
-  type LengthPercentageInput,
-  useLengthPercentage,
-} from '../props/lengthPercentage'
+import { useFlexItem } from '../composables/useFlex.ts'
+import { SIZE_PROP_KEYS, type SizeProps } from '../composables/useRect.ts'
+import { useParentRectRegistration } from '../composables/useSizingContext.ts'
+import { computedTRBLOffset } from '../data/offset.ts'
+import { type AlignSelfInput, resolveAlignSelf } from '../internal/props/alignSelf.ts'
+import { useGroupRenderer } from '../internal/render.ts'
+import { boolProp } from '../internal/utils.ts'
+import { useAspectRatio } from '../props/aspectRatio.ts'
+import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
 
 export interface FlexItemProps extends SizeProps {
   marginTop?: LengthPercentageInput
@@ -36,7 +21,6 @@ export interface FlexItemProps extends SizeProps {
   grow?: number | `${number}`
   shrink?: number | `${number}`
   alignSelf?: AlignSelfInput | number
-  justifySelf?: JustifySelfInput | number
   debug?: boolean
 }
 
@@ -48,43 +32,47 @@ function resolveNumber(value: number | `${number}` | undefined): number {
   return parsed.valid ? parsed.value.value : 0
 }
 
+// The prop resolvers mark an unset input with NaN. `Frame.make` wants such
+// fields omitted, because it reads a non-finite sizing input as a literal
+// infinite preference. That preference defeats an inherited stretch, for example.
+function unsetIfNaN(value: number): number | undefined {
+  return Number.isNaN(value) ? undefined : value
+}
+
 export const FlexItem = defineComponent(
   (props: FlexItemProps) => {
-    const basisSize = useBasisSize(props)
-    const minSize = useMinSize(props)
-    const maxSize = useMaxSize(props)
+    // This resolves each axis raw. The core owns the width/height/ratio
+    // interaction and the min/max clamping (see `placement/frame`).
+    const width = useLengthPercentage(() => props.width, Number.NaN, 'width')
+    const height = useLengthPercentage(() => props.height, Number.NaN, 'height')
+    const aspectRatio = useAspectRatio(() => props.aspectRatio, Number.NaN)
+    const minWidth = useLengthPercentage(() => props.minWidth, Number.NaN, 'width')
+    const minHeight = useLengthPercentage(() => props.minHeight, Number.NaN, 'height')
+    const maxWidth = useLengthPercentage(() => props.maxWidth, Number.NaN, 'width')
+    const maxHeight = useLengthPercentage(() => props.maxHeight, Number.NaN, 'height')
 
     const marginTop = useLengthPercentage(() => props.marginTop, 0, 'height')
     const marginRight = useLengthPercentage(() => props.marginRight, 0, 'width')
-    const marginBottom = useLengthPercentage(
-      () => props.marginBottom,
-      0,
-      'height',
-    )
+    const marginBottom = useLengthPercentage(() => props.marginBottom, 0, 'height')
     const marginLeft = useLengthPercentage(() => props.marginLeft, 0, 'width')
 
-    const margin = computedTRBLOffset(
-      marginTop,
-      marginRight,
-      marginBottom,
-      marginLeft,
-    )
+    const margin = computedTRBLOffset(marginTop, marginRight, marginBottom, marginLeft)
 
     const self = computed(() =>
-      frame({
-        width: basisSize.value.width,
-        height: basisSize.value.height,
-        minWidth: minSize.value.width,
-        minHeight: minSize.value.height,
-        maxWidth: maxSize.value.width,
-        maxHeight: maxSize.value.height,
-        offsetTop: margin.value.bottom,
+      Frame.make({
+        width: unsetIfNaN(width.value),
+        height: unsetIfNaN(height.value),
+        aspectRatio: unsetIfNaN(aspectRatio.value),
+        minWidth: unsetIfNaN(minWidth.value),
+        minHeight: unsetIfNaN(minHeight.value),
+        maxWidth: unsetIfNaN(maxWidth.value),
+        maxHeight: unsetIfNaN(maxHeight.value),
+        offsetTop: margin.value.top,
         offsetRight: margin.value.right,
-        offsetBottom: margin.value.top,
+        offsetBottom: margin.value.bottom,
         offsetLeft: margin.value.left,
         grow: resolveNumber(props.grow),
         shrink: resolveNumber(props.shrink),
-        justify: resolveJustifySelf(props.justifySelf),
         ...resolveAlignSelf(props.alignSelf),
       }),
     )
@@ -106,7 +94,6 @@ export const FlexItem = defineComponent(
       'grow',
       'shrink',
       'alignSelf',
-      'justifySelf',
       'debug',
     ],
     inheritAttrs: false,

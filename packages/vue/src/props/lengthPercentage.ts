@@ -1,6 +1,6 @@
 import { type MaybeRefOrGetter, computed, toValue } from 'vue'
-import { useOverrideablePercentBasis } from '../internal/parent'
-import { type Size1DInput, resolveSize1D } from '../internal/props/size1d'
+import { useOverrideablePercentBasis } from '../internal/parent.ts'
+import { type Size1DInput, resolveSize1D } from '../internal/props/size1d.ts'
 
 export type LengthPercentageInput = Size1DInput
 
@@ -12,10 +12,6 @@ export function useLengthPercentage(
   const percentBasisRef = useOverrideablePercentBasis(percentBasis)
 
   return computed(() => {
-    return resolveSize1D(
-      toValue(prop),
-      toValue(fallback),
-      toValue(percentBasisRef),
-    )
+    return resolveSize1D(toValue(prop), toValue(fallback), toValue(percentBasisRef))
   })
 }

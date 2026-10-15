@@ -1,16 +1,7 @@
-import { parse } from 'valued'
-import { oneOf } from 'valued/combinators/oneOf'
-import { someOf } from 'valued/combinators/someOf'
+import { map, oneOf, optional, parse, someOf } from 'valued'
 import { color } from 'valued/data/color'
 import { isKeywordValue, keyword, keywords } from 'valued/data/keyword'
-import { optional } from 'valued/multipliers/optional'
-import { createCache } from '../cache'
-
-const fillParser = oneOf([
-  keyword('none'),
-  color(),
-  someOf([color(), optional(keywords(['evenodd', 'nonzero']))]),
-])
+import { createCache } from '../cache.ts'
 
 export type FillInput =
   | `${'evenodd' | 'nonzero'} ${string}`
@@ -18,36 +9,48 @@ export type FillInput =
   | (string & {})
   | undefined
 
+// Property names are the kebab-case SVG presentation attribute names, so that
+// an instance can spread verbatim onto the attrs of an SVG element. Browsers
+// ignore unknown camelCase attributes like `fillRule`.
 export class Fill {
-  constructor(
-    readonly fill: string | undefined = undefined,
-    readonly fillRule: string | undefined = undefined,
-  ) {}
+  readonly fill: string | undefined
+  readonly 'fill-rule': string | undefined
+
+  constructor(fill: string | undefined = undefined, fillRule: string | undefined = undefined) {
+    this.fill = fill
+    this['fill-rule'] = fillRule
+  }
 
   static empty = new Fill()
 }
 
-const cache = createCache<string, Fill>(512)
+const fillParser = map(
+  oneOf([keyword('none'), color(), someOf([color(), optional(keywords(['evenodd', 'nonzero']))])]),
+  (value): Fill => {
+    if (Array.isArray(value)) {
+      const [fillColor, fillRule] = value
+      return new Fill(fillColor?.serialize('color'), fillRule?.value)
+    }
+    if (isKeywordValue(value)) {
+      return new Fill('transparent')
+    }
+    return new Fill(value.serialize('color'))
+  },
+)
+
+const cache = createCache<string, Fill | null>(512)
+
+function parseFill(input: string): Fill | null {
+  return cache(input, () => {
+    const parsed = parse(input, fillParser)
+    return parsed.valid ? parsed.value : null
+  })
+}
 
 export function resolveFill(input: FillInput, auto = Fill.empty): Fill {
   if (input === undefined) {
     return auto
   }
 
-  return cache(`${input}:${auto.fill}:${auto.fillRule}`, () => {
-    const parsed = parse(input, fillParser)
-
-    if (!parsed.valid) {
-      return auto
-    }
-
-    if (Array.isArray(parsed.value)) {
-      const [fillColor, fillRule] = parsed.value
-      return new Fill(fillColor?.serialize('color'), fillRule?.value)
-    }
-    if (isKeywordValue(parsed.value)) {
-      return new Fill('transparent')
-    }
-    return new Fill(parsed.value.serialize('color'))
-  })
+  return parseFill(input) ?? auto
 }

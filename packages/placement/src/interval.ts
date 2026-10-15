@@ -1,46 +1,78 @@
-import { PRECISION } from './constants'
-import { Pipeable } from './internal/pipeable'
-import { dual } from './utils/function'
-import {
-  lerp as lerpNumber,
-  minMax,
-  normalize as normalizeNumber,
-  remap as remapNumber,
-  roundTo,
-} from './utils/math'
-import { isRecord } from './utils/object'
+import { lerp as lerpNumber, minMax, remap as remapNumber } from 'curvy/number'
+import { Pipeable, dual } from 'curvy/utils'
+import { isRecord } from './utils/object.ts'
+import { boundsTolerance, fieldsCoincident } from './utils/tolerance.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/interval')
 type TypeBrand = typeof TypeBrand
 
+/**
+ * The structural shape of an interval: a numeric `start` and a numeric `size`.
+ *
+ * Operations that compare or combine two intervals (`join`, `intersect`, `contains`,
+ * `intersects`, `equals`, and the targets of `alignTo` and `avoid`) accept an `IntervalLike`
+ * for the operand measured against `self`, so a plain `{ start, size }` object works there.
+ * The `self` position always requires an `Interval` built by `make`.
+ */
 export interface IntervalLike {
+  /** The start position of the span. */
   readonly start: number
+  /** The signed extent of the span: the end is `start + size`, and negative sizes are legal. */
   readonly size: number
-  readonly end: number
 }
 
+/**
+ * A one-dimensional span: a `start` position and a signed `size`. It is the 1D core of the
+ * layout model in placement.
+ *
+ * Values are immutable, and construction is exact IEEE 754. The fields hold exactly what the
+ * arithmetic produced, with no rounding or normalization. A negative `size` is legal, and then
+ * `end` lies below `start`. `min`/`max` give the orientation-normalized bounds. The predicates
+ * (`equals`, `contains`, `intersects`) are tolerance-aware. See `PRECISION.md`.
+ *
+ * The class is exported type-only. Use `make` to construct it. It extends `Pipeable`, so
+ * operations chain data-last: `Interval.make(0, 100).pipe(Interval.translate(50))`.
+ */
 class Interval extends Pipeable implements IntervalLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
+  /** The start position, exactly as constructed. */
   readonly start: number
+  /** The signed size, exactly as constructed. Negative sizes are legal. */
   readonly size: number
 
   constructor(start: number, size: number) {
     super()
 
-    this.start = roundTo(start, PRECISION)
-    this.size = roundTo(size, PRECISION)
+    this.start = start
+    this.size = size
   }
 
+  /** The end position: `start + size`. It lies below `start` when `size` is negative. */
   get end(): number {
     return this.start + this.size
   }
 
-  [Symbol.for('nodejs.util.inspect.custom')]() {
-    const { min, max } = minMax(this.start, this.end)
-    return `Interval [${min}, ${max}]`
+  /** The lesser bound: `start` for a non-negative `size`, `end` otherwise. */
+  get min(): number {
+    return Math.min(this.start, this.end)
   }
 
+  /** The greater bound: `end` for a non-negative `size`, `start` otherwise. */
+  get max(): number {
+    return Math.max(this.start, this.end)
+  }
+
+  [Symbol.for('nodejs.util.inspect.custom')]() {
+    return `Interval [${this.min}, ${this.max}]`
+  }
+
+  /**
+   * Serializes to the constructor shape, so `JSON.stringify` emits the two stored fields and
+   * `Interval.make(json.start, json.size)` reconstructs the value.
+   *
+   * @returns A plain `{ start, size }` object.
+   */
   toJSON() {
     return {
       start: this.start,
@@ -51,213 +83,547 @@ class Interval extends Pipeable implements IntervalLike {
 
 export type { Interval }
 
-export const interval: {
+/**
+ * Creates an `Interval`. The number of arguments selects the construction: no arguments make
+ * the zero interval, one argument is a `size` for an interval that starts at `0`, and two
+ * arguments are `start` and `size`.
+ *
+ * Construction is exact. The fields store the given values unchanged, and `make` keeps a
+ * negative `size` instead of normalizing it.
+ *
+ * @param start - The start position. Defaults to `0` in the zero- and one-argument forms.
+ * @param size - The signed size. Defaults to `0` in the zero-argument form.
+ * @returns The interval.
+ * @example
+ * ```ts
+ * Interval.make() // Interval.make(0, 0)
+ * Interval.make(100) // Interval.make(0, 100)
+ * Interval.make(50, 100) // Interval.make(50, 100), ending at 150
+ * ```
+ */
+export const make: {
   (): Interval
   (size: number): Interval
   (start: number, size: number): Interval
 } = (a?: number, b?: number) => {
-  return new Interval(b === undefined ? 0 : (a as number), b ?? (a as number))
+  return b === undefined ? new Interval(0, a ?? 0) : new Interval(a as number, b)
 }
 
+/**
+ * Checks if a value is an `Interval`.
+ *
+ * It returns `true` only for values built by `make`, which carry the brand. A plain
+ * `{ start, size }` object fails. Use `isIntervalLike` for the structural check.
+ *
+ * @param value - The value to check.
+ * @returns `true` if the value is an `Interval`, `false` otherwise.
+ */
 export const isInterval = (value: unknown): value is Interval => {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
+
+/**
+ * Checks if a value has the structural shape of an interval: a numeric `start` and a numeric
+ * `size`. Every `Interval` passes, and so does any plain object with the two fields.
+ *
+ * @param value - The value to check.
+ * @returns `true` if the value is an `IntervalLike`, `false` otherwise.
+ */
 export const isIntervalLike = (value: unknown): value is IntervalLike => {
-  return isRecord(value) && 'start' in value && 'size' in value
+  return isRecord(value) && typeof value.start === 'number' && typeof value.size === 'number'
 }
 
+const targetBounds = (target: number | IntervalLike, gap: number): [number, number] => {
+  if (typeof target === 'number') {
+    return [target - gap, target + gap]
+  }
+  const [min, max] = minMax(target.start, target.start + target.size)
+  return [min - gap, max + gap]
+}
+
+/**
+ * Moves the interval so it starts at `start` and keeps its size. The data-last form omits
+ * `self` and returns a function of it.
+ *
+ * @param self - The interval to move.
+ * @param start - The new start position.
+ * @returns An interval at `start` with `self`'s size.
+ * @example
+ * ```ts
+ * Interval.setStart(Interval.make(0, 100), 50) // Interval.make(50, 100)
+ * Interval.make(0, 100).pipe(Interval.setStart(-50)) // Interval.make(-50, 100)
+ * ```
+ */
 export const setStart: {
-  (span: Interval, start: number): Interval
-  (start: number): (span: Interval) => Interval
-} = dual(2, (span: Interval, start: number) => new Interval(start, span.size))
+  (self: Interval, start: number): Interval
+  (start: number): (self: Interval) => Interval
+} = dual(2, (self: Interval, start: number) => new Interval(start, self.size))
 
+/**
+ * Resizes the interval to `size`, anchored at `origin`. `origin` is the normalized position
+ * within the interval that keeps its place: `0` fixes the start, `0.5` the center, and `1` the
+ * end. The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The interval to resize.
+ * @param size - The new size.
+ * @param origin - The normalized anchor position. Defaults to `0`.
+ * @returns An interval of the given size, starting at `self.start + (self.size - size) * origin`.
+ * @example
+ * ```ts
+ * Interval.setSize(Interval.make(0, 100), 50) // Interval.make(0, 50)
+ * Interval.setSize(Interval.make(0, 100), 50, 0.5) // Interval.make(25, 50)
+ * Interval.make(0, 100).pipe(Interval.setSize(50, 1)) // Interval.make(50, 50)
+ * ```
+ */
 export const setSize: {
-  (span: Interval, size: number, origin?: number): Interval
-  (size: number, origin?: number): (span: Interval) => Interval
+  (self: Interval, size: number, origin?: number): Interval
+  (size: number, origin?: number): (self: Interval) => Interval
 } = dual(
   (args) => isInterval(args[0]),
-  (span: Interval, size: number, origin = 0) =>
-    new Interval(span.start + (span.size - size) * origin, size),
+  (self: Interval, size: number, origin = 0) =>
+    new Interval(self.start + (self.size - size) * origin, size),
 )
 
+/**
+ * Moves the interval so its end (`start + size`) lands at `end` and keeps its size. The
+ * data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The interval to move.
+ * @param end - The new end position.
+ * @returns An interval starting at `end - self.size` with `self`'s size.
+ * @example
+ * ```ts
+ * Interval.setEnd(Interval.make(0, 100), 50) // Interval.make(-50, 100)
+ * ```
+ */
 export const setEnd: {
-  (span: Interval, end: number): Interval
-  (end: number): (span: Interval) => Interval
-} = dual(
-  2,
-  (span: Interval, end: number) => new Interval(end - span.size, span.size),
-)
+  (self: Interval, end: number): Interval
+  (end: number): (self: Interval) => Interval
+} = dual(2, (self: Interval, end: number) => new Interval(end - self.size, self.size))
 
+/**
+ * Shifts the interval by `amount` and keeps its size. The data-last form omits `self` and
+ * returns a function of it.
+ *
+ * @param self - The interval to shift.
+ * @param amount - The signed distance to move by.
+ * @returns An interval starting at `self.start + amount` with `self`'s size.
+ * @example
+ * ```ts
+ * Interval.translate(Interval.make(0, 100), 50) // Interval.make(50, 100)
+ * Interval.make(0, 100).pipe(Interval.translate(-50)) // Interval.make(-50, 100)
+ * ```
+ */
 export const translate: {
-  (interval: Interval, amount: number): Interval
-  (amount: number): (interval: Interval) => Interval
-} = dual(
-  2,
-  (interval: Interval, amount: number) =>
-    new Interval(interval.start + amount, interval.size),
-)
+  (self: Interval, amount: number): Interval
+  (amount: number): (self: Interval) => Interval
+} = dual(2, (self: Interval, amount: number) => new Interval(self.start + amount, self.size))
 
+/**
+ * Scales the size of the interval by `factor`, anchored at `origin`. `origin` is the normalized
+ * position within the interval that stays fixed: `0` fixes the start, `0.5` the center, and `1`
+ * the end. A negative factor mirrors the interval about the anchor and gives a negative size.
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The interval to scale.
+ * @param factor - The size multiplier.
+ * @param origin - The normalized anchor position. Defaults to `0`.
+ * @returns An interval of size `self.size * factor`, anchored at `origin`.
+ * @example
+ * ```ts
+ * Interval.scale(Interval.make(0, 100), 2) // Interval.make(0, 200)
+ * Interval.make(0, 100).pipe(Interval.scale(2, 1)) // Interval.make(-100, 200)
+ * ```
+ */
 export const scale: {
-  (interval: Interval, scale: number, origin?: number): Interval
-  (scale: number, origin?: number): (interval: Interval) => Interval
+  (self: Interval, factor: number, origin?: number): Interval
+  (factor: number, origin?: number): (self: Interval) => Interval
 } = dual(
   (args) => isInterval(args[0]),
-  (interval: Interval, scale: number, origin = 0) =>
-    new Interval(
-      interval.start + (interval.size - interval.size * scale) * origin,
-      interval.size * scale,
-    ),
+  (self: Interval, factor: number, origin = 0) =>
+    new Interval(self.start + (self.size - self.size * factor) * origin, self.size * factor),
 )
 
+/**
+ * Scales the size of the interval by `factor` about an absolute `position` on the axis. That
+ * position stays fixed. `scale` anchors at a normalized position within the interval, but
+ * `scaleFrom` anchors at a coordinate. One shared `position` can therefore scale several
+ * intervals together. The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The interval to scale.
+ * @param factor - The size multiplier.
+ * @param position - The axis coordinate that stays fixed.
+ * @returns An interval starting at `position + (self.start - position) * factor` with size
+ * `self.size * factor`.
+ * @example
+ * ```ts
+ * Interval.scaleFrom(Interval.make(100, 100), 2, 100) // Interval.make(100, 200)
+ * Interval.make(100, 100).pipe(Interval.scaleFrom(2, 0)) // Interval.make(200, 200)
+ * ```
+ */
 export const scaleFrom: {
-  (interval: Interval, scale: number, position: number): Interval
-  (scale: number, position: number): (interval: Interval) => Interval
+  (self: Interval, factor: number, position: number): Interval
+  (factor: number, position: number): (self: Interval) => Interval
 } = dual(
   3,
-  (interval: Interval, scale: number, position: number) =>
-    new Interval(
-      position + (interval.start - position) * scale,
-      interval.size * scale,
-    ),
+  (self: Interval, factor: number, position: number) =>
+    new Interval(position + (self.start - position) * factor, self.size * factor),
 )
 
+/**
+ * Linearly interpolates from `self` toward `target`, per field. `start` and `size` each move by
+ * `amount` along the line between the two intervals. The result is exact at the endpoints: `0`
+ * reproduces the fields of `self`, and `1` reproduces those of `target`. The factor is not
+ * clamped, so values outside `[0, 1]` extrapolate. The data-last form omits `self` and returns
+ * a function of it.
+ *
+ * @param self - The interval at `amount = 0`.
+ * @param target - The interval at `amount = 1`.
+ * @param amount - The interpolation factor. It is not restricted to `[0, 1]`.
+ * @returns The interpolated interval.
+ * @example
+ * ```ts
+ * Interval.lerp(Interval.make(0, 100), Interval.make(100, 50), 0.5) // Interval.make(50, 75)
+ * Interval.make(0, 100).pipe(Interval.lerp(Interval.make(100, 100), 1)) // Interval.make(100, 100)
+ * ```
+ */
 export const lerp: {
-  (interval: Interval, target: Interval, amount: number): Interval
-  (target: Interval, amount: number): (interval: Interval) => Interval
+  (self: Interval, target: Interval, amount: number): Interval
+  (target: Interval, amount: number): (self: Interval) => Interval
 } = dual(
   3,
-  (interval: Interval, target: Interval, amount: number) =>
+  (self: Interval, target: Interval, amount: number) =>
     new Interval(
-      lerpNumber(amount, interval.start, target.start),
-      lerpNumber(amount, interval.size, target.size),
+      lerpNumber(amount, self.start, target.start),
+      lerpNumber(amount, self.size, target.size),
     ),
 )
 
+// localize, normalize, and denormalize take fixed arities because their target
+// can itself be an Interval.
+/**
+ * Re-expresses a position or interval relative to the start of `self`. The result is measured
+ * from `self.start` instead of the axis origin. An interval target keeps its size, and only its
+ * start shifts. A number target is a position on the axis. The data-last form omits `self` and
+ * returns a function of it.
+ *
+ * @param self - The interval whose start becomes the new `0`.
+ * @param target - The position or interval to re-express.
+ * @returns A number or `Interval` (matching `target`) relative to `self.start`.
+ * @example
+ * ```ts
+ * Interval.localize(Interval.make(10, 100), 60) // 50
+ * Interval.localize(Interval.make(10, 100), Interval.make(30, 5)) // Interval.make(20, 5)
+ * ```
+ */
+export const localize: {
+  (self: Interval, target: number): number
+  (self: Interval, target: IntervalLike): Interval
+  (target: number): (self: Interval) => number
+  (target: IntervalLike): (self: Interval) => Interval
+} = dual(2, (self: Interval, target: number | IntervalLike) =>
+  typeof target === 'number'
+    ? target - self.start
+    : new Interval(target.start - self.start, target.size),
+)
+
+/**
+ * Expresses a position or interval as fractions of `self`: `self.start` is `0` and `self.end`
+ * is `1`, so a position inside `self` lands in `[0, 1]`. For an interval target, `normalize`
+ * also divides the size by `self.size`. The result is not clamped. This is the inverse of
+ * `denormalize`. A zero-size `self` divides by zero and produces IEEE `Infinity` or `NaN`. The
+ * data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The reference interval whose span maps to `[0, 1]`.
+ * @param target - The position or interval to normalize.
+ * @returns A number or `Interval` (matching `target`) in units of `self`.
+ * @example
+ * ```ts
+ * Interval.normalize(Interval.make(0, 200), 50) // 0.25
+ * Interval.normalize(Interval.make(0, 100), Interval.make(25, 50)) // Interval.make(0.25, 0.5)
+ * Interval.make(100, 100).pipe(Interval.normalize(Interval.make(0, 100))) // Interval.make(-1, 1)
+ * ```
+ */
 export const normalize: {
-  (interval: Interval, target: Interval): Interval
-  (target: Interval): (interval: Interval) => Interval
+  (self: Interval, target: number): number
+  (self: Interval, target: IntervalLike): Interval
+  (target: number): (self: Interval) => number
+  (target: IntervalLike): (self: Interval) => Interval
+} = dual(2, (self: Interval, target: number | IntervalLike) =>
+  typeof target === 'number'
+    ? (target - self.start) / self.size
+    : new Interval((target.start - self.start) / self.size, target.size / self.size),
+)
+
+/**
+ * Maps a position or interval given as fractions of `self` back onto the axis: `0` is
+ * `self.start`, `1` is `self.end`, and `0.5` is the midpoint. For an interval target,
+ * `denormalize` also multiplies the size by `self.size`. The result is not clamped, so fractions
+ * outside `[0, 1]` land outside `self`. This is the inverse of `normalize`. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The reference interval.
+ * @param target - The position or interval, in units of `self`.
+ * @returns A number or `Interval` (matching `target`) on `self`'s axis.
+ * @example
+ * ```ts
+ * Interval.denormalize(Interval.make(100, 200), 0.5) // 200
+ * Interval.denormalize(Interval.make(0, 100), Interval.make(0.25, 0.5)) // Interval.make(25, 50)
+ * ```
+ */
+export const denormalize: {
+  (self: Interval, target: number): number
+  (self: Interval, target: IntervalLike): Interval
+  (target: number): (self: Interval) => number
+  (target: IntervalLike): (self: Interval) => Interval
+} = dual(2, (self: Interval, target: number | IntervalLike) =>
+  typeof target === 'number'
+    ? self.start + target * self.size
+    : new Interval(self.start + target.start * self.size, target.size * self.size),
+)
+
+/**
+ * Maps the interval from the coordinate space of `source` to that of `target`. `start` keeps
+ * its relative position (`source.start` maps to `target.start`, `source.end` to `target.end`),
+ * and `size` scales by `target.size / source.size`. The result is not clamped. A zero-size
+ * `source` divides by zero and produces IEEE `Infinity` or `NaN`. The data-last form omits
+ * `self` and returns a function of it.
+ *
+ * @param self - The interval to remap.
+ * @param source - The space that `self` is expressed in now.
+ * @param target - The space to express it in.
+ * @returns The remapped interval.
+ * @example
+ * ```ts
+ * Interval.remap(Interval.make(0, 100), Interval.make(0, 100), Interval.make(100, 100))
+ * // Interval.make(100, 100)
+ * Interval.make(0, 50).pipe(Interval.remap(Interval.make(100, 100), Interval.make(0, 100)))
+ * // Interval.make(-100, 50)
+ * ```
+ */
+export const remap: {
+  (self: Interval, source: Interval, target: Interval): Interval
+  (source: Interval, target: Interval): (self: Interval) => Interval
+} = dual(
+  3,
+  (self: Interval, source: Interval, target: Interval) =>
+    new Interval(
+      remapNumber(self.start, source.start, source.end, target.start, target.end),
+      remapNumber(self.size, 0, source.size, 0, target.size),
+    ),
+)
+
+// alignTo and avoid take fixed arities because their target can itself be an
+// Interval. With a trailing optional, a 2-argument call is ambiguous between
+// the data-first and data-last forms.
+/**
+ * Positions the interval so its `origin` point coincides with the target, and keeps its size.
+ * `origin` is a normalized position within the interval: `0` is its start, `0.5` its center,
+ * and `1` its end. A number target is the position itself. An interval target gives its own
+ * `origin` point, so `Interval.alignTo(a, b, 1)` puts the end of `a` at the end of `b`. The
+ * data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The interval to position.
+ * @param target - The position to align to, or an interval whose `origin` point is that position.
+ * @param origin - The normalized alignment point, applied to `self` and to an interval target
+ * alike.
+ * @returns An interval of `self`'s size, aligned to the target.
+ * @example
+ * ```ts
+ * Interval.alignTo(Interval.make(0, 100), 50, 0.5) // Interval.make(0, 100), centered on 50
+ * Interval.alignTo(Interval.make(0, 100), Interval.make(200, 50), 0) // Interval.make(200, 100)
+ * Interval.make(0, 100).pipe(Interval.alignTo(50, 1)) // Interval.make(-50, 100), ending at 50
+ * ```
+ */
+export const alignTo: {
+  (self: Interval, target: number | IntervalLike, origin: number): Interval
+  (target: number | IntervalLike, origin: number): (self: Interval) => Interval
+} = dual(3, (self: Interval, target: number | IntervalLike, origin: number) => {
+  const position = typeof target === 'number' ? target : target.start + target.size * origin
+  return new Interval(position - self.size * origin, self.size)
+})
+
+/**
+ * Moves the interval clear of a forbidden zone. The zone is the bounds of the target, expanded
+ * by `gap` on both sides. If the interval is already clear of the zone, `avoid` returns the
+ * same instance unchanged. Touching counts as clear, judged within tolerance (see
+ * `PRECISION.md`). An overlapping interval escapes by the smaller shift and lands flush against
+ * the nearer edge of the zone, with its size preserved. Ties resolve toward the start. The
+ * data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The interval to move.
+ * @param target - The obstacle: a position, or an interval whose bounds define the zone.
+ * @param gap - The clearance added on both sides of the target.
+ * @returns `self` when already clear, otherwise an interval shifted out of the zone.
+ * @example
+ * ```ts
+ * Interval.avoid(Interval.make(0, 100), 50, 0)
+ * // Interval.make(-50, 100), the tie resolved toward the start
+ * Interval.avoid(Interval.make(0, 100), Interval.make(0, 10), 10) // Interval.make(20, 100)
+ * Interval.make(200, 50).pipe(Interval.avoid(Interval.make(0, 100), 0))
+ * // the same instance, untouched
+ * ```
+ */
+export const avoid: {
+  (self: Interval, target: number | IntervalLike, gap: number): Interval
+  (target: number | IntervalLike, gap: number): (self: Interval) => Interval
+} = dual(3, (self: Interval, target: number | IntervalLike, gap: number) => {
+  const [lo, hi] = targetBounds(target, gap)
+  const tolerance = boundsTolerance(Math.min(lo, self.min), Math.max(hi, self.max))
+
+  if (self.max <= lo + tolerance || self.min >= hi - tolerance) {
+    return self
+  }
+
+  // Escape by the smaller shift. Ties resolve toward the start.
+  const shiftDown = self.max - lo
+  const shiftUp = hi - self.min
+  return new Interval(self.start + (shiftDown <= shiftUp ? -shiftDown : shiftUp), self.size)
+})
+
+/**
+ * Returns the smallest interval that contains both operands, which is the enclosing hull of
+ * their spans. The result is orientation-normalized. It starts at the combined minimum, and its
+ * size is non-negative whatever the signs of the operands. The data-last form omits `self` and
+ * returns a function of it.
+ *
+ * @param self - The first interval.
+ * @param other - The second interval.
+ * @returns The enclosing interval.
+ * @example
+ * ```ts
+ * Interval.join(Interval.make(0, 100), Interval.make(150, 50)) // Interval.make(0, 200)
+ * Interval.make(0, 100).pipe(Interval.join(Interval.make(-50, 25))) // Interval.make(-50, 150)
+ * ```
+ */
+export const join: {
+  (self: Interval, other: IntervalLike): Interval
+  (other: IntervalLike): (self: Interval) => Interval
+} = dual(2, (self: Interval, other: IntervalLike) => {
+  const [otherMin, otherMax] = minMax(other.start, other.start + other.size)
+  const min = Math.min(self.min, otherMin)
+  const max = Math.max(self.max, otherMax)
+  return new Interval(min, max - min)
+})
+
+/**
+ * Returns the overlap of the two intervals. Disjoint operands produce a zero-size interval at
+ * the midpoint of the gap between their nearest edges. The result is orientation-normalized. It
+ * starts at the minimum of the overlap, and its size is non-negative whatever the signs of the
+ * operands. The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The first interval.
+ * @param other - The second interval.
+ * @returns The overlapping interval, or a zero-size interval in the gap when there is none.
+ * @example
+ * ```ts
+ * Interval.intersect(Interval.make(0, 100), Interval.make(50, 100)) // Interval.make(50, 50)
+ * Interval.intersect(Interval.make(0, 100), Interval.make(200, 100)) // Interval.make(150, 0)
+ * Interval.make(0, 100).pipe(Interval.intersect(Interval.make(50, 100))) // Interval.make(50, 50)
+ * ```
+ */
+export const intersect: {
+  (self: Interval, other: IntervalLike): Interval
+  (other: IntervalLike): (self: Interval) => Interval
+} = dual(2, (self: Interval, other: IntervalLike) => {
+  const [otherMin, otherMax] = minMax(other.start, other.start + other.size)
+  const min = Math.max(self.min, otherMin)
+  const max = Math.min(self.max, otherMax)
+
+  if (min > max) {
+    // The operands are disjoint. Return a zero-size interval at the midpoint
+    // of the gap between the nearest edges.
+    return new Interval((min + max) / 2, 0)
+  }
+
+  return new Interval(min, max - min)
+})
+
+/**
+ * Checks whether the interval contains a position or another interval, boundaries included.
+ * The comparison is tolerance-aware. A target within rounding distance of a boundary counts as
+ * inside. The band scales to the finite bounds of `self`, so the verdict is magnitude-invariant
+ * (see `PRECISION.md`). An infinite bound adds nothing to the band, so a half-infinite interval
+ * still judges its finite boundary with tolerance. Negative sizes are normalized, and
+ * containment is judged on `min`/`max` bounds on both sides. The data-last form omits `self`
+ * and returns a function of it.
+ *
+ * @param self - The containing interval.
+ * @param target - A position, or an interval that must lie entirely within `self`.
+ * @returns `true` if `self` contains the target.
+ * @example
+ * ```ts
+ * Interval.contains(Interval.make(0, 100), 100) // true
+ * Interval.contains(Interval.make(0, 100), Interval.make(50, 100)) // false
+ * Interval.contains(Interval.make(0, 0.3), 0.1 + 0.2) // true, tolerating boundary noise
+ * Interval.make(0, 100).pipe(Interval.contains(50)) // true
+ * ```
+ */
+export const contains: {
+  (self: Interval, target: number | IntervalLike): boolean
+  (target: number | IntervalLike): (self: Interval) => boolean
+} = dual(2, (self: Interval, target: number | IntervalLike) => {
+  const tolerance = boundsTolerance(self.min, self.max)
+
+  if (typeof target === 'number') {
+    return target >= self.min - tolerance && target <= self.max + tolerance
+  }
+
+  const [targetMin, targetMax] = minMax(target.start, target.start + target.size)
+  return targetMin >= self.min - tolerance && targetMax <= self.max + tolerance
+})
+
+/**
+ * Checks whether the two intervals overlap. Touching counts, so intervals that share only a
+ * boundary intersect. The comparison is tolerance-aware: a gap within rounding distance of zero
+ * counts as touching (see `PRECISION.md`). It is also orientation-normalized, so negative sizes
+ * compare by their `min`/`max` bounds. The data-last form omits `self` and returns a function
+ * of it.
+ *
+ * @param self - The first interval.
+ * @param other - The second interval.
+ * @returns `true` if the intervals overlap or touch.
+ * @example
+ * ```ts
+ * Interval.intersects(Interval.make(0, 100), Interval.make(100, 50)) // true, touching at 100
+ * Interval.make(0, 100).pipe(Interval.intersects(Interval.make(150, 50))) // false
+ * ```
+ */
+export const intersects: {
+  (self: Interval, other: IntervalLike): boolean
+  (other: IntervalLike): (self: Interval) => boolean
+} = dual(2, (self: Interval, other: IntervalLike) => {
+  const [otherMin, otherMax] = minMax(other.start, other.start + other.size)
+  const tolerance = boundsTolerance(Math.min(self.min, otherMin), Math.max(self.max, otherMax))
+  return self.min <= otherMax + tolerance && self.max >= otherMin - tolerance
+})
+
+/**
+ * Checks the two intervals for equality, per field. It compares `start` against `start` and
+ * `size` against `size`, each within the `coincident` band of `curvy/number`:
+ * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)`. Rounding noise therefore never
+ * separates two computed intervals, at any magnitude (see `PRECISION.md`). Non-finite fields
+ * compare exactly: an infinite field equals only the same infinity, and a `NaN` field equals
+ * nothing. Orientation matters. An interval and its negative-size mirror cover the same span
+ * but are not equal. Like `coincident`, the check is not transitive. The data-last form omits
+ * `self` and returns a function of it.
+ *
+ * @param self - The first interval.
+ * @param other - The second interval.
+ * @returns `true` if the intervals' fields coincide.
+ * @example
+ * ```ts
+ * Interval.equals(Interval.make(0, 100), Interval.make(0, 100)) // true
+ * Interval.equals(Interval.make(0.1 + 0.2, 1), Interval.make(0.3, 1)) // true
+ * Interval.equals(Interval.make(0, Infinity), Interval.make(0, Infinity)) // true
+ * Interval.make(0, 100).pipe(Interval.equals(Interval.make(0, 101))) // false
+ * ```
+ */
+export const equals: {
+  (self: Interval, other: IntervalLike): boolean
+  (other: IntervalLike): (self: Interval) => boolean
 } = dual(
   2,
-  (interval: Interval, target: Interval) =>
-    new Interval(
-      normalizeNumber(interval.start, target.start, target.end),
-      interval.size / target.size,
-    ),
+  (self: Interval, other: IntervalLike) =>
+    fieldsCoincident(self.start, other.start) && fieldsCoincident(self.size, other.size),
 )
-
-export const remap: {
-  (interval: Interval, source: Interval, target: Interval): Interval
-  (source: Interval, target: Interval): (interval: Interval) => Interval
-} = dual(
-  3,
-  (interval: Interval, source: Interval, target: Interval) =>
-    new Interval(
-      remapNumber(
-        interval.start,
-        source.start,
-        source.end,
-        target.start,
-        target.end,
-      ),
-      remapNumber(interval.size, 0, source.size, 0, target.size),
-    ),
-)
-
-export const alignTo: {
-  (interval: Interval, target: number | Interval, origin?: number): Interval
-  (target: number | Interval, origin?: number): (interval: Interval) => Interval
-} = dual(
-  (args) =>
-    isInterval(args[0]) &&
-    (isInterval(args[1]) || (typeof args[1] === 'number' && args.length >= 3)),
-  (interval: Interval, target: number, origin = 0) =>
-    new Interval(target - interval.size * origin, interval.size),
-)
-
-export const avoid: {
-  (interval: IntervalLike, target: number | IntervalLike, gap: number): Interval
-  (
-    target: number | IntervalLike,
-    gap: number,
-  ): (interval: IntervalLike) => Interval
-} = dual(
-  3,
-  (source: IntervalLike, target: number | IntervalLike, gap: number) => {
-    const targetIsIntervalLike = isIntervalLike(target)
-
-    const start = (targetIsIntervalLike ? target.start : target) - gap
-    const end = (targetIsIntervalLike ? target.end : target) + gap
-
-    if (source.start > end || source.end < start) {
-      return source
-    }
-
-    if (
-      (source.start >= start && source.end <= end) ||
-      (source.start <= start && source.end >= end)
-    ) {
-      const deltaStart = source.start - start
-      const deltaEnd = end - source.end
-
-      const offset =
-        (Math.min(deltaStart, deltaEnd) + source.size) *
-        (deltaStart > deltaEnd ? 1 : -1)
-
-      return new Interval(source.start + offset, source.size)
-    }
-
-    const offset =
-      Math.min(source.end, end) -
-      Math.max(source.start, start) * (source.start < start ? -1 : 1)
-    return new Interval(source.start + offset, source.size)
-  },
-)
-//
-// export const proportionalOrigin: {
-//   (interval: IntervalLike, target: IntervalLike): number
-//   (target: IntervalLike): (interval: IntervalLike) => number
-// } = dual(2, (source: IntervalLike, target: IntervalLike): number => {
-//   if (source.size > target.size) {
-//     return proportionalOrigin(target, source)
-//   }
-//
-//   if (source.start >= target.start && source.end <= target.end) {
-//     const ratio = (target.size - source.size) / target.size
-//     const absolute = lerpNumber(ratio, target.start, target.end)
-//     return normalizeNumber(absolute, target.start, target.end)
-//   }
-//
-//   if (source.end === target.start) {
-//     return 1
-//   }
-//
-//   if (source.start === target.end) {
-//     return 0
-//   }
-//
-//   if (source.end < target.start) {
-//     return remapNumber(
-//       lerpNumber(0.5, source.end, target.start),
-//       source.start,
-//       source.end,
-//       0,
-//       1,
-//     )
-//   }
-//
-//   if (source.start > target.end) {
-//     return remapNumber(
-//       lerpNumber(0.5, source.start, target.end),
-//       source.start,
-//       source.end,
-//       0,
-//       1,
-//     )
-//   }
-//
-//   if (source.start < target.start) {
-//     return normalizeNumber(target.start, source.start, source.end)
-//   }
-//
-//   return normalizeNumber(target.end, source.start, source.end)
-// })

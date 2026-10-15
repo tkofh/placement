@@ -1,100 +1,40 @@
-import { rect } from 'placement/rect'
 import { defineComponent, h, ref } from 'vue'
-import { useTextRect } from '../composables/useDomRect'
-import {
-  PAINT_PROP_KEYS,
-  type PaintProps,
-  usePaint,
-} from '../composables/usePaint'
+import { useTextRect } from '../composables/useDomRect.ts'
+import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
 import {
   INSET_PROP_KEYS,
   type InsetProps,
   TRANSFORM_PROP_KEYS,
   type TransformProps,
-  useAxisInterval,
-  useTransformedRect,
-} from '../composables/useRect'
-import {
-  useParentHeight,
-  useParentWidth,
-  useParentX,
-  useParentY,
-} from '../composables/useSizingContext'
-import { useLengthPercentage } from '../props/lengthPercentage'
+  useRect,
+} from '../composables/useRect.ts'
 
-export interface GraphicTextProps
-  extends PaintProps,
-    InsetProps,
-    TransformProps {}
+export interface GraphicTextProps extends PaintProps, InsetProps, TransformProps {}
 
 export const GraphicText = defineComponent(
   (props: GraphicTextProps, { slots }) => {
     const text = ref<SVGTextElement>()
     const domRect = useTextRect(text)
 
-    const top = useLengthPercentage(
-      () => props.top,
-      Number.POSITIVE_INFINITY,
-      'height',
-    )
-    const right = useLengthPercentage(
-      () => props.right,
-      Number.POSITIVE_INFINITY,
-      'width',
-    )
-    const bottom = useLengthPercentage(
-      () => props.bottom,
-      Number.POSITIVE_INFINITY,
-      'height',
-    )
-    const left = useLengthPercentage(
-      () => props.left,
-      Number.POSITIVE_INFINITY,
-      'width',
-    )
-
-    const parentX = useParentX()
-    const parentY = useParentY()
-    const parentWidth = useParentWidth()
-    const parentHeight = useParentHeight()
-
-    const x = useAxisInterval(
-      left,
-      right,
-      () => domRect.value.width,
-      parentX,
-      parentWidth,
-      0,
-      Number.POSITIVE_INFINITY,
-    )
-
-    const y = useAxisInterval(
-      top,
-      bottom,
-      () => domRect.value.height,
-      parentY,
-      parentHeight,
-      0,
-      Number.POSITIVE_INFINITY,
-    )
-
-    const self = useTransformedRect(
-      () => rect.fromInterval(x.value, y.value),
-      props,
-    )
+    // The measured DOM rect is the box's explicit size. The inset and
+    // transform props position it.
+    const self = useRect(props, { size: domRect })
 
     const paint = usePaint(props)
 
     return () => {
-      const { x, y, width, height } = self.value
+      const { x, y } = self.value
       return h(
         'text',
         {
           ref: text,
           x,
-          y: y + height,
-          width,
-          height,
+          y,
+          // SVG text sits on its baseline by default, so the descent of the
+          // font hangs below `y`. Anchoring `y` to the top of the text box
+          // makes it the same box that the observer measures, without font
+          // metrics.
+          'dominant-baseline': 'text-before-edge',
           ...paint.value,
         },
         slots.default?.(),

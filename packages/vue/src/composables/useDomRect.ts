@@ -1,11 +1,5 @@
-import { type Rect, rect } from 'placement/rect'
-import {
-  type MaybeRefOrGetter,
-  type ShallowRef,
-  shallowRef,
-  toValue,
-  watch,
-} from 'vue'
+import * as Rect from 'placement/rect'
+import { type MaybeRefOrGetter, type ShallowRef, shallowRef, toValue, watch } from 'vue'
 
 function useResizeObserver<T extends Element>(
   element: MaybeRefOrGetter<T | undefined>,
@@ -31,12 +25,11 @@ function useResizeObserver<T extends Element>(
 
 export function useDomRect(
   element: MaybeRefOrGetter<Element | undefined>,
-  precision = 4,
-): Readonly<ShallowRef<Rect>> {
-  const self = shallowRef(rect())
+): Readonly<ShallowRef<Rect.Rect>> {
+  const self = shallowRef(Rect.make())
 
   useResizeObserver(element, (entry) => {
-    self.value = rect.from(entry.contentRect, precision)
+    self.value = Rect.from(entry.contentRect)
   })
 
   return self
@@ -44,26 +37,11 @@ export function useDomRect(
 
 export function useTextRect(
   element: MaybeRefOrGetter<SVGTextElement | undefined>,
-  precision = 4,
-): Readonly<ShallowRef<Rect>> {
-  const self = shallowRef(rect())
+): Readonly<ShallowRef<Rect.Rect>> {
+  const self = shallowRef(Rect.make())
 
   useResizeObserver(element, (entry) => {
-    // let minX = Number.POSITIVE_INFINITY
-    // let minY = Number.POSITIVE_INFINITY
-    // let maxX = Number.NEGATIVE_INFINITY
-    // let maxY = Number.NEGATIVE_INFINITY
-    //
-    // const numChars = entry.target.getNumberOfChars()
-    // for (let i = 0; i < numChars; i++) {
-    //   const charRect = entry.target.getExtentOfChar(i)
-    //   minX = Math.min(minX, charRect.x)
-    //   minY = Math.min(minY, charRect.y)
-    //   maxX = Math.max(maxX, charRect.x + charRect.width)
-    //   maxY = Math.max(maxY, charRect.y + charRect.height)
-    // }
-    // self.value = rect(0, 0, maxX - minX, maxY - minY)
-    self.value = rect.from(entry.contentRect, precision)
+    self.value = Rect.from(entry.contentRect)
   })
 
   return self

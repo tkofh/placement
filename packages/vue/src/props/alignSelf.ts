@@ -4,18 +4,15 @@ import {
   type AlignSelfValue,
   keywordResults,
   resolveAlignSelf,
-} from '../internal/props/alignSelf'
+} from '../internal/props/alignSelf.ts'
 
 export type { AlignSelfValue, AlignSelfInput }
 
-function preferCachedAlignSelf(
-  value: AlignSelfValue,
-  previous?: AlignSelfValue,
-): AlignSelfValue {
+function preferCachedAlignSelf(value: AlignSelfValue, previous?: AlignSelfValue): AlignSelfValue {
   if (
     previous === undefined ||
     previous.align !== value.align ||
-    previous.stretchCross !== value.stretchCross
+    previous.stretch !== value.stretch
   ) {
     return value
   }
@@ -28,10 +25,7 @@ export function useAlignSelf(
   fallback: MaybeRefOrGetter<AlignSelfValue> = keywordResults.start,
 ): ComputedRef<AlignSelfValue> {
   return computed((previous: AlignSelfValue | undefined) => {
-    const { align, stretchCross } = toValue(fallback)
-    return preferCachedAlignSelf(
-      resolveAlignSelf(toValue(alignSelf), align, stretchCross),
-      previous,
-    )
+    const { align, stretch } = toValue(fallback)
+    return preferCachedAlignSelf(resolveAlignSelf(toValue(alignSelf), align, stretch), previous)
   })
 }

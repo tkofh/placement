@@ -1,450 +1,478 @@
-import { PRECISION } from './constants'
-import type { Dimensions } from './dimensions'
-import { Pipeable } from './internal/pipeable'
-import type { Point } from './point'
-import { dual } from './utils/function'
-import { roundTo } from './utils/math'
-import { hasProperty, isRecord } from './utils/object'
+import { lerp as lerpNumber } from 'curvy/number'
+import { Pipeable, dual } from 'curvy/utils'
+import type { Dimensions } from './dimensions.ts'
+import type { Point } from './point.ts'
+import { isRecord } from './utils/object.ts'
+import { fieldsCoincident } from './utils/tolerance.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/offset')
 type TypeBrand = typeof TypeBrand
 
+/**
+ * The structural shape of an offset: one number per side, in the CSS order
+ * `top`, `right`, `bottom`, `left`.
+ *
+ * Read-only operations (`equals`) accept any `OffsetLike`, so you can compare
+ * plain objects without constructing an `Offset`. Operations that build new
+ * values take the branded `Offset`. `isOffsetLike` is the runtime check for
+ * this shape.
+ */
 export interface OffsetLike {
+  /** The top side's value. */
   readonly top: number
+  /** The right side's value. */
   readonly right: number
+  /** The bottom side's value. */
   readonly bottom: number
+  /** The left side's value. */
   readonly left: number
 }
 
+/**
+ * A per-side quantity in the CSS order `top`, `right`, `bottom`, `left`.
+ * Margins, paddings, and insets have this shape. The consumer chooses what a
+ * side means. For example, `Rect` reads an `Offset` as insets in `contract`
+ * and as outsets in `expand`. Sides pair by axis: `top` and `bottom` along y,
+ * `right` and `left` along x. `Offset.xy`, `setX`, and `setY` write this
+ * pairing.
+ *
+ * Values are immutable, and constructions are exact IEEE 754. Every operation
+ * returns a new `Offset` that holds exactly what the arithmetic produced.
+ * `equals` compares within a tolerance instead. Any number is a legal side.
+ * Negative sides have a meaning (a negative inset expands), and
+ * `Offset.infinity` has `Infinity` on all four sides.
+ *
+ * The module exports this class as a type only. To construct one, use
+ * `Offset.make`. The class extends `Pipeable`, so operations chain data-last:
+ * `o.pipe(Offset.add(10), Offset.scale(2))`.
+ */
 class Offset extends Pipeable implements OffsetLike {
   readonly [TypeBrand]: TypeBrand = TypeBrand
+
+  /** The top side's value. */
   readonly top: number
+  /** The right side's value. */
   readonly right: number
+  /** The bottom side's value. */
   readonly bottom: number
+  /** The left side's value. */
   readonly left: number
 
-  constructor(
-    top: number,
-    right: number,
-    bottom: number,
-    left: number,
-    readonly precision: number,
-  ) {
+  constructor(top: number, right: number, bottom: number, left: number) {
     super()
 
-    this.top = roundTo(top, precision)
-    this.right = roundTo(right, precision)
-    this.bottom = roundTo(bottom, precision)
-    this.left = roundTo(left, precision)
+    this.top = top
+    this.right = right
+    this.bottom = bottom
+    this.left = left
+  }
+
+  /**
+   * Formats the offset for Node console inspection, as
+   * `Offset [top right bottom left]`.
+   *
+   * @returns The debug string.
+   */
+  [Symbol.for('nodejs.util.inspect.custom')]() {
+    return `Offset [${this.top} ${this.right} ${this.bottom} ${this.left}]`
+  }
+
+  /**
+   * Serializes the offset for `JSON.stringify`.
+   *
+   * @returns A plain `{ top, right, bottom, left }` object.
+   */
+  toJSON() {
+    return {
+      top: this.top,
+      right: this.right,
+      bottom: this.bottom,
+      left: this.left,
+    }
   }
 }
 
 export type { Offset }
 
-type OffsetConstructor = {
-  (offset: number, precision?: number): Offset
+/**
+ * Creates an `Offset` with `value` on all four sides. The other construction
+ * forms are module exports: `Offset.xy`, `Offset.trbl`, `Offset.fromPoint`,
+ * `Offset.fromDimensions`, and the constants `Offset.zero` and
+ * `Offset.infinity`.
+ *
+ * Construction is exact. The sides store exactly the given numbers, with no
+ * rounding.
+ *
+ * @param value - The value for every side.
+ * @returns The uniform offset.
+ * @example
+ * ```ts
+ * Offset.make(10) // Offset [10 10 10 10]
+ * Offset.xy(10, 20) // Offset [20 10 20 10]
+ * ```
+ */
+export const make = (value: number): Offset => new Offset(value, value, value, value)
 
-  xy(x: number, y: number, precision?: number): Offset
-  trbl(
-    top: number,
-    right?: number,
-    bottom?: number,
-    left?: number,
-    precision?: number,
-  ): Offset
-  fromPoint(point: Point, precision?: number): Offset
-  fromDimensions(dimensions: Dimensions, precision?: number): Offset
-  zero: Offset
-  infinity: Offset
-}
+/**
+ * Creates an offset from per-axis values. `x` fills the x-axis sides
+ * (`right`, `left`), and `y` fills the y-axis sides (`top`, `bottom`).
+ *
+ * @param x - The value for `right` and `left`.
+ * @param y - The value for `top` and `bottom`.
+ * @returns The per-axis offset.
+ * @example
+ * ```ts
+ * Offset.xy(10, 20) // Offset [20 10 20 10]
+ * ```
+ */
+export const xy = (x: number, y: number): Offset => new Offset(y, x, y, x)
 
-const offset = ((offset: number, precision = PRECISION): Offset =>
-  new Offset(offset, offset, offset, offset, precision)) as OffsetConstructor
+/**
+ * Creates an offset from one to four values with CSS shorthand fallbacks:
+ * a missing `right` or `bottom` mirrors `top`, and a missing `left`
+ * mirrors `right`.
+ *
+ * @param top - The top side.
+ * @param right - The right side. Defaults to `top`.
+ * @param bottom - The bottom side. Defaults to `top`.
+ * @param left - The left side. Defaults to the value used for `right`.
+ * @returns The offset.
+ * @example
+ * ```ts
+ * Offset.trbl(1) // Offset [1 1 1 1]
+ * Offset.trbl(1, 2) // Offset [1 2 1 2]
+ * Offset.trbl(1, 2, 3) // Offset [1 2 3 2]
+ * Offset.trbl(1, 2, 3, 4) // Offset [1 2 3 4]
+ * ```
+ */
+export const trbl = (top: number, right?: number, bottom?: number, left?: number): Offset =>
+  new Offset(top, right ?? top, bottom ?? top, left ?? right ?? top)
 
-offset.xy = (x: number, y: number, precision = PRECISION) =>
-  new Offset(y, x, y, x, precision)
+/**
+ * Creates an offset from a point. `point.x` fills the x-axis sides
+ * (`right`, `left`), and `point.y` fills the y-axis sides (`top`, `bottom`).
+ * The result is the same as `Offset.xy(point.x, point.y)`.
+ *
+ * @param point - The point to read `x` and `y` from.
+ * @returns The per-axis offset.
+ */
+export const fromPoint = (point: Point): Offset => new Offset(point.y, point.x, point.y, point.x)
 
-offset.trbl = (
-  top: number,
-  right?: number,
-  bottom?: number,
-  left?: number,
-  precision = PRECISION,
-) =>
-  new Offset(top, right ?? top, bottom ?? top, left ?? right ?? top, precision)
-
-offset.fromPoint = (point: Point, precision = point.precision) =>
-  new Offset(point.y, point.x, point.y, point.x, precision)
-
-offset.fromDimensions = (
-  dimensions: Dimensions,
-  precision = dimensions.precision,
-) =>
+/**
+ * Creates an offset of half of each dimension per side: `width / 2` on
+ * `right` and `left`, and `height / 2` on `top` and `bottom`. If you expand a
+ * zero-size rect by the result, you get a rect of `dimensions` centered on
+ * the position of the zero-size rect.
+ *
+ * @param dimensions - The dimensions to halve.
+ * @returns The half-dimensions offset.
+ * @example
+ * ```ts
+ * Offset.fromDimensions(Dimensions.make(100, 50)) // Offset [25 50 25 50]
+ * ```
+ */
+export const fromDimensions = (dimensions: Dimensions): Offset =>
   new Offset(
     dimensions.height * 0.5,
     dimensions.width * 0.5,
     dimensions.height * 0.5,
     dimensions.width * 0.5,
-    precision,
   )
 
-offset.zero = new Offset(0, 0, 0, 0, PRECISION)
-offset.infinity = new Offset(
+/** The offset with `0` on every side, which is the identity of `add` and `subtract`. */
+export const zero: Offset = new Offset(0, 0, 0, 0)
+
+/** The offset with `Infinity` on every side. */
+export const infinity: Offset = new Offset(
   Number.POSITIVE_INFINITY,
   Number.POSITIVE_INFINITY,
   Number.POSITIVE_INFINITY,
   Number.POSITIVE_INFINITY,
-  PRECISION,
 )
 
-export { offset }
-
-export function isOffset(value: unknown): value is Offset {
-  return isRecord(value) && TypeBrand in value
+/**
+ * Checks if a value is an `Offset`.
+ *
+ * True only for values that this module's constructors build, because they
+ * carry the brand. A plain `{ top, right, bottom, left }` object fails. For
+ * the structural check, use `isOffsetLike`.
+ *
+ * @param value - The value to check.
+ * @returns `true` if the value is an `Offset`, `false` otherwise.
+ */
+export const isOffset = (value: unknown): value is Offset => {
+  return typeof value === 'object' && value !== null && TypeBrand in value
 }
 
-export function isOffsetLike(value: unknown): value is OffsetLike {
+/**
+ * Checks if a value has the structural shape of an offset: an object with
+ * numeric `top`, `right`, `bottom`, and `left`. Every `Offset` passes, and
+ * so does any plain object with the four sides.
+ *
+ * @param value - The value to check.
+ * @returns `true` if the value is an `OffsetLike`, `false` otherwise.
+ */
+export const isOffsetLike = (value: unknown): value is OffsetLike => {
   return (
     isRecord(value) &&
-    hasProperty(value, 'top') &&
-    hasProperty(value, 'right') &&
-    hasProperty(value, 'bottom') &&
-    hasProperty(value, 'left')
+    typeof value.top === 'number' &&
+    typeof value.right === 'number' &&
+    typeof value.bottom === 'number' &&
+    typeof value.left === 'number'
   )
 }
 
-export const top: {
-  (offset: Offset, top: number): Offset
-  (top: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, top: number) =>
-    new Offset(top, offset.right, offset.bottom, offset.left, offset.precision),
+/**
+ * Replaces the top side and keeps the other three. The data-last form omits
+ * `self` and returns a function of it.
+ *
+ * @param self - The offset to update.
+ * @param top - The new top side.
+ * @returns A new `Offset` with `top` replaced.
+ */
+export const setTop: {
+  (self: Offset, top: number): Offset
+  (top: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, top: number) => new Offset(top, self.right, self.bottom, self.left))
+
+/**
+ * Replaces the right side and keeps the other three. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The offset to update.
+ * @param right - The new right side.
+ * @returns A new `Offset` with `right` replaced.
+ */
+export const setRight: {
+  (self: Offset, right: number): Offset
+  (right: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, right: number) => new Offset(self.top, right, self.bottom, self.left))
+
+/**
+ * Replaces the bottom side and keeps the other three. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The offset to update.
+ * @param bottom - The new bottom side.
+ * @returns A new `Offset` with `bottom` replaced.
+ */
+export const setBottom: {
+  (self: Offset, bottom: number): Offset
+  (bottom: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, bottom: number) => new Offset(self.top, self.right, bottom, self.left))
+
+/**
+ * Replaces the left side and keeps the other three. The data-last form omits
+ * `self` and returns a function of it.
+ *
+ * @param self - The offset to update.
+ * @param left - The new left side.
+ * @returns A new `Offset` with `left` replaced.
+ */
+export const setLeft: {
+  (self: Offset, left: number): Offset
+  (left: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, left: number) => new Offset(self.top, self.right, self.bottom, left))
+
+/**
+ * Replaces both x-axis sides (`right` and `left`) with one value and keeps
+ * `top` and `bottom`. The data-last form omits `self` and returns a function
+ * of it.
+ *
+ * @param self - The offset to update.
+ * @param x - The new value for `right` and `left`.
+ * @returns A new `Offset` with both x-axis sides set to `x`.
+ */
+export const setX: {
+  (self: Offset, x: number): Offset
+  (x: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, x: number) => new Offset(self.top, x, self.bottom, x))
+
+/**
+ * Replaces both y-axis sides (`top` and `bottom`) with one value and keeps
+ * `right` and `left`. The data-last form omits `self` and returns a function
+ * of it.
+ *
+ * @param self - The offset to update.
+ * @param y - The new value for `top` and `bottom`.
+ * @returns A new `Offset` with both y-axis sides set to `y`.
+ */
+export const setY: {
+  (self: Offset, y: number): Offset
+  (y: number): (self: Offset) => Offset
+} = dual(2, (self: Offset, y: number) => new Offset(y, self.right, y, self.left))
+
+/**
+ * Adds to every side. A number adds the same amount to each side, and an
+ * `OffsetLike` adds side by side. The data-last form omits `self` and returns
+ * a function of it.
+ *
+ * @param self - The offset to add to.
+ * @param value - A number for every side, or per-side amounts (any `OffsetLike`).
+ * @returns The sum.
+ * @example
+ * ```ts
+ * Offset.add(Offset.trbl(1, 2, 3, 4), 10) // Offset [11 12 13 14]
+ * Offset.make(1).pipe(Offset.add(Offset.trbl(10, 20, 30, 40))) // Offset [11 21 31 41]
+ * ```
+ */
+export const add: {
+  (self: Offset, value: number | OffsetLike): Offset
+  (value: number | OffsetLike): (self: Offset) => Offset
+} = dual(2, (self: Offset, value: number | OffsetLike) =>
+  typeof value === 'number'
+    ? new Offset(self.top + value, self.right + value, self.bottom + value, self.left + value)
+    : new Offset(
+        self.top + value.top,
+        self.right + value.right,
+        self.bottom + value.bottom,
+        self.left + value.left,
+      ),
 )
 
-export const right: {
-  (offset: Offset, right: number): Offset
-  (right: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, right: number) =>
-    new Offset(offset.top, right, offset.bottom, offset.left, offset.precision),
+/**
+ * Subtracts from every side. A number subtracts the same amount from each
+ * side, and an `OffsetLike` subtracts side by side. The data-last form omits
+ * `self` and returns a function of it.
+ *
+ * @param self - The offset to subtract from.
+ * @param value - A number for every side, or per-side amounts (any `OffsetLike`).
+ * @returns The difference.
+ * @example
+ * ```ts
+ * Offset.subtract(Offset.trbl(11, 12, 13, 14), 10) // Offset [1 2 3 4]
+ * Offset.make(11).pipe(Offset.subtract(Offset.trbl(1, 2, 3, 4))) // Offset [10 9 8 7]
+ * ```
+ */
+export const subtract: {
+  (self: Offset, value: number | OffsetLike): Offset
+  (value: number | OffsetLike): (self: Offset) => Offset
+} = dual(2, (self: Offset, value: number | OffsetLike) =>
+  typeof value === 'number'
+    ? new Offset(self.top - value, self.right - value, self.bottom - value, self.left - value)
+    : new Offset(
+        self.top - value.top,
+        self.right - value.right,
+        self.bottom - value.bottom,
+        self.left - value.left,
+      ),
 )
 
-export const bottom: {
-  (offset: Offset, bottom: number): Offset
-  (bottom: number): (offset: Offset) => Offset
+/**
+ * Multiplies every side by `factor`. The function does not clamp, so a
+ * negative factor flips every sign. The data-last form omits `self` and
+ * returns a function of it.
+ *
+ * @param self - The offset to scale.
+ * @param factor - The multiplier applied to each side.
+ * @returns The scaled offset.
+ * @example
+ * ```ts
+ * Offset.scale(Offset.trbl(1, 2, 3, 4), 2) // Offset [2 4 6 8]
+ * Offset.trbl(1, 2, 3, 4).pipe(Offset.scale(0.5)) // Offset [0.5 1 1.5 2]
+ * ```
+ */
+export const scale: {
+  (self: Offset, factor: number): Offset
+  (factor: number): (self: Offset) => Offset
 } = dual(
   2,
-  (offset: Offset, bottom: number) =>
-    new Offset(offset.top, offset.right, bottom, offset.left, offset.precision),
+  (self: Offset, factor: number) =>
+    new Offset(self.top * factor, self.right * factor, self.bottom * factor, self.left * factor),
 )
 
-export const left: {
-  (offset: Offset, left: number): Offset
-  (left: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, left: number) =>
-    new Offset(offset.top, offset.right, offset.bottom, left, offset.precision),
-)
+/**
+ * Flips the sign of every side. This function is not a dual, so pass the
+ * bare function to `.pipe`.
+ *
+ * @param self - The offset to negate.
+ * @returns The negated offset.
+ * @example
+ * ```ts
+ * Offset.negate(Offset.trbl(1, -2, 3, -4)) // Offset [-1 2 -3 4]
+ * Offset.trbl(1, -2, 3, -4).pipe(Offset.negate) // Offset [-1 2 -3 4]
+ * ```
+ */
+export const negate = (self: Offset): Offset =>
+  new Offset(-self.top, -self.right, -self.bottom, -self.left)
 
-export const precision: {
-  (offset: Offset, precision: number): Offset
-  (precision: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, precision: number) =>
-    new Offset(offset.top, offset.right, offset.bottom, offset.left, precision),
-)
+/**
+ * Takes the magnitude of every side (`Math.abs`). This function is not a
+ * dual, so pass the bare function to `.pipe`.
+ *
+ * @param self - The offset to take magnitudes of.
+ * @returns The offset with every side non-negative.
+ * @example
+ * ```ts
+ * Offset.absolute(Offset.trbl(1, -2, 3, -4)) // Offset [1 2 3 4]
+ * Offset.trbl(-1, -2, -3, -4).pipe(Offset.absolute) // Offset [1 2 3 4]
+ * ```
+ */
+export const absolute = (self: Offset): Offset =>
+  new Offset(Math.abs(self.top), Math.abs(self.right), Math.abs(self.bottom), Math.abs(self.left))
 
-export const x: {
-  (offset: Offset, x: number): Offset
-  (x: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, x: number) =>
-    new Offset(offset.top, x, offset.bottom, x, offset.precision),
-)
-
-export const y: {
-  (offset: Offset, y: number): Offset
-  (y: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, y: number) =>
-    new Offset(y, offset.right, y, offset.left, offset.precision),
-)
-
-export const set: {
-  (
-    offset: Offset,
-    property: 'top' | 'right' | 'bottom' | 'left' | 'x' | 'y' | 'precision',
-    value: number,
-  ): Offset
-  (
-    property: 'top' | 'right' | 'bottom' | 'left' | 'x' | 'y' | 'precision',
-    value: number,
-  ): (offset: Offset) => Offset
+/**
+ * Linearly interpolates each side from `self` (at `amount = 0`) toward
+ * `target` (at `amount = 1`). The function does not clamp `amount`, so
+ * values outside `[0, 1]` extrapolate along the same line. The data-last
+ * form omits `self` and returns a function of it.
+ *
+ * For finite sides, the result is exact at the endpoints. An infinite side
+ * makes the opposite endpoint `NaN` (`Infinity * 0`).
+ *
+ * @param self - The offset at `amount = 0`.
+ * @param target - The offset at `amount = 1`.
+ * @param amount - The interpolation parameter. It is not restricted to `[0, 1]`.
+ * @returns Per side, `target * amount + self * (1 - amount)`.
+ * @example
+ * ```ts
+ * Offset.lerp(Offset.make(0), Offset.trbl(10, 20, 30, 40), 0.5) // Offset [5 10 15 20]
+ * Offset.make(0).pipe(Offset.lerp(Offset.trbl(10, 20, 30, 40), 1)) // Offset [10 20 30 40]
+ * ```
+ */
+export const lerp: {
+  (self: Offset, target: Offset, amount: number): Offset
+  (target: Offset, amount: number): (self: Offset) => Offset
 } = dual(
   3,
-  (
-    offset: Offset,
-    property: 'top' | 'right' | 'bottom' | 'left' | 'x' | 'y' | 'precision',
-    value: number,
-  ) => {
-    switch (property) {
-      case 'top':
-        return new Offset(
-          value,
-          offset.right,
-          offset.bottom,
-          offset.left,
-          offset.precision,
-        )
-      case 'right':
-        return new Offset(
-          offset.top,
-          value,
-          offset.bottom,
-          offset.left,
-          offset.precision,
-        )
-      case 'bottom':
-        return new Offset(
-          offset.top,
-          offset.right,
-          value,
-          offset.left,
-          offset.precision,
-        )
-      case 'left':
-        return new Offset(
-          offset.top,
-          offset.right,
-          offset.bottom,
-          value,
-          offset.precision,
-        )
-      case 'x':
-        return new Offset(
-          offset.top,
-          value,
-          offset.bottom,
-          value,
-          offset.precision,
-        )
-      case 'y':
-        return new Offset(
-          value,
-          offset.right,
-          value,
-          offset.left,
-          offset.precision,
-        )
-      case 'precision':
-        return new Offset(
-          offset.top,
-          offset.right,
-          offset.bottom,
-          offset.left,
-          value,
-        )
-    }
-  },
-)
-
-export const minTop: {
-  (offset: Offset, top: number): Offset
-  (top: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, top: number) =>
+  (self: Offset, target: Offset, amount: number) =>
     new Offset(
-      Math.max(offset.top, top),
-      offset.right,
-      offset.bottom,
-      offset.left,
-      offset.precision,
+      lerpNumber(amount, self.top, target.top),
+      lerpNumber(amount, self.right, target.right),
+      lerpNumber(amount, self.bottom, target.bottom),
+      lerpNumber(amount, self.left, target.left),
     ),
 )
 
-export const minRight: {
-  (offset: Offset, right: number): Offset
-  (right: number): (offset: Offset) => Offset
+/**
+ * Compares two offsets side by side within the tolerance band of
+ * `coincident` from `curvy/number`. Two sides are equal when
+ * `|a - b| <= EPSILON + RELATIVE_TOLERANCE * max(|a|, |b|)`
+ * (`1e-10` and `1e-12`). Rounding noise never fails an equality, and the
+ * result is invariant under uniform scaling of both operands. Non-finite
+ * sides compare exactly. An infinite side equals only the same infinity
+ * (`Offset.infinity` equals itself), and a `NaN` side equals nothing.
+ * Like every tolerant comparison, it is not transitive. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The offset to compare.
+ * @param other - The offset, or any offset-shaped object, to compare against.
+ * @returns `true` when all four sides coincide within tolerance.
+ * @example
+ * ```ts
+ * Offset.equals(Offset.make(0.1 + 0.2), Offset.make(0.3)) // true
+ * Offset.equals(Offset.infinity, Offset.infinity) // true
+ * Offset.make(1).pipe(Offset.equals(Offset.trbl(1, 2, 3, 4))) // false
+ * ```
+ */
+export const equals: {
+  (self: Offset, other: OffsetLike): boolean
+  (other: OffsetLike): (self: Offset) => boolean
 } = dual(
   2,
-  (offset: Offset, right: number) =>
-    new Offset(
-      offset.top,
-      Math.max(offset.right, right),
-      offset.bottom,
-      offset.left,
-      offset.precision,
-    ),
+  (self: Offset, other: OffsetLike) =>
+    fieldsCoincident(self.top, other.top) &&
+    fieldsCoincident(self.right, other.right) &&
+    fieldsCoincident(self.bottom, other.bottom) &&
+    fieldsCoincident(self.left, other.left),
 )
-
-export const minBottom: {
-  (offset: Offset, bottom: number): Offset
-  (bottom: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, bottom: number) =>
-    new Offset(
-      offset.top,
-      offset.right,
-      Math.max(offset.bottom, bottom),
-      offset.left,
-      offset.precision,
-    ),
-)
-
-export const minLeft: {
-  (offset: Offset, left: number): Offset
-  (left: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, left: number) =>
-    new Offset(
-      offset.top,
-      offset.right,
-      offset.bottom,
-      Math.max(offset.left, left),
-      offset.precision,
-    ),
-)
-
-export const maxTop: {
-  (offset: Offset, top: number): Offset
-  (top: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, top: number) =>
-    new Offset(
-      Math.min(offset.top, top),
-      offset.right,
-      offset.bottom,
-      offset.left,
-      offset.precision,
-    ),
-)
-
-export const maxRight: {
-  (offset: Offset, right: number): Offset
-  (right: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, right: number) =>
-    new Offset(
-      offset.top,
-      Math.min(offset.right, right),
-      offset.bottom,
-      offset.left,
-      offset.precision,
-    ),
-)
-
-export const maxBottom: {
-  (offset: Offset, bottom: number): Offset
-  (bottom: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, bottom: number) =>
-    new Offset(
-      offset.top,
-      offset.right,
-      Math.min(offset.bottom, bottom),
-      offset.left,
-      offset.precision,
-    ),
-)
-
-export const maxLeft: {
-  (offset: Offset, left: number): Offset
-  (left: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, left: number) =>
-    new Offset(
-      offset.top,
-      offset.right,
-      offset.bottom,
-      Math.min(offset.left, left),
-      offset.precision,
-    ),
-)
-
-export const add: {
-  (offset: Offset, value: number | Offset): Offset
-  (value: number | Offset): (offset: Offset) => Offset
-} = dual(2, (offset: Offset, value: number | Offset) =>
-  isOffset(value)
-    ? new Offset(
-        offset.top + value.top,
-        offset.right + value.right,
-        offset.bottom + value.bottom,
-        offset.left + value.left,
-        offset.precision,
-      )
-    : new Offset(
-        offset.top + value,
-        offset.right + value,
-        offset.bottom + value,
-        offset.left + value,
-        offset.precision,
-      ),
-)
-
-export const subtract: {
-  (offset: Offset, value: number | Offset): Offset
-  (value: number | Offset): (offset: Offset) => Offset
-} = dual(2, (offset: Offset, value: number | Offset) =>
-  isOffset(value)
-    ? new Offset(
-        offset.top - value.top,
-        offset.right - value.right,
-        offset.bottom - value.bottom,
-        offset.left - value.left,
-        offset.precision,
-      )
-    : new Offset(
-        offset.top - value,
-        offset.right - value,
-        offset.bottom - value,
-        offset.left - value,
-        offset.precision,
-      ),
-)
-
-export const scale: {
-  (offset: Offset, value: number): Offset
-  (value: number): (offset: Offset) => Offset
-} = dual(
-  2,
-  (offset: Offset, value: number) =>
-    new Offset(
-      offset.top * value,
-      offset.right * value,
-      offset.bottom * value,
-      offset.left * value,
-      offset.precision,
-    ),
-)
-
-export const absolute = (offset: Offset): Offset =>
-  new Offset(
-    Math.abs(offset.top),
-    Math.abs(offset.right),
-    Math.abs(offset.bottom),
-    Math.abs(offset.left),
-    offset.precision,
-  )
-
-export const invert = (offset: Offset): Offset =>
-  new Offset(
-    -offset.top,
-    -offset.right,
-    -offset.bottom,
-    -offset.left,
-    offset.precision,
-  )

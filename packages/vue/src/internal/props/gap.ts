@@ -1,11 +1,11 @@
 import { type ParserInput, parse } from 'valued'
-import { oneOf } from 'valued/combinators/oneOf'
+import { oneOf } from 'valued'
+import { between } from 'valued'
 import { lengthPercentage } from 'valued/data/length-percentage'
 import { number } from 'valued/data/number'
-import { between } from 'valued/multipliers/between'
-import { createCache } from '../cache'
-import { SIZE_UNITS } from './constants'
-import { resolveSize1D } from './size1d'
+import { createCache } from '../cache.ts'
+import { SIZE_UNITS } from './constants.ts'
+import { resolveSize1D } from './size1d.ts'
 
 const gap = between(oneOf([lengthPercentage.subset(SIZE_UNITS), number()]), {
   minLength: 1,
@@ -37,28 +37,22 @@ export function resolveGap(
     }
   }
 
-  return cache(
-    `${input}:${autoRow}:${autoColumn}:${parentWidth}:${parentHeight}`,
-    () => {
-      const parsed = parse(input, gap)
-      if (!parsed.valid) {
-        return {
-          rowGap: autoRow,
-          columnGap: autoColumn,
-        }
-      }
-
-      const [row, column] = parsed.value
-      const rowGap = resolveSize1D(row, autoRow, parentHeight)
-      const columnGap =
-        column === undefined
-          ? rowGap
-          : resolveSize1D(column, autoColumn, parentWidth)
-
+  return cache(`${input}:${autoRow}:${autoColumn}:${parentWidth}:${parentHeight}`, () => {
+    const parsed = parse(input, gap)
+    if (!parsed.valid) {
       return {
-        rowGap,
-        columnGap,
+        rowGap: autoRow,
+        columnGap: autoColumn,
       }
-    },
-  )
+    }
+
+    const [row, column] = parsed.value
+    const rowGap = resolveSize1D(row, autoRow, parentHeight)
+    const columnGap = column === undefined ? rowGap : resolveSize1D(column, autoColumn, parentWidth)
+
+    return {
+      rowGap,
+      columnGap,
+    }
+  })
 }

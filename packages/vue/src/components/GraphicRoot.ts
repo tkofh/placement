@@ -1,30 +1,26 @@
-import { point } from 'placement/point'
-import { type Rect, align, contain, cover, rect } from 'placement/rect'
+import * as Box from 'placement/box'
+import * as Point from 'placement/point'
+import * as Rect from 'placement/rect'
 import { computed, defineComponent, h, shallowRef } from 'vue'
-import { useDomRect } from '../composables/useDomRect'
+import { useDomRect } from '../composables/useDomRect.ts'
 import {
   ORIGIN_PROP_KEYS,
   type OriginProps,
   SIZE_PROP_KEYS,
   type SizeProps,
   type TransformProps,
-  useBasisSize,
-  useConstrainedSize,
-  useMaxSize,
-  useMinSize,
   useXYTranslation,
-} from '../composables/useRect'
-import { useSizingContextRoot } from '../composables/useSizingContext'
-import { autoDimensions, computedDimensions } from '../data/dimensions'
-import type { FitInput } from '../internal/props/fit'
-import { provideShouldRenderGroups } from '../internal/render'
-import { boolProp } from '../internal/utils'
-import { useOrigin } from '../props/origin'
+} from '../composables/useRect.ts'
+import { useSizingContextRoot } from '../composables/useSizingContext.ts'
+import { resolveAspectRatio } from '../internal/props/aspectRatio.ts'
+import { resolveSize1D } from '../internal/props/size1d.ts'
+import { provideShouldRenderGroups } from '../internal/render.ts'
+import { boolProp } from '../internal/utils.ts'
+import { useOrigin } from '../props/origin.ts'
 
-export interface GraphicRootProps
-  extends SizeProps,
-    TransformProps,
-    OriginProps {
+export type FitInput = 'contain' | 'cover' | 'crop'
+
+export interface GraphicRootProps extends SizeProps, TransformProps, OriginProps {
   fit?: FitInput
   debugGroups?: boolean
 }
@@ -33,38 +29,41 @@ export const GraphicRoot = defineComponent(
   (props: GraphicRootProps, { slots }) => {
     const svg = shallowRef<SVGElement>()
     const domRect = useDomRect(svg)
-    const domDimensions = computedDimensions(
-      () => domRect.value.width,
-      () => domRect.value.height,
+
+    // The measured <svg> is both the percent basis and the fill target. A
+    // dimension that the props leave undetermined falls back to the measured
+    // size, constrained (see `placement/box`).
+    const box = computed(() =>
+      Box.make({
+        width: resolveSize1D(props.width, Number.NaN, domRect.value.width),
+        height: resolveSize1D(props.height, Number.NaN, domRect.value.height),
+        aspectRatio: resolveAspectRatio(props.aspectRatio, Number.NaN),
+        minWidth: resolveSize1D(props.minWidth, Number.NaN, domRect.value.width),
+        minHeight: resolveSize1D(props.minHeight, Number.NaN, domRect.value.height),
+        maxWidth: resolveSize1D(props.maxWidth, Number.NaN, domRect.value.width),
+        maxHeight: resolveSize1D(props.maxHeight, Number.NaN, domRect.value.height),
+      }),
     )
-
-    const basisSize = useBasisSize(props, domDimensions)
-    const minSize = useMinSize(props, domDimensions)
-    const maxSize = useMaxSize(props, domDimensions)
-
-    const size = useConstrainedSize(basisSize, minSize, maxSize)
 
     const rootRect = computed(() =>
-      rect.fromDimensions(autoDimensions(size.value, domDimensions.value)),
+      Box.apply(box.value, Rect.make(domRect.value.width, domRect.value.height)),
     )
 
-    const origin = useOrigin(() => props.origin, point.half)
+    const origin = useOrigin(() => props.origin, Point.half)
     const translation = useXYTranslation(props, domRect)
 
     const viewBox = computed(() => {
       const fit = props.fit ?? 'crop'
-      let viewBoxRect: Rect
+      let viewBoxRect: Rect.Rect
       if (fit === 'crop') {
-        viewBoxRect = domRect.value.pipe(align(rootRect.value, origin.value))
+        viewBoxRect = domRect.value.pipe(Rect.align(rootRect.value, origin.value))
       } else {
         viewBoxRect = domRect.value.pipe(
-          // these are reversed (cover vs contain) because the viewBox is
-          // the "parent" rect in this context. when the viewBox "covers"
-          // the rootRect, then the rootRect is "contained" by the viewBox
-          fit === 'cover'
-            ? contain(rootRect.value, 0)
-            : cover(rootRect.value, 0),
-          align(rootRect.value, origin.value),
+          // These are reversed (cover vs contain) because the viewBox is
+          // the "parent" rect here. When the viewBox "covers" the rootRect,
+          // the rootRect is "contained" by the viewBox.
+          fit === 'cover' ? Rect.contain(rootRect.value, 0) : Rect.cover(rootRect.value, 0),
+          Rect.align(rootRect.value, origin.value),
         )
       }
 
