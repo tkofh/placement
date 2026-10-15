@@ -1,0 +1,352 @@
+import { Pipeable, dual } from 'curvy/utils'
+import type { Frame } from './frame.ts'
+
+const TypeBrand: unique symbol = Symbol('placement/edge')
+type TypeBrand = typeof TypeBrand
+
+/**
+ * The node sides that a port can sit on, encoded as numbers: `top` is `0`,
+ * `right` is `1`, `bottom` is `2`, `left` is `3`. Sides are physical, as
+ * `Frame` offsets are: `top` is the top side whatever the layout direction.
+ *
+ * An omitted or non-finite side is auto. The layout then picks the side
+ * that faces along the flow toward the other end of the edge.
+ */
+export const side = {
+  top: 0,
+  right: 1,
+  bottom: 2,
+  left: 3,
+} as const
+
+/**
+ * A port side, one of the `side` encodings. Any non-finite number is auto.
+ */
+export type EdgeSide = (typeof side)[keyof typeof side]
+
+/**
+ * A label carried by an edge. The label is a `Frame`, so it sizes like any
+ * other frame, and layout reserves room for it next to the edge.
+ *
+ * - `frame`: the label's size. Its order-axis offsets are clearance: the
+ *   offset facing the edge line keeps the label away from it, and the
+ *   other offset keeps neighbors away. Its `align` places the label across
+ *   the line: `0` puts it on the left (or above, in a horizontal flow), `1`
+ *   on the right (or below), and `0.5` centers it on the line. A
+ *   non-finite `align` inherits the container's `alignLabels`.
+ * - `at`: the position along the edge, as a fraction from the source (`0`)
+ *   to the target (`1`). An omitted or non-finite value means `0.5`.
+ */
+export interface EdgeLabel {
+  /** The label's size, clearance, and cross-line alignment. */
+  readonly frame: Frame
+  /**
+   * The position along the edge, from `0` at the source to `1` at the
+   * target. An omitted or non-finite value means `0.5`.
+   */
+  readonly at?: number | undefined
+}
+
+/**
+ * The construction input for `make`. Only `source` and `target` are
+ * required. Passing `undefined` for an optional field is the same as
+ * omitting it.
+ */
+export interface EdgeInput<K> {
+  /** The key of the node that the edge leaves. */
+  readonly source: K
+  /** The key of the node that the edge enters. */
+  readonly target: K
+  /**
+   * How strongly layout keeps the edge short and straight, relative to the
+   * other edges. Negative and non-finite values act as `0`. Defaults to
+   * `1`.
+   */
+  readonly weight?: number | undefined
+  /**
+   * The minimum number of ranks that the edge spans. Fractions round up,
+   * and values below `1` (and non-finite values) act as `1`. Defaults to
+   * `1`.
+   */
+  readonly minLength?: number | undefined
+  /**
+   * The side of the source node that the edge leaves from, one of the
+   * `side` encodings. Omitted or non-finite means auto.
+   */
+  readonly sourceSide?: number | undefined
+  /**
+   * The position of the source port along its side, as a fraction from the
+   * top or left end (`0`) to the bottom or right end (`1`). Omitted or
+   * non-finite means auto: ports that share a side spread out, ordered to
+   * avoid crossings.
+   */
+  readonly sourceAt?: number | undefined
+  /**
+   * The side of the target node that the edge enters, one of the `side`
+   * encodings. Omitted or non-finite means auto.
+   */
+  readonly targetSide?: number | undefined
+  /**
+   * The position of the target port along its side, as `sourceAt` is for
+   * the source port. Omitted or non-finite means auto.
+   */
+  readonly targetAt?: number | undefined
+  /** The labels carried by the edge. Defaults to none. */
+  readonly labels?: ReadonlyArray<EdgeLabel> | undefined
+}
+
+/**
+ * A directed edge spec: the two node keys it connects, plus the weight,
+ * length, port, and label inputs that `Hierarchy.apply` (from
+ * `placement/hierarchy`) reads. An edge has no geometry of its own. Layout
+ * produces its route.
+ *
+ * The key type `K` is whatever the caller keys its nodes by: strings,
+ * numbers, symbols, or objects compared by identity.
+ *
+ * Values are immutable. Every setter returns a new edge. Create an edge
+ * with `make`.
+ */
+class Edge<K> extends Pipeable {
+  readonly [TypeBrand]: TypeBrand = TypeBrand
+
+  /** The key of the node that the edge leaves. */
+  readonly source: K
+  /** The key of the node that the edge enters. */
+  readonly target: K
+  /** The raw weight input. Layout treats negative and non-finite values as `0`. */
+  readonly weight: number
+  /**
+   * The raw minimum rank span. Layout rounds it up and treats values below
+   * `1` as `1`.
+   */
+  readonly minLength: number
+  /** The source port side, one of the `side` encodings, or non-finite for auto. */
+  readonly sourceSide: number
+  /** The source port position along its side, or non-finite for auto. */
+  readonly sourceAt: number
+  /** The target port side, one of the `side` encodings, or non-finite for auto. */
+  readonly targetSide: number
+  /** The target port position along its side, or non-finite for auto. */
+  readonly targetAt: number
+  /** The labels carried by the edge, in input order. */
+  readonly labels: ReadonlyArray<EdgeLabel>
+
+  constructor(input: EdgeInput<K>) {
+    super()
+
+    this.source = input.source
+    this.target = input.target
+    this.weight = input.weight ?? 1
+    this.minLength = input.minLength ?? 1
+    this.sourceSide = input.sourceSide ?? Number.POSITIVE_INFINITY
+    this.sourceAt = input.sourceAt ?? Number.POSITIVE_INFINITY
+    this.targetSide = input.targetSide ?? Number.POSITIVE_INFINITY
+    this.targetAt = input.targetAt ?? Number.POSITIVE_INFINITY
+    this.labels = input.labels ?? []
+  }
+
+  [Symbol.for('nodejs.util.inspect.custom')]() {
+    return `Edge [${String(this.source)} -> ${String(this.target)}]`
+  }
+
+  /**
+   * Returns the edge's inputs as a plain record of the shape `make`
+   * accepts. `JSON.stringify` writes auto ports (`Infinity`) as `null`, and
+   * `make` reads `null` back as auto.
+   *
+   * @returns The input record.
+   */
+  toJSON() {
+    return {
+      source: this.source,
+      target: this.target,
+      weight: this.weight,
+      minLength: this.minLength,
+      sourceSide: this.sourceSide,
+      sourceAt: this.sourceAt,
+      targetSide: this.targetSide,
+      targetAt: this.targetAt,
+      labels: this.labels,
+    }
+  }
+}
+
+export type { Edge }
+
+/**
+ * Creates an `Edge`.
+ *
+ * @param input - The edge's fields. See `EdgeInput` for the default of each field.
+ * @returns An immutable `Edge`.
+ * @example
+ * ```ts
+ * const edge = Edge.make({ source: 'start', target: 'end', sourceSide: Edge.side.right })
+ * edge.weight // 1
+ * ```
+ */
+export const make = <K>(input: EdgeInput<K>): Edge<K> => new Edge(input)
+
+/**
+ * Checks if a value is an `Edge`. Only values that `make` builds carry the
+ * brand, so only they pass.
+ *
+ * @param value - The value to check.
+ * @returns `true` if the value is an `Edge`, `false` otherwise.
+ */
+export const isEdge = (value: unknown): value is Edge<unknown> => {
+  return typeof value === 'object' && value !== null && TypeBrand in value
+}
+
+// Setters rebuild from toJSON. setSource and setTarget take a key, and a key
+// can be any value (even an edge), so their arity is fixed. The port setters
+// take a numeric side first, so they can dispatch on isEdge.
+
+/**
+ * Sets the source node key. The data-last form omits `self` and returns a
+ * function of it.
+ *
+ * @param self - The edge to update.
+ * @param source - The new source key.
+ * @returns A new edge with the source replaced.
+ * @example
+ * ```ts
+ * Edge.setSource(Edge.make({ source: 'a', target: 'b' }), 'c').source // 'c'
+ * ```
+ */
+export const setSource: {
+  <K>(self: Edge<K>, source: K): Edge<K>
+  <K>(source: K): (self: Edge<K>) => Edge<K>
+} = dual(2, <K>(self: Edge<K>, source: K) => new Edge({ ...self.toJSON(), source }))
+
+/**
+ * Sets the target node key. The data-last form omits `self` and returns a
+ * function of it.
+ *
+ * @param self - The edge to update.
+ * @param target - The new target key.
+ * @returns A new edge with the target replaced.
+ * @example
+ * ```ts
+ * Edge.make({ source: 'a', target: 'b' }).pipe(Edge.setTarget('c')).target // 'c'
+ * ```
+ */
+export const setTarget: {
+  <K>(self: Edge<K>, target: K): Edge<K>
+  <K>(target: K): (self: Edge<K>) => Edge<K>
+} = dual(2, <K>(self: Edge<K>, target: K) => new Edge({ ...self.toJSON(), target }))
+
+/**
+ * Sets the weight: how strongly layout keeps the edge short and straight.
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The edge to update.
+ * @param weight - The new weight.
+ * @returns A new edge with the weight replaced.
+ */
+export const setWeight: {
+  <K>(self: Edge<K>, weight: number): Edge<K>
+  (weight: number): <K>(self: Edge<K>) => Edge<K>
+} = dual(2, <K>(self: Edge<K>, weight: number) => new Edge({ ...self.toJSON(), weight }))
+
+/**
+ * Sets the minimum number of ranks that the edge spans. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The edge to update.
+ * @param minLength - The new minimum rank span.
+ * @returns A new edge with the minimum length replaced.
+ */
+export const setMinLength: {
+  <K>(self: Edge<K>, minLength: number): Edge<K>
+  (minLength: number): <K>(self: Edge<K>) => Edge<K>
+} = dual(2, <K>(self: Edge<K>, minLength: number) => new Edge({ ...self.toJSON(), minLength }))
+
+/**
+ * Sets the source port. An omitted `at` makes the position along the side
+ * auto. A non-finite `side` makes the whole port auto. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The edge to update.
+ * @param side - The port side, one of the `side` encodings.
+ * @param at - The position along the side, from `0` to `1`. Defaults to auto.
+ * @returns A new edge with the source port replaced.
+ * @example
+ * ```ts
+ * const edge = Edge.make({ source: 'a', target: 'b' })
+ * Edge.setSourcePort(edge, Edge.side.right, 0.25).sourceAt // 0.25
+ * edge.pipe(Edge.setSourcePort(Edge.side.bottom)).sourceAt // Infinity
+ * ```
+ */
+export const setSourcePort: {
+  <K>(self: Edge<K>, side: number, at?: number): Edge<K>
+  (side: number, at?: number): <K>(self: Edge<K>) => Edge<K>
+} = dual(
+  (args) => isEdge(args[0]),
+  <K>(self: Edge<K>, side: number, at?: number) =>
+    new Edge({ ...self.toJSON(), sourceSide: side, sourceAt: at }),
+)
+
+/**
+ * Sets the target port. An omitted `at` makes the position along the side
+ * auto. A non-finite `side` makes the whole port auto. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The edge to update.
+ * @param side - The port side, one of the `side` encodings.
+ * @param at - The position along the side, from `0` to `1`. Defaults to auto.
+ * @returns A new edge with the target port replaced.
+ * @example
+ * ```ts
+ * const edge = Edge.make({ source: 'a', target: 'b' })
+ * Edge.setTargetPort(edge, Edge.side.top, 0.5).targetSide // 0
+ * ```
+ */
+export const setTargetPort: {
+  <K>(self: Edge<K>, side: number, at?: number): Edge<K>
+  (side: number, at?: number): <K>(self: Edge<K>) => Edge<K>
+} = dual(
+  (args) => isEdge(args[0]),
+  <K>(self: Edge<K>, side: number, at?: number) =>
+    new Edge({ ...self.toJSON(), targetSide: side, targetAt: at }),
+)
+
+/**
+ * Replaces every label on the edge. The data-last form omits `self` and
+ * returns a function of it.
+ *
+ * @param self - The edge to update.
+ * @param labels - The new labels, in order.
+ * @returns A new edge with the labels replaced.
+ */
+export const setLabels: {
+  <K>(self: Edge<K>, labels: ReadonlyArray<EdgeLabel>): Edge<K>
+  (labels: ReadonlyArray<EdgeLabel>): <K>(self: Edge<K>) => Edge<K>
+} = dual(
+  2,
+  <K>(self: Edge<K>, labels: ReadonlyArray<EdgeLabel>) => new Edge({ ...self.toJSON(), labels }),
+)
+
+/**
+ * Appends a label to the edge. The data-last form omits `self` and returns
+ * a function of it.
+ *
+ * @param self - The edge to update.
+ * @param frame - The label's frame.
+ * @param at - The position along the edge, from `0` at the source to `1` at the
+ * target. Defaults to `0.5`.
+ * @returns A new edge with the label appended.
+ * @example
+ * ```ts
+ * const edge = Edge.make({ source: 'a', target: 'b' })
+ * Edge.addLabel(edge, Frame.make({ width: 40, height: 16 })).labels.length // 1
+ * ```
+ */
+export const addLabel: {
+  <K>(self: Edge<K>, frame: Frame, at?: number): Edge<K>
+  (frame: Frame, at?: number): <K>(self: Edge<K>) => Edge<K>
+} = dual(
+  (args) => isEdge(args[0]),
+  <K>(self: Edge<K>, frame: Frame, at?: number) =>
+    new Edge({ ...self.toJSON(), labels: [...self.labels, { frame, at }] }),
+)

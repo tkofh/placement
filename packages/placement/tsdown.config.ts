@@ -4,8 +4,10 @@ export default defineConfig({
   entry: [
     'src/box.ts',
     'src/dimensions.ts',
+    'src/edge.ts',
     'src/flexbox.ts',
     'src/frame.ts',
+    'src/hierarchy.ts',
     'src/interval.ts',
     'src/offset.ts',
     'src/point.ts',

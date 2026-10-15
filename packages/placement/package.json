@@ -26,6 +26,10 @@
       "types": "./dist/dimensions.d.mts",
       "import": "./dist/dimensions.mjs"
     },
+    "./edge": {
+      "types": "./dist/edge.d.mts",
+      "import": "./dist/edge.mjs"
+    },
     "./flexbox": {
       "types": "./dist/flexbox.d.mts",
       "import": "./dist/flexbox.mjs"
@@ -33,6 +37,10 @@
     "./frame": {
       "types": "./dist/frame.d.mts",
       "import": "./dist/frame.mjs"
+    },
+    "./hierarchy": {
+      "types": "./dist/hierarchy.d.mts",
+      "import": "./dist/hierarchy.mjs"
     },
     "./interval": {
       "types": "./dist/interval.d.mts",
