@@ -166,23 +166,50 @@ describeIntervalOperation('lerp', [
   },
 ])
 
-describeIntervalOperation('normalize', [
-  {
-    input: Interval.make(0, 100),
-    operation: Interval.normalize(Interval.make(0, 100)),
-    output: Interval.make(0, 1),
-  },
-  {
-    input: Interval.make(0, 100),
-    operation: Interval.normalize(Interval.make(100, 100)),
-    output: Interval.make(-1, 1),
-  },
-  {
-    input: Interval.make(25, 50),
-    operation: Interval.normalize(Interval.make(0, 100)),
-    output: Interval.make(0.25, 0.5),
-  },
-])
+describe('localize / normalize / denormalize', () => {
+  const self = Interval.make(100, 200)
+
+  test.each([
+    ['localize', Interval.localize, 150, 50],
+    ['normalize', Interval.normalize, 150, 0.25],
+    ['denormalize', Interval.denormalize, 0.25, 150],
+  ] as const)('%s maps a position, in both forms', (_, op, target, expected) => {
+    expect(op(self, target)).toBe(expected)
+    expect(self.pipe(op(target))).toBe(expected)
+  })
+
+  test.each([
+    ['localize', Interval.localize, Interval.make(150, 50), Interval.make(50, 50)],
+    ['normalize', Interval.normalize, Interval.make(150, 50), Interval.make(0.25, 0.25)],
+    ['denormalize', Interval.denormalize, Interval.make(0.25, 0.25), Interval.make(150, 50)],
+  ] as const)('%s maps an interval, in both forms', (_, op, target, expected) => {
+    expect(op(self, target)).toEqual(expected)
+    expect(self.pipe(op(target))).toEqual(expected)
+  })
+
+  test('normalize takes the reference as self', () => {
+    expect(Interval.normalize(Interval.make(0, 100), Interval.make(100, 100))).toEqual(
+      Interval.make(1, 1),
+    )
+    expect(Interval.normalize(Interval.make(100, 100), Interval.make(0, 100))).toEqual(
+      Interval.make(-1, 1),
+    )
+  })
+
+  test('plain records are interval targets', () => {
+    expect(Interval.localize(self, { start: 100, size: 3 })).toEqual(Interval.make(0, 3))
+  })
+
+  test('denormalize inverts normalize', () => {
+    const odd = Interval.make(0.1, 0.7)
+    expect(Interval.denormalize(odd, Interval.normalize(odd, 0.45))).toBeCloseTo(0.45, 12)
+  })
+
+  test('a zero-size reference follows IEEE division', () => {
+    expect(Interval.normalize(Interval.make(10, 0), 20)).toBe(Number.POSITIVE_INFINITY)
+    expect(Interval.normalize(Interval.make(10, 0), 10)).toBeNaN()
+  })
+})
 
 describeIntervalOperation('remap', [
   {

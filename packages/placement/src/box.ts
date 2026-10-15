@@ -6,6 +6,12 @@ import { normalizeTRBL } from './utils/arguments.ts'
 const TypeBrand: unique symbol = Symbol('placement/box')
 type TypeBrand = typeof TypeBrand
 
+// Raw inputs live under a module-private symbol rather than `#private`
+// fields, so reads still work through a `Proxy` (Vue's `ref`/`reactive`).
+const Raw: unique symbol = Symbol('placement/box/raw')
+
+type RawInput = { readonly [K in keyof BoxInput]-?: number | undefined }
+
 /**
  * The construction input for `make`. Every field is optional, passing
  * `undefined` is the same as omitting the field, and — unlike `Frame`,
@@ -105,33 +111,25 @@ export interface BoxInput {
 class Box extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
-  readonly #top: number | undefined
-  readonly #right: number | undefined
-  readonly #bottom: number | undefined
-  readonly #left: number | undefined
-  readonly #width: number | undefined
-  readonly #height: number | undefined
-  readonly #aspectRatio: number | undefined
-  readonly #minWidth: number | undefined
-  readonly #minHeight: number | undefined
-  readonly #maxWidth: number | undefined
-  readonly #maxHeight: number | undefined
+  readonly [Raw]: RawInput
 
   constructor(input: BoxInput) {
     super()
 
     // `?? undefined` also catches the `null`s of a JSON round trip.
-    this.#top = input.top ?? undefined
-    this.#right = input.right ?? undefined
-    this.#bottom = input.bottom ?? undefined
-    this.#left = input.left ?? undefined
-    this.#width = input.width ?? undefined
-    this.#height = input.height ?? undefined
-    this.#aspectRatio = input.aspectRatio ?? undefined
-    this.#minWidth = input.minWidth ?? undefined
-    this.#minHeight = input.minHeight ?? undefined
-    this.#maxWidth = input.maxWidth ?? undefined
-    this.#maxHeight = input.maxHeight ?? undefined
+    this[Raw] = {
+      top: input.top ?? undefined,
+      right: input.right ?? undefined,
+      bottom: input.bottom ?? undefined,
+      left: input.left ?? undefined,
+      width: input.width ?? undefined,
+      height: input.height ?? undefined,
+      aspectRatio: input.aspectRatio ?? undefined,
+      minWidth: input.minWidth ?? undefined,
+      minHeight: input.minHeight ?? undefined,
+      maxWidth: input.maxWidth ?? undefined,
+      maxHeight: input.maxHeight ?? undefined,
+    }
   }
 
   /**
@@ -139,7 +137,7 @@ class Box extends Pipeable {
    * unset in `apply`.
    */
   get top(): number {
-    return this.#top ?? Number.NaN
+    return this[Raw].top ?? Number.NaN
   }
 
   /**
@@ -147,7 +145,7 @@ class Box extends Pipeable {
    * unset in `apply`.
    */
   get right(): number {
-    return this.#right ?? Number.NaN
+    return this[Raw].right ?? Number.NaN
   }
 
   /**
@@ -155,7 +153,7 @@ class Box extends Pipeable {
    * unset in `apply`.
    */
   get bottom(): number {
-    return this.#bottom ?? Number.NaN
+    return this[Raw].bottom ?? Number.NaN
   }
 
   /**
@@ -163,7 +161,7 @@ class Box extends Pipeable {
    * unset in `apply`.
    */
   get left(): number {
-    return this.#left ?? Number.NaN
+    return this[Raw].left ?? Number.NaN
   }
 
   /**
@@ -171,7 +169,7 @@ class Box extends Pipeable {
    * as unset in `apply`, which resolves the used width against a parent.
    */
   get width(): number {
-    return this.#width ?? Number.NaN
+    return this[Raw].width ?? Number.NaN
   }
 
   /**
@@ -179,7 +177,7 @@ class Box extends Pipeable {
    * as unset in `apply`, which resolves the used height against a parent.
    */
   get height(): number {
-    return this.#height ?? Number.NaN
+    return this[Raw].height ?? Number.NaN
   }
 
   /**
@@ -187,7 +185,7 @@ class Box extends Pipeable {
    * non-finite ratios act as unset in `apply`.
    */
   get aspectRatio(): number {
-    return this.#aspectRatio ?? Number.NaN
+    return this[Raw].aspectRatio ?? Number.NaN
   }
 
   /**
@@ -195,7 +193,7 @@ class Box extends Pipeable {
    * to `>= 0`, and `0` when unset or non-finite.
    */
   get minWidth(): number {
-    const raw = this.#minWidth ?? 0
+    const raw = this[Raw].minWidth ?? 0
     return Number.isFinite(raw) ? Math.max(raw, 0) : 0
   }
 
@@ -204,7 +202,7 @@ class Box extends Pipeable {
    * clamped to `>= 0`, and `0` when unset or non-finite.
    */
   get minHeight(): number {
-    const raw = this.#minHeight ?? 0
+    const raw = this[Raw].minHeight ?? 0
     return Number.isFinite(raw) ? Math.max(raw, 0) : 0
   }
 
@@ -215,7 +213,7 @@ class Box extends Pipeable {
    * `clamp()`.
    */
   get maxWidth(): number {
-    const raw = this.#maxWidth ?? Number.POSITIVE_INFINITY
+    const raw = this[Raw].maxWidth ?? Number.POSITIVE_INFINITY
     return Number.isFinite(raw) ? Math.max(raw, this.minWidth) : Number.POSITIVE_INFINITY
   }
 
@@ -226,7 +224,7 @@ class Box extends Pipeable {
    * `clamp()`.
    */
   get maxHeight(): number {
-    const raw = this.#maxHeight ?? Number.POSITIVE_INFINITY
+    const raw = this[Raw].maxHeight ?? Number.POSITIVE_INFINITY
     return Number.isFinite(raw) ? Math.max(raw, this.minHeight) : Number.POSITIVE_INFINITY
   }
 
@@ -242,20 +240,8 @@ class Box extends Pipeable {
    *
    * @returns The raw input record, of the shape `make` accepts.
    */
-  toJSON() {
-    return {
-      top: this.#top,
-      right: this.#right,
-      bottom: this.#bottom,
-      left: this.#left,
-      width: this.#width,
-      height: this.#height,
-      aspectRatio: this.#aspectRatio,
-      minWidth: this.#minWidth,
-      minHeight: this.#minHeight,
-      maxWidth: this.#maxWidth,
-      maxHeight: this.#maxHeight,
-    }
+  toJSON(): RawInput {
+    return { ...this[Raw] }
   }
 }
 

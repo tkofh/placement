@@ -11,7 +11,6 @@ export default defineConfig({
     'src/point.ts',
     'src/rect.ts',
     'src/track.ts',
-    'src/utils.ts',
   ],
   format: 'esm',
   dts: true,

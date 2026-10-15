@@ -772,6 +772,60 @@ describeRectOperation(
     ),
 )
 
+describe('localize / normalize / denormalize', () => {
+  const self = Rect.make(100, 50, 200, 100)
+
+  test.each([
+    ['localize', Rect.localize, Point.make(150, 75), Point.make(50, 25)],
+    ['normalize', Rect.normalize, Point.make(150, 75), Point.make(0.25, 0.25)],
+    ['denormalize', Rect.denormalize, Point.make(0.25, 0.25), Point.make(150, 75)],
+  ] as const)('%s maps a point, in both forms', (_, op, target, expected) => {
+    expect(op(self, target)).toEqual(expected)
+    expect(self.pipe(op(target))).toEqual(expected)
+  })
+
+  test.each([
+    ['localize', Rect.localize, Rect.make(150, 75, 50, 25), Rect.make(50, 25, 50, 25)],
+    ['normalize', Rect.normalize, Rect.make(150, 75, 50, 25), Rect.make(0.25, 0.25, 0.25, 0.25)],
+    [
+      'denormalize',
+      Rect.denormalize,
+      Rect.make(0.25, 0.25, 0.25, 0.25),
+      Rect.make(150, 75, 50, 25),
+    ],
+  ] as const)('%s maps a rect, in both forms', (_, op, target, expected) => {
+    expect(op(self, target)).toEqual(expected)
+    expect(self.pipe(op(target))).toEqual(expected)
+  })
+
+  test('plain records dispatch on shape', () => {
+    expect(Rect.localize(self, { x: 100, y: 50 })).toEqual(Point.zero)
+    expect(Rect.localize(self, { x: 100, y: 50, width: 1, height: 2 })).toEqual(
+      Rect.make(0, 0, 1, 2),
+    )
+  })
+
+  test('denormalize inverts normalize', () => {
+    const odd = Rect.make(0.1, 0.2, 0.3, 0.7)
+    const point = Point.make(0.15, 0.6)
+    const roundTrip = Rect.denormalize(odd, Rect.normalize(odd, point))
+    expect(roundTrip.x).toBeCloseTo(point.x, 12)
+    expect(roundTrip.y).toBeCloseTo(point.y, 12)
+  })
+
+  test('denormalize of Point.half is the center', () => {
+    expect(Rect.denormalize(self, Point.half)).toEqual(self.center)
+  })
+
+  test('normalize against a zero-size axis follows IEEE division', () => {
+    const flat = Rect.make(0, 0, 100, 0)
+    expect(Rect.normalize(flat, Point.make(50, 10))).toEqual(
+      Point.make(0.5, Number.POSITIVE_INFINITY),
+    )
+    expect(Rect.normalize(flat, Point.make(50, 0)).y).toBeNaN()
+  })
+})
+
 describe('contains', () => {
   test('points', () => {
     expect(Rect.contains(Rect.make(0, 0, 100), Point.make(50, 50))).toBe(true)

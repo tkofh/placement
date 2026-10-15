@@ -370,3 +370,13 @@ describe('serialization', () => {
     })
   })
 })
+
+describe('frame through a Proxy', () => {
+  // Vue's `ref`/`reactive` wrap values in proxies, which `#private` fields reject.
+  test('getters, toJSON, and setters read through the proxy', () => {
+    const frame = new Proxy(Frame.make({ width: 100, aspectRatio: 2 }), {})
+    expect(frame.height).toBe(50)
+    expect(frame.toJSON()).toMatchObject({ width: 100, height: undefined, aspectRatio: 2 })
+    expect(Frame.setWidth(frame, 40).height).toBe(20)
+  })
+})

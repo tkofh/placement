@@ -23,31 +23,30 @@
     <GraphicGroup left="24px" top="64px" bottom="24px" width="560px">
       <GraphicRect fill="color(srgb 1 1 1 / 0.035)" r="14px" />
       <GraphicText left="16px" top="12px" class="label">REVENUE / composite spring</GraphicText>
-      <FlexLayout
-        top="44px"
-        bottom="16px"
-        left="16px"
-        right="16px"
-        flow="row nowrap"
-        align-items="end"
-        :gap="barGap"
-      >
-        <FlexItem v-for="bar in orderedBars" :key="bar.month" height="100%" grow="1">
+      <GraphicGroup top="44px" bottom="16px" left="16px" right="16px">
+        <GraphicGroup
+          v-for="column in columns"
+          :key="column.month"
+          :left="column.left"
+          :width="column.width"
+          top="0px"
+          bottom="0px"
+        >
           <FlexLayout flow="column-reverse" align-items="stretch">
             <FlexItem width="100%" height="26px">
               <GraphicRect fill="color(srgb 1 1 1 / 0.08)" r="7px" />
               <GraphicText left="50%" top="50%" origin="center" y="-1.5px" class="label">
-                {{ bar.month }}
+                {{ column.month }}
               </GraphicText>
             </FlexItem>
-            <FlexItem width="100%" :height="bar.height" margin-bottom="6px">
-              <GraphicRect :fill="bar.color" r="8px" />
+            <FlexItem width="100%" :height="column.height" margin-bottom="6px">
+              <GraphicRect :fill="column.color" r="8px" />
               <GraphicText left="50%" top="-20px" origin="center" class="value">
-                {{ bar.value }}
+                {{ column.value }}
               </GraphicText>
             </FlexItem>
           </FlexLayout>
-        </FlexItem>
+        </GraphicGroup>
         <!-- the same composite spring, read as a curve through the bar tops -->
         <GraphicCurve stroke="color(srgb 1 1 1 / 0.5) 1.5px dashed 2 4">
           <GraphicPoint
@@ -57,7 +56,7 @@
             :bottom="point.bottom"
           />
         </GraphicCurve>
-      </FlexLayout>
+      </GraphicGroup>
     </GraphicGroup>
 
     <!-- orbit: a chain of springs following springs -->
@@ -149,32 +148,47 @@ const barGap = useSpring(() => (sorted.value ? 22 : 8), { duration: 800, bounce:
 
 const total = computed(() => barData.value.reduce((sum, value) => sum + value, 0))
 
-// Curve overlay control points: the exact flex-column centers (the chart
-// is 528px wide inside its panel; columns share it with 6 gaps between).
-const overlayPoints = computed(() => {
-  const gap = barGap.value
-  const column = (528 - 6 * gap) / 7
-  return orderedBars.value.map((bar, i) => ({
-    key: bar.month,
-    x: i * (column + gap) + column / 2,
-    bottom: 32 + bar.height,
-  }))
-})
-
-// Sorting reorders the keyed VNodes; the children registry keeps the
-// flexbox order in sync with the template order.
-const orderedBars = computed(() => {
+// Columns keep a fixed slot in the template; sorting only changes each
+// column's target rank. A second composite spring animates the ranks, so a
+// re-sort glides the columns into place instead of swapping keyed VNodes.
+const rankTargets = computed(() => {
   const indices = MONTHS.map((_, i) => i)
   if (sorted.value) {
     indices.sort((a, b) => (barData.value[b] ?? 0) - (barData.value[a] ?? 0))
   }
-  return indices.map((i) => ({
-    month: MONTHS[i]!,
+  const ranks = indices.map(() => 0)
+  for (const [rank, i] of indices.entries()) {
+    ranks[i] = rank
+  }
+  return ranks
+})
+const ranks = useSpring(() => rankTargets.value, defineSpring({ tension: 120, damping: 18 }))
+
+// The chart is 528px wide inside its panel; columns share it with 6 gaps.
+const columns = computed(() => {
+  const gap = barGap.value
+  const width = (528 - 6 * gap) / 7
+  return MONTHS.map((month, i) => ({
+    month,
     color: PALETTE[i]!,
     height: (bars.value[i] ?? 0) * 4,
     value: Math.round(bars.value[i] ?? 0),
+    left: (ranks.value[i] ?? i) * (width + gap),
+    width,
   }))
 })
+
+// Curve overlay control points: the column centers and bar tops, left to
+// right in their current (animated) positions.
+const overlayPoints = computed(() =>
+  columns.value
+    .map((column) => ({
+      key: column.month,
+      x: column.left + column.width / 2,
+      bottom: 32 + column.height,
+    }))
+    .sort((a, b) => a.x - b.x),
+)
 
 // -- orbit chain -------------------------------------------------------
 

@@ -1,9 +1,4 @@
-import {
-  lerp as lerpNumber,
-  minMax,
-  normalize as normalizeNumber,
-  remap as remapNumber,
-} from 'curvy/number'
+import { lerp as lerpNumber, minMax, remap as remapNumber } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import { isRecord } from './utils/object.ts'
 import { boundsTolerance, fieldsCoincident } from './utils/tolerance.ts'
@@ -303,29 +298,86 @@ export const lerp: {
     ),
 )
 
+// localize, normalize, and denormalize take fixed arities: their target may
+// itself be an Interval.
 /**
- * Expresses the interval in `target`'s normalized coordinate space: `start` maps to its relative
- * position within `target` (`target.start` is `0`, `target.end` is `1`), and `size` becomes the
- * ratio `self.size / target.size`. Not clamped: an interval outside `target` maps outside
- * `[0, 1]`. A zero-size `target` divides by zero, producing IEEE `Infinity` or `NaN`. The
- * data-last form omits `self` and returns a function of it.
+ * Re-expresses a position or interval relative to `self`'s start: the result is measured from
+ * `self.start` instead of the axis origin. An interval target keeps its size; only its start
+ * shifts. A number target is a position on the axis. The data-last form omits `self` and
+ * returns a function of it.
  *
- * @param self - The interval to normalize.
- * @param target - The reference interval whose span maps to `[0, 1]`.
- * @returns The normalized interval.
+ * @param self - The interval whose start becomes the new `0`.
+ * @param target - The position or interval to re-express.
+ * @returns A number or `Interval` (matching `target`) relative to `self.start`.
  * @example
  * ```ts
- * Interval.normalize(Interval.make(25, 50), Interval.make(0, 100)) // Interval.make(0.25, 0.5)
- * Interval.make(0, 100).pipe(Interval.normalize(Interval.make(100, 100))) // Interval.make(-1, 1)
+ * Interval.localize(Interval.make(10, 100), 60) // 50
+ * Interval.localize(Interval.make(10, 100), Interval.make(30, 5)) // Interval.make(20, 5)
+ * ```
+ */
+export const localize: {
+  (self: Interval, target: number): number
+  (self: Interval, target: IntervalLike): Interval
+  (target: number): (self: Interval) => number
+  (target: IntervalLike): (self: Interval) => Interval
+} = dual(2, (self: Interval, target: number | IntervalLike) =>
+  typeof target === 'number'
+    ? target - self.start
+    : new Interval(target.start - self.start, target.size),
+)
+
+/**
+ * Expresses a position or interval as fractions of `self`: `self.start` is `0` and `self.end`
+ * is `1`, so a position inside `self` lands in `[0, 1]`. An interval target also divides its
+ * size by `self.size`. Not clamped. The inverse of `denormalize`. A zero-size `self` divides by
+ * zero, producing IEEE `Infinity` or `NaN`. The data-last form omits `self` and returns a
+ * function of it.
+ *
+ * @param self - The reference interval whose span maps to `[0, 1]`.
+ * @param target - The position or interval to normalize.
+ * @returns A number or `Interval` (matching `target`) in units of `self`.
+ * @example
+ * ```ts
+ * Interval.normalize(Interval.make(0, 200), 50) // 0.25
+ * Interval.normalize(Interval.make(0, 100), Interval.make(25, 50)) // Interval.make(0.25, 0.5)
+ * Interval.make(100, 100).pipe(Interval.normalize(Interval.make(0, 100))) // Interval.make(-1, 1)
  * ```
  */
 export const normalize: {
-  (self: Interval, target: Interval): Interval
-  (target: Interval): (self: Interval) => Interval
-} = dual(
-  2,
-  (self: Interval, target: Interval) =>
-    new Interval(normalizeNumber(self.start, target.start, target.end), self.size / target.size),
+  (self: Interval, target: number): number
+  (self: Interval, target: IntervalLike): Interval
+  (target: number): (self: Interval) => number
+  (target: IntervalLike): (self: Interval) => Interval
+} = dual(2, (self: Interval, target: number | IntervalLike) =>
+  typeof target === 'number'
+    ? (target - self.start) / self.size
+    : new Interval((target.start - self.start) / self.size, target.size / self.size),
+)
+
+/**
+ * Maps a position or interval given as fractions of `self` back onto the axis: `0` is
+ * `self.start`, `1` is `self.end`, and `0.5` the midpoint. An interval target also scales its
+ * size by `self.size`. Not clamped: fractions outside `[0, 1]` land outside `self`. The inverse
+ * of `normalize`. The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The reference interval.
+ * @param target - The position or interval, in units of `self`.
+ * @returns A number or `Interval` (matching `target`) on `self`'s axis.
+ * @example
+ * ```ts
+ * Interval.denormalize(Interval.make(100, 200), 0.5) // 200
+ * Interval.denormalize(Interval.make(0, 100), Interval.make(0.25, 0.5)) // Interval.make(25, 50)
+ * ```
+ */
+export const denormalize: {
+  (self: Interval, target: number): number
+  (self: Interval, target: IntervalLike): Interval
+  (target: number): (self: Interval) => number
+  (target: IntervalLike): (self: Interval) => Interval
+} = dual(2, (self: Interval, target: number | IntervalLike) =>
+  typeof target === 'number'
+    ? self.start + target * self.size
+    : new Interval(self.start + target.start * self.size, target.size * self.size),
 )
 
 /**

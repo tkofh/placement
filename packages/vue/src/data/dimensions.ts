@@ -1,6 +1,6 @@
 import * as Dimensions from 'placement/dimensions'
-import { auto } from 'placement/utils'
 import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
+import { auto } from '../internal/utils.ts'
 
 function preferCachedDimensions(
   value: Dimensions.Dimensions,

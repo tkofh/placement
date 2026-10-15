@@ -4,6 +4,22 @@ import { type NormalizedSizing, normalizeSizing, normalizeTRBL } from './utils/a
 const TypeBrand: unique symbol = Symbol('placement/frame')
 type TypeBrand = typeof TypeBrand
 
+// Sizing state lives under module-private symbols rather than `#private`
+// fields, so reads still work through a `Proxy` (Vue's `ref`/`reactive`).
+const Raw: unique symbol = Symbol('placement/frame/raw')
+const Sizing: unique symbol = Symbol('placement/frame/sizing')
+
+type RawSizing = {
+  readonly [K in
+    | 'width'
+    | 'height'
+    | 'aspectRatio'
+    | 'minWidth'
+    | 'minHeight'
+    | 'maxWidth'
+    | 'maxHeight']: number | undefined
+}
+
 /**
  * The construction input for `make`. Every field is optional, and passing
  * `undefined` is the same as omitting the field.
@@ -181,17 +197,10 @@ class Frame extends Pipeable {
    */
   readonly stretch: number
 
-  // Sizing inputs are stored raw (undefined = unset) and resolved lazily, so
-  // unset-ness survives setter round-trips.
-  readonly #width: number | undefined
-  readonly #height: number | undefined
-  readonly #aspectRatio: number | undefined
-  readonly #minWidth: number | undefined
-  readonly #minHeight: number | undefined
-  readonly #maxWidth: number | undefined
-  readonly #maxHeight: number | undefined
-
-  #sizing: NormalizedSizing | undefined
+  // Sizing inputs are stored raw (undefined = unset), so unset-ness survives
+  // setter round-trips, and resolved once at construction.
+  readonly [Raw]: RawSizing
+  readonly [Sizing]: NormalizedSizing
 
   constructor(input: FrameInput) {
     super()
@@ -205,25 +214,25 @@ class Frame extends Pipeable {
     this.align = input.align ?? Number.POSITIVE_INFINITY
     this.stretch = input.stretch ?? Number.POSITIVE_INFINITY
 
-    this.#width = input.width
-    this.#height = input.height
-    this.#aspectRatio = input.aspectRatio
-    this.#minWidth = input.minWidth
-    this.#minHeight = input.minHeight
-    this.#maxWidth = input.maxWidth
-    this.#maxHeight = input.maxHeight
-  }
-
-  get #resolved(): NormalizedSizing {
-    return (this.#sizing ??= normalizeSizing(
-      this.#aspectRatio ?? 0,
-      this.#width ?? Number.NaN,
-      this.#height ?? Number.NaN,
-      this.#minWidth ?? 0,
-      this.#minHeight ?? 0,
-      this.#maxWidth ?? Number.POSITIVE_INFINITY,
-      this.#maxHeight ?? Number.POSITIVE_INFINITY,
-    ))
+    const raw: RawSizing = {
+      width: input.width,
+      height: input.height,
+      aspectRatio: input.aspectRatio,
+      minWidth: input.minWidth,
+      minHeight: input.minHeight,
+      maxWidth: input.maxWidth,
+      maxHeight: input.maxHeight,
+    }
+    this[Raw] = raw
+    this[Sizing] = normalizeSizing(
+      raw.aspectRatio ?? 0,
+      raw.width ?? Number.NaN,
+      raw.height ?? Number.NaN,
+      raw.minWidth ?? 0,
+      raw.minHeight ?? 0,
+      raw.maxWidth ?? Number.POSITIVE_INFINITY,
+      raw.maxHeight ?? Number.POSITIVE_INFINITY,
+    )
   }
 
   /**
@@ -237,7 +246,7 @@ class Frame extends Pipeable {
    * can raise.
    */
   get width(): number {
-    return this.#resolved.width
+    return this[Sizing].width
   }
 
   /**
@@ -251,7 +260,7 @@ class Frame extends Pipeable {
    * can raise.
    */
   get height(): number {
-    return this.#resolved.height
+    return this[Sizing].height
   }
 
   /**
@@ -261,7 +270,7 @@ class Frame extends Pipeable {
    * `NaN` for `0` over `0` (the empty `Frame.make({})`).
    */
   get aspectRatio(): number {
-    return this.#resolved.aspectRatio
+    return this[Sizing].aspectRatio
   }
 
   /**
@@ -269,7 +278,7 @@ class Frame extends Pipeable {
    * `>= 0`, and `0` when unset.
    */
   get minWidth(): number {
-    return this.#resolved.minWidth
+    return this[Sizing].minWidth
   }
 
   /**
@@ -277,7 +286,7 @@ class Frame extends Pipeable {
    * `>= 0`, and `0` when unset.
    */
   get minHeight(): number {
-    return this.#resolved.minHeight
+    return this[Sizing].minHeight
   }
 
   /**
@@ -286,7 +295,7 @@ class Frame extends Pipeable {
    * bounds cross — the minimum wins, as in CSS `clamp()`.
    */
   get maxWidth(): number {
-    return this.#resolved.maxWidth
+    return this[Sizing].maxWidth
   }
 
   /**
@@ -295,7 +304,7 @@ class Frame extends Pipeable {
    * bounds cross — the minimum wins, as in CSS `clamp()`.
    */
   get maxHeight(): number {
-    return this.#resolved.maxHeight
+    return this[Sizing].maxHeight
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
@@ -318,13 +327,13 @@ class Frame extends Pipeable {
       offsetRight: this.offsetRight,
       offsetBottom: this.offsetBottom,
       offsetLeft: this.offsetLeft,
-      width: this.#width,
-      height: this.#height,
-      aspectRatio: this.#aspectRatio,
-      minWidth: this.#minWidth,
-      minHeight: this.#minHeight,
-      maxWidth: this.#maxWidth,
-      maxHeight: this.#maxHeight,
+      width: this[Raw].width,
+      height: this[Raw].height,
+      aspectRatio: this[Raw].aspectRatio,
+      minWidth: this[Raw].minWidth,
+      minHeight: this[Raw].minHeight,
+      maxWidth: this[Raw].maxWidth,
+      maxHeight: this[Raw].maxHeight,
       grow: this.grow,
       shrink: this.shrink,
       align: this.align,

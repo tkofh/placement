@@ -319,3 +319,14 @@ describe('box', () => {
     })
   })
 })
+
+describe('box through a Proxy', () => {
+  // Vue's `ref`/`reactive` wrap values in proxies, which `#private` fields reject.
+  test('getters, toJSON, setters, and apply read through the proxy', () => {
+    const box = new Proxy(Box.make({ top: 10, left: 20, width: 100, aspectRatio: 2 }), {})
+    expect(box.top).toBe(10)
+    expect(box.toJSON()).toEqual({ top: 10, left: 20, width: 100, aspectRatio: 2 })
+    expect(Box.setTop(box, 5).top).toBe(5)
+    expect(Box.apply(box, parent)).toEqual(Rect.make(20, 10, 100, 50))
+  })
+})

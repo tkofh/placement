@@ -76,11 +76,9 @@ Every type is immutable and every operation is a small pure function with two
 call forms — data-first, or data-last for pipelines:
 
 ```ts
-import { pipe } from 'placement/utils'
 import * as Interval from 'placement/interval'
 
 Interval.setSize(Interval.make(0, 100), 50, 0.5) // Interval [25, 75]
-pipe(Interval.make(0, 100), Interval.setSize(50, 0.5)) // same
 Interval.make(0, 100).pipe(Interval.setSize(50, 0.5)) // same
 ```
 
@@ -101,7 +99,7 @@ radians.
 
 `placement/box` · `placement/dimensions` · `placement/flexbox` ·
 `placement/frame` · `placement/interval` · `placement/offset` ·
-`placement/point` · `placement/rect` · `placement/track` · `placement/utils`
+`placement/point` · `placement/rect` · `placement/track`
 
 ESM only. Every export carries JSDoc — the types are the reference docs.
 

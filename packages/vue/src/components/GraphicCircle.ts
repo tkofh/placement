@@ -27,11 +27,11 @@ export const GraphicCircle = defineComponent(
     const paint = usePaint(props)
 
     return () => {
-      const { x, y, width, height } = self.value
+      const { center, width, height } = self.value
+      const cx = center.x
+      const cy = center.y
       const rx = width * 0.5
       const ry = height * 0.5
-      const cx = x + rx
-      const cy = y + ry
       const isEllipse = rx !== ry
       return h(
         isEllipse ? 'ellipse' : 'circle',

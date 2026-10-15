@@ -747,7 +747,7 @@ export const normalize: {
 } = dual(
   (args) => isTrack(args[0]),
   (self: Track, target: Interval.Interval = toInterval(self)) =>
-    map(self, Interval.normalize(target)),
+    map(self, (interval) => Interval.normalize(target, interval)),
 )
 
 // remap takes a fixed arity: a Track is itself IntervalLike, so a 2-argument

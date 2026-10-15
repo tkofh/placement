@@ -4,7 +4,7 @@ import type { Dimensions } from './dimensions.ts'
 import type { Interval } from './interval.ts'
 import type { Offset } from './offset.ts'
 import * as Point from './point.ts'
-import { normalizeTRBL, normalizeXYWH } from './utils/arguments.ts'
+import { normalizeTRBL } from './utils/arguments.ts'
 import { isRecord } from './utils/object.ts'
 import { boundsTolerance, fieldsCoincident } from './utils/tolerance.ts'
 
@@ -204,7 +204,20 @@ export const make: {
    * @returns The rect at `(x, y)` with the given size.
    */
   (x: number, y: number, width: number, height: number): Rect
-} = (a?: number, b?: number, c?: number, d?: number): Rect => new Rect(...normalizeXYWH(a, b, c, d))
+} = (a?: number, b?: number, c?: number, d?: number): Rect => {
+  // Branches inline rather than through a normalized tuple: `make` is the
+  // hottest constructor, and the tuple plus spread doubled its cost.
+  if (d != null) {
+    return new Rect(a ?? 0, b ?? 0, c ?? 0, d)
+  }
+  if (c != null) {
+    return new Rect(a ?? 0, b ?? 0, c, c)
+  }
+  if (b != null) {
+    return new Rect(0, 0, a ?? 0, b)
+  }
+  return new Rect(0, 0, a ?? 0, a ?? 0)
+}
 
 /**
  * Creates a `Rect` from any value with numeric `x`, `y`, `width`, and
@@ -1286,6 +1299,112 @@ export const lerp: {
       lerpNumber(amount, self.width, target.width),
       lerpNumber(amount, self.height, target.height),
     ),
+)
+
+/**
+ * Re-expresses a point or rect in `self`'s local coordinates: the result
+ * is relative to `self`'s origin corner `(x, y)` instead of the space both
+ * live in. A rect target keeps its size; only its position shifts. The
+ * inverse of translating by `self`'s position.
+ *
+ * A target carrying the four rect fields is treated as a rect (every
+ * `Rect` is also point-like, so the rect reading wins), and anything else
+ * point-like as a point.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The rect whose origin becomes the new `(0, 0)`.
+ * @param target - The point or rect to re-express.
+ * @returns A new `Point` or `Rect` (matching `target`) in `self`'s local space.
+ * @example
+ * ```ts
+ * Rect.localize(Rect.make(10, 20, 100), Point.make(60, 70)) // Point (50, 50)
+ * Rect.localize(Rect.make(10, 20, 100), Rect.make(30, 40, 5)) // Rect.make(20, 20, 5, 5)
+ * ```
+ */
+export const localize: {
+  (self: Rect, target: RectLike): Rect
+  (self: Rect, target: Point.PointLike): Point.Point
+  (target: RectLike): (self: Rect) => Rect
+  (target: Point.PointLike): (self: Rect) => Point.Point
+} = dual(2, (self: Rect, target: Point.PointLike | RectLike) =>
+  isRectLike(target)
+    ? new Rect(target.x - self.x, target.y - self.y, target.width, target.height)
+    : Point.make(target.x - self.x, target.y - self.y),
+)
+
+/**
+ * Expresses a point or rect as fractions of `self`: `(0, 0)` is `self`'s
+ * origin corner and `(1, 1)` the opposite corner, so a point inside
+ * `self` lands in the unit square. A rect target also divides its size by
+ * `self`'s. The inverse of `denormalize`.
+ *
+ * Exact IEEE division: a zero-size axis of `self` yields `Infinity` or
+ * `NaN` on that axis. A target carrying the four rect fields is treated
+ * as a rect, and anything else point-like as a point.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The reference rect.
+ * @param target - The point or rect to normalize.
+ * @returns A new `Point` or `Rect` (matching `target`) in units of `self`.
+ * @example
+ * ```ts
+ * Rect.normalize(Rect.make(100, 100, 200), Point.make(150, 200)) // Point (0.25, 0.5)
+ * Rect.normalize(Rect.make(0, 0, 200, 100), Rect.make(50, 25, 100, 50)) // Rect.make(0.25, 0.25, 0.5, 0.5)
+ * ```
+ */
+export const normalize: {
+  (self: Rect, target: RectLike): Rect
+  (self: Rect, target: Point.PointLike): Point.Point
+  (target: RectLike): (self: Rect) => Rect
+  (target: Point.PointLike): (self: Rect) => Point.Point
+} = dual(2, (self: Rect, target: Point.PointLike | RectLike) =>
+  isRectLike(target)
+    ? new Rect(
+        (target.x - self.x) / self.width,
+        (target.y - self.y) / self.height,
+        target.width / self.width,
+        target.height / self.height,
+      )
+    : Point.make((target.x - self.x) / self.width, (target.y - self.y) / self.height),
+)
+
+/**
+ * Maps a point or rect given as fractions of `self` back into the space
+ * `self` lives in: `(0, 0)` is `self`'s origin corner, `(1, 1)` the
+ * opposite corner, and `Point.half` its center. A rect target also scales
+ * its size by `self`'s. The inverse of `normalize`.
+ *
+ * Not clamped: fractions outside `[0, 1]` land outside `self`. A target
+ * carrying the four rect fields is treated as a rect, and anything else
+ * point-like as a point.
+ *
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The reference rect.
+ * @param target - The point or rect, in units of `self`.
+ * @returns A new `Point` or `Rect` (matching `target`) in `self`'s space.
+ * @example
+ * ```ts
+ * Rect.denormalize(Rect.make(100, 100, 200), Point.half) // Point (200, 200)
+ * Rect.denormalize(Rect.make(0, 0, 200, 100), Rect.make(0.25, 0.25, 0.5, 0.5)) // Rect.make(50, 25, 100, 50)
+ * ```
+ */
+export const denormalize: {
+  (self: Rect, target: RectLike): Rect
+  (self: Rect, target: Point.PointLike): Point.Point
+  (target: RectLike): (self: Rect) => Rect
+  (target: Point.PointLike): (self: Rect) => Point.Point
+} = dual(2, (self: Rect, target: Point.PointLike | RectLike) =>
+  isRectLike(target)
+    ? new Rect(
+        self.x + target.x * self.width,
+        self.y + target.y * self.height,
+        target.width * self.width,
+        target.height * self.height,
+      )
+    : Point.make(self.x + target.x * self.width, self.y + target.y * self.height),
 )
 
 /**
