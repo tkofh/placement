@@ -17,11 +17,10 @@
     "check": "oxlint . && oxfmt --check .",
     "fix": "oxlint --fix . && oxfmt .",
     "deps:update": "pnpm -r update --latest && pnpm dedupe",
-    "version-packages": "changeset version && pnpm run format:fix",
     "check:fix": "oxlint --fix . && oxfmt ."
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.0",
+    "@changesets/cli": "^3.0.3",
     "oxfmt": "^0.48.0",
     "oxlint": "^1.63.0",
     "turbo": "^2.9.10",
