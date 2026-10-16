@@ -175,7 +175,7 @@ svg text.edge-label {
 }
 .controls {
   position: fixed;
-  top: 12px;
+  bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;

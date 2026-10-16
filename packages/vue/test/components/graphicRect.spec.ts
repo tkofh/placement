@@ -2,7 +2,7 @@ import { CubicPath2d } from 'curvy/path'
 import * as Rect from 'placement/rect'
 import { describe, expect, test } from 'vitest'
 import { h, nextTick, ref } from 'vue'
-import { GraphicRect } from '../../src/components/GraphicRect.ts'
+import { GraphicRect, type GraphicRectProps } from '../../src/components/GraphicRect.ts'
 import { roundRect } from '../../src/internal/corners.ts'
 import { findAll, findOne, mountWithRect } from '../host.ts'
 
@@ -136,7 +136,7 @@ describe('smoothing', () => {
     expect(findAll(root, 'rect')).toEqual([])
   })
 
-  test.each([
+  test.each<[string, GraphicRectProps & { r?: number }]>([
     ['no smoothing', { r: 6 }],
     ['smoothing 0', { r: 6, smoothing: 0 }],
     ['no radius', { smoothing: 0.6 }],
@@ -153,9 +153,7 @@ describe('smoothing', () => {
     ])
 
     const path = findOne(root, 'path')
-    expect(path.props['d']).toBe(
-      `${CubicPath2d.toPathData(roundRect(0, 0, 200, 100, 8, 4, 1))} Z`,
-    )
+    expect(path.props['d']).toBe(`${CubicPath2d.toPathData(roundRect(0, 0, 200, 100, 8, 4, 1))} Z`)
     expect(path.props['fill']).toBe('color(srgb 1 0 0)')
   })
 })

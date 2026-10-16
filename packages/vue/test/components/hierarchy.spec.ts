@@ -167,7 +167,10 @@ describe('solving', () => {
       node('b', 40, 20),
     ])
     const solved = Hierarchy.apply(
-      [Frame.make({ id: 'a', width: 40, height: 20 }), Frame.make({ id: 'b', width: 40, height: 20 })],
+      [
+        Frame.make({ id: 'a', width: 40, height: 20 }),
+        Frame.make({ id: 'b', width: 40, height: 20 }),
+      ],
       [Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.right })],
       Hierarchy.make({ rankGap: 20 }),
     )
