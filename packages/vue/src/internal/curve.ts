@@ -2,6 +2,7 @@ import type { Interval, Interval2d } from 'curvy/interval'
 import { CubicPath2d, LinearPath2d, QuadraticPath2d, RationalCubicPath2d } from 'curvy/path'
 import { Basis2d, Bezier2d, Cardinal2d, Hermite2d, Linear2d, RationalBezier2d } from 'curvy/splines'
 import type { Affine2d } from 'curvy/transform'
+import type { Vector2 } from 'curvy/vector'
 
 /**
  * Everything `GraphicPath` accepts: a renderable path, a spline (converted
@@ -109,4 +110,82 @@ export function pathData(renderable: RenderablePath): string {
 export function finiteNumber(value: number | `${number}` | undefined): number | undefined {
   const parsed = typeof value === 'number' ? value : value != null ? Number(value) : Number.NaN
   return Number.isFinite(parsed) ? parsed : undefined
+}
+
+export type CurveKind = 'cardinal' | 'basis' | 'bezier' | 'linear'
+
+export type CurveEnds = 'duplicate' | 'reflect' | 'interpolate' | 'natural'
+
+// The minimum count of control points for each family. Below it, there is
+// no path to draw (points mount progressively).
+function hasEnoughPoints(kind: CurveKind, ends: CurveEnds, count: number): boolean {
+  switch (kind) {
+    case 'basis':
+    case 'cardinal':
+      return count >= (ends === 'natural' ? 4 : 2)
+    case 'bezier':
+      return count >= 4 && count % 3 === 1
+    default:
+      return count >= 2
+  }
+}
+
+/**
+ * The SVG path data of a spline family through `controls`, or `undefined`
+ * when there are too few control points for the family.
+ */
+export function curvePathData(
+  kind: CurveKind,
+  ends: CurveEnds,
+  controls: ReadonlyArray<Vector2>,
+  options: { tension?: number; alpha?: number } = {},
+): string | undefined {
+  if (!hasEnoughPoints(kind, ends, controls.length)) {
+    return undefined
+  }
+
+  switch (kind) {
+    case 'linear':
+      return LinearPath2d.toPathData(Linear2d.toPath(Linear2d.fromArray(controls)))
+    case 'basis': {
+      // Basis2d.fromArray requires four control points, so endpoint
+      // triplication pads the array before construction.
+      const padded =
+        ends === 'natural'
+          ? controls
+          : [controls[0]!, controls[0]!, ...controls, controls.at(-1)!, controls.at(-1)!]
+      return CubicPath2d.toPathData(Basis2d.toPath(Basis2d.fromArray(padded)))
+    }
+    case 'bezier':
+      return CubicPath2d.toPathData(Bezier2d.toPath(Bezier2d.fromArray(controls)))
+    default: {
+      const spline = Cardinal2d.fromArray(controls, options)
+      const padded =
+        ends === 'reflect'
+          ? Cardinal2d.withReflectedEndpoints(spline)
+          : ends === 'interpolate'
+            ? Cardinal2d.withInterpolatedEndpoints(spline)
+            : ends === 'natural'
+              ? spline
+              : Cardinal2d.withDuplicatedEndpoints(spline)
+      return CubicPath2d.toPathData(Cardinal2d.toPath(padded))
+    }
+  }
+}
+
+/** The cardinal spline options from the `tension` and `alpha` props. Unset options stay omitted. */
+export function curveOptions(
+  tension: number | `${number}` | undefined,
+  alpha: number | `${number}` | undefined,
+): { tension?: number; alpha?: number } {
+  const resolved: { tension?: number; alpha?: number } = {}
+  const tensionValue = finiteNumber(tension)
+  const alphaValue = finiteNumber(alpha)
+  if (tensionValue !== undefined) {
+    resolved.tension = tensionValue
+  }
+  if (alphaValue !== undefined) {
+    resolved.alpha = alphaValue
+  }
+  return resolved
 }

@@ -217,6 +217,19 @@ describe('apply', () => {
     expect(layout.nodes.b?.y).toBe(40 + 2 * 40)
   })
 
+  test('a route between touching ports keeps both ends', () => {
+    const layout = Hierarchy.apply(
+      [Frame.setId(small, 'a'), Frame.setId(small, 'b')],
+      [Edge.make({ source: 'a', target: 'b' })],
+      Hierarchy.make({}),
+    )
+    expect(layout.nodes.b).toEqual(Rect.make(0, 20, 60, 20))
+    expect(points(layout.edges[0])).toEqual([
+      [30, 20],
+      [30, 20],
+    ])
+  })
+
   test('a cycle routes both edges from source to target', () => {
     const layout = Hierarchy.apply(
       [Frame.setId(box, 'a'), Frame.setId(box, 'b')],

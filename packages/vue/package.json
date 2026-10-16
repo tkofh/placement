@@ -66,6 +66,22 @@
       "types": "./dist/components/GraphicText.d.mts",
       "import": "./dist/components/GraphicText.mjs"
     },
+    "./HierarchyEdge": {
+      "types": "./dist/components/HierarchyEdge.d.mts",
+      "import": "./dist/components/HierarchyEdge.mjs"
+    },
+    "./HierarchyLabel": {
+      "types": "./dist/components/HierarchyLabel.d.mts",
+      "import": "./dist/components/HierarchyLabel.mjs"
+    },
+    "./HierarchyLayout": {
+      "types": "./dist/components/HierarchyLayout.d.mts",
+      "import": "./dist/components/HierarchyLayout.mjs"
+    },
+    "./HierarchyNode": {
+      "types": "./dist/components/HierarchyNode.d.mts",
+      "import": "./dist/components/HierarchyNode.mjs"
+    },
     "./data/dimensions": {
       "types": "./dist/data/dimensions.d.mts",
       "import": "./dist/data/dimensions.mjs"

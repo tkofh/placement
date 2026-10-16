@@ -12,6 +12,10 @@ const components = [
   'GraphicRect',
   'GraphicRoot',
   'GraphicText',
+  'HierarchyEdge',
+  'HierarchyLabel',
+  'HierarchyLayout',
+  'HierarchyNode',
 ]
 
 export default defineNuxtModule({

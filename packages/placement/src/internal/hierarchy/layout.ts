@@ -840,7 +840,8 @@ function pointAlong(points: ReadonlyArray<LogicalPoint>, at: number): LogicalPoi
 
 // Drops repeated points and the middle point of axis-aligned runs. Both
 // checks use `coincident`, as they decide whether two computed coordinates
-// are the same.
+// are the same. A route always keeps both of its ends, even when they
+// coincide (a zero rank gap can put touching ports at one point).
 function simplify(points: ReadonlyArray<LogicalPoint>): Array<LogicalPoint> {
   const result: Array<LogicalPoint> = []
   for (const point of points) {
@@ -859,6 +860,10 @@ function simplify(points: ReadonlyArray<LogicalPoint>): Array<LogicalPoint> {
       continue
     }
     result.push(point)
+  }
+  const end = points[points.length - 1]
+  if (result.length === 1 && end !== undefined) {
+    result.push(end)
   }
   return result
 }
