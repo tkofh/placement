@@ -10,11 +10,19 @@ check the references: an edge to an unknown id, or a frame without an id, is
 a compile error. It returns a record of rects keyed by id, a polyline route
 per edge, and the bounds of the drawing. The solver breaks cycles, ranks
 nodes by network simplex, reduces crossings by barycenter sweeps, and assigns
-coordinates by Brandes-Köpf with an edge-straightening pass. It is deterministic, and ties follow input order.
+coordinates by Brandes-Köpf with an edge-straightening pass. It is
+deterministic, and ties follow input order.
+
+Routes are orthogonal by default: every segment runs along or across the
+flow. An edge that shifts across the flow does so on a jog between two
+ranks. Jogs that share the space between two ranks get their own lanes,
+ordered to avoid crossings, and that space grows to fit them. The
+`routing` option switches to `Hierarchy.routing.polyline`, which shifts on
+diagonals instead.
 
 Edges carry a `weight`, a `minLength`, ports (`sourceSide`/`sourceAt`,
 `targetSide`/`targetAt`, each auto when omitted), and labels, which are
 `Frame`s placed along the edge that take up room in the layout. Nodes stack
 within their rank by the frames' `align` and `stretch`. `Hierarchy.make`
-configures the flow `direction`, the `rankGap`/`nodeGap`/`edgeGap` spacing,
+configures the flow `direction`, the `routing`, the `rankGap`/`nodeGap`/`edgeGap` spacing,
 and the `alignItems`/`stretchItems`/`alignLabels` defaults.

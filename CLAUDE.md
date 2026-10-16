@@ -38,8 +38,8 @@ non-finite input acts as unset. `Hierarchy` is a layered graph layout spec.
 `Hierarchy.apply` solves `Frame`s with ids plus `Edge` specs (which
 reference frame ids) through the phases in `internal/hierarchy/`: acyclic,
 rank (network simplex), order, position (Brandes-Köpf), and layout (bands,
-ports, routes). `Rect`, `Point`, `Dimensions`, and `Offset`
-are the 2D value types. Type-only cross-module imports can stay flat
+ports, routes). `lanes.ts` orders the jogs of orthogonal routes. `Rect`,
+`Point`, `Dimensions`, and `Offset` are the 2D value types. Type-only cross-module imports can stay flat
 (`import type { Rect } from ...`). Use namespace imports for value usage.
 
 Follow the dual-dispatch ambiguity rule. An op can use a predicate dual

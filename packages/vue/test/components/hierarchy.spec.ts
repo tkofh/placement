@@ -214,6 +214,22 @@ describe('solving', () => {
     ])
   })
 
+  test.each([
+    ['orthogonal', Hierarchy.routing.orthogonal],
+    ['polyline', Hierarchy.routing.polyline],
+  ] as const)('routing %s maps to the core routing', async (name, routing) => {
+    const { root } = await mountLayout({ routing: name, rankGap: 20, nodeGap: 10 }, graph)
+    const solved = Hierarchy.apply(
+      frames,
+      [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'c' })],
+      Hierarchy.make({ routing, rankGap: 20, nodeGap: 10 }),
+    )
+
+    expect(props(findAll(root, 'route'))).toEqual(
+      solved.edges.map((route) => ({ points: translatedPoints(route.points) })),
+    )
+  })
+
   test('a layout prop replaces the other layout props', async () => {
     const layout = Hierarchy.make({ direction: Hierarchy.direction.right, rankGap: 20 })
     const { root } = await mountLayout({ layout, direction: 'down', rankGap: 100 }, graph)

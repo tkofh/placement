@@ -17,7 +17,7 @@
     <GraphicRect fill="color(display-p3 0.045 0.055 0.1)" />
     <GraphicText left="24px" top="16px" class="title">FLOWCHART</GraphicText>
     <GraphicText right="24px" top="20px" class="label">
-      {{ direction.toUpperCase() }} / {{ curve.toUpperCase() }}
+      {{ direction.toUpperCase() }} / {{ routing.toUpperCase() }} / {{ curve.toUpperCase() }}
     </GraphicText>
 
     <HierarchyLayout
@@ -25,6 +25,7 @@
       top="50%"
       origin="center"
       :direction="direction"
+      :routing="routing"
       rank-gap="30px"
       node-gap="28px"
       edge-gap="10px"
@@ -89,6 +90,10 @@
       {{ d }}
     </button>
     <span />
+    <button v-for="m in ROUTINGS" :key="m" :class="{ on: m === routing }" @click="routing = m">
+      {{ m }}
+    </button>
+    <span />
     <button v-for="c in CURVES" :key="c" :class="{ on: c === curve }" @click="curve = c">
       {{ c }}
     </button>
@@ -103,10 +108,12 @@
 <script setup lang="ts">
 const DIRECTIONS = ['down', 'right', 'up', 'left'] as const
 const CURVES = ['linear', 'basis', 'cardinal'] as const
+const ROUTINGS = ['orthogonal', 'polyline'] as const
 
 const direction = ref<(typeof DIRECTIONS)[number]>('down')
 const curve = ref<(typeof CURVES)[number]>('linear')
 const smooth = ref(true)
+const routing = ref<(typeof ROUTINGS)[number]>('orthogonal')
 const withLint = ref(false)
 
 // The drawing has its own size, so the scene grows along the flow to fit it.

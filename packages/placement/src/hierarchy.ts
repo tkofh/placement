@@ -40,6 +40,26 @@ export const direction = {
 export type HierarchyDirection = (typeof direction)[keyof typeof direction]
 
 /**
+ * The edge routing styles, encoded as numbers: `polyline` is `0`,
+ * `orthogonal` is `1`.
+ *
+ * - `polyline` runs each edge straight between its waypoints, so an edge
+ *   that shifts across the flow does so on a diagonal.
+ * - `orthogonal` draws every segment along or across the flow. An edge
+ *   that shifts across the flow does so on a jog between two ranks, and
+ *   jogs that share the space between two ranks get their own lanes,
+ *   ordered to avoid crossings. That space grows to fit its lanes,
+ *   `edgeGap` apart.
+ */
+export const routing = {
+  polyline: 0,
+  orthogonal: 1,
+} as const
+
+/** An edge routing style, one of the `routing` encodings. */
+export type HierarchyRouting = (typeof routing)[keyof typeof routing]
+
+/**
  * The configuration that `make` accepts. Every property is optional. An
  * empty input flows downward with no gaps, nodes centered in their ranks,
  * and labels centered on their edges.
@@ -47,6 +67,8 @@ export type HierarchyDirection = (typeof direction)[keyof typeof direction]
 export interface HierarchyInput {
   /** The flow direction, one of the `direction` encodings. Defaults to `direction.down`. */
   readonly direction?: HierarchyDirection
+  /** The edge routing style, one of the `routing` encodings. Defaults to `routing.orthogonal`. */
+  readonly routing?: HierarchyRouting
   /**
    * The space between adjacent ranks of nodes, along the flow. An edge
    * label adds its own size on top. Defaults to `0`.
@@ -99,6 +121,8 @@ class Hierarchy extends Pipeable {
 
   /** The flow direction, one of the `direction` encodings. */
   readonly direction: HierarchyDirection
+  /** The edge routing style, one of the `routing` encodings. */
+  readonly routing: HierarchyRouting
   /** The space between adjacent ranks of nodes. */
   readonly rankGap: number
   /** The space between adjacent nodes in a rank. */
@@ -116,6 +140,7 @@ class Hierarchy extends Pipeable {
     super()
 
     this.direction = input.direction ?? direction.down
+    this.routing = input.routing ?? routing.orthogonal
     this.rankGap = input.rankGap ?? 0
     this.nodeGap = input.nodeGap ?? 0
     this.edgeGap = input.edgeGap ?? 0
@@ -142,6 +167,7 @@ class Hierarchy extends Pipeable {
   toJSON() {
     return {
       direction: this.direction,
+      routing: this.routing,
       rankGap: this.rankGap,
       nodeGap: this.nodeGap,
       edgeGap: this.edgeGap,
@@ -231,6 +257,8 @@ export interface HierarchyLayout<K extends string> {
  *    edges straight.
  * 5. It stacks each rank's nodes inside the rank's thickness with the
  *    frames' `align` and `stretch`, and routes edges through their ports.
+ *    Orthogonal routing (the default `routing`) gives each jog between two
+ *    ranks its own lane and widens the space between the ranks to fit.
  *
  * Nodes are `Frame`s with an `id`, and edges reference them by it. The
  * types check both. The literal ids of `frames` form the allowed ids, so a

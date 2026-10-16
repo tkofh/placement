@@ -10,7 +10,18 @@ const box = Frame.make({ width: 100, height: 40 })
 const small = Frame.make({ width: 60, height: 20 })
 const spec = Hierarchy.make({ rankGap: 40, nodeGap: 20, edgeGap: 10 })
 
-const lineOf = (route: Hierarchy.HierarchyRoute | undefined) => route?.points[1]?.x ?? Number.NaN
+// The order-axis position of the segment that runs with the flow at `y`.
+const lineAt = (route: Hierarchy.HierarchyRoute | undefined, y: number) => {
+  const list = route?.points ?? []
+  for (let i = 1; i < list.length; i++) {
+    const a = list[i - 1] as Point.Point
+    const b = list[i] as Point.Point
+    if (a.x === b.x && Math.min(a.y, b.y) <= y && y <= Math.max(a.y, b.y)) {
+      return a.x
+    }
+  }
+  return Number.NaN
+}
 
 const points = (route: Hierarchy.HierarchyRoute | undefined) =>
   route?.points.map((point) => [point.x, point.y])
@@ -19,6 +30,7 @@ describe('make', () => {
   test('empty input applies the defaults', () => {
     expect(Hierarchy.make({}).toJSON()).toEqual({
       direction: Hierarchy.direction.down,
+      routing: Hierarchy.routing.orthogonal,
       rankGap: 0,
       nodeGap: 0,
       edgeGap: 0,
@@ -195,7 +207,56 @@ describe('apply', () => {
     expect(layout.nodes.a).toEqual(Rect.make(60, 0, 100, 40))
     expect(layout.nodes.b).toEqual(Rect.make(0, 80, 100, 40))
     expect(layout.nodes.c).toEqual(Rect.make(120, 80, 100, 40))
-    // The two ports sit edgeGap apart around the bottom center.
+    // The two ports sit edgeGap apart around the bottom center. Each edge
+    // jogs in the middle of the channel below the parent, then drops
+    // straight into its child.
+    expect(points(layout.edges[0])).toEqual([
+      [105, 40],
+      [105, 50],
+      [50, 50],
+      [50, 80],
+    ])
+    expect(points(layout.edges[1])).toEqual([
+      [115, 40],
+      [115, 50],
+      [170, 50],
+      [170, 80],
+    ])
+  })
+
+  test('a busy channel grows to fit its lanes, edgeGap apart', () => {
+    // Two edges jog left and two jog right below the parent. Each pair
+    // overlaps, so it takes two lanes, and the channel needs three edge gaps.
+    const layout = Hierarchy.apply(
+      ['a', 'b', 'c', 'd', 'e'].map((id) => Frame.setId(box, id)),
+      ['b', 'c', 'd', 'e'].map((target) => Edge.make({ source: 'a', target })),
+      spec,
+    )
+    expect(layout.nodes.b?.y).toBe(40 + 30 + 20)
+    const lanes = layout.edges.map((route) => route.points[1]?.y)
+    expect(lanes).toEqual([50, 60, 60, 50])
+    // The outer edge of each side jogs first, so the edges nest without
+    // crossing.
+    expect(points(layout.edges[0])).toEqual([
+      [215, 40],
+      [215, 50],
+      [50, 50],
+      [50, 90],
+    ])
+    expect(points(layout.edges[1])).toEqual([
+      [225, 40],
+      [225, 60],
+      [170, 60],
+      [170, 90],
+    ])
+  })
+
+  test('polyline routing shifts across the flow on a diagonal', () => {
+    const layout = Hierarchy.apply(
+      [Frame.setId(box, 'a'), Frame.setId(box, 'b'), Frame.setId(box, 'c')],
+      [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'c' })],
+      Hierarchy.make({ ...spec.toJSON(), routing: Hierarchy.routing.polyline }),
+    )
     expect(points(layout.edges[0])).toEqual([
       [105, 40],
       [50, 60],
@@ -329,8 +390,10 @@ describe('apply', () => {
         spec,
       )
       const [first, second] = layout.edges
-      expect(first?.labels[0]?.x).toBe(lineOf(first) + 4)
-      expect(second?.labels[0]?.x).toBe(lineOf(second) - 4 - 20)
+      const firstLabel = first?.labels[0] as Rect.Rect
+      const secondLabel = second?.labels[0] as Rect.Rect
+      expect(firstLabel.x).toBe(lineAt(first, firstLabel.y) + 4)
+      expect(secondLabel.x).toBe(lineAt(second, secondLabel.y) - 4 - 20)
     })
 
     test('alignLabels sets the default side', () => {
@@ -428,11 +491,12 @@ describe('apply', () => {
       )
       const route = points(layout.edges[0]) ?? []
       const a = layout.nodes.a
-      // The stub is half the node gap long.
+      // The stub is half the node gap long. The edge then runs with the
+      // flow to its jog, in the middle of the channel below the rank.
       expect(route.slice(0, 3)).toEqual([
         [a.right, 20],
         [a.right + 10, 20],
-        [a.right + 10, 40],
+        [a.right + 10, 50],
       ])
     })
 
@@ -628,6 +692,42 @@ describe('properties', () => {
           ),
         ).toBe(true)
         expect(layout.edges[i]?.labels).toHaveLength(edge.labels.length)
+      }
+
+      // Orthogonal routes: every segment runs with or across the flow. The
+      // segments across the flow are jogs between ranks. Jogs of different
+      // edges that share a lane never overlap, and no jog crosses a node.
+      const across: Array<[edge: number, at: number, from: number, to: number]> = []
+      for (const [i, { points: route }] of layout.edges.entries()) {
+        for (let k = 1; k < route.length; k++) {
+          const a = route[k - 1] as Point.Point
+          const b = route[k] as Point.Point
+          expect(coincident(a.x, b.x) || coincident(a.y, b.y)).toBe(true)
+          const flowAlongX = !hierarchy.isVertical
+          const [aFlow, bFlow, aCross, bCross] = flowAlongX
+            ? [a.x, b.x, a.y, b.y]
+            : [a.y, b.y, a.x, b.x]
+          if (coincident(aFlow, bFlow) && !coincident(aCross, bCross)) {
+            across.push([i, aFlow, Math.min(aCross, bCross), Math.max(aCross, bCross)])
+          }
+        }
+      }
+      for (let m = 0; m < across.length; m++) {
+        const [edgeA, atA, fromA, toA] = across[m] as [number, number, number, number]
+        for (let n = m + 1; n < across.length; n++) {
+          const [edgeB, atB, fromB, toB] = across[n] as [number, number, number, number]
+          if (edgeA !== edgeB && coincident(atA, atB)) {
+            expect(Math.min(toA, toB) - Math.max(fromA, fromB)).toBeLessThanOrEqual(1e-9)
+          }
+        }
+        for (const rect of rects) {
+          const [flowStart, flowEnd, crossStart, crossEnd] = hierarchy.isVertical
+            ? [rect.top, rect.bottom, rect.left, rect.right]
+            : [rect.left, rect.right, rect.top, rect.bottom]
+          const insideFlow = atA > flowStart + 1e-9 && atA < flowEnd - 1e-9
+          const overlapsCross = Math.min(toA, crossEnd) - Math.max(fromA, crossStart) > 1e-9
+          expect(insideFlow && overlapsCross).toBe(false)
+        }
       }
 
       // Bounds start at the origin and contain everything.

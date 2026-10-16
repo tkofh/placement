@@ -2,6 +2,7 @@ import { clamp, coincident } from 'curvy/number'
 import * as Track from '../../track.ts'
 import { findReversed } from './acyclic.ts'
 import type { LayeredGraph, Segment } from './graph.ts'
+import { type Jog, assignLanes } from './lanes.ts'
 import { order } from './order.ts'
 import { type Extent, position, separate } from './position.ts'
 import { type RankEdge, rank } from './rank.ts'
@@ -72,10 +73,14 @@ export interface SolveEdge {
   readonly labels: ReadonlyArray<SolveLabel>
 }
 
+// The routing encodings of `placement/hierarchy`.
+export const ORTHOGONAL = 1
+
 export interface SolveOptions {
   readonly rankGap: number
   readonly nodeGap: number
   readonly edgeGap: number
+  readonly routing: number
 }
 
 export interface LogicalBox {
@@ -240,47 +245,174 @@ export function solve(
 
   const anchors = position(graph, layers, extents)
 
-  // Attachment points across the flow, for straightening. An edge attaches
-  // to a node at its port when the port is fixed or on a side face, and at
-  // the node's center otherwise.
-  const attachment = (node: number, port: SolvePort, towardFace: number): number => {
-    const center = anchors[node] as number
-    const half = (nodes[node] as SolveNode).oSize / 2
-    const face = port.face >= 0 ? port.face : towardFace
-    if (face === ORDER_END) {
-      return center + half + nodeGap / 2
-    }
-    if (face === ORDER_START) {
-      return center - half - nodeGap / 2
-    }
-    if (face === towardFace && Number.isFinite(port.at)) {
-      return center - half + port.at * 2 * half
-    }
-    return center
+  const orthogonal = options.routing === ORTHOGONAL
+  const stub = nodeGap / 2
+
+  // The ends of each chain: the node, its port face and position, and the
+  // order-axis position of the next element along the edge, which orders
+  // ports that share a face.
+  interface End {
+    readonly j: number
+    readonly node: number
+    readonly face: number
+    readonly at: number
+    readonly toward: number
+  }
+  const makeEnds = (): Array<[upper: End, lower: End]> =>
+    flowEdges.map((edge, j) => {
+      const chain = chains[j] as Array<number>
+      const isReversed = reversed[j] as boolean
+      const upperPort = isReversed ? edge.targetPort : edge.sourcePort
+      const lowerPort = isReversed ? edge.sourcePort : edge.targetPort
+      return [
+        {
+          j,
+          node: chain[0] as number,
+          face: upperPort.face >= 0 ? upperPort.face : RANK_END,
+          at: upperPort.at,
+          toward: anchors[chain[1] as number] as number,
+        },
+        {
+          j,
+          node: chain[chain.length - 1] as number,
+          face: lowerPort.face >= 0 ? lowerPort.face : RANK_START,
+          at: lowerPort.at,
+          toward: anchors[chain[chain.length - 2] as number] as number,
+        },
+      ]
+    })
+
+  // A node's box across the flow only. Ports on rank faces and the points
+  // where edges leave their node's band depend on nothing else.
+  const orderBox = (node: number): LogicalBox => {
+    const { oSize } = nodes[node] as SolveNode
+    return { o: (anchors[node] as number) - oSize / 2, r: 0, oSize, rSize: 0 }
   }
 
-  straighten(
-    layers,
-    anchors,
-    extents,
-    chains.map((chain, j) => {
-      const edge = flowEdges[j] as SolveEdge
-      const isReversed = reversed[j] as boolean
-      return {
-        chain,
-        upper: attachment(
-          chain[0] as number,
-          isReversed ? edge.targetPort : edge.sourcePort,
-          RANK_END,
-        ),
-        lower: attachment(
-          chain[chain.length - 1] as number,
-          isReversed ? edge.sourcePort : edge.targetPort,
-          RANK_START,
-        ),
+  // Where each edge leaves its upper node's band and enters its lower
+  // node's band, across the flow.
+  const exits = (ends: ReadonlyArray<[End, End]>, along: ReadonlyMap<End, number>) =>
+    ends.map(
+      ([upper, lower]) =>
+        [
+          exitO(orderBox(upper.node), upper.face, along.get(upper), 1, upper.toward, stub),
+          exitO(orderBox(lower.node), lower.face, along.get(lower), -1, lower.toward, stub),
+        ] as const,
+    )
+
+  if (orthogonal) {
+    // Straighten toward the actual ports, so that a run aligns with the
+    // port its edge leaves or enters through and needs one jog. The jog sits
+    // by the end that fans out: below a node with several edges leaving it,
+    // above a node with several edges entering it.
+    const ends = makeEnds()
+    const attach = exits(ends, placePorts(ends, orderBox, true, edgeGap))
+    straighten(
+      layers,
+      anchors,
+      extents,
+      chains.map((chain, j) => {
+        const [upper, lower] = attach[j] as readonly [number, number]
+        const fansOut = (down[chain[0] as number] as Array<number>).length > 1
+        const fansIn = (up[chain[chain.length - 1] as number] as Array<number>).length > 1
+        return { chain, upper, lower, preferUpper: fansIn && !fansOut }
+      }),
+      true,
+    )
+  } else {
+    // Attachment points across the flow, for straightening. An edge
+    // attaches to a node at its port when the port is fixed or on a side
+    // face, and at the node's center otherwise.
+    const attachment = (node: number, port: SolvePort, towardFace: number): number => {
+      const center = anchors[node] as number
+      const half = (nodes[node] as SolveNode).oSize / 2
+      const face = port.face >= 0 ? port.face : towardFace
+      if (face === ORDER_END) {
+        return center + half + stub
       }
-    }),
-  )
+      if (face === ORDER_START) {
+        return center - half - stub
+      }
+      if (face === towardFace && Number.isFinite(port.at)) {
+        return center - half + port.at * 2 * half
+      }
+      return center
+    }
+
+    straighten(
+      layers,
+      anchors,
+      extents,
+      chains.map((chain, j) => {
+        const edge = flowEdges[j] as SolveEdge
+        const isReversed = reversed[j] as boolean
+        return {
+          chain,
+          upper: attachment(
+            chain[0] as number,
+            isReversed ? edge.targetPort : edge.sourcePort,
+            RANK_END,
+          ),
+          lower: attachment(
+            chain[chain.length - 1] as number,
+            isReversed ? edge.sourcePort : edge.targetPort,
+            RANK_START,
+          ),
+          preferUpper: false,
+        }
+      }),
+      false,
+    )
+  }
+
+  // Ports. Fixed positions resolve directly. Auto positions on a shared face
+  // spread around the face's center, ordered by where their edges head.
+  // Ports on rank faces depend only on positions across the flow, so they
+  // resolve before the rank bands do.
+  const ends = makeEnds()
+  const rankAlong = placePorts(ends, orderBox, true, edgeGap)
+
+  // Orthogonal routing: the order-axis position of each chain at every rank
+  // boundary, and the lane of each jog between two ranks.
+  const crossings: Array<Array<number>> = []
+  const jogLanes: Array<Array<number>> = []
+  const laneCounts: Array<number> = []
+  if (orthogonal) {
+    const attach = exits(ends, rankAlong)
+    const channelJogs = new Map<number, Array<{ j: number; i: number; jog: Jog }>>()
+    for (const [j, chain] of chains.entries()) {
+      const [upper, lower] = attach[j] as readonly [number, number]
+      const xs = [upper]
+      for (let i = 1; i + 1 < chain.length; i++) {
+        xs.push(anchors[chain[i] as number] as number)
+      }
+      xs.push(lower)
+      crossings.push(xs)
+      jogLanes.push(xs.slice(1).map(() => -1))
+      for (let i = 0; i + 1 < xs.length; i++) {
+        const start = xs[i] as number
+        const end = xs[i + 1] as number
+        if (coincident(start, end)) {
+          continue
+        }
+        const channel = ranks[chain[i] as number] as number
+        let list = channelJogs.get(channel)
+        if (list === undefined) {
+          list = []
+          channelJogs.set(channel, list)
+        }
+        list.push({ j, i, jog: { start, end } })
+      }
+    }
+    for (let channel = 0; channel + 1 < rankCount; channel++) {
+      const list = channelJogs.get(channel) ?? []
+      const assigned = assignLanes(list.map(({ jog }) => jog))
+      laneCounts.push(assigned.count)
+      for (const [k, { j, i }] of list.entries()) {
+        ;(jogLanes[j] as Array<number>)[i] = assigned.lanes[k] as number
+      }
+    }
+  }
 
   // Rank bands. Each band is as thick as the outer size of its largest
   // element, and its elements stack inside it.
@@ -312,15 +444,38 @@ export function solve(
     }
   }
 
-  const bandTrack = Track.sequence(
-    thicknesses.map((basis) => ({ basis })),
-    { gap: rankGap / 2 },
-  )
-  const bands: Array<Band> = bandTrack.intervals.map((interval) => ({
-    start: interval.start,
-    end: interval.end,
-  }))
-  const rankExtent = bandTrack.end
+  // The bands sit half a rank gap apart. With orthogonal routing, the space
+  // between two bands is a channel that grows to fit its lanes, `edgeGap`
+  // apart and from its bands.
+  let bands: Array<Band>
+  const channels: Array<Band> = []
+  let rankExtent: number
+  if (orthogonal) {
+    const items: Array<{ basis: number }> = []
+    for (const [r, basis] of thicknesses.entries()) {
+      if (r > 0) {
+        const lanes = laneCounts[r - 1] as number
+        items.push({ basis: Math.max(rankGap / 2, (lanes + 1) * edgeGap) })
+      }
+      items.push({ basis })
+    }
+    const track = Track.sequence(items, { gap: 0 })
+    bands = []
+    for (const [k, interval] of track.intervals.entries()) {
+      ;(k % 2 === 0 ? bands : channels).push({ start: interval.start, end: interval.end })
+    }
+    rankExtent = track.end
+  } else {
+    const bandTrack = Track.sequence(
+      thicknesses.map((basis) => ({ basis })),
+      { gap: rankGap / 2 },
+    )
+    bands = bandTrack.intervals.map((interval) => ({
+      start: interval.start,
+      end: interval.end,
+    }))
+    rankExtent = bandTrack.end
+  }
 
   const band = (element: number): Band => bands[ranks[element] as number] as Band
 
@@ -352,75 +507,14 @@ export function solve(
     }
   }
 
-  // Ports. Fixed positions resolve directly. Auto positions on a shared face
-  // spread around the face's center, ordered by where their edges head.
-  interface End {
-    readonly j: number
-    readonly node: number
-    readonly face: number
-    readonly at: number
-    readonly toward: number
-  }
-  const ends: Array<[upper: End, lower: End]> = flowEdges.map((edge, j) => {
-    const chain = chains[j] as Array<number>
-    const isReversed = reversed[j] as boolean
-    const upperPort = isReversed ? edge.targetPort : edge.sourcePort
-    const lowerPort = isReversed ? edge.sourcePort : edge.targetPort
-    return [
-      {
-        j,
-        node: chain[0] as number,
-        face: upperPort.face >= 0 ? upperPort.face : RANK_END,
-        at: upperPort.at,
-        toward: anchors[chain[1] as number] as number,
-      },
-      {
-        j,
-        node: chain[chain.length - 1] as number,
-        face: lowerPort.face >= 0 ? lowerPort.face : RANK_START,
-        at: lowerPort.at,
-        toward: anchors[chain[chain.length - 2] as number] as number,
-      },
-    ]
-  })
-
-  const portPoints = new Map<End, LogicalPoint>()
-  const autoGroups = new Map<string, Array<End>>()
-
-  for (const pair of ends) {
-    for (const end of pair) {
-      const box = nodeBoxes[end.node] as LogicalBox
-      if (Number.isFinite(end.at)) {
-        portPoints.set(
-          end,
-          facePoint(box, end.face, faceStart(box, end.face) + end.at * faceLength(box, end.face)),
-        )
-        continue
-      }
-      const key = `${end.node}:${end.face}`
-      let group = autoGroups.get(key)
-      if (group === undefined) {
-        group = []
-        autoGroups.set(key, group)
-      }
-      group.push(end)
-    }
-  }
-
-  for (const group of autoGroups.values()) {
-    group.sort((a, b) => (coincident(a.toward, b.toward) ? a.j - b.j : a.toward - b.toward))
-    const first = group[0] as End
-    const box = nodeBoxes[first.node] as LogicalBox
-    const positions = spread(
-      group.length,
-      faceStart(box, first.face),
-      faceLength(box, first.face),
-      edgeGap,
+  // Ports on order faces run along the rank axis, so they resolve now.
+  const orderAlong = placePorts(ends, (node) => nodeBoxes[node] as LogicalBox, false, edgeGap)
+  const portPoint = (end: End): LogicalPoint =>
+    facePoint(
+      nodeBoxes[end.node] as LogicalBox,
+      end.face,
+      (rankAlong.get(end) ?? orderAlong.get(end)) as number,
     )
-    for (const [i, end] of group.entries()) {
-      portPoints.set(end, facePoint(box, end.face, positions[i] as number))
-    }
-  }
 
   const routes: Array<ReadonlyArray<LogicalPoint>> = edges.map(() => [])
 
@@ -430,7 +524,7 @@ export function solve(
       nodeBoxes[upperEnd.node] as LogicalBox,
       band(upperEnd.node),
       upperEnd.face,
-      portPoints.get(upperEnd) as LogicalPoint,
+      portPoint(upperEnd),
       1,
       upperEnd.toward,
       options,
@@ -439,18 +533,30 @@ export function solve(
       nodeBoxes[lowerEnd.node] as LogicalBox,
       band(lowerEnd.node),
       lowerEnd.face,
-      portPoints.get(lowerEnd) as LogicalPoint,
+      portPoint(lowerEnd),
       -1,
       lowerEnd.toward,
       options,
     )
 
     const middle: Array<LogicalPoint> = []
-    for (let i = 1; i + 1 < chain.length; i++) {
-      const element = chain[i] as number
-      const x = anchors[element] as number
-      const elementBand = band(element)
-      middle.push([x, elementBand.start], [x, elementBand.end])
+    for (let i = 0; i + 1 < chain.length; i++) {
+      if (orthogonal) {
+        const lane = (jogLanes[j] as Array<number>)[i] as number
+        if (lane >= 0) {
+          const xs = crossings[j] as Array<number>
+          const channel = channels[ranks[chain[i] as number] as number] as Band
+          const count = laneCounts[ranks[chain[i] as number] as number] as number
+          const r = channel.start + ((lane + 1) * (channel.end - channel.start)) / (count + 1)
+          middle.push([xs[i] as number, r], [xs[i + 1] as number, r])
+        }
+      }
+      if (i + 2 < chain.length) {
+        const element = chain[i + 1] as number
+        const x = anchors[element] as number
+        const elementBand = band(element)
+        middle.push([x, elementBand.start], [x, elementBand.end])
+      }
     }
 
     const points = simplify([...upperPath, ...middle, ...lowerPath.toReversed()])
@@ -553,6 +659,9 @@ interface ChainAttachment {
   // Where the edge attaches to its upper and lower nodes, across the flow.
   readonly upper: number
   readonly lower: number
+  // With orthogonal routing, whether a run aligns with its upper neighbor
+  // before its lower one.
+  readonly preferUpper: boolean
 }
 
 const STRAIGHTEN_PASSES = 4
@@ -564,11 +673,16 @@ const STRAIGHTEN_PASSES = 4
 // separation from its rank neighbors allows. Runs aligned with an end stay,
 // so long edges stay straight. Moves never break separation, so the result
 // stays valid.
+//
+// For orthogonal routing, a run that can align with one of its neighbors
+// does so instead (the preferred one first), so its edge needs one jog
+// rather than two.
 function straighten(
   layers: ReadonlyArray<ReadonlyArray<number>>,
   xs: Array<number>,
   extents: ReadonlyArray<Extent>,
   chains: ReadonlyArray<ChainAttachment>,
+  orthogonal: boolean,
 ): void {
   const left = new Map<number, number>()
   const right = new Map<number, number>()
@@ -631,7 +745,16 @@ function straighten(
             }
           }
           if (low <= high) {
-            const target = clamp((above + below) / 2, low, high)
+            let target = clamp((above + below) / 2, low, high)
+            if (orthogonal) {
+              const first = attached.preferUpper ? above : below
+              const second = attached.preferUpper ? below : above
+              if (first >= low && first <= high) {
+                target = first
+              } else if (second >= low && second <= high) {
+                target = second
+              }
+            }
             for (let i = start; i <= end; i++) {
               xs[chain[i] as number] = target
             }
@@ -709,6 +832,89 @@ function spread(count: number, start: number, length: number, gap: number): Arra
   return positions
 }
 
+// Where an edge leaves its node's rank band across the flow, on the side it
+// travels toward (`direction` 1 is downstream, -1 upstream): at the port on
+// the face toward that side, beside the node for ports on order faces, and
+// around the node for ports on the face pointing away.
+function exitO(
+  box: LogicalBox,
+  face: number,
+  along: number | undefined,
+  direction: 1 | -1,
+  toward: number,
+  stub: number,
+): number {
+  const towardFace = direction > 0 ? RANK_END : RANK_START
+  if (face === towardFace) {
+    return along as number
+  }
+  if (face === ORDER_END) {
+    return box.o + box.oSize + stub
+  }
+  if (face === ORDER_START) {
+    return box.o - stub
+  }
+  const center = box.o + box.oSize / 2
+  const goEnd = !(toward < center && !coincident(toward, center))
+  return goEnd ? box.o + box.oSize + stub : box.o - stub
+}
+
+interface PortEnd {
+  readonly j: number
+  readonly node: number
+  readonly face: number
+  readonly at: number
+  readonly toward: number
+}
+
+// The position along its face of each port on rank faces (`rankFaces`) or on
+// order faces. Fixed positions resolve directly. Auto positions on a shared
+// face spread around its center, ordered by where their edges head, then by
+// edge order.
+function placePorts<E extends PortEnd>(
+  ends: ReadonlyArray<readonly [E, E]>,
+  boxOf: (node: number) => LogicalBox,
+  rankFaces: boolean,
+  gap: number,
+): Map<E, number> {
+  const along = new Map<E, number>()
+  const groups = new Map<string, Array<E>>()
+  for (const pair of ends) {
+    for (const end of pair) {
+      if (isRankFace(end.face) !== rankFaces) {
+        continue
+      }
+      const box = boxOf(end.node)
+      if (Number.isFinite(end.at)) {
+        along.set(end, faceStart(box, end.face) + end.at * faceLength(box, end.face))
+        continue
+      }
+      const key = `${end.node}:${end.face}`
+      let group = groups.get(key)
+      if (group === undefined) {
+        group = []
+        groups.set(key, group)
+      }
+      group.push(end)
+    }
+  }
+  for (const group of groups.values()) {
+    group.sort((a, b) => (coincident(a.toward, b.toward) ? a.j - b.j : a.toward - b.toward))
+    const first = group[0] as E
+    const box = boxOf(first.node)
+    const positions = spread(
+      group.length,
+      faceStart(box, first.face),
+      faceLength(box, first.face),
+      gap,
+    )
+    for (const [i, end] of group.entries()) {
+      along.set(end, positions[i] as number)
+    }
+  }
+  return along
+}
+
 // The path from a port to the edge of its node's rank band, on the side the
 // edge travels toward (`direction` 1 is downstream, -1 upstream). Ports on
 // the order faces step sideways first, and ports on the face pointing away
@@ -722,26 +928,22 @@ function endpointPath(
   toward: number,
   options: SolveOptions,
 ): Array<LogicalPoint> {
-  const stub = options.nodeGap / 2
   const towardFace = direction > 0 ? RANK_END : RANK_START
   const bandEdge = direction > 0 ? band.end : band.start
   const [o, r] = port
+  const exit = exitO(box, face, o, direction, toward, options.nodeGap / 2)
 
   if (face === towardFace) {
     return [port, [o, bandEdge]]
   }
 
   if (face === ORDER_END || face === ORDER_START) {
-    const stubO = face === ORDER_END ? box.o + box.oSize + stub : box.o - stub
-    return [port, [stubO, r], [stubO, bandEdge]]
+    return [port, [exit, r], [exit, bandEdge]]
   }
 
   const awayEdge = direction > 0 ? band.start : band.end
   const stubR = awayEdge - (direction * options.rankGap) / 4
-  const center = box.o + box.oSize / 2
-  const goEnd = !(toward < center && !coincident(toward, center))
-  const aroundO = goEnd ? box.o + box.oSize + stub : box.o - stub
-  return [port, [o, stubR], [aroundO, stubR], [aroundO, bandEdge]]
+  return [port, [o, stubR], [exit, stubR], [exit, bandEdge]]
 }
 
 function selfLoop(

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { findReversed } from '../src/internal/hierarchy/acyclic.ts'
 import type { LayeredGraph, Segment } from '../src/internal/hierarchy/graph.ts'
+import { type Jog, assignLanes } from '../src/internal/hierarchy/lanes.ts'
 import { countCrossings, order } from '../src/internal/hierarchy/order.ts'
 import { rank } from '../src/internal/hierarchy/rank.ts'
 
@@ -183,5 +184,88 @@ describe('order', () => {
     )
     const layers = order(graph)
     expect(layers.map((layer) => [...layer].toSorted())).toEqual([[0, 1, 2], [3, 4, 5], [6]])
+  })
+})
+
+const jog = (start: number, end: number): Jog => ({ start, end })
+const insideJog = (x: number, j: Jog) =>
+  x > Math.min(j.start, j.end) && x < Math.max(j.start, j.end)
+
+describe('assignLanes', () => {
+  // The crossings in an assignment: for each overlapping pair, the
+  // connections of the nearer jog that cross the farther one, and back.
+  function crossingsOf(jogs: ReadonlyArray<Jog>, lanes: ReadonlyArray<number>): number {
+    let total = 0
+    for (let i = 0; i < jogs.length; i++) {
+      for (let k = 0; k < jogs.length; k++) {
+        const a = jogs[i] as Jog
+        const b = jogs[k] as Jog
+        if ((lanes[i] as number) < (lanes[k] as number)) {
+          total += (insideJog(a.end, b) ? 1 : 0) + (insideJog(b.start, a) ? 1 : 0)
+        }
+      }
+    }
+    return total
+  }
+
+  test.each([
+    ['no jogs', [], [], 0],
+    ['apart', [jog(0, 10), jog(20, 30)], [0, 0], 1],
+    ['end to end', [jog(0, 10), jog(10, 20)], [0, 0], 1],
+    ['a fan-out', [jog(10, 0), jog(10, 20)], [0, 0], 1],
+    // Staggered jogs in one direction: the later one jogs nearer.
+    ['staggered', [jog(0, 10), jog(5, 15)], [1, 0], 2],
+    // Nested jogs toward one side: the outer one jogs nearer.
+    ['nested', [jog(20, 0), jog(25, 10)], [0, 1], 2],
+  ] as const)('%s', (_, jogs, lanes, count) => {
+    expect(assignLanes(jogs)).toEqual({ lanes, count })
+  })
+
+  test('overlapping jogs never share a lane', () => {
+    let state = 7
+    const next = () => {
+      state = (state * 1103515245 + 12345) % 2147483648
+      return state / 2147483648
+    }
+    for (let round = 0; round < 50; round++) {
+      const jogs = Array.from({ length: 8 }, () =>
+        jog(Math.floor(next() * 20) * 5, Math.floor(next() * 20) * 5),
+      )
+      const { lanes, count } = assignLanes(jogs)
+      expect(assignLanes(jogs)).toEqual({ lanes, count })
+      for (let i = 0; i < jogs.length; i++) {
+        expect(lanes[i]).toBeLessThan(count)
+        for (let k = i + 1; k < jogs.length; k++) {
+          const a = jogs[i] as Jog
+          const b = jogs[k] as Jog
+          const overlap =
+            Math.min(Math.max(a.start, a.end), Math.max(b.start, b.end)) -
+            Math.max(Math.min(a.start, a.end), Math.min(b.start, b.end))
+          if (overlap > 0) {
+            expect(lanes[i]).not.toBe(lanes[k])
+          }
+        }
+      }
+    }
+  })
+
+  test('staggered jogs in one direction avoid every crossing', () => {
+    const jogs = [jog(20, 50), jog(0, 30), jog(25, 55), jog(10, 40), jog(60, 70)]
+    const { lanes } = assignLanes(jogs)
+    expect(crossingsOf(jogs, lanes)).toBe(0)
+  })
+
+  test('a jog inside another one in the same direction crosses it once', () => {
+    const jogs = [jog(0, 60), jog(10, 40)]
+    const { lanes, count } = assignLanes(jogs)
+    expect(count).toBe(2)
+    expect(crossingsOf(jogs, lanes)).toBe(1)
+  })
+
+  test('two jogs that swap sides cross once in either order', () => {
+    const jogs = [jog(0, 10), jog(15, 5)]
+    const { lanes, count } = assignLanes(jogs)
+    expect(count).toBe(2)
+    expect(crossingsOf(jogs, lanes)).toBe(1)
   })
 })

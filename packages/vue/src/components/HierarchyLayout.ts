@@ -24,11 +24,19 @@ import { type LengthPercentageInput, useLengthPercentage } from '../props/length
 
 export type HierarchyDirectionInput = keyof typeof Hierarchy.direction
 
+export type HierarchyRoutingInput = keyof typeof Hierarchy.routing
+
 export interface HierarchyLayoutProps extends InsetProps, TransformProps {
   /** A prebuilt spec. When set, it replaces every other layout prop. */
   layout?: Hierarchy.Hierarchy
   /** The direction edges flow in: `'down'` (default), `'up'`, `'right'`, or `'left'`. */
   direction?: HierarchyDirectionInput
+  /**
+   * How edges route: `'orthogonal'` (default) runs every segment along or
+   * across the flow, with jogs between ranks in lanes `edgeGap` apart.
+   * `'polyline'` shifts across the flow on diagonals.
+   */
+  routing?: HierarchyRoutingInput
   /** The space between adjacent ranks. Percentages resolve against the parent along the flow. */
   rankGap?: LengthPercentageInput
   /** The space between adjacent nodes in a rank. Percentages resolve across the flow. */
@@ -65,6 +73,7 @@ export const HierarchyLayout = defineComponent(
 
       return Hierarchy.make({
         direction: direction.value,
+        routing: Hierarchy.routing[props.routing ?? 'orthogonal'] ?? Hierarchy.routing.orthogonal,
         rankGap: rankGap.value,
         nodeGap: nodeGap.value,
         edgeGap: edgeGap.value,
@@ -91,6 +100,7 @@ export const HierarchyLayout = defineComponent(
       ...TRANSFORM_PROP_KEYS,
       'layout',
       'direction',
+      'routing',
       'rankGap',
       'nodeGap',
       'edgeGap',

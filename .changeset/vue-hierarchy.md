@@ -6,8 +6,9 @@ Add `HierarchyLayout`, `HierarchyNode`, `HierarchyEdge`, and `HierarchyLabel`,
 the Vue layer for `placement/hierarchy` flowcharts and other directed
 diagrams.
 
-- `HierarchyLayout` takes the spec as props (`direction`, `rankGap`,
-  `nodeGap`, `edgeGap`, `alignItems`, `alignLabels`) or a prebuilt `layout`.
+- `HierarchyLayout` takes the spec as props (`direction`, `routing`,
+  `rankGap`, `nodeGap`, `edgeGap`, `alignItems`, `alignLabels`) or a
+  prebuilt `layout`.
   The drawing has its own size, so the inset and transform props only
   position it (`left="50%" top="50%" origin="center"` centers it).
 - `HierarchyNode` takes an `id` plus the sizing, margin, and `alignSelf`
