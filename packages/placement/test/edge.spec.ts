@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest'
+import * as Adornment from '../src/adornment.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
 
 const label = Frame.make({ width: 40, height: 16 })
+const adornment = Adornment.make({ frame: label })
 
 describe('edge', () => {
   test('make applies the defaults', () => {
@@ -15,7 +17,9 @@ describe('edge', () => {
     expect(edge.sourceAt).toBe(Number.POSITIVE_INFINITY)
     expect(edge.targetSide).toBe(Number.POSITIVE_INFINITY)
     expect(edge.targetAt).toBe(Number.POSITIVE_INFINITY)
-    expect(edge.labels).toEqual([])
+    expect(edge.radius).toBe(0)
+    expect(edge.minRadius).toBe(0)
+    expect(edge.adornments).toEqual([])
   })
 
   test('ids keep their literal types', () => {
@@ -71,6 +75,16 @@ describe('edge', () => {
     expect(Edge.setSourcePort(base, Edge.side.top).sourceAt).toBe(Number.POSITIVE_INFINITY)
   })
 
+  test('setRadius sets the radius and an optional minimum, in both forms', () => {
+    expect(Edge.setRadius(base, 12, 4)).toMatchObject({ radius: 12, minRadius: 4 })
+    expect(base.pipe(Edge.setRadius(8, 2))).toMatchObject({ radius: 8, minRadius: 2 })
+    // An omitted minimum keeps the current one.
+    const rounded = Edge.setRadius(base, 12, 4)
+    expect(Edge.setRadius(rounded, 6)).toMatchObject({ radius: 6, minRadius: 4 })
+    expect(rounded.pipe(Edge.setRadius(10))).toMatchObject({ radius: 10, minRadius: 4 })
+    expect(base).toMatchObject({ radius: 0, minRadius: 0 })
+  })
+
   test('setTargetPort sets the side and an optional position', () => {
     const full = Edge.setTargetPort(base, Edge.side.top, 0.5)
     const dataLast = base.pipe(Edge.setTargetPort(Edge.side.left))
@@ -78,23 +92,22 @@ describe('edge', () => {
     expect([dataLast.targetSide, dataLast.targetAt]).toEqual([3, Number.POSITIVE_INFINITY])
   })
 
-  test('setLabels replaces and addLabel appends', () => {
-    const replaced = Edge.setLabels(base, [{ frame: label, at: 0.25 }])
-    expect(replaced.labels).toEqual([{ frame: label, at: 0.25 }])
-    expect(base.pipe(Edge.setLabels([])).labels).toEqual([])
+  test('setAdornments replaces and addAdornment appends, in both forms', () => {
+    const late = Adornment.setAt(adornment, 0.75)
+    const replaced = Edge.setAdornments(base, [adornment])
+    expect(replaced.adornments).toEqual([adornment])
+    expect(replaced.pipe(Edge.setAdornments([])).adornments).toEqual([])
 
-    const appended = Edge.addLabel(replaced, label)
-    expect(appended.labels).toHaveLength(2)
-    expect(appended.labels[1]?.frame).toBe(label)
-    expect(appended.labels[1]?.at).toBeUndefined()
-    expect(replaced.pipe(Edge.addLabel(label, 1)).labels[1]?.at).toBe(1)
+    expect(Edge.addAdornment(replaced, late).adornments).toEqual([adornment, late])
+    expect(replaced.pipe(Edge.addAdornment(late)).adornments).toEqual([adornment, late])
+    expect(base.adornments).toEqual([])
   })
 
   test('setters keep the other fields', () => {
-    const edge = Edge.make({ source: 'a', target: 'b', weight: 5, labels: [{ frame: label }] })
+    const edge = Edge.make({ source: 'a', target: 'b', weight: 5, adornments: [adornment] })
     const updated = Edge.setTargetPort(edge, Edge.side.top)
     expect(updated.weight).toBe(5)
-    expect(updated.labels).toHaveLength(1)
+    expect(updated.adornments).toEqual([adornment])
     expect(updated.source).toBe('a')
   })
 })

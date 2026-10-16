@@ -1,6 +1,8 @@
 import { Pipeable } from 'curvy/utils'
+import type { Adornment } from './adornment.ts'
 import type { Edge } from './edge.ts'
 import type { Frame } from './frame.ts'
+import { type AxisFrame, type SolveAdornment } from './internal/hierarchy/adornments.ts'
 import {
   type LogicalBox,
   type LogicalPoint,
@@ -9,11 +11,11 @@ import {
   RANK_END,
   RANK_START,
   type SolveEdge,
-  type SolveLabel,
   type SolveNode,
   type SolvePort,
   solve,
 } from './internal/hierarchy/layout.ts'
+import * as Interval from './interval.ts'
 import * as Point from './point.ts'
 import * as Rect from './rect.ts'
 import { auto } from './utils/arguments.ts'
@@ -40,38 +42,43 @@ export const direction = {
 export type HierarchyDirection = (typeof direction)[keyof typeof direction]
 
 /**
- * The edge routing styles, encoded as numbers: `polyline` is `0`,
- * `orthogonal` is `1`.
+ * The ways to attach back edges, encoded as numbers: `direct` is `0`, `loop`
+ * is `1`. A back edge points against the flow. The solver reverses one edge
+ * of each cycle to lay the graph out in ranks, and those edges are the back
+ * edges.
  *
- * - `polyline` runs each edge straight between its waypoints, so an edge
- *   that shifts across the flow does so on a diagonal.
- * - `orthogonal` draws every segment along or across the flow. An edge
- *   that shifts across the flow does so on a jog between two ranks, and
- *   jogs that share the space between two ranks get their own lanes,
- *   ordered to avoid crossings. That space grows to fit its lanes,
- *   `edgeGap` apart.
+ * - `direct` attaches a back edge the way its reversed form would: it
+ *   leaves the upstream face of its source and enters the downstream face
+ *   of its target, so it runs straight back against the flow.
+ * - `loop` attaches it the way every other edge attaches: it leaves the
+ *   downstream face of its source, loops around beside both nodes, and
+ *   enters the upstream face of its target. Flowcharts often draw loops
+ *   this way.
+ *
+ * It applies to auto port sides only. An edge with an explicit side keeps
+ * it.
  */
-export const routing = {
-  polyline: 0,
-  orthogonal: 1,
+export const backEdges = {
+  direct: 0,
+  loop: 1,
 } as const
 
-/** An edge routing style, one of the `routing` encodings. */
-export type HierarchyRouting = (typeof routing)[keyof typeof routing]
+/** A back edge style, one of the `backEdges` encodings. */
+export type HierarchyBackEdges = (typeof backEdges)[keyof typeof backEdges]
 
 /**
  * The configuration that `make` accepts. Every property is optional. An
  * empty input flows downward with no gaps, nodes centered in their ranks,
- * and labels centered on their edges.
+ * and adornments centered on their edges.
  */
 export interface HierarchyInput {
   /** The flow direction, one of the `direction` encodings. Defaults to `direction.down`. */
   readonly direction?: HierarchyDirection
-  /** The edge routing style, one of the `routing` encodings. Defaults to `routing.orthogonal`. */
-  readonly routing?: HierarchyRouting
+  /** How back edges attach, one of the `backEdges` encodings. Defaults to `backEdges.direct`. */
+  readonly backEdges?: HierarchyBackEdges
   /**
-   * The space between adjacent ranks of nodes, along the flow. An edge
-   * label adds its own size on top. Defaults to `0`.
+   * The space between adjacent ranks of nodes, along the flow. Flow
+   * adornments on an edge add their own size on top. Defaults to `0`.
    */
   readonly rankGap?: number
   /** The space between adjacent nodes in a rank, across the flow. Defaults to `0`. */
@@ -96,12 +103,12 @@ export interface HierarchyInput {
    */
   readonly stretchItems?: number
   /**
-   * Which side of its edge each label sits on: `0` on the left (or above,
-   * in a horizontal flow), `0.5` centered on the line, `1` on the right (or
-   * below). A label frame with a finite `align` overrides it. Defaults to
-   * `0.5`.
+   * Which side of its edge each adornment sits on: `0` on the left of a
+   * line running up or down (above a line running left or right), `0.5`
+   * centered on the line, `1` on the right (below). An adornment frame with
+   * a finite `align` overrides it. Defaults to `0.5`.
    */
-  readonly alignLabels?: number
+  readonly alignAdornments?: number
 }
 
 /**
@@ -121,8 +128,8 @@ class Hierarchy extends Pipeable {
 
   /** The flow direction, one of the `direction` encodings. */
   readonly direction: HierarchyDirection
-  /** The edge routing style, one of the `routing` encodings. */
-  readonly routing: HierarchyRouting
+  /** How back edges attach, one of the `backEdges` encodings. */
+  readonly backEdges: HierarchyBackEdges
   /** The space between adjacent ranks of nodes. */
   readonly rankGap: number
   /** The space between adjacent nodes in a rank. */
@@ -133,20 +140,20 @@ class Hierarchy extends Pipeable {
   readonly alignItems: number
   /** How much of its rank's thickness each node absorbs: `0` none, `1` fills it. */
   readonly stretchItems: number
-  /** Which side of its edge each label sits on: `0` left or above, `1` right or below. */
-  readonly alignLabels: number
+  /** Which side of its edge each adornment sits on: `0` left or above, `1` right or below. */
+  readonly alignAdornments: number
 
   constructor(input: HierarchyInput) {
     super()
 
     this.direction = input.direction ?? direction.down
-    this.routing = input.routing ?? routing.orthogonal
+    this.backEdges = input.backEdges ?? backEdges.direct
     this.rankGap = input.rankGap ?? 0
     this.nodeGap = input.nodeGap ?? 0
     this.edgeGap = input.edgeGap ?? 0
     this.alignItems = input.alignItems ?? 0.5
     this.stretchItems = input.stretchItems ?? 0
-    this.alignLabels = input.alignLabels ?? 0.5
+    this.alignAdornments = input.alignAdornments ?? 0.5
   }
 
   /** Whether the flow is vertical: `true` for `down` and `up` (the encodings `<= 1`). */
@@ -167,13 +174,13 @@ class Hierarchy extends Pipeable {
   toJSON() {
     return {
       direction: this.direction,
-      routing: this.routing,
+      backEdges: this.backEdges,
       rankGap: this.rankGap,
       nodeGap: this.nodeGap,
       edgeGap: this.edgeGap,
       alignItems: this.alignItems,
       stretchItems: this.stretchItems,
-      alignLabels: this.alignLabels,
+      alignAdornments: this.alignAdornments,
     }
   }
 }
@@ -206,18 +213,47 @@ export const isHierarchy = (value: unknown): value is Hierarchy => {
 }
 
 /**
+ * Where an adornment landed.
+ *
+ * - `rect`: the adornment's frame, upright. Turn it by `angle` about its
+ *   center to draw it.
+ * - `angle`: the direction its local x axis points, in radians (atan2
+ *   convention, with the y axis down). `0` for an upright adornment.
+ * - `along`: the stretch of the route it covers, as lengths along the
+ *   route's polyline from its first point. An absolute adornment on a
+ *   rounded corner maps the corner's arc evenly onto the two stretches of
+ *   polyline the corner replaces.
+ */
+export interface HierarchyAdornment {
+  /** The adornment's frame before it turns. */
+  readonly rect: Rect.Rect
+  /** How far it turns about the rect's center, in radians. */
+  readonly angle: number
+  /** The stretch of the route it covers, as lengths along the polyline. */
+  readonly along: Interval.Interval
+}
+
+/**
  * The solved geometry of one edge.
  *
  * - `points`: the polyline from the source port to the target port, with
- *   at least two points. The first and last segments give the direction to
- *   draw arrowheads along.
- * - `labels`: one rect per input label, in the edge's label order.
+ *   at least two points. Every segment runs along an axis, and every inner
+ *   point is a right-angled corner.
+ * - `radii`: how far the corner at each point reaches along its two legs,
+ *   one per point, `0` at both ends. Each is at most the edge's `radius`,
+ *   and the corners on a segment never reach past each other or into a
+ *   flow adornment. A renderer that rounds corners draws circular corners
+ *   of these radii, or any corner that reaches no farther.
+ * - `adornments`: where each adornment landed, in the edge's adornment
+ *   order.
  */
 export interface HierarchyRoute {
   /** The polyline from the source port to the target port. */
   readonly points: ReadonlyArray<Point.Point>
-  /** One rect per label, in the edge's label order. */
-  readonly labels: ReadonlyArray<Rect.Rect>
+  /** The size of the corner at each point, `0` at both ends. */
+  readonly radii: ReadonlyArray<number>
+  /** Where each adornment landed, in the edge's adornment order. */
+  readonly adornments: ReadonlyArray<HierarchyAdornment>
 }
 
 /**
@@ -228,8 +264,8 @@ export interface HierarchyRoute {
  *   property order, which lists integer-like ids first. Iterate the input
  *   frames for input order.
  * - `edges`: one route per edge, in input order.
- * - `bounds`: the rect enclosing every node, label, and route point. Its
- *   origin is always `(0, 0)`.
+ * - `bounds`: the rect enclosing every node, adornment (as turned), and
+ *   route point. Its origin is always `(0, 0)`.
  */
 export interface HierarchyLayout<K extends string> {
   /** One rect per frame, keyed by frame `id`. */
@@ -250,15 +286,24 @@ export interface HierarchyLayout<K extends string> {
  *    depth-first search in input order. Reversed edges still route from
  *    their source to their target.
  * 2. It assigns ranks by network simplex, which keeps the weighted sum of
- *    edge lengths small. Each edge spans at least `minLength` ranks, and
- *    one more rank slot for each label beyond the first.
+ *    edge lengths small. Each edge spans at least `minLength` ranks.
  * 3. It orders each rank to reduce crossings, by barycenter sweeps.
  * 4. It positions nodes across the flow by Brandes-Köpf, which keeps long
  *    edges straight.
  * 5. It stacks each rank's nodes inside the rank's thickness with the
  *    frames' `align` and `stretch`, and routes edges through their ports.
- *    Orthogonal routing (the default `routing`) gives each jog between two
- *    ranks its own lane and widens the space between the ranks to fit.
+ *
+ * Routes are orthogonal: every segment runs along or across the flow. An
+ * edge that shifts across the flow does so on a jog between two ranks, and
+ * jogs that share the space between two ranks get their own lanes, ordered
+ * to avoid crossings. That space grows to fit its lanes, `edgeGap` apart,
+ * to keep room for corners of each edge's `minRadius`, and to keep the
+ * flow adornments at each end of an edge on a straight run. An
+ * edge that leaves a node through a side across the flow, or around the
+ * node from the side facing away, runs in a column of its own beside the
+ * node, and step 4 reserves room for the columns. An edge that goes around
+ * its node turns in a lane before or after the rank, which adds space
+ * before the first rank or after the last one when needed.
  *
  * Nodes are `Frame`s with an `id`, and edges reference them by it. The
  * types check both. The literal ids of `frames` form the allowed ids, so a
@@ -267,9 +312,18 @@ export interface HierarchyLayout<K extends string> {
  * known only at runtime widen to `string`, and the runtime checks still
  * apply.
  *
- * Frame sizes resolve as usual. Offsets across the flow add clearance. Offsets along the flow add clearance within the rank, and
- * auto (non-finite) offsets along the flow position the node in the rank as
- * auto margins do in flexbox. Auto offsets across the flow act as `0`. The
+ * Edges carry adornments (see `placement/adornment`). A flow adornment sits
+ * on the straight run nearest its `at`: a stub, the run out of a port,
+ * which packs it against the port, or the run through a rank between the
+ * two nodes, which centers it there. Each run grows to fit its flow
+ * adornments, layer by layer, and lanes and columns keep clear of them. An
+ * absolute adornment sits at `at` of the way along the route as drawn, with
+ * corners of the solved `radii`, and takes no room.
+ *
+ * Frame sizes resolve as usual. Offsets across the flow add clearance.
+ * Offsets along the flow add clearance within the rank, and auto
+ * (non-finite) offsets along the flow position the node in the rank as auto
+ * margins do in flexbox. Auto offsets across the flow act as `0`. The
  * frames' `grow` and `shrink` have no effect.
  *
  * Every input is deterministic: the same frames and edges always produce
@@ -296,6 +350,7 @@ export interface HierarchyLayout<K extends string> {
  * const layout = Hierarchy.apply(frames, edges, Hierarchy.make({ rankGap: 50 }))
  * layout.nodes.b // Rect [0, 90, 100, 40]
  * layout.edges[0]?.points // [Point (50, 40), Point (50, 90)]
+ * layout.edges[0]?.radii // [0, 0]
  * ```
  */
 export function apply<const T extends ReadonlyArray<Frame<string>>>(
@@ -343,6 +398,7 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
     if (source === undefined || target === undefined) {
       throw new RangeError(`Edge ${i} references an id that no frame has`)
     }
+    const radius = finite(Math.max(edge.radius, 0))
     return {
       source,
       target,
@@ -350,22 +406,9 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
       minLength: Number.isFinite(edge.minLength) ? Math.max(Math.ceil(edge.minLength), 1) : 1,
       sourcePort: resolvePort(edge.sourceSide, edge.sourceAt, hierarchy.direction),
       targetPort: resolvePort(edge.targetSide, edge.targetAt, hierarchy.direction),
-      labels: edge.labels.map((label): SolveLabel => {
-        const frame = label.frame
-        const [rLeading, rTrailing] = vertical
-          ? [frame.offsetTop, frame.offsetBottom]
-          : [frame.offsetLeft, frame.offsetRight]
-        return {
-          oSize: vertical ? frame.width : frame.height,
-          rSize: vertical ? frame.height : frame.width,
-          oStart: finite(vertical ? frame.offsetLeft : frame.offsetTop),
-          oEnd: finite(vertical ? frame.offsetRight : frame.offsetBottom),
-          rStart: reverse ? rTrailing : rLeading,
-          rEnd: reverse ? rLeading : rTrailing,
-          align: auto(frame.align, hierarchy.alignLabels),
-          at: label.at !== undefined && Number.isFinite(label.at) ? label.at : 0.5,
-        }
-      }),
+      radius,
+      minRadius: Math.min(finite(Math.max(edge.minRadius, 0)), radius),
+      adornments: edge.adornments.map((adornment) => resolveAdornment(adornment, hierarchy)),
     }
   })
 
@@ -375,7 +418,13 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
     return { nodes: layoutNodes, edges: [], bounds: Rect.make() }
   }
 
-  const result = solve(solveNodes, solveEdges, hierarchy)
+  const result = solve(solveNodes, solveEdges, {
+    rankGap: hierarchy.rankGap,
+    nodeGap: hierarchy.nodeGap,
+    edgeGap: hierarchy.edgeGap,
+    backEdges: hierarchy.backEdges,
+    mirror: mirrors[hierarchy.direction],
+  })
   const extent = result.rankExtent
 
   const toRect = (box: LogicalBox): [number, number, number, number] => {
@@ -387,9 +436,35 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
     return vertical ? [o, rank] : [rank, o]
   }
 
+  // A logical direction, as a physical one.
+  const toDirection = ([o, r]: LogicalPoint): [number, number] => {
+    const rank = reverse ? -r : r
+    return vertical ? [o, rank] : [rank, o]
+  }
+
   const nodeRects = result.nodes.map(toRect)
-  const labelRects = result.labels.map((boxes) => boxes.map(toRect))
   const routePoints = result.routes.map((points) => points.map(toPoint))
+  // Each adornment's upright rect, the physical direction it faces, and
+  // the half extents of its turned box.
+  const adornmentShapes = result.adornments.map((placed, i) =>
+    placed.map((adornment, k) => {
+      const { frame } = (edges[i] as Edge<string>).adornments[k] as Adornment
+      const width = frameSize(frame.width, frame.minWidth, frame.maxWidth)
+      const height = frameSize(frame.height, frame.minHeight, frame.maxHeight)
+      const [x, y] = toPoint(adornment.center)
+      const direction =
+        adornment.direction === undefined ? undefined : toDirection(adornment.direction)
+      const [dx, dy] = direction ?? [1, 0]
+      return {
+        rect: [x - width / 2, y - height / 2, width, height] as [number, number, number, number],
+        angle: direction === undefined ? 0 : Math.atan2(dy, dx),
+        halfX: (Math.abs(dx) * width + Math.abs(dy) * height) / 2,
+        halfY: (Math.abs(dy) * width + Math.abs(dx) * height) / 2,
+        center: [x, y] as const,
+        along: adornment.along,
+      }
+    }),
+  )
 
   let minX = Number.POSITIVE_INFINITY
   let minY = Number.POSITIVE_INFINITY
@@ -401,8 +476,11 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
     maxX = Math.max(maxX, x1)
     maxY = Math.max(maxY, y1)
   }
-  for (const [x, y, w, h] of [...nodeRects, ...labelRects.flat()]) {
+  for (const [x, y, w, h] of nodeRects) {
     include(x, y, x + w, y + h)
+  }
+  for (const { center, halfX, halfY } of adornmentShapes.flat()) {
+    include(center[0] - halfX, center[1] - halfY, center[0] + halfX, center[1] + halfY)
   }
   for (const [x, y] of routePoints.flat()) {
     include(x, y, x, y)
@@ -422,7 +500,12 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
     nodes: layoutNodes,
     edges: routePoints.map((points, i) => ({
       points: points.map(point),
-      labels: (labelRects[i] as Array<[number, number, number, number]>).map(rect),
+      radii: result.radii[i] as ReadonlyArray<number>,
+      adornments: (adornmentShapes[i] ?? []).map((shape) => ({
+        rect: rect(shape.rect),
+        angle: shape.angle,
+        along: Interval.make(shape.along[0], shape.along[1] - shape.along[0]),
+      })),
     })),
     bounds: Rect.make(0, 0, maxX - minX, maxY - minY),
   }
@@ -430,6 +513,65 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
 
 function finite(value: number): number {
   return Number.isFinite(value) ? value : 0
+}
+
+// A frame's size along one axis, clamped to its finite limits. Unset sizes
+// are `0`.
+function frameSize(size: number, min: number, max: number): number {
+  let result = finite(Math.max(size, 0))
+  if (Number.isFinite(max)) {
+    result = Math.min(result, max)
+  }
+  if (Number.isFinite(min)) {
+    result = Math.max(result, min)
+  }
+  return result
+}
+
+// Whether each direction maps logical space onto physical space by a
+// reflection: `up` mirrors the rank axis, and `right` swaps the axes.
+const mirrors: Record<HierarchyDirection, boolean> = {
+  [direction.down]: false,
+  [direction.up]: true,
+  [direction.right]: true,
+  [direction.left]: false,
+}
+
+// Resolves an adornment into logical terms. Upright frames map their
+// physical axes to the logical ones, mirroring the rank axis in the
+// reversed directions. Turned frames keep their own axes.
+function resolveAdornment(adornment: Adornment, hierarchy: Hierarchy): SolveAdornment {
+  const { frame } = adornment
+  const vertical = hierarchy.isVertical
+  const reverse = hierarchy.isReverse
+  const width = frameSize(frame.width, frame.minWidth, frame.maxWidth)
+  const height = frameSize(frame.height, frame.minHeight, frame.maxHeight)
+  const top = finite(frame.offsetTop)
+  const right = finite(frame.offsetRight)
+  const bottom = finite(frame.offsetBottom)
+  const left = finite(frame.offsetLeft)
+  const align = auto(frame.align, hierarchy.alignAdornments)
+  const [leading, trailing] = vertical ? [top, bottom] : [left, right]
+  const o: AxisFrame = vertical
+    ? { size: width, start: left, end: right, align }
+    : { size: height, start: top, end: bottom, align }
+  const r: AxisFrame = {
+    size: vertical ? height : width,
+    start: reverse ? trailing : leading,
+    end: reverse ? leading : trailing,
+    align: reverse ? 1 - align : align,
+  }
+  const at = Number.isFinite(adornment.at) ? Math.min(Math.max(adornment.at, 0), 1) : 0.5
+  return {
+    at,
+    flow: adornment.position !== 1,
+    layer: Number.isFinite(adornment.layer) ? Math.trunc(adornment.layer) : 0,
+    orient: adornment.orient === 1 || adornment.orient === 2 ? adornment.orient : 0,
+    o,
+    r,
+    x: { size: width, start: left, end: right, align: 0.5 },
+    y: { size: height, start: top, end: bottom, align },
+  }
 }
 
 // The logical face of each physical side (top, right, bottom, left), per

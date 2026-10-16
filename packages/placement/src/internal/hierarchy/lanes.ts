@@ -8,15 +8,24 @@ import { findReversed } from './acyclic.ts'
 // A channel is a strip that connections cross. Each crossing that shifts
 // sideways becomes a jog: a segment along the channel at some lane, joined to
 // a connection from the near side of the channel at `start` and to one toward
-// the far side at `end`. Jogs whose spans overlap need different lanes, and
-// their order decides how many of their connections cross. Lane 0 is nearest
-// the near side.
+// the far side at `end`. A connection that turns back in the channel, around
+// a node beside it, makes a U-turn jog instead: the connections at both of
+// its ends lead to the same side. Jogs whose spans overlap need different
+// lanes, and their order decides how many of their connections cross. Lane 0
+// is nearest the near side.
+
+export const NEAR = 0
+export const FAR = 1
 
 export interface Jog {
   // Where the connection from the near side meets the jog.
   readonly start: number
   // Where the connection toward the far side leaves it.
   readonly end: number
+  // The sides that the connections at `start` and `end` lead to, `NEAR` or
+  // `FAR`. They default to `NEAR` and `FAR`, which cross the channel.
+  readonly startSide?: number
+  readonly endSide?: number
 }
 
 export interface Lanes {
@@ -29,12 +38,45 @@ export interface Lanes {
 const low = (jog: Jog) => Math.min(jog.start, jog.end)
 const high = (jog: Jog) => Math.max(jog.start, jog.end)
 
-// Spans that only touch share a lane: they meet end to end.
+// Whether two jogs need different lanes: their spans overlap, or they meet
+// where one leads on toward the far side and the other comes in from the
+// near side. Sharing a lane there would join the two at a point. Jogs that
+// meet end to end otherwise share a lane.
 function overlaps(a: Jog, b: Jog): boolean {
   const from = Math.max(low(a), low(b))
   const to = Math.min(high(a), high(b))
-  return from < to && !coincident(from, to)
+  return (from < to && !coincident(from, to)) || joins(a, b) || joins(b, a)
 }
+
+// Whether `a` leads toward the far side where `b` comes in from the near
+// side. Unless `b` runs nearer the near side, the two connections there
+// overlap along the channel's crossing.
+function joins(a: Jog, b: Jog): boolean {
+  for (const x of ends(a, FAR)) {
+    for (const y of ends(b, NEAR)) {
+      if (coincident(x, y)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+// The positions of the connections of `jog` that lead toward `side`.
+function ends(jog: Jog, side: number): Array<number> {
+  const result: Array<number> = []
+  if ((jog.startSide ?? NEAR) === side) {
+    result.push(jog.start)
+  }
+  if ((jog.endSide ?? FAR) === side) {
+    result.push(jog.end)
+  }
+  return result
+}
+
+// Outweighs every crossing a pair of jogs can have, so that the order of a
+// joining pair avoids the overlap.
+const OVERLAP = 5
 
 function inside(x: number, jog: Jog): boolean {
   const from = low(jog)
@@ -42,11 +84,14 @@ function inside(x: number, jog: Jog): boolean {
   return x > from && x < to && !coincident(x, from) && !coincident(x, to)
 }
 
-// The crossings when `a` runs nearer the near side than `b`: a's connection
-// toward the far side crosses b's jog, and b's connection from the near side
-// crosses a's jog.
+// The cost when `a` runs nearer the near side than `b`: each of a's
+// connections toward the far side crosses b's jog where it passes it, each
+// of b's connections toward the near side crosses a's jog, and a joining
+// pair overlaps.
 function crossings(a: Jog, b: Jog): number {
-  return (inside(a.end, b) ? 1 : 0) + (inside(b.start, a) ? 1 : 0)
+  const passes = (jog: Jog, side: number, other: Jog) =>
+    ends(jog, side).filter((x) => inside(x, other)).length
+  return passes(a, FAR, b) + passes(b, NEAR, a) + (joins(a, b) ? OVERLAP : 0)
 }
 
 /**

@@ -35,9 +35,10 @@ pnpm add @placement/vue placement vue
   `Flexbox.apply`. Each item receives its solved `Rect` and provides it again
   as the sizing context for its children. Both are renderless unless they
   receive `class`, `style`, or `debug`.
-- `GraphicRect`, `GraphicCircle`, `GraphicLine`, `GraphicText`,
-  `GraphicPoint`, and `GraphicGroup` are the SVG leaf and group components.
-  Their inset, size, and origin props resolve against the parent context.
+- `GraphicRect`, `GraphicCircle`, `GraphicPolygon`, `GraphicLine`,
+  `GraphicText`, `GraphicPoint`, and `GraphicGroup` are the SVG leaf and
+  group components. Their inset, size, and origin props resolve against the
+  parent context. `GraphicPolygon` takes CSS `polygon()`-style `points`.
 - `GraphicCurve` and `GraphicPath` draw curves with
   [curvy](https://www.npmjs.com/package/curvy). `GraphicCurve` draws a spline
   through its `GraphicPoint` children. It uses Catmull-Rom by default, and the

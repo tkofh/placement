@@ -2,6 +2,7 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   entry: [
+    'src/adornment.ts',
     'src/box.ts',
     'src/dimensions.ts',
     'src/edge.ts',

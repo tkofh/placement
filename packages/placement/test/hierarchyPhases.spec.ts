@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { findReversed } from '../src/internal/hierarchy/acyclic.ts'
 import type { LayeredGraph, Segment } from '../src/internal/hierarchy/graph.ts'
-import { type Jog, assignLanes } from '../src/internal/hierarchy/lanes.ts'
+import { FAR, type Jog, NEAR, assignLanes } from '../src/internal/hierarchy/lanes.ts'
 import { countCrossings, order } from '../src/internal/hierarchy/order.ts'
 import { rank } from '../src/internal/hierarchy/rank.ts'
 
@@ -211,7 +211,9 @@ describe('assignLanes', () => {
   test.each([
     ['no jogs', [], [], 0],
     ['apart', [jog(0, 10), jog(20, 30)], [0, 0], 1],
-    ['end to end', [jog(0, 10), jog(10, 20)], [0, 0], 1],
+    // A jog that leads on where another comes in runs farther, so the two
+    // never meet.
+    ['end to end', [jog(0, 10), jog(10, 20)], [1, 0], 2],
     ['a fan-out', [jog(10, 0), jog(10, 20)], [0, 0], 1],
     // Staggered jogs in one direction: the later one jogs nearer.
     ['staggered', [jog(0, 10), jog(5, 15)], [1, 0], 2],
@@ -260,6 +262,28 @@ describe('assignLanes', () => {
     const { lanes, count } = assignLanes(jogs)
     expect(count).toBe(2)
     expect(crossingsOf(jogs, lanes)).toBe(1)
+  })
+
+  // U-turns around a node on the far side nest with the outer one nearer,
+  // and around a node on the near side with the inner one nearer.
+  test.each([
+    ['far', FAR, [0, 1]],
+    ['near', NEAR, [1, 0]],
+  ] as const)('U-turns toward the %s side nest', (_, side, lanes) => {
+    const turn = (start: number, end: number): Jog => ({
+      start,
+      end,
+      startSide: side,
+      endSide: side,
+    })
+    expect(assignLanes([turn(0, 30), turn(10, 20)])).toEqual({ lanes, count: 2 })
+  })
+
+  test('a jog runs past a U-turn on the side its connections avoid', () => {
+    // The turn leads to the far side at 10 and 30, so the jog that comes in
+    // at 20 from the near side runs nearer, crossing nothing.
+    const turn: Jog = { start: 10, end: 30, startSide: FAR, endSide: FAR }
+    expect(assignLanes([turn, jog(20, 40)])).toEqual({ lanes: [1, 0], count: 2 })
   })
 
   test('two jogs that swap sides cross once in either order', () => {

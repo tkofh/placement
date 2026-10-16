@@ -1,23 +1,9 @@
 <template>
   <GraphicRoot :width="root.width" :height="root.height" fit="contain" origin="center">
-    <defs>
-      <marker
-        id="arrow"
-        viewBox="0 0 10 10"
-        refX="10"
-        refY="5"
-        markerWidth="7"
-        markerHeight="7"
-        orient="auto-start-reverse"
-      >
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="color(srgb 1 1 1 / 0.55)" />
-      </marker>
-    </defs>
-
     <GraphicRect fill="color(display-p3 0.045 0.055 0.1)" />
     <GraphicText left="24px" top="16px" class="title">FLOWCHART</GraphicText>
     <GraphicText right="24px" top="20px" class="label">
-      {{ direction.toUpperCase() }} / {{ routing.toUpperCase() }} / {{ curve.toUpperCase() }}
+      {{ direction.toUpperCase() }} / {{ backEdges.toUpperCase() }}
     </GraphicText>
 
     <HierarchyLayout
@@ -25,7 +11,7 @@
       top="50%"
       origin="center"
       :direction="direction"
-      :routing="routing"
+      :back-edges="backEdges"
       rank-gap="30px"
       node-gap="28px"
       edge-gap="10px"
@@ -36,18 +22,25 @@
         :key="`${edge.from}-${edge.to}`"
         :from="edge.from"
         :to="edge.to"
-        :curve="curve"
         :r="smooth ? '12px' : '0px'"
+        :min-r="smooth ? '6px' : '0px'"
         :smoothing="smooth ? 0.8 : 0"
         stroke="color(srgb 1 1 1 / 0.45) 1.5px"
-        marker-end="url(#arrow)"
       >
-        <HierarchyLabel v-if="edge.label" width="34px" height="18px">
+        <!-- the left margin trails the arrow, so the line runs straight past it -->
+        <HierarchyAdornment at="end" width="9px" height="8px" margin-left="4px">
+          <GraphicPolygon
+            points="0% 0%, 100% 50%, 0% 100%"
+            :r="smooth ? '1.5px' : '0px'"
+            fill="color(srgb 1 1 1 / 0.55)"
+          />
+        </HierarchyAdornment>
+        <HierarchyAdornment v-if="edge.label" width="34px" height="18px">
           <GraphicRect fill="color(display-p3 0.045 0.055 0.1)" r="4px" />
           <GraphicText left="50%" top="50%" origin="center" class="edge-label">
             {{ edge.label }}
           </GraphicText>
-        </HierarchyLabel>
+        </HierarchyAdornment>
       </HierarchyEdge>
 
       <HierarchyNode
@@ -90,12 +83,13 @@
       {{ d }}
     </button>
     <span />
-    <button v-for="m in ROUTINGS" :key="m" :class="{ on: m === routing }" @click="routing = m">
-      {{ m }}
-    </button>
-    <span />
-    <button v-for="c in CURVES" :key="c" :class="{ on: c === curve }" @click="curve = c">
-      {{ c }}
+    <button
+      v-for="b in BACK_EDGES"
+      :key="b"
+      :class="{ on: b === backEdges }"
+      @click="backEdges = b"
+    >
+      back {{ b }}
     </button>
     <span />
     <button :class="{ on: smooth }" @click="smooth = !smooth">smooth corners</button>
@@ -107,13 +101,11 @@
 
 <script setup lang="ts">
 const DIRECTIONS = ['down', 'right', 'up', 'left'] as const
-const CURVES = ['linear', 'basis', 'cardinal'] as const
-const ROUTINGS = ['orthogonal', 'polyline'] as const
+const BACK_EDGES = ['direct', 'loop'] as const
 
 const direction = ref<(typeof DIRECTIONS)[number]>('down')
-const curve = ref<(typeof CURVES)[number]>('linear')
 const smooth = ref(true)
-const routing = ref<(typeof ROUTINGS)[number]>('orthogonal')
+const backEdges = ref<(typeof BACK_EDGES)[number]>('loop')
 const withLint = ref(false)
 
 // The drawing has its own size, so the scene grows along the flow to fit it.
@@ -186,6 +178,10 @@ svg text.edge-label {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: max-content;
+  max-width: calc(100vw - 32px);
   gap: 6px;
   align-items: center;
   font: 11px ui-monospace, 'SF Mono', Menlo, monospace;

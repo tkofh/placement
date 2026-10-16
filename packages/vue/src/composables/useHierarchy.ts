@@ -1,6 +1,8 @@
+import type * as Adornment from 'placement/adornment'
 import * as Edge from 'placement/edge'
 import type { Frame } from 'placement/frame'
 import * as Hierarchy from 'placement/hierarchy'
+import * as Interval from 'placement/interval'
 import * as Point from 'placement/point'
 import * as Rect from 'placement/rect'
 import {
@@ -17,6 +19,7 @@ import {
   watchEffect,
 } from 'vue'
 import { preferCachedPoint } from '../data/point.ts'
+import { type DrawnLine, drawnLine } from '../internal/adornment.ts'
 import { type Child, useChild, useChildren } from './useChildren.ts'
 import { useParentHeight, useParentWidth } from './useSizingContext.ts'
 
@@ -26,7 +29,7 @@ declare const process: { env: { NODE_ENV?: string } }
 
 const NODE_CHANNEL = 'placement/hierarchy/node'
 const EDGE_CHANNEL = 'placement/hierarchy/edge'
-const LABEL_CHANNEL = 'placement/hierarchy/label'
+const ADORNMENT_CHANNEL = 'placement/hierarchy/adornment'
 
 const ORIGIN: InjectionKey<ComputedRef<Point.Point>> = Symbol.for('placement/hierarchy/origin')
 const BASIS: InjectionKey<HierarchyPercentBasis> = Symbol.for('placement/hierarchy/basis')
@@ -39,16 +42,57 @@ export interface HierarchyPercentBasis {
 
 const zero = Rect.make()
 
-/** The geometry of one edge: its polyline and one rect per label, in label order. */
-export interface HierarchyEdgeRoute {
-  readonly points: ReadonlyArray<Point.Point>
-  readonly labels: ReadonlyArray<Rect.Rect>
+/** The geometry of one edge: its polyline, its corner sizes, and its adornments. */
+export type HierarchyEdgeRoute = Hierarchy.HierarchyRoute
+
+const emptyRoute: HierarchyEdgeRoute = { points: [], radii: [], adornments: [] }
+
+/** The edge fields a `useHierarchyEdge` caller supplies. Adornments come from adornment children. */
+export type HierarchyEdgeInput = Omit<Edge.EdgeInput<string>, 'adornments' | 'radius' | 'minRadius'>
+
+/**
+ * An adornment on an edge: the core adornment (see `placement/adornment`),
+ * and whether the edge's drawn line stops where it begins. A trimming
+ * adornment at `at` `0` trims the start of the line, and one at `at` `1`
+ * the end.
+ */
+export interface HierarchyAdornmentInput {
+  readonly adornment: Adornment.Adornment
+  readonly trims?: boolean
 }
 
-const emptyRoute: HierarchyEdgeRoute = { points: [], labels: [] }
+/** Where an adornment landed (see `HierarchyAdornment` in `placement/hierarchy`). */
+export type HierarchyAdornmentPlacement = Hierarchy.HierarchyAdornment
 
-/** The edge fields a `useHierarchyEdge` caller supplies. Labels come from label children. */
-export type HierarchyEdgeInput = Omit<Edge.EdgeInput<string>, 'labels'>
+const unplaced: HierarchyAdornmentPlacement = {
+  rect: Rect.make(),
+  angle: 0,
+  along: Interval.make(0, 0),
+}
+
+/**
+ * How an edge draws its corners, which sizes them in the layout. A smoothed
+ * corner reaches `1 + smoothing` times its radius along each leg.
+ */
+export interface HierarchyEdgeDrawing {
+  /** The corner radius, `0` for sharp corners. */
+  readonly radius: number
+  /** The least radius the layout keeps room for. */
+  readonly minRadius: number
+  /** The corner smoothing. */
+  readonly smoothing: number
+}
+
+/**
+ * A solved edge: its route, how far each end of the drawn line stops short
+ * of the route's ends to make room for trimming adornments, and the line it
+ * draws.
+ */
+export interface HierarchyEdgeSolution {
+  readonly route: HierarchyEdgeRoute
+  readonly insets: { readonly start: number; readonly end: number }
+  readonly line: DrawnLine
+}
 
 type NodeChild = Child<Frame, Rect.Rect>
 type EdgeChild = Child<Edge.Edge<string>, HierarchyEdgeRoute>
@@ -118,7 +162,11 @@ function translateRoute(route: HierarchyEdgeRoute, origin: Point.Point): Hierarc
   const { x, y } = origin
   return {
     points: route.points.map((point) => Point.translate(point, x, y)),
-    labels: route.labels.map((label) => Rect.translate(label, x, y)),
+    radii: route.radii,
+    adornments: route.adornments.map((placed) => ({
+      ...placed,
+      rect: Rect.translate(placed.rect, x, y),
+    })),
   }
 }
 
@@ -251,57 +299,102 @@ export function useHierarchyNode(frame: MaybeRefOrGetter<Frame>): ComputedRef<Re
 }
 
 /**
- * Registers an edge with the nearest `useHierarchyLayout`, and provides a
- * label context to `useHierarchyLabel` descendants. The labels join the edge
- * in their resolved order.
+ * Registers an edge with the nearest `useHierarchyLayout`, and provides an
+ * adornment context to `useHierarchyAdornment` descendants, which join the
+ * edge in their resolved order. The edge's corners take the drawing's
+ * radius, which the layout sizes in its reach: `1 + smoothing` radii along
+ * each leg.
  *
  * @param edge - The edge's ends, ports, weight, and length.
- * @returns The edge's solved route, which is empty while the edge is left out of the layout.
+ * @param drawing - How the edge draws its corners.
+ * @returns The edge's solved route, which is empty while the edge is left
+ * out of the layout, the insets its trimming adornments need, and the line
+ * it draws.
  */
 export function useHierarchyEdge(
   edge: MaybeRefOrGetter<HierarchyEdgeInput>,
-): ComputedRef<HierarchyEdgeRoute> {
-  const labels = shallowRef<ReadonlyArray<Child<Edge.EdgeLabel, Rect.Rect>>>([])
+  drawing: MaybeRefOrGetter<HierarchyEdgeDrawing> = { radius: 0, minRadius: 0, smoothing: 0 },
+): ComputedRef<HierarchyEdgeSolution> {
+  const adornments = shallowRef<
+    ReadonlyArray<Child<HierarchyAdornmentInput, HierarchyAdornmentPlacement>>
+  >([])
 
-  const input = computed(() =>
-    Edge.make({ ...toValue(edge), labels: labels.value.map((child) => child.input.value) }),
-  )
+  const input = computed(() => {
+    const { radius, minRadius, smoothing } = toValue(drawing)
+    const reach = 1 + Math.min(Math.max(smoothing, 0), 1)
+    return Edge.make({
+      ...toValue(edge),
+      radius: reach * Math.max(radius, 0),
+      minRadius: reach * Math.max(minRadius, 0),
+      adornments: adornments.value.map((child) => child.input.value.adornment),
+    })
+  })
 
   const local = useChild(EDGE_CHANNEL, input, emptyRoute)
   const origin = useOrigin()
   const route = computed(() => translateRoute(local.value, origin.value))
 
+  // Each end of the drawn line stops where the trimming adornments at that
+  // end begin.
+  const insets = computed(() => {
+    const { points, adornments: placed } = route.value
+    let total = 0
+    for (let i = 1; i < points.length; i++) {
+      total += Point.distance(points[i - 1]!, points[i]!)
+    }
+    let start = 0
+    let end = 0
+    for (const [k, child] of adornments.value.entries()) {
+      const { adornment, trims } = child.input.value
+      const along = placed[k]?.along
+      if (trims !== true || along === undefined) {
+        continue
+      }
+      if (adornment.at < 0.5) {
+        start = Math.max(start, along.end)
+      } else {
+        end = Math.max(end, total - along.start)
+      }
+    }
+    return { start, end }
+  })
+
+  const line = computed(() => drawnLine(route.value.points, route.value.radii, insets.value))
+
   // As in the layout, the mapper records the list and an effect writes the
   // outputs.
   const assign = () => {
-    const rects = route.value.labels
-    for (const [index, child] of labels.value.entries()) {
-      child.output.value = rects[index] ?? zero
+    const placed = route.value.adornments
+    for (const [k, child] of adornments.value.entries()) {
+      child.output.value = placed[k] ?? unplaced
     }
   }
 
   const ssr = isSSR()
 
-  useChildren<Edge.EdgeLabel, Rect.Rect>(LABEL_CHANNEL, (children) => {
-    labels.value = children
-    if (ssr) {
-      assign()
-    }
-  })
+  useChildren<HierarchyAdornmentInput, HierarchyAdornmentPlacement>(
+    ADORNMENT_CHANNEL,
+    (children) => {
+      adornments.value = children
+      if (ssr) {
+        assign()
+      }
+    },
+  )
 
   watchEffect(assign, { flush: 'pre' })
 
-  return route
+  return computed(() => ({ route: route.value, insets: insets.value, line: line.value }))
 }
 
 /**
- * Registers a label with the nearest `useHierarchyEdge`.
+ * Registers an adornment with the nearest `useHierarchyEdge`.
  *
- * @param label - The label's frame and position along the edge.
- * @returns The label's solved rect.
+ * @param adornment - The adornment's frame and where it sits.
+ * @returns Where the adornment landed.
  */
-export function useHierarchyLabel(
-  label: MaybeRefOrGetter<Edge.EdgeLabel>,
-): Readonly<Ref<Rect.Rect>> {
-  return useChild(LABEL_CHANNEL, label, zero)
+export function useHierarchyAdornment(
+  adornment: MaybeRefOrGetter<HierarchyAdornmentInput>,
+): Readonly<Ref<HierarchyAdornmentPlacement>> {
+  return useChild(ADORNMENT_CHANNEL, adornment, unplaced)
 }

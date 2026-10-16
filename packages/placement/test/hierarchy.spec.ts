@@ -1,8 +1,10 @@
 import { coincident } from 'curvy/number'
 import { describe, expect, test } from 'vitest'
+import * as Adornment from '../src/adornment.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
 import * as Hierarchy from '../src/hierarchy.ts'
+import * as Interval from '../src/interval.ts'
 import * as Point from '../src/point.ts'
 import * as Rect from '../src/rect.ts'
 
@@ -23,20 +25,34 @@ const lineAt = (route: Hierarchy.HierarchyRoute | undefined, y: number) => {
   return Number.NaN
 }
 
+const withIds = (ids: ReadonlyArray<string>) => ids.map((id) => Frame.setId(box, id))
+
 const points = (route: Hierarchy.HierarchyRoute | undefined) =>
   route?.points.map((point) => [point.x, point.y])
+
+// A flow adornment that faces along the line and takes `length` of it: a
+// stand-in for an arrowhead at `at` 0 or 1.
+const stub = (length: number, at: number) =>
+  Adornment.make({
+    frame: Frame.make({ width: length, height: 0 }),
+    at,
+    orient: at === 0 ? Adornment.orient.backward : Adornment.orient.forward,
+  })
+
+const labelOf = (frame: Frame.Frame, input: Omit<Adornment.AdornmentInput, 'frame'> = {}) =>
+  Adornment.make({ frame, ...input })
 
 describe('make', () => {
   test('empty input applies the defaults', () => {
     expect(Hierarchy.make({}).toJSON()).toEqual({
       direction: Hierarchy.direction.down,
-      routing: Hierarchy.routing.orthogonal,
+      backEdges: Hierarchy.backEdges.direct,
       rankGap: 0,
       nodeGap: 0,
       edgeGap: 0,
       alignItems: 0.5,
       stretchItems: 0,
-      alignLabels: 0.5,
+      alignAdornments: 0.5,
     })
   })
 
@@ -251,24 +267,6 @@ describe('apply', () => {
     ])
   })
 
-  test('polyline routing shifts across the flow on a diagonal', () => {
-    const layout = Hierarchy.apply(
-      [Frame.setId(box, 'a'), Frame.setId(box, 'b'), Frame.setId(box, 'c')],
-      [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'c' })],
-      Hierarchy.make({ ...spec.toJSON(), routing: Hierarchy.routing.polyline }),
-    )
-    expect(points(layout.edges[0])).toEqual([
-      [105, 40],
-      [50, 60],
-      [50, 80],
-    ])
-    expect(points(layout.edges[1])).toEqual([
-      [115, 40],
-      [170, 60],
-      [170, 80],
-    ])
-  })
-
   test('minLength stretches an edge over more ranks', () => {
     const layout = Hierarchy.apply(
       [Frame.setId(box, 'a'), Frame.setId(box, 'b')],
@@ -308,6 +306,194 @@ describe('apply', () => {
       [55, 80],
       [55, 40],
     ])
+  })
+
+  describe('end adornments', () => {
+    const three = ['a', 'b', 'c'].map((id) => Frame.setId(box, id))
+
+    test('an adornment at the target keeps the last turn that far from it', () => {
+      const layout = Hierarchy.apply(
+        three,
+        [
+          Edge.make({ source: 'a', target: 'b', adornments: [stub(25, 1)] }),
+          Edge.make({ source: 'a', target: 'c', adornments: [stub(25, 1)] }),
+        ],
+        spec,
+      )
+      // The channel above the children grows to 25, so each edge runs 35
+      // straight into its child after its jog.
+      expect(layout.nodes.b?.y).toBe(85)
+      expect(points(layout.edges[0])).toEqual([
+        [105, 40],
+        [105, 50],
+        [50, 50],
+        [50, 85],
+      ])
+    })
+
+    test('an adornment at the source moves the jog lane away from it', () => {
+      const layout = Hierarchy.apply(
+        three,
+        [
+          Edge.make({ source: 'a', target: 'b', adornments: [stub(25, 0)] }),
+          Edge.make({ source: 'a', target: 'c' }),
+        ],
+        spec,
+      )
+      expect(points(layout.edges[0])).toEqual([
+        [105, 40],
+        [105, 65],
+        [50, 65],
+        [50, 95],
+      ])
+    })
+
+    test('an adornment on a side port moves its column out', () => {
+      const layout = Hierarchy.apply(
+        withIds(['a', 'b', 'c', 'x']),
+        [
+          Edge.make({ source: 'a', target: 'b' }),
+          Edge.make({ source: 'x', target: 'c' }),
+          Edge.make({
+            source: 'a',
+            target: 'c',
+            sourceSide: Edge.side.right,
+            adornments: [stub(30, 0)],
+          }),
+        ],
+        spec,
+      )
+      expect(points(layout.edges[2])?.slice(0, 3)).toEqual([
+        [100, 20],
+        [130, 20],
+        [130, 50],
+      ])
+      // The column's room pushes x along.
+      expect(layout.nodes.x?.x).toBe(145)
+    })
+
+    test('an adornment on a wrap moves its turn away from the face', () => {
+      const layout = Hierarchy.apply(
+        withIds(['a', 'b']),
+        [
+          Edge.make({
+            source: 'a',
+            target: 'b',
+            sourceSide: Edge.side.top,
+            adornments: [stub(30, 0)],
+          }),
+        ],
+        spec,
+      )
+      expect(layout.nodes.a?.y).toBe(30)
+      expect(points(layout.edges[0])?.slice(0, 2)).toEqual([
+        [50, 30],
+        [50, 0],
+      ])
+    })
+
+    test('an edge that never turns and carries one end adornment needs no room', () => {
+      const layout = Hierarchy.apply(
+        withIds(['a', 'b']),
+        [Edge.make({ source: 'a', target: 'b', adornments: [stub(60, 1)] })],
+        spec,
+      )
+      expect(layout.nodes.b?.y).toBe(80)
+      expect(layout.edges[0]?.adornments[0]?.rect).toEqual(Rect.make(20, 50, 60, 0))
+    })
+
+    test('adornments at both ends each keep to their own channel', () => {
+      const layout = Hierarchy.apply(
+        withIds(['a', 'b']),
+        [Edge.make({ source: 'a', target: 'b', adornments: [stub(30, 0), stub(30, 1)] })],
+        spec,
+      )
+      expect(layout.nodes.b?.y).toBe(100)
+      const [start, end] = layout.edges[0]?.adornments ?? []
+      expect(start?.along).toEqual(Interval.make(0, 30))
+      expect(end?.along).toEqual(Interval.make(30, 30))
+    })
+
+    test('an end adornment faces into its node, flush with the port', () => {
+      const layout = Hierarchy.apply(
+        withIds(['a', 'b']),
+        [Edge.make({ source: 'a', target: 'b', adornments: [stub(10, 0), stub(10, 1)] })],
+        spec,
+      )
+      const [start, end] = layout.edges[0]?.adornments ?? []
+      // Upright, each is 10 wide around the line. It turns about its center.
+      expect(start?.rect).toEqual(Rect.make(45, 45, 10, 0))
+      expect(start?.angle).toBe(-Math.PI / 2)
+      expect(end?.rect).toEqual(Rect.make(45, 75, 10, 0))
+      expect(end?.angle).toBe(Math.PI / 2)
+    })
+  })
+
+  describe('back edges', () => {
+    const loop = Hierarchy.make({ ...spec.toJSON(), backEdges: Hierarchy.backEdges.loop })
+    const nodes = [Frame.setId(box, 'a'), Frame.setId(box, 'b'), Frame.setId(box, 'c')]
+
+    test('a loop leaves downstream and enters upstream, around both nodes', () => {
+      const layout = Hierarchy.apply(
+        nodes.slice(0, 2),
+        [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'b', target: 'a' })],
+        loop,
+      )
+      expect(layout.nodes.a).toEqual(Rect.make(0, 10, 100, 40))
+      expect(layout.nodes.b).toEqual(Rect.make(0, 90, 100, 40))
+      expect(points(layout.edges[0])).toEqual([
+        [50, 50],
+        [50, 90],
+      ])
+      // It turns below b and above a, in lanes outside the ranks.
+      expect(points(layout.edges[1])).toEqual([
+        [50, 130],
+        [50, 140],
+        [115, 140],
+        [115, 0],
+        [50, 0],
+        [50, 10],
+      ])
+    })
+
+    test('a loop enters beside the centered ports, so straight edges stay straight', () => {
+      const layout = Hierarchy.apply(
+        nodes,
+        [
+          Edge.make({ source: 'a', target: 'b' }),
+          Edge.make({ source: 'b', target: 'c' }),
+          Edge.make({ source: 'c', target: 'b' }),
+        ],
+        loop,
+      )
+      expect(points(layout.edges[0])).toEqual([
+        [50, 40],
+        [50, 80],
+      ])
+      expect(points(layout.edges[2])).toEqual([
+        [50, 200],
+        [50, 210],
+        [115, 210],
+        [115, 70],
+        [60, 70],
+        [60, 80],
+      ])
+    })
+
+    test('an explicit side overrides the loop at its end only', () => {
+      const layout = Hierarchy.apply(
+        nodes.slice(0, 2),
+        [
+          Edge.make({ source: 'a', target: 'b' }),
+          Edge.make({ source: 'b', target: 'a', sourceSide: Edge.side.top }),
+        ],
+        loop,
+      )
+      const b = layout.nodes.b
+      const route = layout.edges[1]?.points ?? []
+      expect(route[0]?.y).toBe(b.top)
+      expect(route[route.length - 1]).toEqual(Point.make(50, layout.nodes.a.top))
+    })
   })
 
   describe('rank bands', () => {
@@ -359,17 +545,19 @@ describe('apply', () => {
     })
   })
 
-  describe('labels', () => {
+  describe('flow adornments', () => {
     const nodes = [Frame.setId(box, 'a'), Frame.setId(box, 'b')]
+    const label = Frame.make({ width: 20, height: 10 })
 
-    test('a label takes its own rank between the nodes', () => {
-      const label = Frame.make({ width: 20, height: 10 })
+    test('one in the middle takes room in the rank between the nodes', () => {
       const layout = Hierarchy.apply(
         nodes,
-        [Edge.make({ source: 'a', target: 'b', labels: [{ frame: label }] })],
+        [Edge.make({ source: 'a', target: 'b', adornments: [labelOf(label)] })],
         spec,
       )
-      expect(layout.edges[0]?.labels).toEqual([Rect.make(40, 60, 20, 10)])
+      expect(layout.edges[0]?.adornments).toEqual([
+        { rect: Rect.make(40, 60, 20, 10), angle: 0, along: Interval.make(20, 10) },
+      ])
       // The label's thickness adds to the rank gap.
       expect(layout.nodes.b?.y).toBe(40 + 40 + 10)
       expect(points(layout.edges[0])).toEqual([
@@ -378,60 +566,93 @@ describe('apply', () => {
       ])
     })
 
-    test('align puts a label beside the line, and offsets add clearance', () => {
+    test('align puts one beside the line, and offsets add clearance', () => {
       const right = Frame.make({ width: 20, height: 10, align: 1, offsetLeft: 4 })
       const left = Frame.make({ width: 20, height: 10, align: 0, offsetRight: 4 })
       const layout = Hierarchy.apply(
         nodes,
         [
-          Edge.make({ source: 'a', target: 'b', labels: [{ frame: right }] }),
-          Edge.make({ source: 'a', target: 'b', labels: [{ frame: left }] }),
+          Edge.make({ source: 'a', target: 'b', adornments: [labelOf(right)] }),
+          Edge.make({ source: 'a', target: 'b', adornments: [labelOf(left)] }),
         ],
         spec,
       )
       const [first, second] = layout.edges
-      const firstLabel = first?.labels[0] as Rect.Rect
-      const secondLabel = second?.labels[0] as Rect.Rect
-      expect(firstLabel.x).toBe(lineAt(first, firstLabel.y) + 4)
-      expect(secondLabel.x).toBe(lineAt(second, secondLabel.y) - 4 - 20)
+      const firstRect = first?.adornments[0]?.rect as Rect.Rect
+      const secondRect = second?.adornments[0]?.rect as Rect.Rect
+      expect(firstRect.x).toBe(lineAt(first, firstRect.y) + 4)
+      expect(secondRect.x).toBe(lineAt(second, secondRect.y) - 4 - 20)
     })
 
-    test('alignLabels sets the default side', () => {
-      const label = Frame.make({ width: 20, height: 10 })
+    test('alignAdornments sets the default side', () => {
       const layout = Hierarchy.apply(
         nodes,
-        [Edge.make({ source: 'a', target: 'b', labels: [{ frame: label }] })],
-        Hierarchy.make({ rankGap: 40, alignLabels: 1 }),
+        [Edge.make({ source: 'a', target: 'b', adornments: [labelOf(label)] })],
+        Hierarchy.make({ rankGap: 40, alignAdornments: 1 }),
       )
-      expect(layout.edges[0]?.labels[0]?.x).toBe(layout.edges[0]?.points[0]?.x)
+      expect(layout.edges[0]?.adornments[0]?.rect.x).toBe(layout.edges[0]?.points[0]?.x)
     })
 
-    test('several labels take distinct ranks in order along the edge', () => {
-      const label = Frame.make({ width: 20, height: 10 })
+    test('ones in a layer on one run line up in order along the edge', () => {
+      const gapped = Frame.make({ width: 20, height: 10, offsetTop: 2 })
       const layout = Hierarchy.apply(
         nodes,
         [
           Edge.make({
             source: 'a',
             target: 'b',
-            labels: [
-              { frame: label, at: 0.9 },
-              { frame: label, at: 0.1 },
-            ],
+            adornments: [labelOf(label, { at: 0.6 }), labelOf(gapped, { at: 0.4 })],
           }),
         ],
         spec,
       )
-      const [late, early] = layout.edges[0]?.labels ?? []
-      expect(early?.y).toBeLessThan(late?.y ?? NaN)
-      const a = layout.nodes.a
-      const b = layout.nodes.b
-      expect(early?.y).toBeGreaterThan(a.bottom)
-      expect(late?.bottom).toBeLessThan(b.y)
+      const [late, early] = layout.edges[0]?.adornments ?? []
+      // The run holds both and the gap: 22 along the flow.
+      expect(layout.nodes.b?.y).toBe(40 + 40 + 22)
+      expect(early?.rect).toEqual(Rect.make(40, 62, 20, 10))
+      expect(late?.rect).toEqual(Rect.make(40, 72, 20, 10))
     })
 
-    test('labels on a reversed edge measure from the source', () => {
-      const label = Frame.make({ width: 20, height: 10 })
+    test('layers overlap, and the longest one sizes the run', () => {
+      const dot = Frame.make({ width: 6, height: 6 })
+      const layout = Hierarchy.apply(
+        nodes,
+        [
+          Edge.make({
+            source: 'a',
+            target: 'b',
+            adornments: [labelOf(label, { at: 0.4 }), labelOf(label), labelOf(dot, { layer: 1 })],
+          }),
+        ],
+        spec,
+      )
+      const [first, second, top] = layout.edges[0]?.adornments ?? []
+      expect(layout.nodes.b?.y).toBe(40 + 40 + 20)
+      expect(first?.rect.y).toBe(60)
+      expect(second?.rect.y).toBe(70)
+      // The dot centers on the run, over the two labels.
+      expect(top?.rect).toEqual(Rect.make(47, 67, 6, 6))
+    })
+
+    test('ones near an end go to its stub and pack against the port', () => {
+      const layout = Hierarchy.apply(
+        nodes,
+        [
+          Edge.make({
+            source: 'a',
+            target: 'b',
+            adornments: [labelOf(label, { at: 0.1 }), labelOf(label, { at: 0.9 })],
+          }),
+        ],
+        spec,
+      )
+      const [early, late] = layout.edges[0]?.adornments ?? []
+      expect(layout.nodes.b?.y).toBe(80)
+      expect(early?.rect).toEqual(Rect.make(40, 40, 20, 10))
+      expect(late?.rect).toEqual(Rect.make(40, 70, 20, 10))
+    })
+
+    test('positions on a reversed edge measure from the source', () => {
       const layout = Hierarchy.apply(
         nodes,
         [
@@ -439,17 +660,254 @@ describe('apply', () => {
           Edge.make({
             source: 'b',
             target: 'a',
-            labels: [
-              { frame: label, at: 0.1 },
-              { frame: label, at: 0.9 },
-            ],
+            adornments: [labelOf(label, { at: 0.4 }), labelOf(label, { at: 0.6 })],
           }),
         ],
         spec,
       )
-      // The back edge runs upward, so the label near its source (b) is lower.
-      const [nearSource, nearTarget] = layout.edges[1]?.labels ?? []
-      expect(nearSource?.y).toBeGreaterThan(nearTarget?.y ?? NaN)
+      // The back edge runs upward, so the label nearer its source (b) is lower.
+      const [nearSource, nearTarget] = layout.edges[1]?.adornments ?? []
+      expect(nearSource?.rect.y).toBeGreaterThan(nearTarget?.rect.y ?? Number.NaN)
+    })
+
+    test('a turned one measures its frame along the line', () => {
+      const arrow = Frame.make({ width: 20, height: 10, offsetLeft: 4 })
+      const layout = Hierarchy.apply(
+        nodes,
+        [
+          Edge.make({
+            source: 'a',
+            target: 'b',
+            adornments: [labelOf(arrow, { orient: Adornment.orient.forward })],
+          }),
+        ],
+        spec,
+      )
+      const placed = layout.edges[0]?.adornments[0]
+      // 24 along the flow, margin included, and 10 across it. The upright
+      // rect turns a quarter turn about its center, at (50, 74).
+      expect(layout.nodes.b?.y).toBe(40 + 40 + 24)
+      expect(placed?.angle).toBe(Math.PI / 2)
+      expect(placed?.rect).toEqual(Rect.make(40, 69, 20, 10))
+      expect(placed?.along).toEqual(Interval.make(24, 20))
+      // The bounds hold the turned box, which is 10 wide.
+      expect(layout.bounds.width).toBe(100)
+    })
+
+    test.each([
+      ['right', Hierarchy.direction.right, Rect.make(120, 15, 20, 10), 0],
+      ['left', Hierarchy.direction.left, Rect.make(120, 15, 20, 10), Math.PI],
+      ['up', Hierarchy.direction.up, Rect.make(40, 65, 20, 10), -Math.PI / 2],
+    ] as const)('a turned one faces along the flow %s', (_, direction, rect, angle) => {
+      const layout = Hierarchy.apply(
+        nodes,
+        [
+          Edge.make({
+            source: 'a',
+            target: 'b',
+            adornments: [labelOf(label, { orient: Adornment.orient.forward })],
+          }),
+        ],
+        Hierarchy.make({ rankGap: 40, direction }),
+      )
+      expect(layout.edges[0]?.adornments[0]?.rect).toEqual(rect)
+      expect(layout.edges[0]?.adornments[0]?.angle).toBe(angle)
+    })
+
+    test('align on a turned one is in its own frame', () => {
+      // Above its local x axis, which points down the flow: to the right.
+      const above = Frame.make({ width: 20, height: 10, align: 0 })
+      const layout = Hierarchy.apply(
+        nodes,
+        [
+          Edge.make({
+            source: 'a',
+            target: 'b',
+            adornments: [labelOf(above, { orient: Adornment.orient.forward })],
+          }),
+        ],
+        spec,
+      )
+      const rect = layout.edges[0]?.adornments[0]?.rect as Rect.Rect
+      expect(rect.x + rect.width / 2).toBe(55)
+    })
+  })
+
+  describe('absolute adornments', () => {
+    const three = withIds(['a', 'b', 'c'])
+    const dot = Frame.make({ width: 4, height: 4 })
+
+    test('one sits at its position along the line and takes no room', () => {
+      const layout = Hierarchy.apply(
+        withIds(['a', 'b']),
+        [
+          Edge.make({
+            source: 'a',
+            target: 'b',
+            adornments: [labelOf(dot, { at: 0.25, position: Adornment.position.absolute })],
+          }),
+        ],
+        spec,
+      )
+      expect(layout.nodes.b?.y).toBe(80)
+      expect(layout.edges[0]?.adornments[0]).toEqual({
+        rect: Rect.make(48, 48, 4, 4),
+        angle: 0,
+        along: Interval.make(8, 4),
+      })
+    })
+
+    test('one on a rounded corner sits on its arc and faces along it', () => {
+      const layout = Hierarchy.apply(
+        three,
+        [
+          Edge.make({
+            source: 'a',
+            target: 'b',
+            radius: 8,
+            adornments: [
+              labelOf(dot, {
+                at: 0,
+                position: Adornment.position.absolute,
+                orient: Adornment.orient.forward,
+              }),
+              labelOf(dot, { at: 1, position: Adornment.position.absolute }),
+            ],
+          }),
+          Edge.make({ source: 'a', target: 'c' }),
+        ],
+        spec,
+      )
+      const route = layout.edges[0] as Hierarchy.HierarchyRoute
+      expect(points(route)).toEqual([
+        [105, 40],
+        [105, 50],
+        [50, 50],
+        [50, 80],
+      ])
+      expect(route.radii).toEqual([0, 8, 8, 0])
+      const [start, end] = route.adornments
+      expect(start?.rect).toEqual(Rect.make(103, 38, 4, 4))
+      expect(start?.angle).toBe(Math.PI / 2)
+      expect(end?.rect).toEqual(Rect.make(48, 78, 4, 4))
+      expect(end?.along).toEqual(Interval.make(93, 4))
+    })
+
+    test('the middle of a rounded corner maps onto the polyline evenly', () => {
+      const layout = Hierarchy.apply(
+        withIds(['a', 'b']),
+        [
+          Edge.make({
+            source: 'a',
+            target: 'b',
+            targetSide: Edge.side.left,
+            radius: 10,
+            adornments: [labelOf(dot, { position: Adornment.position.absolute })],
+          }),
+        ],
+        Hierarchy.make({ rankGap: 40 }),
+      )
+      const route = layout.edges[0] as Hierarchy.HierarchyRoute
+      const placed = route.adornments[0] as Hierarchy.HierarchyAdornment
+      const total = route.points
+        .slice(1)
+        .reduce((sum, point, i) => sum + Point.distance(route.points[i] as Point.Point, point), 0)
+      // Each corner swaps 2r of polyline for a quarter circle of length
+      // pi r / 2, so the drawn line is shorter. Its middle still maps back
+      // into the polyline.
+      expect(placed.along.start + placed.along.size / 2).toBeGreaterThan(0)
+      expect(placed.along.start + placed.along.size / 2).toBeLessThan(total)
+    })
+  })
+
+  describe('corners', () => {
+    const three = withIds(['a', 'b', 'c'])
+
+    test('take the radius where the route has room', () => {
+      const layout = Hierarchy.apply(
+        three,
+        [
+          Edge.make({ source: 'a', target: 'b', radius: 4 }),
+          Edge.make({ source: 'a', target: 'c', radius: 4 }),
+        ],
+        spec,
+      )
+      expect(layout.edges[0]?.radii).toEqual([0, 4, 4, 0])
+    })
+
+    test('shrink where a leg is short', () => {
+      const layout = Hierarchy.apply(
+        three,
+        [
+          Edge.make({ source: 'a', target: 'b', radius: 30 }),
+          Edge.make({ source: 'a', target: 'c', radius: 30 }),
+        ],
+        spec,
+      )
+      // The jog sits 10 below a, so the first corner fits in 10.
+      expect(points(layout.edges[0])).toEqual([
+        [105, 40],
+        [105, 50],
+        [50, 50],
+        [50, 80],
+      ])
+      expect(layout.edges[0]?.radii).toEqual([0, 10, 30, 0])
+    })
+
+    test('two corners on a short leg split it', () => {
+      const layout = Hierarchy.apply(
+        withIds(['a', 'b', 'c']),
+        [
+          Edge.make({ source: 'a', target: 'b', radius: 30 }),
+          Edge.make({ source: 'a', target: 'c', radius: 30 }),
+        ],
+        Hierarchy.make({ rankGap: 200, nodeGap: 4, edgeGap: 4 }),
+      )
+      const route = layout.edges[0] as Hierarchy.HierarchyRoute
+      const jog = Point.distance(route.points[1] as Point.Point, route.points[2] as Point.Point)
+      expect(jog).toBeLessThan(60)
+      expect(route.radii).toEqual([0, jog / 2, jog / 2, 0])
+    })
+
+    test('minRadius keeps room where layout sets the length', () => {
+      const layout = Hierarchy.apply(
+        three,
+        [
+          Edge.make({ source: 'a', target: 'b', radius: 30, minRadius: 25 }),
+          Edge.make({ source: 'a', target: 'c' }),
+        ],
+        spec,
+      )
+      // The lane moves 25 from a. The leg below it runs on through the
+      // next channel, so that side needs nothing more.
+      expect(points(layout.edges[0])).toEqual([
+        [105, 40],
+        [105, 65],
+        [50, 65],
+        [50, 95],
+      ])
+      expect(layout.edges[0]?.radii).toEqual([0, 25, 30, 0])
+    })
+
+    test('keep clear of flow adornments and their gaps', () => {
+      const arrow = Frame.make({ width: 9, height: 8, offsetLeft: 4 })
+      const layout = Hierarchy.apply(
+        three,
+        [
+          Edge.make({
+            source: 'a',
+            target: 'b',
+            radius: 30,
+            adornments: [labelOf(arrow, { at: 1, orient: Adornment.orient.forward })],
+          }),
+          Edge.make({ source: 'a', target: 'c' }),
+        ],
+        spec,
+      )
+      // The last leg runs 30 into b, and the arrow and its gap take 13.
+      const route = layout.edges[0] as Hierarchy.HierarchyRoute
+      expect(points(route)?.at(-2)).toEqual([50, 50])
+      expect(route.radii.at(-2)).toBe(17)
     })
   })
 
@@ -491,13 +949,43 @@ describe('apply', () => {
       )
       const route = points(layout.edges[0]) ?? []
       const a = layout.nodes.a
-      // The stub is half the node gap long. The edge then runs with the
-      // flow to its jog, in the middle of the channel below the rank.
+      // The edge steps out to its column, half of nodeGap plus half of
+      // edgeGap beside the node. It then runs with the flow to its jog, in
+      // the middle of the channel below the rank.
       expect(route.slice(0, 3)).toEqual([
         [a.right, 20],
-        [a.right + 10, 20],
-        [a.right + 10, 50],
+        [a.right + 15, 20],
+        [a.right + 15, 50],
       ])
+    })
+
+    test('side ports that share a side take their own columns, edgeGap apart', () => {
+      const layout = Hierarchy.apply(
+        [Frame.setId(box, 'a'), Frame.setId(box, 'b'), Frame.setId(box, 'c')],
+        [
+          Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.right }),
+          Edge.make({ source: 'a', target: 'c', sourceSide: Edge.side.right }),
+        ],
+        spec,
+      )
+      // The edge heading farther out leaves higher and takes the outer
+      // column, so the two never cross.
+      expect(points(layout.edges[0])).toEqual([
+        [160, 25],
+        [175, 25],
+        [175, 50],
+        [50, 50],
+        [50, 90],
+      ])
+      expect(points(layout.edges[1])).toEqual([
+        [160, 15],
+        [185, 15],
+        [185, 60],
+        [170, 60],
+        [170, 90],
+      ])
+      // The columns reserve room beside a, which pushes c out.
+      expect(layout.nodes.c).toEqual(Rect.make(120, 90, 100, 40))
     })
 
     test('a port facing against the flow wraps around its node', () => {
@@ -506,12 +994,71 @@ describe('apply', () => {
         [Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.top })],
         spec,
       )
-      const route = points(layout.edges[0]) ?? []
-      const a = layout.nodes.a
-      expect(route[0]).toEqual([a.x + 50, a.y])
-      // It rises a quarter of the rank gap, then passes beside the node.
-      expect(route[1]?.[1]).toBe(a.y - 10)
-      expect(route[route.length - 1]?.[1]).toBe(layout.nodes.b?.y)
+      // It turns in a lane before the first rank, passes beside the node
+      // in its column, and jogs back in the channel below.
+      expect(layout.nodes.a).toEqual(Rect.make(0, 10, 100, 40))
+      expect(points(layout.edges[0])).toEqual([
+        [50, 10],
+        [50, 0],
+        [115, 0],
+        [115, 60],
+        [50, 60],
+        [50, 90],
+      ])
+    })
+
+    test('a side port runs straight out to where its edge continues', () => {
+      const layout = Hierarchy.apply(
+        [Frame.setId(box, 'a'), Frame.setId(box, 'b'), Frame.setId(box, 'c')],
+        [
+          Edge.make({ source: 'a', target: 'b' }),
+          Edge.make({ source: 'a', target: 'c', sourceSide: Edge.side.right }),
+        ],
+        spec,
+      )
+      // c's port lies past a's column, so the edge turns once, above it.
+      expect(points(layout.edges[1])).toEqual([
+        [100, 20],
+        [170, 20],
+        [170, 80],
+      ])
+    })
+
+    test('a column stops short of a node beside it in the rank', () => {
+      const layout = Hierarchy.apply(
+        ['a', 'b', 'c', 'x'].map((id) => Frame.setId(box, id)),
+        [
+          Edge.make({ source: 'a', target: 'b' }),
+          Edge.make({ source: 'x', target: 'c' }),
+          Edge.make({ source: 'a', target: 'c', sourceSide: Edge.side.right }),
+        ],
+        spec,
+      )
+      // x sits beside a, so the edge keeps its column and jogs below the
+      // rank.
+      expect(layout.nodes.x).toEqual(Rect.make(130, 0, 100, 40))
+      expect(points(layout.edges[2])).toEqual([
+        [100, 20],
+        [115, 20],
+        [115, 70],
+        [170, 70],
+        [170, 80],
+      ])
+    })
+
+    test('auto ports keep clear of fixed ports on the same side', () => {
+      const layout = Hierarchy.apply(
+        nodes,
+        [
+          Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.bottom, sourceAt: 0.5 }),
+          Edge.make({ source: 'a', target: 'b' }),
+        ],
+        spec,
+      )
+      // The fixed port claims the nearer of the two spread positions, and
+      // the auto port takes the other.
+      expect(layout.edges[0]?.points[0]).toEqual(Point.make(50, 40))
+      expect(layout.edges[1]?.points[0]).toEqual(Point.make(55, 40))
     })
 
     test('positions along order faces mirror with the flow', () => {
@@ -616,7 +1163,7 @@ describe('apply', () => {
 
 // A pseudo-random graph for property checks. A linear congruential
 // generator keeps it deterministic.
-function randomGraph(seed: number, nodeCount: number, edgeCount: number) {
+function randomGraph(seed: number, nodeCount: number, edgeCount: number, sides = false) {
   let state = seed
   const next = () => {
     state = (state * 1103515245 + 12345) % 2147483648
@@ -636,8 +1183,45 @@ function randomGraph(seed: number, nodeCount: number, edgeCount: number) {
   for (let i = 0; i < edgeCount; i++) {
     const source = `n${Math.floor(next() * nodeCount)}`
     const target = `n${Math.floor(next() * nodeCount)}`
-    const labels = next() < 0.2 ? [{ frame: Frame.make({ width: 30, height: 12 }) }] : []
-    edges.push(Edge.make({ source, target, labels }))
+    const adornments: Array<Adornment.Adornment> = []
+    if (next() < 0.2) {
+      adornments.push(
+        Adornment.make({
+          frame: Frame.make({ width: 30, height: 12 }),
+          at: Math.floor(next() * 5) / 4,
+          layer: Math.floor(next() * 2),
+        }),
+      )
+    }
+    // With `sides`, about a third of the ports get a random side, and about
+    // a third an end adornment. Some edges carry a dot in the middle too.
+    const side = () => (sides && next() < 0.35 ? Math.floor(next() * 4) : undefined)
+    for (const at of [0, 1]) {
+      if (sides && next() < 0.35) {
+        adornments.push(stub(6 + Math.floor(next() * 4) * 6, at))
+      }
+    }
+    if (sides && next() < 0.2) {
+      adornments.push(
+        Adornment.make({
+          frame: Frame.make({ width: 6, height: 6 }),
+          at: next(),
+          position: Math.floor(next() * 2),
+        }),
+      )
+    }
+    const radius = Math.floor(next() * 3) * 6
+    edges.push(
+      Edge.make({
+        source,
+        target,
+        adornments,
+        sourceSide: side(),
+        targetSide: side(),
+        radius,
+        minRadius: next() < 0.5 ? radius : 0,
+      }),
+    )
   }
   return { nodes, edges }
 }
@@ -648,6 +1232,50 @@ function onBoundary(point: Point.Point, rect: Rect.Rect): boolean {
   const onVertical = coincident(point.x, rect.left) || coincident(point.x, rect.right)
   const onHorizontal = coincident(point.y, rect.top) || coincident(point.y, rect.bottom)
   return (onVertical && withinY) || (onHorizontal && withinX)
+}
+
+// A route's corners: one size per point, `0` at the ends, at most the
+// edge's radius, never past a neighbor on a shared leg, and clear of the
+// stretches its flow adornments cover. Flow adornments in one layer never
+// overlap along the route.
+function expectCorners(edge: Edge.Edge<string>, route: Hierarchy.HierarchyRoute): void {
+  const { points: list, radii, adornments } = route
+  expect(radii).toHaveLength(list.length)
+  expect(radii[0]).toBe(0)
+  expect(radii.at(-1)).toBe(0)
+  const along = [0]
+  for (let k = 1; k < list.length; k++) {
+    along.push(
+      (along[k - 1] as number) + Point.distance(list[k - 1] as Point.Point, list[k] as Point.Point),
+    )
+  }
+  for (const [k, radius] of radii.entries()) {
+    expect(radius).toBeGreaterThanOrEqual(0)
+    expect(radius).toBeLessThanOrEqual(edge.radius + 1e-9)
+    if (k > 0) {
+      const leg = (along[k] as number) - (along[k - 1] as number)
+      expect(radius + (radii[k - 1] as number)).toBeLessThanOrEqual(leg + 1e-9)
+    }
+  }
+  const flow = adornments.filter((_, k) => edge.adornments[k]?.position !== 1)
+  for (const [k, placed] of flow.entries()) {
+    const { start, end } = placed.along
+    for (const [c, radius] of radii.entries()) {
+      const at = along[c] as number
+      const overlap = Math.min(end, at + radius) - Math.max(start, at - radius)
+      if (radius > 0) {
+        expect(overlap).toBeLessThanOrEqual(1e-9)
+      }
+    }
+    const layer = edge.adornments.filter((adornment) => adornment.position !== 1)[k]?.layer
+    for (const [m, other] of flow.entries()) {
+      const otherLayer = edge.adornments.filter((adornment) => adornment.position !== 1)[m]?.layer
+      if (m > k && layer === otherLayer) {
+        const overlap = Math.min(end, other.along.end) - Math.max(start, other.along.start)
+        expect(overlap).toBeLessThanOrEqual(1e-9)
+      }
+    }
+  }
 }
 
 describe('properties', () => {
@@ -691,7 +1319,8 @@ describe('properties', () => {
             layout.nodes[edge.target] as Rect.Rect,
           ),
         ).toBe(true)
-        expect(layout.edges[i]?.labels).toHaveLength(edge.labels.length)
+        expect(layout.edges[i]?.adornments).toHaveLength(edge.adornments.length)
+        expectCorners(edge, layout.edges[i] as Hierarchy.HierarchyRoute)
       }
 
       // Orthogonal routes: every segment runs with or across the flow. The
@@ -735,6 +1364,97 @@ describe('properties', () => {
       for (const rect of rects) {
         expect(Rect.contains(layout.bounds, rect)).toBe(true)
       }
+      for (const route of layout.edges) {
+        for (const { rect } of route.adornments) {
+          expect(Rect.contains(layout.bounds, rect)).toBe(true)
+        }
+      }
+    }
+  })
+
+  // Orthogonal routes with side ports, wraps, end adornments, and both back
+  // edge styles: every segment runs with or across the flow, no segment
+  // passes through a node, no two edges overlap along a line, and a route
+  // that turns keeps its first and last segments as long as the adornments
+  // at its ends. Corners and flow adornments keep clear of each other.
+  test.each([11, 12, 13, 14, 15, 16, 17, 18])('random graph %i with sides', (seed) => {
+    const { nodes, edges } = randomGraph(seed, 12, 18, true)
+    for (const backEdges of Object.values(Hierarchy.backEdges)) {
+      for (const direction of Object.values(Hierarchy.direction)) {
+        const hierarchy = Hierarchy.make({
+          rankGap: 30,
+          nodeGap: 20,
+          edgeGap: 8,
+          direction,
+          backEdges,
+        })
+        const layout = Hierarchy.apply(nodes, edges, hierarchy)
+        expect(Hierarchy.apply(nodes, edges, hierarchy)).toEqual(layout)
+
+        const rects = Object.values<Rect.Rect>(layout.nodes)
+        const lines: Array<
+          [edge: number, vertical: boolean, at: number, from: number, to: number]
+        > = []
+        for (const [i, edge] of edges.entries()) {
+          if (edge.source === edge.target) {
+            continue
+          }
+          const route = layout.edges[i]?.points ?? []
+          expect(onBoundary(route[0] as Point.Point, layout.nodes[edge.source] as Rect.Rect)).toBe(
+            true,
+          )
+          expect(
+            onBoundary(
+              route[route.length - 1] as Point.Point,
+              layout.nodes[edge.target] as Rect.Rect,
+            ),
+          ).toBe(true)
+          expectCorners(edge, layout.edges[i] as Hierarchy.HierarchyRoute)
+          if (route.length > 2) {
+            const first = Point.distance(route[0] as Point.Point, route[1] as Point.Point)
+            const last = Point.distance(
+              route[route.length - 2] as Point.Point,
+              route[route.length - 1] as Point.Point,
+            )
+            const stubOf = (at: number) =>
+              Math.max(
+                0,
+                ...edge.adornments
+                  .filter((adornment) => adornment.at === at && adornment.orient !== 0)
+                  .map((adornment) => adornment.frame.width),
+              )
+            expect(first).toBeGreaterThanOrEqual(stubOf(0) - 1e-9)
+            expect(last).toBeGreaterThanOrEqual(stubOf(1) - 1e-9)
+          }
+          for (let k = 1; k < route.length; k++) {
+            const a = route[k - 1] as Point.Point
+            const b = route[k] as Point.Point
+            const vertical = coincident(a.x, b.x)
+            expect(vertical || coincident(a.y, b.y)).toBe(true)
+            const [at, from, to] = vertical
+              ? [a.x, Math.min(a.y, b.y), Math.max(a.y, b.y)]
+              : [a.y, Math.min(a.x, b.x), Math.max(a.x, b.x)]
+            lines.push([i, vertical, at, from, to])
+            for (const rect of rects) {
+              const [crossStart, crossEnd, alongStart, alongEnd] = vertical
+                ? [rect.left, rect.right, rect.top, rect.bottom]
+                : [rect.top, rect.bottom, rect.left, rect.right]
+              const insideCross = at > crossStart + 1e-9 && at < crossEnd - 1e-9
+              const overlapsAlong = Math.min(to, alongEnd) - Math.max(from, alongStart) > 1e-9
+              expect(insideCross && overlapsAlong).toBe(false)
+            }
+          }
+        }
+        for (let m = 0; m < lines.length; m++) {
+          const [edgeA, verticalA, atA, fromA, toA] = lines[m] as (typeof lines)[number]
+          for (let n = m + 1; n < lines.length; n++) {
+            const [edgeB, verticalB, atB, fromB, toB] = lines[n] as (typeof lines)[number]
+            if (edgeA !== edgeB && verticalA === verticalB && coincident(atA, atB)) {
+              expect(Math.min(toA, toB) - Math.max(fromA, fromB)).toBeLessThanOrEqual(1e-9)
+            }
+          }
+        }
+      }
     }
   })
 
@@ -745,9 +1465,17 @@ describe('properties', () => {
       Frame.make({ id: frame.id, width: frame.width * scale, height: frame.height * scale }),
     )
     const scaledEdges = edges.map((edge) =>
-      Edge.setLabels(
-        edge,
-        edge.labels.map(() => ({ frame: Frame.make({ width: 30 * scale, height: 12 * scale }) })),
+      Edge.setAdornments(
+        Edge.setRadius(edge, edge.radius * scale, edge.minRadius * scale),
+        edge.adornments.map((adornment) =>
+          Adornment.setFrame(
+            adornment,
+            Frame.make({
+              width: adornment.frame.width * scale,
+              height: adornment.frame.height * scale,
+            }),
+          ),
+        ),
       ),
     )
     const base = Hierarchy.apply(
@@ -768,6 +1496,9 @@ describe('properties', () => {
     }
     for (const [i, route] of base.edges.entries()) {
       expect(big.edges[i]?.points).toHaveLength(route.points.length)
+      for (const [k, radius] of route.radii.entries()) {
+        expect((big.edges[i]?.radii[k] ?? Number.NaN) / scale).toBeCloseTo(radius, 6)
+      }
     }
   })
 

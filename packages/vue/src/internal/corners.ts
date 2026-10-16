@@ -192,10 +192,15 @@ function fit(turn: Turn, r: number, smoothing: number, room: number) {
  * starts and ends at the middle of the first leg, which splits that leg
  * evenly between its two corners.
  *
+ * `rooms`, one per point of an open polyline, caps how far each corner
+ * reaches along its legs, as the corner sizes that `placement/hierarchy`
+ * solves do. A capped corner gives way as a crowded one does.
+ *
  * @param points - The polyline.
  * @param r - The corner radius. `0` keeps every corner sharp.
  * @param smoothing - From `0` (circular fillets) to `1` (fully smoothed).
  * @param closed - Whether the last point joins back to the first.
+ * @param rooms - The most each corner may reach along its legs, per point.
  * @returns The rounded path, or `undefined` for fewer than two distinct points.
  */
 export function roundPolyline(
@@ -203,12 +208,68 @@ export function roundPolyline(
   r: number,
   smoothing: number,
   closed = false,
+  rooms?: ReadonlyArray<number>,
 ): CubicPath2d.CubicPath2d | undefined {
+  const fitted = fitCorners(points, r, smoothing, closed, rooms)
+  if (fitted === undefined) {
+    return undefined
+  }
+  const { distinct, sizes } = fitted
+
+  const beziers: Array<Bezier> = []
+  let cursor = distinct[0]!
+
+  for (let i = 1; i < distinct.length - 1; i++) {
+    const size = sizes[i]
+    if (size === undefined) {
+      beziers.push(line(cursor, distinct[i]!))
+      cursor = distinct[i]!
+      continue
+    }
+    const pieces = corner(distinct[i]!, size.turn, size.r, size.smoothing)
+    const start = pieces[0]![0]
+    if (!coincident(cursor[0], start[0]) || !coincident(cursor[1], start[1])) {
+      beziers.push(line(cursor, start))
+    }
+    beziers.push(...pieces)
+    cursor = pieces.at(-1)![3]
+  }
+
+  const end = distinct.at(-1)!
+  if (beziers.length === 0 || !coincident(cursor[0], end[0]) || !coincident(cursor[1], end[1])) {
+    beziers.push(line(cursor, end))
+  }
+
+  return toPath(beziers)
+}
+
+// The distinct points of a polyline, and the fitted size of the corner at
+// each of them (`undefined` where the polyline does not turn or `r` is 0).
+function fitCorners(
+  points: ReadonlyArray<{ readonly x: number; readonly y: number }>,
+  r: number,
+  smoothing: number,
+  closed: boolean,
+  rooms?: ReadonlyArray<number>,
+):
+  | {
+      readonly distinct: ReadonlyArray<XY>
+      readonly sizes: ReadonlyArray<
+        { readonly turn: Turn; readonly r: number; readonly smoothing: number } | undefined
+      >
+    }
+  | undefined {
   let distinct: Array<XY> = []
-  for (const { x, y } of points) {
+  // The cap on each distinct point's corner: the least of its repeats'.
+  const caps: Array<number> = []
+  for (const [i, { x, y }] of points.entries()) {
+    const cap = rooms?.[i] ?? Number.POSITIVE_INFINITY
     const last = distinct.at(-1)
     if (last === undefined || !coincident(last[0], x) || !coincident(last[1], y)) {
       distinct.push([x, y])
+      caps.push(cap)
+    } else {
+      caps[caps.length - 1] = Math.min(caps.at(-1)!, cap)
     }
   }
   if (closed) {
@@ -256,33 +317,20 @@ export function roundPolyline(
     return total <= length ? mine : (length * mine) / total
   }
 
-  const beziers: Array<Bezier> = []
-  let cursor = distinct[0]!
-
-  for (let i = 1; i < distinct.length - 1; i++) {
-    const turn = turns[i]
+  const sizes = turns.map((turn, i) => {
     if (turn === undefined) {
-      beziers.push(line(cursor, distinct[i]!))
-      cursor = distinct[i]!
-      continue
+      return undefined
     }
-    const room = Math.min(share(i, i - 1, lengths[i - 1]!), share(i, i + 1, lengths[i]!))
+    const room = Math.min(
+      share(i, i - 1, lengths[i - 1]!),
+      share(i, i + 1, lengths[i]!),
+      closed ? Number.POSITIVE_INFINITY : Math.max(caps[i]!, 0),
+    )
     const size = fit(turn, r, s, room)
-    const pieces = corner(distinct[i]!, turn, size.r, size.smoothing)
-    const start = pieces[0]![0]
-    if (!coincident(cursor[0], start[0]) || !coincident(cursor[1], start[1])) {
-      beziers.push(line(cursor, start))
-    }
-    beziers.push(...pieces)
-    cursor = pieces.at(-1)![3]
-  }
+    return { turn, r: size.r, smoothing: size.smoothing }
+  })
 
-  const end = distinct.at(-1)!
-  if (beziers.length === 0 || !coincident(cursor[0], end[0]) || !coincident(cursor[1], end[1])) {
-    beziers.push(line(cursor, end))
-  }
-
-  return toPath(beziers)
+  return { distinct, sizes }
 }
 
 /**

@@ -1,6 +1,7 @@
 import { CubicPath2d, LinearPath2d } from 'curvy/path'
 import { Linear2d } from 'curvy/splines'
 import { Vector2 } from 'curvy/vector'
+import * as Adornment from 'placement/adornment'
 import * as Edge from 'placement/edge'
 import * as Frame from 'placement/frame'
 import * as Hierarchy from 'placement/hierarchy'
@@ -9,8 +10,11 @@ import * as Rect from 'placement/rect'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { type VNodeArrayChildren, h, nextTick, ref } from 'vue'
 import { GraphicGroup } from '../../src/components/GraphicGroup.ts'
+import {
+  HierarchyAdornment,
+  type HierarchyAdornmentProps,
+} from '../../src/components/HierarchyAdornment.ts'
 import { HierarchyEdge, type HierarchyEdgeProps } from '../../src/components/HierarchyEdge.ts'
-import { HierarchyLabel } from '../../src/components/HierarchyLabel.ts'
 import { HierarchyLayout, type HierarchyLayoutProps } from '../../src/components/HierarchyLayout.ts'
 import { HierarchyNode, type HierarchyNodeProps } from '../../src/components/HierarchyNode.ts'
 import { roundPolyline } from '../../src/internal/corners.ts'
@@ -166,19 +170,39 @@ describe('solving', () => {
       node('a', 40, 20),
       node('b', 40, 20),
     ])
+    // The layout sizes corners by their reach, (1 + smoothing) radii.
     const solved = Hierarchy.apply(
       [
         Frame.make({ id: 'a', width: 40, height: 20 }),
         Frame.make({ id: 'b', width: 40, height: 20 }),
       ],
-      [Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.right })],
+      [Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.right, radius: 1.6 * 6 })],
       Hierarchy.make({ rankGap: 20 }),
     )
+    const { points, radii } = solved.edges[0]!
 
-    expect(solved.edges[0]!.points.length).toBeGreaterThan(2)
+    expect(points.length).toBeGreaterThan(2)
     expect(findOne(root, 'path').props['d']).toBe(
-      CubicPath2d.toPathData(roundPolyline(solved.edges[0]!.points, 6, 0.6)!),
+      CubicPath2d.toPathData(roundPolyline(points, 6, 0.6, false, radii)!),
     )
+  })
+
+  test('minR keeps room for corners in the layout', async () => {
+    const fan = ['a', 'b', 'c'].map((id) => Frame.make({ id, width: 40, height: 20 }))
+    const { root } = await mountLayout({ rankGap: 20, nodeGap: 10 }, () => [
+      ...['b', 'c'].map((to) => edge({ from: 'a', to, r: 12, minR: 12 })),
+      ...fan.map((frame) => node(frame.id, 40, 20)),
+    ])
+    const solved = Hierarchy.apply(
+      fan,
+      ['b', 'c'].map((target) => Edge.make({ source: 'a', target, radius: 12, minRadius: 12 })),
+      Hierarchy.make({ rankGap: 20, nodeGap: 10 }),
+    )
+
+    expect(props(findAll(root, 'route'))).toEqual(
+      solved.edges.map((route) => ({ points: translatedPoints(route.points) })),
+    )
+    expect(solved.edges[0]!.radii).toEqual([0, 12, 12, 0])
   })
 
   test('attrs and paint reach the path', async () => {
@@ -215,14 +239,20 @@ describe('solving', () => {
   })
 
   test.each([
-    ['orthogonal', Hierarchy.routing.orthogonal],
-    ['polyline', Hierarchy.routing.polyline],
-  ] as const)('routing %s maps to the core routing', async (name, routing) => {
-    const { root } = await mountLayout({ routing: name, rankGap: 20, nodeGap: 10 }, graph)
+    ['direct', Hierarchy.backEdges.direct],
+    ['loop', Hierarchy.backEdges.loop],
+  ] as const)('backEdges %s maps to the core back edge style', async (name, backEdges) => {
+    const cycle = () => [
+      edge({ from: 'a', to: 'b' }),
+      edge({ from: 'b', to: 'a' }),
+      node('a', 40, 20),
+      node('b', 60, 30),
+    ]
+    const { root } = await mountLayout({ backEdges: name, rankGap: 20, edgeGap: 10 }, cycle)
     const solved = Hierarchy.apply(
-      frames,
-      [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'c' })],
-      Hierarchy.make({ routing, rankGap: 20, nodeGap: 10 }),
+      frames.slice(0, 2),
+      [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'b', target: 'a' })],
+      Hierarchy.make({ backEdges, rankGap: 20, edgeGap: 10 }),
     )
 
     expect(props(findAll(root, 'route'))).toEqual(
@@ -289,7 +319,7 @@ describe('solving', () => {
   })
 })
 
-describe('ports and labels', () => {
+describe('ports and adornments', () => {
   test('port props reach the edge', async () => {
     const { root } = await mountLayout({ rankGap: 20 }, () => [
       edge({ from: 'a', to: 'b', fromPort: 'right 25%', toPort: 'left' }),
@@ -318,17 +348,17 @@ describe('ports and labels', () => {
     })
   })
 
-  test('labels take their rects from the route', async () => {
+  test('adornments along the edge take their rects from the route', async () => {
     const label = (at?: RatioInput) =>
       h(
-        HierarchyLabel,
+        HierarchyAdornment,
         { width: 30, height: 12, at },
         {
           default: ({ rect }: { rect: Rect.Rect }) => [probe(rect, 'label')],
         },
       )
     const { root } = await mountLayout({ rankGap: 20, left: 5, top: 7 }, () => [
-      edge({ from: 'a', to: 'b', weight: 2 }, () => [label(), label('end')]),
+      edge({ from: 'a', to: 'b', weight: 2 }, () => [label(), label('100%')]),
       node('a', 40, 20),
       node('b', 40, 20),
     ])
@@ -343,9 +373,9 @@ describe('ports and labels', () => {
           source: 'a',
           target: 'b',
           weight: 2,
-          labels: [
-            { frame: labelFrame, at: 0.5 },
-            { frame: labelFrame, at: 1 },
+          adornments: [
+            Adornment.make({ frame: labelFrame, at: 0.5 }),
+            Adornment.make({ frame: labelFrame, at: 1 }),
           ],
         }),
       ],
@@ -353,11 +383,202 @@ describe('ports and labels', () => {
     )
 
     expect(props(findAll(root, 'label'))).toEqual(
-      solved.edges[0]!.labels.map((rect) => rectProps(Rect.translate(rect, 5, 7))),
+      solved.edges[0]!.adornments.map(({ rect }) => rectProps(Rect.translate(rect, 5, 7))),
     )
     expect(findAll(root, 'probe')[1]?.props).toEqual(
       rectProps(Rect.translate(solved.nodes.b, 5, 7)),
     )
+  })
+})
+
+// A turned adornment at one end of an edge, as `at="start"` and `at="end"` make.
+const turned = (frame: Frame.Frame, at: number) =>
+  Adornment.make({
+    frame,
+    at,
+    orient: at === 0 ? Adornment.orient.backward : Adornment.orient.forward,
+  })
+
+describe('end adornments', () => {
+  const frames = [
+    Frame.make({ id: 'a', width: 40, height: 20 }),
+    Frame.make({ id: 'b', width: 40, height: 20 }),
+  ]
+  const solved = Hierarchy.apply(
+    frames,
+    [Edge.make({ source: 'a', target: 'b' })],
+    Hierarchy.make({ rankGap: 20 }),
+  )
+  const route = solved.edges[0]!.points
+  const head = route[0]!
+  const tip = route[route.length - 1]!
+
+  const adornment = (props: HierarchyAdornmentProps, tag: string) =>
+    h(HierarchyAdornment, props, {
+      default: ({ rect }: { rect: Rect.Rect }) => [probe(rect, tag)],
+    })
+
+  function mountArrows(arrows: () => VNodeArrayChildren) {
+    return mountLayout({ rankGap: 20 }, () => [
+      edge({ from: 'a', to: 'b' }, arrows),
+      node('a', 40, 20),
+      node('b', 40, 20),
+    ])
+  }
+
+  test('an end adornment sits against the target, turned to point into it', async () => {
+    const { root } = await mountArrows(() => [
+      adornment({ at: 'end', width: 8, height: 6 }, 'arrow'),
+    ])
+
+    // The route runs down, so the frame turns a quarter turn clockwise
+    // about its center, 4 above the tip.
+    expect(findOne(root, 'arrow').props).toEqual({
+      x: tip.x - 4,
+      y: tip.y - 7,
+      width: 8,
+      height: 6,
+    })
+    expect(findOne(root, 'g').props).toEqual({
+      transform: `rotate(90 ${tip.x} ${tip.y - 4})`,
+    })
+  })
+
+  test('a start adornment turns to point into the source', async () => {
+    const { root } = await mountArrows(() => [
+      adornment({ at: 'start', width: 8, height: 6 }, 'arrow'),
+    ])
+
+    expect(findOne(root, 'arrow').props).toEqual({
+      x: head.x - 4,
+      y: head.y + 1,
+      width: 8,
+      height: 6,
+    })
+    expect(findOne(root, 'g').props).toEqual({
+      transform: `rotate(-90 ${head.x} ${head.y + 4})`,
+    })
+  })
+
+  test('the drawn line stops where the end adornments begin', async () => {
+    const { root } = await mountArrows(() => [
+      adornment({ at: 'start', width: 4, height: 4 }, 'tail'),
+      adornment({ at: 'end', width: 8, height: 6 }, 'arrow'),
+      adornment({ at: 'end', width: 5, height: 6 }, 'arrow'),
+    ])
+    const solvedEnds = Hierarchy.apply(
+      frames,
+      [
+        Edge.make({
+          source: 'a',
+          target: 'b',
+          adornments: [
+            turned(Frame.make({ width: 4, height: 4 }), 0),
+            turned(Frame.make({ width: 8, height: 6 }), 1),
+            turned(Frame.make({ width: 5, height: 6 }), 1),
+          ],
+        }),
+      ],
+      Hierarchy.make({ rankGap: 20 }),
+    )
+    const [start, end] = solvedEnds.edges[0]!.points
+
+    // The two at the end line up, so the line stops 13 short of it.
+    const data = LinearPath2d.toPathData(
+      Linear2d.toPath(
+        Linear2d.fromArray([
+          Vector2.make(start!.x, start!.y + 4),
+          Vector2.make(end!.x, end!.y - 13),
+        ]),
+      ),
+    )
+    expect(findOne(root, 'path').props['d']).toBe(data)
+  })
+
+  test('an end adornment and its margin keep the route straight', async () => {
+    const fan = ['a', 'b', 'c'].map((id) => Frame.make({ id, width: 40, height: 20 }))
+    const { root } = await mountLayout({ rankGap: 20, nodeGap: 10 }, () => [
+      ...['b', 'c'].map((to) =>
+        edge({ from: 'a', to, r: 4, minR: 4, smoothing: 0.5 }, () => [
+          adornment({ at: 'end', width: 8, height: 6, marginLeft: 6 }, 'arrow'),
+        ]),
+      ),
+      ...fan.map((frame) => node(frame.id, 40, 20)),
+    ])
+    const arrow = Adornment.make({
+      frame: Frame.make({ width: 8, height: 6, offsetLeft: 6 }),
+      at: 1,
+      orient: Adornment.orient.forward,
+    })
+    const solvedFan = Hierarchy.apply(
+      fan,
+      ['b', 'c'].map((target) =>
+        Edge.make({ source: 'a', target, radius: 6, minRadius: 6, adornments: [arrow] }),
+      ),
+      Hierarchy.make({ rankGap: 20, nodeGap: 10 }),
+    )
+
+    expect(props(findAll(root, 'route'))).toEqual(
+      solvedFan.edges.map(({ points }) => ({ points: translatedPoints(points) })),
+    )
+    // The route runs straight for the arrow (8) and its margin (6), then
+    // for the corner's reach of (1 + 0.5) * 4.
+    const points = solvedFan.edges[0]!.points
+    expect(points.at(-1)!.y - points.at(-2)!.y).toBeGreaterThanOrEqual(20)
+  })
+
+  test('layers and positions reach the core adornments', async () => {
+    const { root } = await mountLayout({ rankGap: 20 }, () => [
+      edge({ from: 'a', to: 'b', fromPort: 'right', r: 4 }, () => [
+        adornment({ width: 20, height: 10 }, 'label'),
+        adornment({ width: 20, height: 10 }, 'label'),
+        adornment({ width: 6, height: 6, layer: 1 }, 'label'),
+        adornment(
+          { at: '25%', position: 'absolute', orient: 'forward', width: 4, height: 4 },
+          'dot',
+        ),
+      ]),
+      node('a', 40, 20),
+      node('b', 40, 20),
+    ])
+    const solvedMixed = Hierarchy.apply(
+      frames,
+      [
+        Edge.make({
+          source: 'a',
+          target: 'b',
+          sourceSide: Edge.side.right,
+          radius: 4,
+          adornments: [
+            Adornment.make({ frame: Frame.make({ width: 20, height: 10 }) }),
+            Adornment.make({ frame: Frame.make({ width: 20, height: 10 }) }),
+            Adornment.make({ frame: Frame.make({ width: 6, height: 6 }), layer: 1 }),
+            Adornment.make({
+              frame: Frame.make({ width: 4, height: 4 }),
+              at: 0.25,
+              position: Adornment.position.absolute,
+              orient: Adornment.orient.forward,
+            }),
+          ],
+        }),
+      ],
+      Hierarchy.make({ rankGap: 20 }),
+    )
+    const placed = solvedMixed.edges[0]!.adornments
+
+    expect(props(findAll(root, 'label'))).toEqual(
+      placed.slice(0, 3).map(({ rect }) => rectProps(rect)),
+    )
+    expect(findOne(root, 'dot').props).toEqual(rectProps(placed[3]!.rect))
+  })
+
+  test('a lone end adornment on a straight edge takes no room in the layout', async () => {
+    const { root } = await mountArrows(() => [
+      adornment({ at: 'end', width: 8, height: 6 }, 'arrow'),
+    ])
+
+    expect(findOne(root, 'route').props).toEqual({ points: translatedPoints(route) })
+    expect(findAll(root, 'probe')[1]?.props).toEqual(rectProps(solved.nodes.b))
   })
 })
 

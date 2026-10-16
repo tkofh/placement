@@ -185,6 +185,19 @@ describe('roundPolyline', () => {
     const one = roundPolyline([point([0, 0]), point([100, 0]), point([100, 100])], 10, 1)
     expect(CubicPath2d.toPathData(over!)).toBe(CubicPath2d.toPathData(one!))
   })
+
+  test('rooms cap each corner, smoothing giving way first', () => {
+    const ell = [point([0, 0]), point([100, 0]), point([100, 100])]
+    // Where the corner begins along the first leg.
+    const begins = (rooms: Array<number>) =>
+      curvesOf(roundPolyline(ell, 10, 0.5, false, rooms))[1]!.x.c0
+    // It fits: (1 + 0.5) * 10.
+    expect(begins([0, 15, 0])).toBe(85)
+    // Smoothing gives way, and the radius stays.
+    expect(begins([0, 10, 0])).toBeCloseTo(90, 9)
+    // Then the radius shrinks too.
+    expect(begins([0, 4, 0])).toBeCloseTo(96, 9)
+  })
 })
 
 describe('roundRect', () => {

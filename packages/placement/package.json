@@ -18,6 +18,10 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./adornment": {
+      "types": "./dist/adornment.d.mts",
+      "import": "./dist/adornment.mjs"
+    },
     "./box": {
       "types": "./dist/box.d.mts",
       "import": "./dist/box.mjs"

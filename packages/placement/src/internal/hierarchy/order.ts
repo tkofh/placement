@@ -59,7 +59,10 @@ export function order(graph: LayeredGraph): Array<Array<number>> {
 
 // A depth-first search from the elements in rank order, then id order. Each
 // element joins its rank when first visited, so connected elements start out
-// near each other, in the order the caller wrote them.
+// near each other, in the order the caller wrote them. An element's lower
+// neighbors are visited in the order of their port shifts, so an edge that
+// leaves on the order-start side starts out before one that leaves on the
+// order-end side.
 function initialOrder(graph: LayeredGraph): Array<Array<number>> {
   const layers: Array<Array<number>> = Array.from({ length: graph.rankCount }, () => [])
   const visited = new Uint8Array(graph.ranks.length)
@@ -78,7 +81,11 @@ function initialOrder(graph: LayeredGraph): Array<Array<number>> {
       }
       visited[element] = 1
       layers[graph.ranks[element] as number]?.push(element)
-      const down = graph.down[element] as ReadonlyArray<number>
+      const down = (graph.down[element] as ReadonlyArray<number>).toSorted((a, b) => {
+        const shiftA = (graph.segments[a] as Segment).upperShift
+        const shiftB = (graph.segments[b] as Segment).upperShift
+        return coincident(shiftA, shiftB) ? 0 : shiftA - shiftB
+      })
       for (let i = down.length - 1; i >= 0; i--) {
         const lower = (graph.segments[down[i] as number] as Segment).lower
         if (visited[lower] === 0) {

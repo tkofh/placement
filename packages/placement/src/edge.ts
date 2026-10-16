@@ -1,5 +1,5 @@
 import { Pipeable, dual } from 'curvy/utils'
-import type { Frame } from './frame.ts'
+import type { Adornment } from './adornment.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/edge')
 type TypeBrand = typeof TypeBrand
@@ -10,7 +10,9 @@ type TypeBrand = typeof TypeBrand
  * `Frame` offsets are: `top` is the top side whatever the layout direction.
  *
  * An omitted or non-finite side is auto. The layout then picks the side
- * that faces along the flow toward the other end of the edge.
+ * that faces along the flow toward the other end of the edge. For a back
+ * edge, which points against the flow, the `backEdges` option of
+ * `placement/hierarchy` decides instead.
  */
 export const side = {
   top: 0,
@@ -23,29 +25,6 @@ export const side = {
  * A port side, one of the `side` encodings. Any non-finite number is auto.
  */
 export type EdgeSide = (typeof side)[keyof typeof side]
-
-/**
- * A label carried by an edge. The label is a `Frame`, so it sizes like any
- * other frame, and layout reserves room for it next to the edge.
- *
- * - `frame`: the label's size. Its order-axis offsets are clearance: the
- *   offset facing the edge line keeps the label away from it, and the
- *   other offset keeps neighbors away. Its `align` places the label across
- *   the line: `0` puts it on the left (or above, in a horizontal flow), `1`
- *   on the right (or below), and `0.5` centers it on the line. A
- *   non-finite `align` inherits the container's `alignLabels`.
- * - `at`: the position along the edge, as a fraction from the source (`0`)
- *   to the target (`1`). An omitted or non-finite value means `0.5`.
- */
-export interface EdgeLabel {
-  /** The label's size, clearance, and cross-line alignment. */
-  readonly frame: Frame
-  /**
-   * The position along the edge, from `0` at the source to `1` at the
-   * target. An omitted or non-finite value means `0.5`.
-   */
-  readonly at?: number | undefined
-}
 
 /**
  * The construction input for `make`. Only `source` and `target` are
@@ -91,13 +70,30 @@ export interface EdgeInput<K extends string> {
    * the source port. Omitted or non-finite means auto.
    */
   readonly targetAt?: number | undefined
-  /** The labels carried by the edge. Defaults to none. */
-  readonly labels?: ReadonlyArray<EdgeLabel> | undefined
+  /**
+   * How far each corner of the route reaches along its two legs, at most:
+   * its radius, for a circular corner. Renderers that round corners draw
+   * them this size where the route has room, and the route reports the size
+   * of each corner. Negative and non-finite values act as `0`. Defaults to
+   * `0`, sharp corners.
+   */
+  readonly radius?: number | undefined
+  /**
+   * How far each corner reaches at least. Where layout sets the length of a
+   * run (along the flow, and out of each port), it keeps room for corners
+   * this size, and corners shrink from `radius` toward it only where the
+   * route has less room. Runs across the flow take their length from where
+   * the nodes sit, so a short one can hold only smaller corners. Values
+   * above `radius` act as `radius`. Defaults to `0`.
+   */
+  readonly minRadius?: number | undefined
+  /** The adornments carried by the edge, from `placement/adornment`. Defaults to none. */
+  readonly adornments?: ReadonlyArray<Adornment> | undefined
 }
 
 /**
  * A directed edge spec: the ids of the two frames it connects, plus the
- * weight, length, port, and label inputs that `Hierarchy.apply` (from
+ * weight, length, port, corner, and adornment inputs that `Hierarchy.apply` (from
  * `placement/hierarchy`) reads. An edge has no geometry of its own. Layout
  * produces its route.
  *
@@ -129,8 +125,12 @@ class Edge<K extends string> extends Pipeable {
   readonly targetSide: number
   /** The target port position along its side, or non-finite for auto. */
   readonly targetAt: number
-  /** The labels carried by the edge, in input order. */
-  readonly labels: ReadonlyArray<EdgeLabel>
+  /** The raw corner radius. Layout treats negative and non-finite values as `0`. */
+  readonly radius: number
+  /** The raw minimum corner radius. Layout clamps it to `[0, radius]`. */
+  readonly minRadius: number
+  /** The adornments carried by the edge, in input order. */
+  readonly adornments: ReadonlyArray<Adornment>
 
   constructor(input: EdgeInput<K>) {
     super()
@@ -143,7 +143,9 @@ class Edge<K extends string> extends Pipeable {
     this.sourceAt = input.sourceAt ?? Number.POSITIVE_INFINITY
     this.targetSide = input.targetSide ?? Number.POSITIVE_INFINITY
     this.targetAt = input.targetAt ?? Number.POSITIVE_INFINITY
-    this.labels = input.labels ?? []
+    this.radius = input.radius ?? 0
+    this.minRadius = input.minRadius ?? 0
+    this.adornments = input.adornments ?? []
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
@@ -167,7 +169,9 @@ class Edge<K extends string> extends Pipeable {
       sourceAt: this.sourceAt,
       targetSide: this.targetSide,
       targetAt: this.targetAt,
-      labels: this.labels,
+      radius: this.radius,
+      minRadius: this.minRadius,
+      adornments: this.adornments,
     }
   }
 }
@@ -199,8 +203,8 @@ export const isEdge = (value: unknown): value is Edge<string> => {
 }
 
 // Setters rebuild from toJSON. setSource and setTarget take an id, and the
-// port and label setters take a side or a frame first, so none of them can
-// receive an edge as their first data-last argument.
+// other setters take a number, an adornment, or a list first, so none of
+// them can receive an edge as their first data-last argument.
 
 /**
  * Sets the source frame id. The result's type parameter keeps the old ids
@@ -328,42 +332,66 @@ export const setTargetPort: {
 )
 
 /**
- * Replaces every label on the edge. The data-last form omits `self` and
+ * Sets the corner radius, and optionally the minimum radius. An omitted
+ * `minRadius` keeps the current one. The data-last form omits `self` and
  * returns a function of it.
  *
  * @param self - The edge to update.
- * @param labels - The new labels, in order.
- * @returns A new edge with the labels replaced.
- */
-export const setLabels: {
-  <K extends string>(self: Edge<K>, labels: ReadonlyArray<EdgeLabel>): Edge<K>
-  (labels: ReadonlyArray<EdgeLabel>): <K extends string>(self: Edge<K>) => Edge<K>
-} = dual(
-  2,
-  <K extends string>(self: Edge<K>, labels: ReadonlyArray<EdgeLabel>) =>
-    new Edge({ ...self.toJSON(), labels }),
-)
-
-/**
- * Appends a label to the edge. The data-last form omits `self` and returns
- * a function of it.
- *
- * @param self - The edge to update.
- * @param frame - The label's frame.
- * @param at - The position along the edge, from `0` at the source to `1` at the
- * target. Defaults to `0.5`.
- * @returns A new edge with the label appended.
+ * @param radius - How far each corner reaches along its legs, at most.
+ * @param minRadius - How far each corner reaches, at least.
+ * @returns A new edge with the radius replaced.
  * @example
  * ```ts
  * const edge = Edge.make({ source: 'a', target: 'b' })
- * Edge.addLabel(edge, Frame.make({ width: 40, height: 16 })).labels.length // 1
+ * Edge.setRadius(edge, 12, 6).minRadius // 6
+ * edge.pipe(Edge.setRadius(8)).radius // 8
  * ```
  */
-export const addLabel: {
-  <K extends string>(self: Edge<K>, frame: Frame, at?: number): Edge<K>
-  (frame: Frame, at?: number): <K extends string>(self: Edge<K>) => Edge<K>
+export const setRadius: {
+  <K extends string>(self: Edge<K>, radius: number, minRadius?: number): Edge<K>
+  (radius: number, minRadius?: number): <K extends string>(self: Edge<K>) => Edge<K>
 } = dual(
   (args) => isEdge(args[0]),
-  <K extends string>(self: Edge<K>, frame: Frame, at?: number) =>
-    new Edge({ ...self.toJSON(), labels: [...self.labels, { frame, at }] }),
+  <K extends string>(self: Edge<K>, radius: number, minRadius?: number) =>
+    new Edge({ ...self.toJSON(), radius, minRadius: minRadius ?? self.minRadius }),
+)
+
+/**
+ * Replaces every adornment on the edge. The data-last form omits `self` and
+ * returns a function of it.
+ *
+ * @param self - The edge to update.
+ * @param adornments - The new adornments, in order.
+ * @returns A new edge with the adornments replaced.
+ */
+export const setAdornments: {
+  <K extends string>(self: Edge<K>, adornments: ReadonlyArray<Adornment>): Edge<K>
+  (adornments: ReadonlyArray<Adornment>): <K extends string>(self: Edge<K>) => Edge<K>
+} = dual(
+  2,
+  <K extends string>(self: Edge<K>, adornments: ReadonlyArray<Adornment>) =>
+    new Edge({ ...self.toJSON(), adornments }),
+)
+
+/**
+ * Appends an adornment to the edge. The data-last form omits `self` and
+ * returns a function of it.
+ *
+ * @param self - The edge to update.
+ * @param adornment - The adornment to append.
+ * @returns A new edge with the adornment appended.
+ * @example
+ * ```ts
+ * const edge = Edge.make({ source: 'a', target: 'b' })
+ * const label = Adornment.make({ frame: Frame.make({ width: 40, height: 16 }) })
+ * Edge.addAdornment(edge, label).adornments.length // 1
+ * ```
+ */
+export const addAdornment: {
+  <K extends string>(self: Edge<K>, adornment: Adornment): Edge<K>
+  (adornment: Adornment): <K extends string>(self: Edge<K>) => Edge<K>
+} = dual(
+  2,
+  <K extends string>(self: Edge<K>, adornment: Adornment) =>
+    new Edge({ ...self.toJSON(), adornments: [...self.adornments, adornment] }),
 )

@@ -24,7 +24,7 @@ import { type LengthPercentageInput, useLengthPercentage } from '../props/length
 
 export type HierarchyDirectionInput = keyof typeof Hierarchy.direction
 
-export type HierarchyRoutingInput = keyof typeof Hierarchy.routing
+export type HierarchyBackEdgesInput = keyof typeof Hierarchy.backEdges
 
 export interface HierarchyLayoutProps extends InsetProps, TransformProps {
   /** A prebuilt spec. When set, it replaces every other layout prop. */
@@ -32,11 +32,12 @@ export interface HierarchyLayoutProps extends InsetProps, TransformProps {
   /** The direction edges flow in: `'down'` (default), `'up'`, `'right'`, or `'left'`. */
   direction?: HierarchyDirectionInput
   /**
-   * How edges route: `'orthogonal'` (default) runs every segment along or
-   * across the flow, with jogs between ranks in lanes `edgeGap` apart.
-   * `'polyline'` shifts across the flow on diagonals.
+   * How back edges (the edges that point against the flow) attach:
+   * `'direct'` (default) runs them straight back against the flow, and
+   * `'loop'` leaves the source downstream and loops around into the target
+   * from upstream. Edges with an explicit side keep it.
    */
-  routing?: HierarchyRoutingInput
+  backEdges?: HierarchyBackEdgesInput
   /** The space between adjacent ranks. Percentages resolve against the parent along the flow. */
   rankGap?: LengthPercentageInput
   /** The space between adjacent nodes in a rank. Percentages resolve across the flow. */
@@ -45,8 +46,8 @@ export interface HierarchyLayoutProps extends InsetProps, TransformProps {
   edgeGap?: LengthPercentageInput
   /** How nodes sit in the thickness of their rank. Defaults to `'center'`. */
   alignItems?: AlignItemsInput
-  /** Which side of their edge labels sit on: `'start'`, `'center'` (default), `'end'`, or a ratio. */
-  alignLabels?: RatioInput
+  /** Which side of their edge adornments sit on: `'start'`, `'center'` (default), `'end'`, or a ratio. */
+  alignAdornments?: RatioInput
   debug?: boolean
 }
 
@@ -73,12 +74,12 @@ export const HierarchyLayout = defineComponent(
 
       return Hierarchy.make({
         direction: direction.value,
-        routing: Hierarchy.routing[props.routing ?? 'orthogonal'] ?? Hierarchy.routing.orthogonal,
+        backEdges: Hierarchy.backEdges[props.backEdges ?? 'direct'] ?? Hierarchy.backEdges.direct,
         rankGap: rankGap.value,
         nodeGap: nodeGap.value,
         edgeGap: edgeGap.value,
         ...alignItems.value,
-        alignLabels: resolveRatio(props.alignLabels, 0.5),
+        alignAdornments: resolveRatio(props.alignAdornments, 0.5),
       })
     })
 
@@ -100,12 +101,12 @@ export const HierarchyLayout = defineComponent(
       ...TRANSFORM_PROP_KEYS,
       'layout',
       'direction',
-      'routing',
+      'backEdges',
       'rankGap',
       'nodeGap',
       'edgeGap',
       'alignItems',
-      'alignLabels',
+      'alignAdornments',
       'debug',
     ],
     inheritAttrs: false,

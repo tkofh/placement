@@ -54,6 +54,10 @@
       "types": "./dist/components/GraphicPoint.d.mts",
       "import": "./dist/components/GraphicPoint.mjs"
     },
+    "./GraphicPolygon": {
+      "types": "./dist/components/GraphicPolygon.d.mts",
+      "import": "./dist/components/GraphicPolygon.mjs"
+    },
     "./GraphicRect": {
       "types": "./dist/components/GraphicRect.d.mts",
       "import": "./dist/components/GraphicRect.mjs"
@@ -66,13 +70,13 @@
       "types": "./dist/components/GraphicText.d.mts",
       "import": "./dist/components/GraphicText.mjs"
     },
+    "./HierarchyAdornment": {
+      "types": "./dist/components/HierarchyAdornment.d.mts",
+      "import": "./dist/components/HierarchyAdornment.mjs"
+    },
     "./HierarchyEdge": {
       "types": "./dist/components/HierarchyEdge.d.mts",
       "import": "./dist/components/HierarchyEdge.mjs"
-    },
-    "./HierarchyLabel": {
-      "types": "./dist/components/HierarchyLabel.d.mts",
-      "import": "./dist/components/HierarchyLabel.mjs"
     },
     "./HierarchyLayout": {
       "types": "./dist/components/HierarchyLayout.d.mts",

@@ -9,11 +9,12 @@ const components = [
   'GraphicLine',
   'GraphicPath',
   'GraphicPoint',
+  'GraphicPolygon',
   'GraphicRect',
   'GraphicRoot',
   'GraphicText',
+  'HierarchyAdornment',
   'HierarchyEdge',
-  'HierarchyLabel',
   'HierarchyLayout',
   'HierarchyNode',
 ]
