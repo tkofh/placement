@@ -1,8 +1,8 @@
 import { Pipeable } from 'curvy/utils'
-import type { Adornment } from './adornment.ts'
+import type { Adornment, AdornmentPlacement } from './adornment.ts'
 import type { Edge } from './edge.ts'
 import type { Frame } from './frame.ts'
-import { type AxisFrame, type SolveAdornment } from './internal/hierarchy/adornments.ts'
+import { type SolveAdornment, frameSize, resolveAdornment } from './internal/adornments.ts'
 import {
   type LogicalBox,
   type LogicalPoint,
@@ -216,27 +216,6 @@ export const isHierarchy = (value: unknown): value is Hierarchy => {
 }
 
 /**
- * Where an adornment landed.
- *
- * - `rect`: the adornment's frame, upright. Turn it by `angle` about its
- *   center to draw it.
- * - `angle`: the direction its local x axis points, in radians (atan2
- *   convention, with the y axis down). `0` for an upright adornment.
- * - `along`: the stretch of the route it covers, as lengths along the
- *   route's polyline from its first point. An absolute adornment on a
- *   rounded corner maps the corner's arc evenly onto the two stretches of
- *   polyline the corner replaces.
- */
-export interface HierarchyAdornment {
-  /** The adornment's frame before it turns. */
-  readonly rect: Rect.Rect
-  /** How far it turns about the rect's center, in radians. */
-  readonly angle: number
-  /** The stretch of the route it covers, as lengths along the polyline. */
-  readonly along: Interval.Interval
-}
-
-/**
  * The solved geometry of one edge.
  *
  * - `points`: the polyline from the source port to the target port, with
@@ -256,7 +235,7 @@ export interface HierarchyRoute {
   /** The size of the corner at each point, `0` at both ends. */
   readonly radii: ReadonlyArray<number>
   /** Where each adornment landed, in the edge's adornment order. */
-  readonly adornments: ReadonlyArray<HierarchyAdornment>
+  readonly adornments: ReadonlyArray<AdornmentPlacement>
 }
 
 /**
@@ -452,7 +431,7 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
       targetPort: resolvePort(edge.targetSide, edge.targetAt, hierarchy.direction),
       radius,
       minRadius: Math.min(finite(Math.max(edge.minRadius, 0)), radius),
-      adornments: edge.adornments.map((adornment) => resolveAdornment(adornment, hierarchy)),
+      adornments: edge.adornments.map((adornment) => resolveEdgeAdornment(adornment, hierarchy)),
     }
   })
 
@@ -559,19 +538,6 @@ function finite(value: number): number {
   return Number.isFinite(value) ? value : 0
 }
 
-// A frame's size along one axis, clamped to its finite limits. Unset sizes
-// are `0`.
-function frameSize(size: number, min: number, max: number): number {
-  let result = finite(Math.max(size, 0))
-  if (Number.isFinite(max)) {
-    result = Math.min(result, max)
-  }
-  if (Number.isFinite(min)) {
-    result = Math.max(result, min)
-  }
-  return result
-}
-
 // Whether each direction maps logical space onto physical space by a
 // reflection: `up` mirrors the rank axis, and `right` swaps the axes.
 const mirrors: Record<HierarchyDirection, boolean> = {
@@ -581,41 +547,14 @@ const mirrors: Record<HierarchyDirection, boolean> = {
   [direction.left]: false,
 }
 
-// Resolves an adornment into logical terms. Upright frames map their
-// physical axes to the logical ones, mirroring the rank axis in the
-// reversed directions. Turned frames keep their own axes.
-function resolveAdornment(adornment: Adornment, hierarchy: Hierarchy): SolveAdornment {
-  const { frame } = adornment
-  const vertical = hierarchy.isVertical
-  const reverse = hierarchy.isReverse
-  const width = frameSize(frame.width, frame.minWidth, frame.maxWidth)
-  const height = frameSize(frame.height, frame.minHeight, frame.maxHeight)
-  const top = finite(frame.offsetTop)
-  const right = finite(frame.offsetRight)
-  const bottom = finite(frame.offsetBottom)
-  const left = finite(frame.offsetLeft)
-  const align = auto(frame.align, hierarchy.alignAdornments)
-  const [leading, trailing] = vertical ? [top, bottom] : [left, right]
-  const o: AxisFrame = vertical
-    ? { size: width, start: left, end: right, align }
-    : { size: height, start: top, end: bottom, align }
-  const r: AxisFrame = {
-    size: vertical ? height : width,
-    start: reverse ? trailing : leading,
-    end: reverse ? leading : trailing,
-    align: reverse ? 1 - align : align,
-  }
-  const at = Number.isFinite(adornment.at) ? Math.min(Math.max(adornment.at, 0), 1) : 0.5
-  return {
-    at,
-    flow: adornment.position !== 1,
-    layer: Number.isFinite(adornment.layer) ? Math.trunc(adornment.layer) : 0,
-    orient: adornment.orient === 1 || adornment.orient === 2 ? adornment.orient : 0,
-    o,
-    r,
-    x: { size: width, start: left, end: right, align: 0.5 },
-    y: { size: height, start: top, end: bottom, align },
-  }
+// Resolves an adornment into logical terms (see `resolveAdornment`).
+function resolveEdgeAdornment(adornment: Adornment, hierarchy: Hierarchy): SolveAdornment {
+  return resolveAdornment(
+    adornment,
+    hierarchy.isVertical,
+    hierarchy.isReverse,
+    hierarchy.alignAdornments,
+  )
 }
 
 // Places a node's polygon in its box. The polygon fills the node's

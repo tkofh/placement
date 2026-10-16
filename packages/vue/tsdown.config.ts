@@ -4,6 +4,10 @@ export default defineConfig({
   entry: [
     'src/index.ts',
     'src/nuxt.ts',
+    'src/components/ConnectorAdornment.ts',
+    'src/components/ConnectorEdge.ts',
+    'src/components/ConnectorLayout.ts',
+    'src/components/ConnectorNode.ts',
     'src/components/FlexItem.ts',
     'src/components/FlexLayout.ts',
     'src/components/GraphicCircle.ts',

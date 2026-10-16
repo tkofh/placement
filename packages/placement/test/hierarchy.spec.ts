@@ -850,7 +850,7 @@ describe('apply', () => {
         Hierarchy.make({ rankGap: 40 }),
       )
       const route = layout.edges[0] as Hierarchy.HierarchyRoute
-      const placed = route.adornments[0] as Hierarchy.HierarchyAdornment
+      const placed = route.adornments[0] as Adornment.AdornmentPlacement
       const total = route.points
         .slice(1)
         .reduce((sum, point, i) => sum + Point.distance(route.points[i] as Point.Point, point), 0)

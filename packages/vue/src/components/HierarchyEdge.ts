@@ -1,12 +1,9 @@
-import { CubicPath2d, LinearPath2d } from 'curvy/path'
-import { Linear2d } from 'curvy/splines'
-import { Vector2 } from 'curvy/vector'
 import type * as Point from 'placement/point'
-import { type SlotsType, type VNode, Fragment, computed, defineComponent, h } from 'vue'
+import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
 import { useHierarchyEdge, useHierarchyPercentBasis } from '../composables/useHierarchy.ts'
-import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
-import { roundPolyline } from '../internal/corners.ts'
+import { PAINT_PROP_KEYS, type PaintProps } from '../composables/usePaint.ts'
 import { finiteNumber } from '../internal/curve.ts'
+import { useEdgeRenderer } from '../internal/edge.ts'
 import { type PortInput, resolvePort } from '../internal/props/port.ts'
 import { type SmoothingInput, resolveSmoothing } from '../internal/props/smoothing.ts'
 import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
@@ -49,7 +46,7 @@ export interface HierarchyEdgeProps extends PaintProps {
 }
 
 export const HierarchyEdge = defineComponent(
-  (props: HierarchyEdgeProps, { slots, attrs }) => {
+  (props: HierarchyEdgeProps, { slots }) => {
     // Percentages resolve against the layout's parent, as node sizes do,
     // because the radius sizes the layout itself.
     const basis = useHierarchyPercentBasis().width
@@ -81,39 +78,7 @@ export const HierarchyEdge = defineComponent(
 
     // The drawn line stops short of each end by the length of the trimming
     // adornments there, and each corner takes the size the layout solved.
-    const pathData = computed(() => {
-      const { points, rooms } = solution.value.line
-      if (points.length < 2) {
-        return undefined
-      }
-      if (radius.value > 0) {
-        const rounded = roundPolyline(points, radius.value, smoothing.value, false, rooms)
-        return rounded === undefined ? undefined : CubicPath2d.toPathData(rounded)
-      }
-      const vectors = points.map((point) => Vector2.make(point.x, point.y))
-      return LinearPath2d.toPathData(Linear2d.toPath(Linear2d.fromArray(vectors)))
-    })
-
-    const paint = usePaint(props)
-
-    return () => {
-      const d = pathData.value
-      const route = solution.value.route
-      // The path renders first, so adornments drawn in the slot sit on top of it.
-      return h(Fragment, {}, [
-        d === undefined
-          ? null
-          : h('path', {
-              d,
-              ...attrs,
-              ...paint.value,
-              // An SVG path with no fill attribute fills black. An edge is a
-              // stroke by default.
-              fill: paint.value.fill ?? 'none',
-            }),
-        slots.default?.({ points: route.points, radii: route.radii }),
-      ])
-    }
+    return useEdgeRenderer(props, slots, solution, radius, smoothing)
   },
   {
     name: 'HierarchyEdge',

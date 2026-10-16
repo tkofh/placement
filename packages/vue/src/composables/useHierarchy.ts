@@ -2,7 +2,6 @@ import type * as Adornment from 'placement/adornment'
 import * as Edge from 'placement/edge'
 import type { Frame } from 'placement/frame'
 import * as Hierarchy from 'placement/hierarchy'
-import * as Interval from 'placement/interval'
 import * as Point from 'placement/point'
 import type * as Polygon from 'placement/polygon'
 import * as Rect from 'placement/rect'
@@ -15,12 +14,19 @@ import {
   inject,
   provide,
   shallowRef,
-  ssrContextKey,
   toValue,
   watchEffect,
 } from 'vue'
 import { preferCachedPoint } from '../data/point.ts'
-import { type DrawnLine, drawnLine } from '../internal/adornment.ts'
+import {
+  type EdgeAdornmentInput,
+  type EdgeRoute,
+  type EdgeSolution,
+  emptyRoute,
+  isSSR,
+  useEdgeAdornment,
+  useEdgeAdornments,
+} from '../internal/edge.ts'
 import { type Child, useChild, useChildren } from './useChildren.ts'
 import { useParentHeight, useParentWidth } from './useSizingContext.ts'
 
@@ -54,9 +60,7 @@ export interface HierarchyNodeInput {
 }
 
 /** The geometry of one edge: its polyline, its corner sizes, and its adornments. */
-export type HierarchyEdgeRoute = Hierarchy.HierarchyRoute
-
-const emptyRoute: HierarchyEdgeRoute = { points: [], radii: [], adornments: [] }
+export type HierarchyEdgeRoute = EdgeRoute
 
 /** The edge fields a `useHierarchyEdge` caller supplies. Adornments come from adornment children. */
 export type HierarchyEdgeInput = Omit<Edge.EdgeInput<string>, 'adornments' | 'radius' | 'minRadius'>
@@ -67,19 +71,10 @@ export type HierarchyEdgeInput = Omit<Edge.EdgeInput<string>, 'adornments' | 'ra
  * adornment at `at` `0` trims the start of the line, and one at `at` `1`
  * the end.
  */
-export interface HierarchyAdornmentInput {
-  readonly adornment: Adornment.Adornment
-  readonly trims?: boolean
-}
+export type HierarchyAdornmentInput = EdgeAdornmentInput
 
-/** Where an adornment landed (see `HierarchyAdornment` in `placement/hierarchy`). */
-export type HierarchyAdornmentPlacement = Hierarchy.HierarchyAdornment
-
-const unplaced: HierarchyAdornmentPlacement = {
-  rect: Rect.make(),
-  angle: 0,
-  along: Interval.make(0, 0),
-}
+/** Where an adornment landed (see `AdornmentPlacement` in `placement/adornment`). */
+export type HierarchyAdornmentPlacement = Adornment.AdornmentPlacement
 
 /**
  * How an edge draws its corners, which sizes them in the layout. A smoothed
@@ -99,11 +94,7 @@ export interface HierarchyEdgeDrawing {
  * of the route's ends to make room for trimming adornments, and the line it
  * draws.
  */
-export interface HierarchyEdgeSolution {
-  readonly route: HierarchyEdgeRoute
-  readonly insets: { readonly start: number; readonly end: number }
-  readonly line: DrawnLine
-}
+export type HierarchyEdgeSolution = EdgeSolution
 
 type NodeChild = Child<HierarchyNodeInput, Rect.Rect>
 type EdgeChild = Child<Edge.Edge<string>, HierarchyEdgeRoute>
@@ -287,11 +278,6 @@ export function useHierarchyPercentBasis(): HierarchyPercentBasis {
   return basis
 }
 
-// `renderToString` provides the SSR context app-wide.
-function isSSR(): boolean {
-  return inject(ssrContextKey, null) !== null
-}
-
 function useOrigin(): ComputedRef<Point.Point> {
   const origin = inject(ORIGIN, null)
   if (origin === null) {
@@ -333,9 +319,7 @@ export function useHierarchyEdge(
   edge: MaybeRefOrGetter<HierarchyEdgeInput>,
   drawing: MaybeRefOrGetter<HierarchyEdgeDrawing> = { radius: 0, minRadius: 0, smoothing: 0 },
 ): ComputedRef<HierarchyEdgeSolution> {
-  const adornments = shallowRef<
-    ReadonlyArray<Child<HierarchyAdornmentInput, HierarchyAdornmentPlacement>>
-  >([])
+  const { adornments, solve: solveEdge } = useEdgeAdornments(ADORNMENT_CHANNEL)
 
   const input = computed(() => {
     const { radius, minRadius, smoothing } = toValue(drawing)
@@ -344,65 +328,13 @@ export function useHierarchyEdge(
       ...toValue(edge),
       radius: reach * Math.max(radius, 0),
       minRadius: reach * Math.max(minRadius, 0),
-      adornments: adornments.value.map((child) => child.input.value.adornment),
+      adornments: adornments.value,
     })
   })
 
   const local = useChild(EDGE_CHANNEL, input, emptyRoute)
   const origin = useOrigin()
-  const route = computed(() => translateRoute(local.value, origin.value))
-
-  // Each end of the drawn line stops where the trimming adornments at that
-  // end begin.
-  const insets = computed(() => {
-    const { points, adornments: placed } = route.value
-    let total = 0
-    for (let i = 1; i < points.length; i++) {
-      total += Point.distance(points[i - 1]!, points[i]!)
-    }
-    let start = 0
-    let end = 0
-    for (const [k, child] of adornments.value.entries()) {
-      const { adornment, trims } = child.input.value
-      const along = placed[k]?.along
-      if (trims !== true || along === undefined) {
-        continue
-      }
-      if (adornment.at < 0.5) {
-        start = Math.max(start, along.end)
-      } else {
-        end = Math.max(end, total - along.start)
-      }
-    }
-    return { start, end }
-  })
-
-  const line = computed(() => drawnLine(route.value.points, route.value.radii, insets.value))
-
-  // As in the layout, the mapper records the list and an effect writes the
-  // outputs.
-  const assign = () => {
-    const placed = route.value.adornments
-    for (const [k, child] of adornments.value.entries()) {
-      child.output.value = placed[k] ?? unplaced
-    }
-  }
-
-  const ssr = isSSR()
-
-  useChildren<HierarchyAdornmentInput, HierarchyAdornmentPlacement>(
-    ADORNMENT_CHANNEL,
-    (children) => {
-      adornments.value = children
-      if (ssr) {
-        assign()
-      }
-    },
-  )
-
-  watchEffect(assign, { flush: 'pre' })
-
-  return computed(() => ({ route: route.value, insets: insets.value, line: line.value }))
+  return solveEdge(computed(() => translateRoute(local.value, origin.value)))
 }
 
 /**
@@ -414,5 +346,5 @@ export function useHierarchyEdge(
 export function useHierarchyAdornment(
   adornment: MaybeRefOrGetter<HierarchyAdornmentInput>,
 ): Readonly<Ref<HierarchyAdornmentPlacement>> {
-  return useChild(ADORNMENT_CHANNEL, adornment, unplaced)
+  return useEdgeAdornment(ADORNMENT_CHANNEL, adornment)
 }

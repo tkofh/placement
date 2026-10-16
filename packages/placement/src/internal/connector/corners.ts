@@ -1,10 +1,10 @@
 import { coincident } from 'curvy/number'
+import { lengths, resolveRadii } from '../adornments.ts'
 import type { XY } from './nudge.ts'
 
 // The sizes of the corners of orthogonal routes. Each corner reaches at most
-// its route's radius, and no more of a leg than its share: a leg between two
-// corners splits evenly between them, and a leg from a port belongs to its
-// one corner.
+// its route's radius, never into a wall (a stretch that flow adornments
+// take), and no more of a leg than its share (see `resolveRadii`).
 //
 // Routes that turn together, nested a small distance apart, keep that
 // distance through the turn only when their corners share a center, like the
@@ -38,29 +38,20 @@ const before = (a: number, b: number) => a < b && !coincident(a, b)
  * @param routes - The routes, as points with no repeats and no points in the
  * middle of a straight run.
  * @param radii - The radius of each route.
+ * @param walls - The stretches of each route that its flow adornments
+ * take, as lengths along it.
  * @returns The size of the corner at each point of each route, `0` at both
  * ends.
  */
 export function cornerRadii(
   routes: ReadonlyArray<ReadonlyArray<XY>>,
   radii: ReadonlyArray<number>,
+  walls: ReadonlyArray<ReadonlyArray<readonly [number, number]>> = [],
 ): Array<Array<number>> {
   const sizes = routes.map((points, r) => {
     const radius = radii[r] ?? 0
     const limit = Number.isFinite(radius) && radius > 0 ? radius : 0
-    const legs = points.slice(1).map((point, i) => {
-      const previous = points[i] as XY
-      return Math.abs(point[0] - previous[0]) + Math.abs(point[1] - previous[1])
-    })
-    const last = points.length - 1
-    return points.map((_, i) => {
-      if (i === 0 || i === last) {
-        return 0
-      }
-      const into = (legs[i - 1] as number) / (i - 1 === 0 ? 1 : 2)
-      const out = (legs[i] as number) / (i === last - 1 ? 1 : 2)
-      return Math.min(limit, into, out)
-    })
+    return resolveRadii(points, lengths(points), limit, walls[r] ?? [])
   })
 
   // The right-angled corners, grouped by the turn they make.

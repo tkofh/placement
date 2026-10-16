@@ -1,5 +1,7 @@
 import { Pipeable, dual } from 'curvy/utils'
 import type { Frame } from './frame.ts'
+import type * as Interval from './interval.ts'
+import type * as Rect from './rect.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/adornment')
 type TypeBrand = typeof TypeBrand
@@ -9,16 +11,20 @@ type TypeBrand = typeof TypeBrand
  * `absolute` is `1`.
  *
  * - `flow` adornments sit only on straight runs of the route, never on a
- *   corner. Each one goes to the straight run nearest its `at`, and the
- *   layout makes that run long enough for every flow adornment on it. The
- *   runs it can size are the stubs at either end of the edge (the straight
- *   run out of each port) and the runs through the ranks the edge crosses.
- *   Flow adornments in the same `layer` on one run line up one after
- *   another, in the order of their `at`, like flex items: none overlaps
- *   another, and the frame's margins along the line keep them apart and
- *   keep corners away. A run at either end packs its adornments against
- *   the port, so an adornment at `at` `0` or `1` sits flush with its node.
- *   A run through a rank centers them in the rank.
+ *   corner. Flow adornments in the same `layer` on one run line up one
+ *   after another, in the order of their `at`, like flex items: none
+ *   overlaps another, and the frame's margins along the line keep them
+ *   apart and keep corners away. An adornment at `at` `0` or `1` packs
+ *   against the port, flush with its node. In a hierarchy (see
+ *   `placement/hierarchy`), each one goes to the straight run nearest its
+ *   `at`, and the layout makes that run long enough for every flow
+ *   adornment on it. The runs it can size are the stubs at either end of
+ *   the edge (the straight run out of each port) and the runs through the
+ *   ranks the edge crosses, which center their adornments in the rank. A
+ *   connector (see `placement/connector`) routes around placed rects and
+ *   sizes no runs: each one goes to the straight run nearest where its
+ *   `at` falls that has room for it, and centers on where it falls, or on
+ *   the run when it falls elsewhere.
  * - `absolute` adornments sit at `at` of the way along the route as drawn,
  *   rounded corners included, wherever that falls, and take no room in the
  *   layout.
@@ -96,6 +102,8 @@ export interface AdornmentInput {
  * A frame that decorates an edge: a label, an arrowhead, or any other
  * marker. `Hierarchy.apply` (from `placement/hierarchy`) places each of an
  * edge's adornments, and makes room for the ones that flow.
+ * `Connector.apply` (from `placement/connector`) places them on the routes
+ * it finds, and keeps corners clear of the ones that flow.
  *
  * Values are immutable. Every setter returns a new adornment. Create one
  * with `make`.
@@ -147,6 +155,28 @@ class Adornment extends Pipeable {
 }
 
 export type { Adornment }
+
+/**
+ * Where an adornment landed on its edge's route, as the layouts that place
+ * adornments report it (see `placement/hierarchy` and `placement/connector`).
+ *
+ * - `rect`: the adornment's frame, upright. Turn it by `angle` about its
+ *   center to draw it.
+ * - `angle`: the direction its local x axis points, in radians (atan2
+ *   convention, with the y axis down). `0` for an upright adornment.
+ * - `along`: the stretch of the route it covers, as lengths along the
+ *   route's polyline from its first point. An absolute adornment on a
+ *   rounded corner maps the corner's arc evenly onto the two stretches of
+ *   polyline the corner replaces.
+ */
+export interface AdornmentPlacement {
+  /** The adornment's frame before it turns. */
+  readonly rect: Rect.Rect
+  /** How far it turns about the rect's center, in radians. */
+  readonly angle: number
+  /** The stretch of the route it covers, as lengths along the polyline. */
+  readonly along: Interval.Interval
+}
 
 /**
  * Creates an `Adornment`.

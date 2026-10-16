@@ -1,3 +1,7 @@
+export { ConnectorAdornment } from './components/ConnectorAdornment.ts'
+export { ConnectorEdge } from './components/ConnectorEdge.ts'
+export { ConnectorLayout } from './components/ConnectorLayout.ts'
+export { ConnectorNode } from './components/ConnectorNode.ts'
 export { FlexItem } from './components/FlexItem.ts'
 export { FlexLayout } from './components/FlexLayout.ts'
 export { GraphicCircle } from './components/GraphicCircle.ts'

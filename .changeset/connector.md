@@ -15,4 +15,9 @@ routes that turn together get corners about one center, as on a metro map.
 An auto side is the side of the cheapest route, and auto ports that share a
 side spread out without crossing. Each edge can also pass through `via`
 points, stay out of its own `avoid` rects, and prefer clockwise or
-counterclockwise turns.
+counterclockwise turns. Routes place their edges' adornments (`flow` ones
+on the straight run where they fall, packed against the port at either
+end, with corners kept clear of them; `absolute` ones on the route as
+drawn), and the spec's `alignAdornments` picks their side of the line.
+`AdornmentPlacement` in `placement/adornment` is the shape that both
+layouts report placed adornments in.

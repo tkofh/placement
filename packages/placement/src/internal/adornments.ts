@@ -1,14 +1,28 @@
 import { coincident } from 'curvy/number'
-import type { LogicalPoint, PlacedAdornment } from './layout.ts'
+import type { Adornment } from '../adornment.ts'
+import { auto } from '../utils/arguments.ts'
 
 // The geometry of edge adornments in logical space: how much of a straight
 // run each one takes, how flow adornments line up on a run, how big each
 // corner of a route can be, and where a point at some length along the
-// drawn route lands.
+// drawn route lands. Both routers use it: the hierarchy in its logical
+// space, and the connector in physical space, which is the hierarchy's
+// logical space when edges flow down.
 //
 // Axis 0 is the order axis and axis 1 the rank axis, the indices of a
 // `LogicalPoint`. A run's `sign` is 1 when the route, from source to target,
 // heads toward increasing coordinates along it.
+
+export type LogicalPoint = readonly [o: number, r: number]
+
+// Where an adornment landed: its center, the logical direction of its local
+// x axis when it turns, and the stretch of the route it covers, as lengths
+// along the route's polyline.
+export interface PlacedAdornment {
+  readonly center: LogicalPoint
+  readonly direction: LogicalPoint | undefined
+  readonly along: readonly [start: number, end: number]
+}
 
 export const UPRIGHT = 0
 export const FORWARD = 1
@@ -40,6 +54,64 @@ export interface SolveAdornment {
   // trails, end leads) and y across it (start above its x axis).
   readonly x: AxisFrame
   readonly y: AxisFrame
+}
+
+function finite(value: number): number {
+  return Number.isFinite(value) ? value : 0
+}
+
+// A frame's size along one axis, clamped to its finite limits. Unset sizes
+// are `0`.
+export function frameSize(size: number, min: number, max: number): number {
+  let result = finite(Math.max(size, 0))
+  if (Number.isFinite(max)) {
+    result = Math.min(result, max)
+  }
+  if (Number.isFinite(min)) {
+    result = Math.max(result, min)
+  }
+  return result
+}
+
+// Resolves an adornment into logical terms. Upright frames map their
+// physical axes to the logical ones: x to the order axis when `vertical`,
+// and the rank axis mirrored when `reverse`. Turned frames keep their own
+// axes. A non-finite `align` on the frame takes `align`.
+export function resolveAdornment(
+  adornment: Adornment,
+  vertical: boolean,
+  reverse: boolean,
+  align: number,
+): SolveAdornment {
+  const { frame } = adornment
+  const width = frameSize(frame.width, frame.minWidth, frame.maxWidth)
+  const height = frameSize(frame.height, frame.minHeight, frame.maxHeight)
+  const top = finite(frame.offsetTop)
+  const right = finite(frame.offsetRight)
+  const bottom = finite(frame.offsetBottom)
+  const left = finite(frame.offsetLeft)
+  const side = auto(frame.align, align)
+  const [leading, trailing] = vertical ? [top, bottom] : [left, right]
+  const o: AxisFrame = vertical
+    ? { size: width, start: left, end: right, align: side }
+    : { size: height, start: top, end: bottom, align: side }
+  const r: AxisFrame = {
+    size: vertical ? height : width,
+    start: reverse ? trailing : leading,
+    end: reverse ? leading : trailing,
+    align: reverse ? 1 - side : side,
+  }
+  const at = Number.isFinite(adornment.at) ? Math.min(Math.max(adornment.at, 0), 1) : 0.5
+  return {
+    at,
+    flow: adornment.position !== 1,
+    layer: Number.isFinite(adornment.layer) ? Math.trunc(adornment.layer) : 0,
+    orient: adornment.orient === 1 || adornment.orient === 2 ? adornment.orient : 0,
+    o,
+    r,
+    x: { size: width, start: left, end: right, align: 0.5 },
+    y: { size: height, start: top, end: bottom, align: side },
+  }
 }
 
 // An adornment measured on a line along some axis: its size along the line,

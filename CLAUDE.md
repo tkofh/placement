@@ -41,8 +41,8 @@ shapes that ports sit on, through the phases in
 `internal/hierarchy/`: acyclic (`internal/graph/acyclic.ts`), rank
 (network simplex), order, position (Brandes-Köpf), and layout (bands,
 ports, routes). `lanes.ts` orders the jogs
-and U-turns of orthogonal routes, and `adornments.ts` packs adornments onto
-straight runs and sizes corners. `Polygon` is a regular or star polygon that fills a rect, and
+and U-turns of orthogonal routes, and `internal/adornments.ts` (shared with
+the connector) packs adornments onto straight runs and sizes corners. `Polygon` is a regular or star polygon that fills a rect, and
 `Polygon.apply` places it, growing a rounded one so that its rounded
 outline fills the rect (`internal/polygon.ts`, shared with the hierarchy
 ports). `Connector` is a routing spec, and `Connector.apply` routes `Edge`s
@@ -54,7 +54,8 @@ length and turns (A\*) between sets of endpoints; `acyclic.ts` breaks
 cycles and orders pairwise preferences for both routers. Then
 `internal/connector/nudge.ts` moves overlapping route segments apart and
 centers jogs, with `internal/separation.ts`, a 1D separation-constraint
-solver (VPSC), and `internal/connector/corners.ts` sizes corners, nesting
+solver (VPSC), `internal/connector/adornments.ts` places adornments on the
+routes, and `internal/connector/corners.ts` sizes corners, nesting
 those of routes that turn together about one center. `Rect`,
 `Point`, `Dimensions`, and `Offset` are the 2D value types. Type-only cross-module imports can stay flat
 (`import type { Rect } from ...`). Use namespace imports for value usage.

@@ -1,13 +1,22 @@
 import { coincident } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
+import type { Adornment, AdornmentPlacement } from './adornment.ts'
 import type { Edge } from './edge.ts'
+import {
+  type PlacedAdornment,
+  frameSize,
+  lengths,
+  resolveAdornment,
+} from './internal/adornments.ts'
+import { placeAdornments, placeFlow } from './internal/connector/adornments.ts'
 import { cornerRadii } from './internal/connector/corners.ts'
 import { type RouteConstraints, type XY, nudge } from './internal/connector/nudge.ts'
 import type { Obstacle } from './internal/graph/graph.ts'
 import { type Endpoint, shortestPath } from './internal/graph/search.ts'
 import { ALL_DIRECTIONS, type Pin, visibilityGraph } from './internal/graph/visibility.ts'
+import * as Interval from './interval.ts'
 import * as Point from './point.ts'
-import type * as Rect from './rect.ts'
+import * as Rect from './rect.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/connector')
 type TypeBrand = typeof TypeBrand
@@ -30,14 +39,17 @@ export type ConnectorTurn = (typeof turn)[keyof typeof turn]
 /**
  * The construction input for `make`. Every field is optional, and passing
  * `undefined` for one is the same as omitting it. Negative and non-finite
- * values act as `0`.
+ * lengths and costs act as `0`.
  */
 export interface ConnectorInput {
   /**
    * The space routes keep from the rects they pass, except where they leave
    * or enter one. Where two rects are closer than twice this, the space
    * between them shrinks to half the distance on each side, so a route can
-   * still pass between them. Defaults to `0`.
+   * still pass between them. Rects that touch or overlap leave no
+   * passage, so routes keep the clearance around them as around one
+   * shape; with a clearance of `0`, a route may run along the seam where
+   * they touch. Defaults to `0`.
    */
   readonly clearance?: number | undefined
   /**
@@ -58,6 +70,14 @@ export interface ConnectorInput {
    * preferred `turn`, in units of length. Defaults to `0`.
    */
   readonly turnCost?: number | undefined
+  /**
+   * Which side of its edge each adornment sits on: `0` on the left of a
+   * line running up or down (above a line running left or right), `0.5`
+   * centered on the line, `1` on the right (below). An adornment frame with
+   * a finite `align` overrides it. Non-finite values act as `0.5`.
+   * Defaults to `0.5`.
+   */
+  readonly alignAdornments?: number | undefined
 }
 
 /**
@@ -78,6 +98,8 @@ class Connector extends Pipeable {
   readonly bendCost: number
   /** The extra cost of a corner against the preferred turn. */
   readonly turnCost: number
+  /** Which side of its edge each adornment sits on: `0` left or above, `1` right or below. */
+  readonly alignAdornments: number
 
   constructor(input: ConnectorInput) {
     super()
@@ -86,10 +108,14 @@ class Connector extends Pipeable {
     this.gap = length(input.gap)
     this.bendCost = length(input.bendCost)
     this.turnCost = length(input.turnCost)
+    this.alignAdornments =
+      input.alignAdornments !== undefined && Number.isFinite(input.alignAdornments)
+        ? input.alignAdornments
+        : 0.5
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
-    return `Connector [clearance ${this.clearance} gap ${this.gap} bend ${this.bendCost} turn ${this.turnCost}]`
+    return `Connector [clearance ${this.clearance} gap ${this.gap} bend ${this.bendCost} turn ${this.turnCost} align ${this.alignAdornments}]`
   }
 
   /**
@@ -103,6 +129,7 @@ class Connector extends Pipeable {
       gap: this.gap,
       bendCost: this.bendCost,
       turnCost: this.turnCost,
+      alignAdornments: this.alignAdornments,
     }
   }
 }
@@ -191,6 +218,24 @@ export const setTurnCost: {
 } = dual(2, (self: Connector, turnCost: number) => new Connector({ ...self.toJSON(), turnCost }))
 
 /**
+ * Sets which side of its edge each adornment sits on. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The spec to update.
+ * @param alignAdornments - The new side, from `0` (left or above) to `1`
+ * (right or below).
+ * @returns A new spec with the adornment alignment replaced.
+ */
+export const setAlignAdornments: {
+  (self: Connector, alignAdornments: number): Connector
+  (alignAdornments: number): (self: Connector) => Connector
+} = dual(
+  2,
+  (self: Connector, alignAdornments: number) =>
+    new Connector({ ...self.toJSON(), alignAdornments }),
+)
+
+/**
  * The route constraints of one edge, in the `edges` option of `apply`.
  */
 export interface ConnectorEdgeOptions {
@@ -228,14 +273,19 @@ export interface ConnectorApplyOptions {
  *   and the corners on a segment never reach past each other. Where routes
  *   turn together a short distance apart, each inner corner shrinks to fit
  *   inside the one outside it, about the same center where the routes are
- *   evenly spaced, as on a metro map. A renderer that rounds corners draws
- *   circular corners of these radii, or any corner that reaches no farther.
+ *   evenly spaced, as on a metro map. No corner reaches into a flow
+ *   adornment or its gaps. A renderer that rounds corners draws circular
+ *   corners of these radii, or any corner that reaches no farther.
+ * - `adornments`: where each adornment landed, in the edge's adornment
+ *   order (see `AdornmentPlacement` in `placement/adornment`).
  */
 export interface ConnectorRoute {
   /** The polyline from the source port to the target port. */
   readonly points: ReadonlyArray<Point.Point>
   /** The size of the corner at each point, `0` at both ends. */
   readonly radii: ReadonlyArray<number>
+  /** Where each adornment landed, in the edge's adornment order. */
+  readonly adornments: ReadonlyArray<AdornmentPlacement>
 }
 
 /**
@@ -300,8 +350,21 @@ interface Port {
  * default.
  *
  * Each route's corners report their `radii`, from the edge's `radius`, with
- * the inner corners of routes that turn together shrunk to nest. The edge's
- * `weight`, `minLength`, `minRadius`, and `adornments` have no effect.
+ * the inner corners of routes that turn together shrunk to nest.
+ *
+ * Edges carry adornments (see `placement/adornment`), which `apply` places
+ * on the routes it finds but makes no room for, so adornments on routes
+ * that run close alongside each other may overlap. A flow adornment sits on
+ * a straight run: those at `0` and `1` pack against their ports, and each
+ * of the others goes to the run nearest where its `at` falls that has room
+ * for it (the roomiest when none has), centered on where it falls. Corners
+ * keep clear of flow adornments and their gaps along the line. A route
+ * leaves and enters its ports straight for at least the clearance, so a
+ * clearance at least as long as the end adornments keeps them off the
+ * corners. An absolute adornment sits at `at` of the way along the route
+ * as drawn, rounded corners included.
+ *
+ * The edge's `weight`, `minLength`, and `minRadius` have no effect.
  *
  * Every input is deterministic: the same rects and edges always produce the
  * same routes. Ties fall back to the order of the rects' keys, then of the
@@ -476,23 +539,68 @@ export function apply<const K extends string>(
       }
     }),
   )
+
+  // Flow adornments wall off corners, and absolute ones land on the route
+  // as drawn, with its corners sized.
+  const adornments = found.map((i) =>
+    (edges[i] as Edge<K>).adornments.map((adornment) =>
+      resolveAdornment(adornment, true, false, connector.alignAdornments),
+    ),
+  )
+  const cumulative = nudged.map((route) => lengths(route))
+  const flows = nudged.map((route, k) =>
+    placeFlow(route, cumulative[k] as Array<number>, adornments[k] ?? []),
+  )
   const sizes = cornerRadii(
     nudged,
     found.map((i) => (edges[i] as Edge<K>).radius),
+    flows.map((flow) => flow.walls),
   )
   const result: Array<ConnectorRoute | undefined> = edges.map(() => undefined)
   for (const [k, i] of found.entries()) {
+    const route = nudged[k] as Array<XY>
+    const radii = sizes[k] as Array<number>
+    const placed = placeAdornments(
+      route,
+      cumulative[k] as Array<number>,
+      radii,
+      adornments[k] ?? [],
+      (flows[k] as { placed: ReadonlyArray<PlacedAdornment | undefined> }).placed,
+    )
     result[i] = {
-      points: (nudged[k] as Array<XY>).map(([x, y]) => Point.make(x, y)),
-      radii: sizes[k] as Array<number>,
+      points: route.map(([x, y]) => Point.make(x, y)),
+      radii,
+      adornments: placed.map((adornment, a) =>
+        placementOf(adornment, (edges[i] as Edge<K>).adornments[a] as Adornment),
+      ),
     }
   }
   return { edges: result }
 }
 
+// A placed adornment as the public shape: its upright rect about its
+// center, the angle its local x axis turns to, and its stretch of the route.
+function placementOf(placed: PlacedAdornment, adornment: Adornment): AdornmentPlacement {
+  const { frame } = adornment
+  const width = frameSize(frame.width, frame.minWidth, frame.maxWidth)
+  const height = frameSize(frame.height, frame.minHeight, frame.maxHeight)
+  const [x, y] = placed.center
+  const [start, end] = placed.along
+  return {
+    rect: Rect.make(x - width / 2, y - height / 2, width, height),
+    angle:
+      placed.direction === undefined ? 0 : Math.atan2(placed.direction[1], placed.direction[0]),
+    along: Interval.make(start, end - start),
+  }
+}
+
+const before = (a: number, b: number) => a < b && !coincident(a, b)
+
 // The rects grown by the clearance on each side, except toward a nearby
 // rect, where each side grows by at most half the distance between them,
-// so the grown rects never close a passage the rects leave open.
+// so the grown rects never close a passage the rects leave open. Rects that
+// touch or overlap leave no passage, so they grow into each other, and no
+// route slips through the seam between them.
 function grow(boxes: ReadonlyArray<Rect.Rect>, clearance: number): Array<Obstacle> {
   const reach = 2 * clearance
   const near = (a0: number, a1: number, b0: number, b1: number) =>
@@ -508,17 +616,17 @@ function grow(boxes: ReadonlyArray<Rect.Rect>, clearance: number): Array<Obstacl
       }
       const acrossY = near(a.top, a.bottom, b.top, b.bottom)
       const acrossX = near(a.left, a.right, b.left, b.right)
-      if (acrossY && (b.left >= a.right || coincident(b.left, a.right))) {
-        right = Math.min(right, Math.max(0, (b.left - a.right) / 2))
+      if (acrossY && before(a.right, b.left)) {
+        right = Math.min(right, (b.left - a.right) / 2)
       }
-      if (acrossY && (b.right <= a.left || coincident(b.right, a.left))) {
-        left = Math.min(left, Math.max(0, (a.left - b.right) / 2))
+      if (acrossY && before(b.right, a.left)) {
+        left = Math.min(left, (a.left - b.right) / 2)
       }
-      if (acrossX && (b.top >= a.bottom || coincident(b.top, a.bottom))) {
-        bottom = Math.min(bottom, Math.max(0, (b.top - a.bottom) / 2))
+      if (acrossX && before(a.bottom, b.top)) {
+        bottom = Math.min(bottom, (b.top - a.bottom) / 2)
       }
-      if (acrossX && (b.bottom <= a.top || coincident(b.bottom, a.top))) {
-        top = Math.min(top, Math.max(0, (a.top - b.bottom) / 2))
+      if (acrossX && before(b.bottom, a.top)) {
+        top = Math.min(top, (a.top - b.bottom) / 2)
       }
     }
     return {

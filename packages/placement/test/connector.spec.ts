@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'vitest'
+import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
+import * as Frame from '../src/frame.ts'
+import * as Interval from '../src/interval.ts'
 import * as Rect from '../src/rect.ts'
 
 const pointsOf = (layout: Connector.ConnectorLayout, i = 0) =>
@@ -26,15 +29,35 @@ const across = (at: number) =>
   Edge.make({ source: 'a', target: 'b', sourceSide: 1, targetSide: 3, sourceAt: at, targetAt: at })
 const pair = { a: Rect.make(0, 0, 40, 20), b: Rect.make(100, 0, 40, 20) }
 
+// An arrowhead 8 long, with a margin of 2 trailing it.
+const arrow = (at: number, orient: number) =>
+  Adornment.make({ frame: Frame.make({ width: 8, height: 6, offsetLeft: 2 }), at, orient })
+
+// An upright label, 20 by 10.
+const label = (at: number, position: number = Adornment.position.flow) =>
+  Adornment.make({ frame: Frame.make({ width: 20, height: 10 }), at, position })
+
 describe('make', () => {
-  test('defaults are zero', () => {
-    expect(Connector.make().toJSON()).toEqual({ clearance: 0, gap: 0, bendCost: 0, turnCost: 0 })
+  const defaults = { clearance: 0, gap: 0, bendCost: 0, turnCost: 0, alignAdornments: 0.5 }
+
+  test('lengths and costs default to zero, and adornments to the middle', () => {
+    expect(Connector.make().toJSON()).toEqual(defaults)
   })
 
-  test.each([-1, Number.NaN, Number.POSITIVE_INFINITY])('%f acts as 0', (value) => {
+  test.each([-1, Number.NaN, Number.POSITIVE_INFINITY])('%f acts as the default', (value) => {
     expect(
-      Connector.make({ clearance: value, gap: value, bendCost: value, turnCost: value }).toJSON(),
-    ).toEqual({ clearance: 0, gap: 0, bendCost: 0, turnCost: 0 })
+      Connector.make({
+        clearance: value,
+        gap: value,
+        bendCost: value,
+        turnCost: value,
+        alignAdornments: Number.isFinite(value) ? 0.5 : value,
+      }).toJSON(),
+    ).toEqual(defaults)
+  })
+
+  test('a finite adornment alignment stays as given', () => {
+    expect(Connector.make({ alignAdornments: -1 }).alignAdornments).toBe(-1)
   })
 
   test('isConnector', () => {
@@ -50,11 +73,12 @@ describe('setters', () => {
     ['setGap', Connector.setGap, 'gap'],
     ['setBendCost', Connector.setBendCost, 'bendCost'],
     ['setTurnCost', Connector.setTurnCost, 'turnCost'],
+    ['setAlignAdornments', Connector.setAlignAdornments, 'alignAdornments'],
   ] as const)('%s, data-first and data-last', (_, set, key) => {
     const base = Connector.make()
     expect(set(base, 3)[key]).toBe(3)
     expect(base.pipe(set(3))[key]).toBe(3)
-    expect(base[key]).toBe(0)
+    expect(base[key]).toBe(Connector.make().toJSON()[key])
   })
 })
 
@@ -261,6 +285,22 @@ describe('apply', () => {
     ])
   })
 
+  test('rects that touch leave no seam for a route to slip through', () => {
+    // A ring of four touching walls around `a`.
+    const rects = {
+      a: Rect.make(40, 40, 20, 20),
+      b: Rect.make(200, 40, 20, 20),
+      top: Rect.make(0, 0, 100, 20),
+      bottom: Rect.make(0, 80, 100, 20),
+      left: Rect.make(0, 20, 20, 60),
+      right: Rect.make(80, 20, 20, 60),
+    }
+    const edge = Edge.make({ source: 'a', target: 'b' })
+    expect(Connector.apply(rects, [edge], Connector.make({ clearance: 5 })).edges).toEqual([
+      undefined,
+    ])
+  })
+
   test('corners take the radius where their legs have room', () => {
     const rects = { a: Rect.make(0, 0, 40, 20), b: Rect.make(100, 40, 40, 20) }
     const layout = Connector.apply(
@@ -291,6 +331,114 @@ describe('apply', () => {
       [0, 30, 0],
       [0, 10, 0],
     ])
+  })
+
+  describe('adornments', () => {
+    // A route from the right of `a` to the left of `b`, through a jog:
+    // (40, 10), (70, 10), (70, 50), (100, 50), 100 long.
+    const jog = { a: Rect.make(0, 0, 40, 20), b: Rect.make(100, 40, 40, 20) }
+    const route = (adornments: Array<Adornment.Adornment>, radius = 0, connector = spec) =>
+      Connector.apply(
+        jog,
+        [Edge.make({ source: 'a', target: 'b', sourceSide: 1, targetSide: 3, radius, adornments })],
+        connector,
+      ).edges[0]
+
+    test('an arrow at the end packs against the target port, its margin trailing', () => {
+      const layout = Connector.apply(
+        pair,
+        [Edge.make({ ...across(0.5).toJSON(), adornments: [arrow(1, Adornment.orient.forward)] })],
+        spec,
+      )
+      expect(layout.edges[0]?.adornments).toEqual([
+        { rect: Rect.make(92, 7, 8, 6), angle: 0, along: Interval.make(52, 8) },
+      ])
+    })
+
+    test('a turned adornment faces along its run', () => {
+      const rects = { a: Rect.make(0, 0, 40, 20), b: Rect.make(100, 60, 40, 20) }
+      const layout = Connector.apply(
+        rects,
+        [
+          Edge.make({
+            source: 'a',
+            target: 'b',
+            sourceSide: Edge.side.right,
+            targetSide: Edge.side.top,
+            adornments: [arrow(1, Adornment.orient.forward)],
+          }),
+        ],
+        spec,
+      )
+      expect(pointsOf(layout)).toEqual([
+        [40, 10],
+        [120, 10],
+        [120, 60],
+      ])
+      expect(layout.edges[0]?.adornments).toEqual([
+        { rect: Rect.make(116, 53, 8, 6), angle: Math.PI / 2, along: Interval.make(122, 8) },
+      ])
+    })
+
+    test('a flow adornment at the start keeps the corner after it clear', () => {
+      const placed = route([label(0)], 30)
+      expect(placed?.adornments).toEqual([
+        { rect: Rect.make(40, 5, 20, 10), angle: 0, along: Interval.make(0, 20) },
+      ])
+      expect(placed?.radii).toEqual([0, 10, 30, 0])
+    })
+
+    test('a flow adornment in the middle centers where it falls, between corners', () => {
+      const placed = route([label(0.5)], 30)
+      expect(placed?.adornments).toEqual([
+        { rect: Rect.make(60, 25, 20, 10), angle: 0, along: Interval.make(45, 10) },
+      ])
+      expect(placed?.radii).toEqual([0, 15, 15, 0])
+    })
+
+    test('a flow adornment moves off a run too short for it, to the nearest with room', () => {
+      const rects = { a: Rect.make(0, 0, 40, 20), b: Rect.make(100, 4, 40, 20) }
+      const layout = Connector.apply(
+        rects,
+        [Edge.make({ ...across(0.5).toJSON(), adornments: [label(0.5)] })],
+        spec,
+      )
+      // The middle falls on the jog, 4 long. The runs on either side are as
+      // near, and the first wins, with the label at its middle.
+      expect(pointsOf(layout)).toEqual([
+        [40, 10],
+        [70, 10],
+        [70, 14],
+        [100, 14],
+      ])
+      expect(layout.edges[0]?.adornments).toEqual([
+        { rect: Rect.make(45, 5, 20, 10), angle: 0, along: Interval.make(5, 20) },
+      ])
+    })
+
+    test('an absolute adornment lands on the route as drawn, and takes no room', () => {
+      const placed = route([label(0.5, Adornment.position.absolute)], 30)
+      expect(placed?.radii).toEqual([0, 20, 20, 0])
+      // The middle of the drawn route, through the arcs of the corners.
+      const { rect, angle, along } = (placed as Connector.ConnectorRoute)
+        .adornments[0] as Adornment.AdornmentPlacement
+      for (const [actual, expected] of [
+        [rect.x, 60],
+        [rect.y, 25],
+        [rect.width, 20],
+        [rect.height, 10],
+        [along.start, 45],
+        [along.size, 10],
+      ] as const) {
+        expect(actual).toBeCloseTo(expected, 9)
+      }
+      expect(angle).toBe(0)
+    })
+
+    test('the spec aligns adornments to a side of the line', () => {
+      const placed = route([label(0.5)], 0, spec.pipe(Connector.setAlignAdornments(0)))
+      expect(placed?.adornments[0]?.rect).toEqual(Rect.make(50, 25, 20, 10))
+    })
   })
 
   test('a rect that others enclose has no route', () => {

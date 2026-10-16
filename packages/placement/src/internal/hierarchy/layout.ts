@@ -1,9 +1,9 @@
 import { clamp, coincident } from 'curvy/number'
 import * as Track from '../../track.ts'
-import { findReversed } from '../graph/acyclic.ts'
-import { cornerArcs, onArc } from '../polygon.ts'
 import {
   type Axis,
+  type LogicalPoint,
+  type PlacedAdornment,
   type RunItem,
   type Sign,
   type SolveAdornment,
@@ -15,7 +15,9 @@ import {
   pointOnDrawn,
   resolveRadii,
   runLength,
-} from './adornments.ts'
+} from '../adornments.ts'
+import { findReversed } from '../graph/acyclic.ts'
+import { cornerArcs, onArc } from '../polygon.ts'
 import type { LayeredGraph, Segment } from './graph.ts'
 import { FAR, type Jog, NEAR, assignLanes } from './lanes.ts'
 import { order } from './order.ts'
@@ -110,16 +112,7 @@ export interface LogicalBox {
   readonly rSize: number
 }
 
-export type LogicalPoint = readonly [o: number, r: number]
-
-// Where an adornment landed: its center, the logical direction of its local
-// x axis when it turns, and the stretch of the route it covers, as lengths
-// along the route's polyline.
-export interface PlacedAdornment {
-  readonly center: LogicalPoint
-  readonly direction: LogicalPoint | undefined
-  readonly along: readonly [start: number, end: number]
-}
+export type { LogicalPoint, PlacedAdornment }
 
 export interface SolveResult {
   readonly nodes: ReadonlyArray<LogicalBox>
