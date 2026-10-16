@@ -1,4 +1,4 @@
-import { LinearPath2d } from 'curvy/path'
+import { CubicPath2d, LinearPath2d } from 'curvy/path'
 import { Linear2d } from 'curvy/splines'
 import { Vector2 } from 'curvy/vector'
 import * as Edge from 'placement/edge'
@@ -13,6 +13,7 @@ import { HierarchyEdge, type HierarchyEdgeProps } from '../../src/components/Hie
 import { HierarchyLabel } from '../../src/components/HierarchyLabel.ts'
 import { HierarchyLayout, type HierarchyLayoutProps } from '../../src/components/HierarchyLayout.ts'
 import { HierarchyNode, type HierarchyNodeProps } from '../../src/components/HierarchyNode.ts'
+import { roundPolyline } from '../../src/internal/corners.ts'
 import type { RatioInput } from '../../src/internal/props/ratio.ts'
 import { findAll, findOne, mountWithRect } from '../host.ts'
 import type { TestNode } from '../renderer.ts'
@@ -157,6 +158,24 @@ describe('solving', () => {
     )
     expect(paths[0]?.props['d']).toBe(data)
     expect(paths[0]?.props['fill']).toBe('none')
+  })
+
+  test('r and smoothing round the route', async () => {
+    const { root } = await mountLayout({ rankGap: 20 }, () => [
+      edge({ from: 'a', to: 'b', fromPort: 'right', r: 6, smoothing: 0.6 }),
+      node('a', 40, 20),
+      node('b', 40, 20),
+    ])
+    const solved = Hierarchy.apply(
+      [Frame.make({ id: 'a', width: 40, height: 20 }), Frame.make({ id: 'b', width: 40, height: 20 })],
+      [Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.right })],
+      Hierarchy.make({ rankGap: 20 }),
+    )
+
+    expect(solved.edges[0]!.points.length).toBeGreaterThan(2)
+    expect(findOne(root, 'path').props['d']).toBe(
+      CubicPath2d.toPathData(roundPolyline(solved.edges[0]!.points, 6, 0.6)!),
+    )
   })
 
   test('attrs and paint reach the path', async () => {

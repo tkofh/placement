@@ -36,6 +36,8 @@
         :from="edge.from"
         :to="edge.to"
         :curve="curve"
+        :r="smooth ? '12px' : '0px'"
+        :smoothing="smooth ? 0.8 : 0"
         stroke="color(srgb 1 1 1 / 0.45) 1.5px"
         marker-end="url(#arrow)"
       >
@@ -54,17 +56,25 @@
         :width="node.kind === 'decision' ? '92px' : '124px'"
         :height="node.kind === 'decision' ? '56px' : '34px'"
       >
-        <GraphicPath
+        <GraphicCurve
           v-if="node.kind === 'decision'"
-          :path="diamond"
-          fit="fill"
+          curve="linear"
+          closed
+          :r="smooth ? '10px' : '0px'"
+          :smoothing="smooth ? 0.8 : 0"
           :fill="node.fill"
           stroke="color(srgb 1 1 1 / 0.25) 1px"
-        />
+        >
+          <GraphicPoint left="50%" top="0%" />
+          <GraphicPoint left="100%" top="50%" />
+          <GraphicPoint left="50%" top="100%" />
+          <GraphicPoint left="0%" top="50%" />
+        </GraphicCurve>
         <GraphicRect
           v-else
           :fill="node.fill"
-          :r="node.kind === 'terminal' ? '17px' : '6px'"
+          :r="node.kind === 'terminal' ? '17px' : '10px'"
+          :smoothing="smooth && node.kind !== 'terminal' ? 0.8 : 0"
           stroke="color(srgb 1 1 1 / 0.25) 1px"
         />
         <GraphicText left="50%" top="50%" origin="center" class="node">
@@ -83,6 +93,7 @@
       {{ c }}
     </button>
     <span />
+    <button :class="{ on: smooth }" @click="smooth = !smooth">smooth corners</button>
     <button :class="{ on: withLint }" @click="withLint = !withLint">lint step</button>
     <span />
     <NuxtLink to="/">springboard</NuxtLink>
@@ -90,13 +101,12 @@
 </template>
 
 <script setup lang="ts">
-import { Linear2d } from 'curvy/splines'
-
 const DIRECTIONS = ['down', 'right', 'up', 'left'] as const
 const CURVES = ['linear', 'basis', 'cardinal'] as const
 
 const direction = ref<(typeof DIRECTIONS)[number]>('down')
-const curve = ref<(typeof CURVES)[number]>('basis')
+const curve = ref<(typeof CURVES)[number]>('linear')
+const smooth = ref(true)
 const withLint = ref(false)
 
 // The drawing has its own size, so the scene grows along the flow to fit it.
@@ -151,17 +161,6 @@ const edges = computed(() => [
   { from: 'deploy', to: 'end' },
   { from: 'notify', to: 'end' },
 ])
-
-// A unit diamond, stretched over each decision node by fit="fill".
-const diamond = Linear2d.toPath(
-  Linear2d.fromTuples([
-    [0.5, 0],
-    [1, 0.5],
-    [0.5, 1],
-    [0, 0.5],
-    [0.5, 0],
-  ]),
-)
 </script>
 
 <style>

@@ -3,6 +3,7 @@ import { CubicPath2d, LinearPath2d, QuadraticPath2d, RationalCubicPath2d } from 
 import { Basis2d, Bezier2d, Cardinal2d, Hermite2d, Linear2d, RationalBezier2d } from 'curvy/splines'
 import type { Affine2d } from 'curvy/transform'
 import type { Vector2 } from 'curvy/vector'
+import { roundPolyline } from './corners.ts'
 
 /**
  * Everything `GraphicPath` accepts: a renderable path, a spline (converted
@@ -130,23 +131,48 @@ function hasEnoughPoints(kind: CurveKind, ends: CurveEnds, count: number): boole
   }
 }
 
+export interface CurveOptions {
+  /** Cardinal tension. */
+  readonly tension?: number
+  /** Cardinal parameterization. */
+  readonly alpha?: number
+  /** The corner radius of a linear curve. `0` (default) keeps it sharp. */
+  readonly radius?: number
+  /** The corner smoothing of a linear curve, from `0` to `1`. */
+  readonly smoothing?: number
+  /** Whether a rounded linear curve also rounds its closing corners. */
+  readonly closed?: boolean
+}
+
 /**
  * The SVG path data of a spline family through `controls`, or `undefined`
- * when there are too few control points for the family.
+ * when there are too few control points for the family. A linear curve
+ * with a positive `radius` rounds its corners (see `roundPolyline`).
  */
 export function curvePathData(
   kind: CurveKind,
   ends: CurveEnds,
   controls: ReadonlyArray<Vector2>,
-  options: { tension?: number; alpha?: number } = {},
+  options: CurveOptions = {},
 ): string | undefined {
   if (!hasEnoughPoints(kind, ends, controls.length)) {
     return undefined
   }
 
   switch (kind) {
-    case 'linear':
+    case 'linear': {
+      const radius = options.radius ?? 0
+      if (radius > 0) {
+        const rounded = roundPolyline(
+          controls,
+          radius,
+          options.smoothing ?? 0,
+          options.closed ?? false,
+        )
+        return rounded === undefined ? undefined : CubicPath2d.toPathData(rounded)
+      }
       return LinearPath2d.toPathData(Linear2d.toPath(Linear2d.fromArray(controls)))
+    }
     case 'basis': {
       // Basis2d.fromArray requires four control points, so endpoint
       // triplication pads the array before construction.

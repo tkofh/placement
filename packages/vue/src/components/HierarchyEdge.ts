@@ -6,6 +6,8 @@ import { useHierarchyEdge } from '../composables/useHierarchy.ts'
 import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
 import { curveOptions, curvePathData, finiteNumber } from '../internal/curve.ts'
 import { type PortInput, resolvePort } from '../internal/props/port.ts'
+import { type SmoothingInput, resolveSmoothing } from '../internal/props/smoothing.ts'
+import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
 
 export type HierarchyEdgeCurve = 'linear' | 'basis' | 'cardinal'
 
@@ -27,11 +29,18 @@ export interface HierarchyEdgeProps extends PaintProps {
   /** The minimum number of ranks the edge spans. Defaults to `1`. */
   minLength?: number | `${number}`
   /**
-   * How the route is drawn: `'linear'` (default) is the polyline,
-   * `'basis'` smooths past its corners, and `'cardinal'` curves through
-   * them.
+   * How the route is drawn: `'linear'` (default) is the polyline, with
+   * corners rounded by `r` and `smoothing`, `'basis'` smooths past its
+   * corners, and `'cardinal'` curves through them.
    */
   curve?: HierarchyEdgeCurve
+  /** Rounds the corners of a `'linear'` route to this radius. */
+  r?: LengthPercentageInput
+  /**
+   * How much each rounded corner eases its curvature in, from `0`
+   * (default, circular corners) to `1` (fully smoothed, squircle-like).
+   */
+  smoothing?: SmoothingInput
   /** Cardinal tension: `0.5` (default) is Catmull-Rom. */
   tension?: number | `${number}`
   /** Cardinal parameterization: `0` uniform, `0.5` centripetal (default), `1` chordal. */
@@ -55,7 +64,13 @@ export const HierarchyEdge = defineComponent(
       }
     })
 
-    const options = computed(() => curveOptions(props.tension, props.alpha))
+    const radius = useLengthPercentage(() => props.r, 0, 'width')
+
+    const options = computed(() => ({
+      ...curveOptions(props.tension, props.alpha),
+      radius: radius.value,
+      smoothing: resolveSmoothing(props.smoothing),
+    }))
 
     const pathData = computed(() =>
       curvePathData(
@@ -96,6 +111,8 @@ export const HierarchyEdge = defineComponent(
       'weight',
       'minLength',
       'curve',
+      'r',
+      'smoothing',
       'tension',
       'alpha',
       ...PAINT_PROP_KEYS,
