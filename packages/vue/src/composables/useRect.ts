@@ -75,6 +75,17 @@ export const RECT_PROP_KEYS = [
   ...TRANSFORM_PROP_KEYS,
 ] as const
 
+/**
+ * Whether a rect fills its parent exactly: none of its inset, size, or
+ * transform props is set.
+ *
+ * @param props - The rect props.
+ * @returns `true` when the rect is its parent's rect.
+ */
+export function fillsParent(props: RectProps): boolean {
+  return RECT_PROP_KEYS.every((key) => props[key] === undefined)
+}
+
 export function useXYTranslation(
   props: MaybeRefOrGetter<TranslateProps>,
   self: MaybeRefOrGetter<Rect.Rect | Dimensions.Dimensions>,

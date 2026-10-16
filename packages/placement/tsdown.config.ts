@@ -12,6 +12,7 @@ export default defineConfig({
     'src/interval.ts',
     'src/offset.ts',
     'src/point.ts',
+    'src/polygon.ts',
     'src/rect.ts',
     'src/track.ts',
     'src/unstable/utils.ts',

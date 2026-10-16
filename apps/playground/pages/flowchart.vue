@@ -29,8 +29,10 @@
       >
         <!-- the left margin trails the arrow, so the line runs straight past it -->
         <HierarchyAdornment at="end" width="9px" height="8px" margin-left="4px">
+          <!-- a third of the way along, a triangle's corners point right -->
           <GraphicPolygon
-            points="0% 0%, 100% 50%, 0% 100%"
+            sides="3"
+            :phase="1 / 3"
             :r="smooth ? '1.5px' : '0px'"
             fill="color(srgb 1 1 1 / 0.55)"
           />
@@ -50,24 +52,19 @@
         :width="node.kind === 'decision' ? '92px' : '124px'"
         :height="node.kind === 'decision' ? '56px' : '34px'"
       >
-        <GraphicCurve
+        <!-- the graphic that fills a node is the outline its edges meet -->
+        <GraphicPolygon
           v-if="node.kind === 'decision'"
-          curve="linear"
-          closed
-          :r="smooth ? '10px' : '0px'"
+          phase="0.5"
+          :r="radius(node.kind)"
           :smoothing="smooth ? 0.8 : 0"
           :fill="node.fill"
           stroke="color(srgb 1 1 1 / 0.25) 1px"
-        >
-          <GraphicPoint left="50%" top="0%" />
-          <GraphicPoint left="100%" top="50%" />
-          <GraphicPoint left="50%" top="100%" />
-          <GraphicPoint left="0%" top="50%" />
-        </GraphicCurve>
+        />
         <GraphicRect
           v-else
           :fill="node.fill"
-          :r="node.kind === 'terminal' ? '17px' : '10px'"
+          :r="radius(node.kind)"
           :smoothing="smooth && node.kind !== 'terminal' ? 0.8 : 0"
           stroke="color(srgb 1 1 1 / 0.25) 1px"
         />
@@ -121,6 +118,11 @@ const TERMINAL = 'color(display-p3 0.14 0.34 0.26)'
 const ALERT = 'color(display-p3 0.4 0.15 0.2)'
 
 type Kind = 'terminal' | 'process' | 'decision'
+
+// Each node's corner radius. A rounded diamond grows, so its rounded tips
+// still touch its box.
+const radius = (kind: Kind) =>
+  kind === 'terminal' ? '17px' : kind === 'decision' && !smooth.value ? '0px' : '10px'
 
 const nodes = computed(() => {
   const list: Array<{ id: string; text: string; kind: Kind; fill: string }> = [

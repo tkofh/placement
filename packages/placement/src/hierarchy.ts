@@ -13,10 +13,13 @@ import {
   type SolveEdge,
   type SolveNode,
   type SolvePort,
+  type SolveShape,
   solve,
 } from './internal/hierarchy/layout.ts'
+import { fitLoops, resolveFractions, resolveRadius } from './internal/polygon.ts'
 import * as Interval from './interval.ts'
 import * as Point from './point.ts'
+import { type Polygon, isPolygon } from './polygon.ts'
 import * as Rect from './rect.ts'
 import { auto } from './utils/arguments.ts'
 
@@ -277,6 +280,37 @@ export interface HierarchyLayout<K extends string> {
 }
 
 /**
+ * The per-node options of `apply`, keyed by frame `id`.
+ *
+ * @example
+ * ```ts
+ * const frames = [
+ *   Frame.make({ id: 'a', width: 100, height: 40 }),
+ *   Frame.make({ id: 'b', width: 100, height: 40 }),
+ * ]
+ * const edges = [Edge.make({ source: 'a', target: 'b', targetSide: Edge.side.top, targetAt: 0.25 })]
+ * const layout = Hierarchy.apply(frames, edges, Hierarchy.make({ rankGap: 50 }), {
+ *   shapes: { b: Polygon.make({ phase: 0.5 }) },
+ * })
+ * // A quarter of the way along the top, the diamond's slope is 10 below the rect.
+ * layout.edges[0]?.points.at(-1) // Point (25, 100)
+ * ```
+ */
+export interface HierarchyApplyOptions<K extends string> {
+  /**
+   * The shape of each node, as a `Polygon` (see `placement/polygon`) that
+   * fills its rect. A node without one is its rect, with sharp corners. A
+   * port sits where the line out of it meets the shape first, coming in
+   * from its side of the rect, so edges meet a diamond
+   * (`Polygon.make({ phase: 0.5 })`) on its slopes and at its tips rather
+   * than on its bounding box, and meet a rounded rect on its curve near a
+   * corner. Where the line misses the shape, the port stays on the rect.
+   * The layout still sizes and spaces nodes by their rects.
+   */
+  readonly shapes?: Readonly<Partial<Record<K, Polygon>>> | undefined
+}
+
+/**
  * Lays out a directed graph in ranks and returns the rects of its nodes, the
  * routes of its edges, and the bounds of the drawing.
  *
@@ -320,6 +354,9 @@ export interface HierarchyLayout<K extends string> {
  * absolute adornment sits at `at` of the way along the route as drawn, with
  * corners of the solved `radii`, and takes no room.
  *
+ * Ports sit on each node's rect, or on its shape when `options.shapes`
+ * gives it one.
+ *
  * Frame sizes resolve as usual. Offsets across the flow add clearance.
  * Offsets along the flow add clearance within the rank, and auto
  * (non-finite) offsets along the flow position the node in the rank as auto
@@ -337,6 +374,7 @@ export interface HierarchyLayout<K extends string> {
  * @param frames - The node specs, each with a unique `id`. Their order is the tie-breaking order.
  * @param edges - The edge specs, referencing frames by `id`.
  * @param hierarchy - The layout specification.
+ * @param options - The per-node options, keyed by frame `id`.
  * @returns The node rects, edge routes, and bounds.
  * @throws `RangeError` when a frame has no `id`, when two frames share an
  * `id`, or when an edge references an `id` that no frame has.
@@ -357,6 +395,7 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
   frames: T,
   edges: ReadonlyArray<Edge<NoInfer<T[number]['id']>>>,
   hierarchy: Hierarchy,
+  options: HierarchyApplyOptions<NoInfer<T[number]['id']>> = {},
 ): HierarchyLayout<T[number]['id']> {
   const index = new Map<string, number>()
   for (const [i, frame] of frames.entries()) {
@@ -373,6 +412,7 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
   const vertical = hierarchy.isVertical
   const reverse = hierarchy.isReverse
 
+  const shapes: Partial<Record<string, Polygon>> = options.shapes ?? {}
   const solveNodes: Array<SolveNode> = frames.map((frame) => {
     const [rLeading, rTrailing] = vertical
       ? [frame.offsetTop, frame.offsetBottom]
@@ -389,6 +429,10 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
       rEnd: reverse ? rLeading : rTrailing,
       place: reverse ? 1 - place : place,
       stretch: auto(frame.stretch, hierarchy.stretchItems),
+      shape: resolveShape(
+        Object.hasOwn(shapes, frame.id as string) ? shapes[frame.id as string] : undefined,
+        hierarchy,
+      ),
     }
   })
 
@@ -573,6 +617,48 @@ function resolveAdornment(adornment: Adornment, hierarchy: Hierarchy): SolveAdor
     y: { size: height, start: top, end: bottom, align },
   }
 }
+
+// Places a node's polygon in its box. The polygon fills the node's
+// physical rect, so it is placed there and its corners map to logical
+// coordinates, mirroring the rank axis in the reversed directions. A
+// polygon that is the sharp rect is no shape at all.
+function resolveShape(
+  polygon: Polygon | undefined,
+  hierarchy: Hierarchy,
+): ((box: LogicalBox) => SolveShape) | undefined {
+  if (!isPolygon(polygon)) {
+    return undefined
+  }
+  const fractions = resolveFractions(polygon)
+  const radius = resolveRadius(polygon.radius)
+  const isRect =
+    fractions.length === 1 &&
+    fractions[0]?.length === 4 &&
+    fractions[0].every(([x, y], i) => x === RECT_X[i] && y === RECT_Y[i])
+  if (isRect && radius === 0) {
+    return undefined
+  }
+  const vertical = hierarchy.isVertical
+  const reverse = hierarchy.isReverse
+  return (box) => {
+    const [width, height] = vertical ? [box.oSize, box.rSize] : [box.rSize, box.oSize]
+    const fitted = fitLoops(fractions, 0, 0, width, height, radius)
+    return {
+      outlines: fitted.loops.map((loop) =>
+        loop.map(([x, y]): LogicalPoint => {
+          const [o, r] = vertical ? [x, y] : [y, x]
+          const extent = vertical ? height : width
+          return [box.o + o, box.r + (reverse ? extent - r : r)]
+        }),
+      ),
+      radius: fitted.radius,
+    }
+  }
+}
+
+// The corners of the rect polygon, in fractions, from its top left.
+const RECT_X = [0, 1, 1, 0]
+const RECT_Y = [0, 0, 1, 1]
 
 // The logical face of each physical side (top, right, bottom, left), per
 // flow direction.

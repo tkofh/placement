@@ -45,6 +45,12 @@ one after another like flex items, with their margins as gaps. An
 its rounded corners, and takes no room. Each route reports where its
 adornments landed and the stretch of the route each covers.
 
+Ports sit on each node's rect by default. `apply`'s fourth argument takes
+`shapes`, a `Polygon` per frame id, so that ports sit on a node's shape
+instead: edges meet a diamond (`Polygon.make({ phase: 0.5 })`) at its tips
+and on its slopes, and a rounded rect on its curve. Shapes only move ports.
+The layout still spaces nodes by their rects.
+
 Nodes stack within their rank by the frames' `align` and `stretch`.
 `Hierarchy.make` configures the flow `direction`, the `backEdges` style,
 the `rankGap`/`nodeGap`/`edgeGap` spacing, and the

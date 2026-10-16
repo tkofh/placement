@@ -6,10 +6,13 @@ import * as Edge from 'placement/edge'
 import * as Frame from 'placement/frame'
 import * as Hierarchy from 'placement/hierarchy'
 import type * as Point from 'placement/point'
+import * as Polygon from 'placement/polygon'
 import * as Rect from 'placement/rect'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { type VNodeArrayChildren, h, nextTick, ref } from 'vue'
 import { GraphicGroup } from '../../src/components/GraphicGroup.ts'
+import { GraphicPolygon } from '../../src/components/GraphicPolygon.ts'
+import { GraphicRect } from '../../src/components/GraphicRect.ts'
 import {
   HierarchyAdornment,
   type HierarchyAdornmentProps,
@@ -347,6 +350,130 @@ describe('ports and adornments', () => {
       points: translatedPoints(solved.edges[0]!.points),
     })
   })
+
+  // A node drawn with `children`, and a probe of its rect.
+  const drawnNode = (
+    id: string,
+    width: number,
+    height: number,
+    children: () => VNodeArrayChildren,
+  ) =>
+    h(
+      HierarchyNode,
+      { id, width, height },
+      { default: ({ rect }: { rect: Rect.Rect }) => [probe(rect), ...children()] },
+    )
+
+  const shapedGraph = (children: () => VNodeArrayChildren) => () => [
+    edge({ from: 'a', to: 'b' }),
+    edge({ from: 'b', to: 'c', fromPort: 'bottom 12.5%' }),
+    edge({ from: 'b', to: 'c', fromPort: 'right 25%' }),
+    node('a', 40, 20),
+    drawnNode('b', 60, 30, children),
+    node('c', 40, 20),
+  ]
+
+  const solveShaped = (shape: Polygon.Polygon | undefined) =>
+    Hierarchy.apply(
+      frames,
+      [
+        Edge.make({ source: 'a', target: 'b' }),
+        Edge.make({ source: 'b', target: 'c', sourceSide: Edge.side.bottom, sourceAt: 0.125 }),
+        Edge.make({ source: 'b', target: 'c', sourceSide: Edge.side.right, sourceAt: 0.25 }),
+      ],
+      spec,
+      shape === undefined ? {} : { shapes: { b: shape } },
+    )
+
+  const routesOf = (root: TestNode) => props(findAll(root, 'route'))
+  const routesFrom = (layout: Hierarchy.HierarchyLayout<string>) =>
+    layout.edges.map((route) => ({ points: translatedPoints(route.points) }))
+
+  test.each([
+    ['a polygon', () => [h(GraphicPolygon, { phase: 0.5 })], Polygon.make({ phase: 0.5 })],
+    [
+      'a rounded polygon',
+      () => [h(GraphicPolygon, { sides: 6, r: 4, smoothing: 0.6 })],
+      Polygon.make({ sides: 6, radius: 4 }),
+    ],
+    ['a rounded rect', () => [h(GraphicRect, { r: 10 })], Polygon.make({ radius: 10 })],
+    [
+      'the first of two graphics',
+      () => [h(GraphicPolygon, { sides: 3 }), h(GraphicPolygon, { phase: 0.5 })],
+      Polygon.make({ sides: 3 }),
+    ],
+  ])('%s that fills the node gives it its outline', async (_, children, shape) => {
+    const { root } = await mountLayout({ rankGap: 20, nodeGap: 10 }, shapedGraph(children))
+    expect(routesOf(root)).toEqual(routesFrom(solveShaped(shape)))
+    // The outline moves a port off the rect.
+    expect(routesOf(root)).not.toEqual(routesFrom(solveShaped(undefined)))
+  })
+
+  test.each([
+    ['with an inset', () => [h(GraphicPolygon, { phase: 0.5, left: '2px' })]],
+    ['with a size', () => [h(GraphicPolygon, { phase: 0.5, width: '100%' })]],
+    [
+      'inside a group',
+      () => [h(GraphicGroup, {}, { default: () => [h(GraphicPolygon, { phase: 0.5 })] })],
+    ],
+  ])('a graphic %s leaves the node its rect', async (_, children) => {
+    const { root } = await mountLayout({ rankGap: 20, nodeGap: 10 }, shapedGraph(children))
+    expect(routesOf(root)).toEqual(routesFrom(solveShaped(undefined)))
+  })
+
+  test('the outline follows the graphic as it changes and unmounts', async () => {
+    const phase = ref<number | undefined>(0.5)
+    const { root } = await mountLayout(
+      { rankGap: 20, nodeGap: 10 },
+      shapedGraph(() =>
+        phase.value === undefined ? [] : [h(GraphicPolygon, { phase: phase.value })],
+      ),
+    )
+    expect(routesOf(root)).toEqual(routesFrom(solveShaped(Polygon.make({ phase: 0.5 }))))
+    phase.value = 0.25
+    await nextTick()
+    await nextTick()
+    expect(routesOf(root)).toEqual(routesFrom(solveShaped(Polygon.make({ phase: 0.25 }))))
+    phase.value = undefined
+    await nextTick()
+    await nextTick()
+    expect(routesOf(root)).toEqual(routesFrom(solveShaped(undefined)))
+  })
+
+  test.each([0, 0.8, 1])(
+    'ports meet the rounded tips of a drawn diamond, smoothing %f',
+    async (smoothing) => {
+      const { root } = await mountLayout({ rankGap: 20, nodeGap: 10 }, () => [
+        edge({ from: 'a', to: 'b' }),
+        edge({ from: 'b', to: 'c', fromPort: 'left' }),
+        node('a', 40, 20),
+        drawnNode('b', 92, 56, () => [h(GraphicPolygon, { phase: 0.5, r: 10, smoothing })]),
+        node('c', 40, 20),
+      ])
+      const b = Rect.make(
+        ...((['x', 'y', 'width', 'height'] as const).map(
+          (key) => findAll(root, 'probe')[1]!.props[key] as number,
+        ) as [number, number, number, number]),
+      )
+      const { outlines, radius } = Polygon.apply(Polygon.make({ phase: 0.5, radius: 10 }), b)
+      const drawn = roundPolyline(
+        outlines[0]!.map(({ x, y }) => Vector2.make(x, y)),
+        radius,
+        smoothing,
+        true,
+      )
+      const box = CubicPath2d.boundingBox(drawn!)
+      const [into, out] = props(findAll(root, 'route')) as Array<{
+        points: Array<[number, number]>
+      }>
+      // The rounded tips are the drawn diamond's extremes, on the node's
+      // rect.
+      expect(into!.points.at(-1)![1]).toBeCloseTo(box.y.start, 1)
+      expect(out!.points[0]![0]).toBeCloseTo(box.x.start, 1)
+      expect(box.y.start).toBeCloseTo(b.y, 1)
+      expect(box.x.start).toBeCloseTo(b.x, 1)
+    },
+  )
 
   test('adornments along the edge take their rects from the route', async () => {
     const label = (at?: RatioInput) =>

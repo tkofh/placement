@@ -58,6 +58,10 @@
       "types": "./dist/point.d.mts",
       "import": "./dist/point.mjs"
     },
+    "./polygon": {
+      "types": "./dist/polygon.d.mts",
+      "import": "./dist/polygon.mjs"
+    },
     "./rect": {
       "types": "./dist/rect.d.mts",
       "import": "./dist/rect.mjs"

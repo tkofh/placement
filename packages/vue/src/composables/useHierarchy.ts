@@ -4,6 +4,7 @@ import type { Frame } from 'placement/frame'
 import * as Hierarchy from 'placement/hierarchy'
 import * as Interval from 'placement/interval'
 import * as Point from 'placement/point'
+import type * as Polygon from 'placement/polygon'
 import * as Rect from 'placement/rect'
 import {
   type ComputedRef,
@@ -41,6 +42,16 @@ export interface HierarchyPercentBasis {
 }
 
 const zero = Rect.make()
+
+/**
+ * A node: its frame, whose `id` edges reference, and its shape, the
+ * polygon its ports sit on (see `shapes` in `placement/hierarchy`), or
+ * undefined for its rect with sharp corners.
+ */
+export interface HierarchyNodeInput {
+  readonly frame: Frame
+  readonly shape?: Polygon.Polygon | undefined
+}
 
 /** The geometry of one edge: its polyline, its corner sizes, and its adornments. */
 export type HierarchyEdgeRoute = Hierarchy.HierarchyRoute
@@ -94,7 +105,7 @@ export interface HierarchyEdgeSolution {
   readonly line: DrawnLine
 }
 
-type NodeChild = Child<Frame, Rect.Rect>
+type NodeChild = Child<HierarchyNodeInput, Rect.Rect>
 type EdgeChild = Child<Edge.Edge<string>, HierarchyEdgeRoute>
 
 interface Solution {
@@ -118,9 +129,10 @@ function solve(
   const frames: Array<Frame<string>> = []
   const placed: Array<NodeChild> = []
   const ids = new Set<string>()
+  const shapes: Record<string, Polygon.Polygon> = Object.create(null)
 
   for (const child of nodes) {
-    const frame = child.input.value
+    const { frame, shape } = child.input.value
     if (frame.id === undefined) {
       problems.push('a node has no id')
     } else if (ids.has(frame.id)) {
@@ -129,6 +141,9 @@ function solve(
       ids.add(frame.id)
       frames.push(frame as Frame<string>)
       placed.push(child)
+      if (shape !== undefined) {
+        shapes[frame.id] = shape
+      }
     }
   }
 
@@ -145,7 +160,7 @@ function solve(
     }
   }
 
-  const layout = Hierarchy.apply(frames, specs, spec)
+  const layout = Hierarchy.apply(frames, specs, spec, { shapes })
 
   return {
     bounds: layout.bounds,
@@ -210,7 +225,7 @@ export function useHierarchyLayout(
   // instead (see `useChildren.ts`), so the mappers assign directly.
   const ssr = isSSR()
 
-  useChildren<Frame, Rect.Rect>(NODE_CHANNEL, (children) => {
+  useChildren<HierarchyNodeInput, Rect.Rect>(NODE_CHANNEL, (children) => {
     nodes.value = children
     if (ssr) {
       assign()
@@ -288,12 +303,15 @@ function useOrigin(): ComputedRef<Point.Point> {
 /**
  * Registers a node with the nearest `useHierarchyLayout`.
  *
- * @param frame - The node's frame. Its `id` is what edges reference.
+ * @param node - The node's frame, whose `id` is what edges reference, and
+ * its outline, which its ports sit on.
  * @returns The node's solved rect, or an empty rect while it is left out of
  * the layout.
  */
-export function useHierarchyNode(frame: MaybeRefOrGetter<Frame>): ComputedRef<Rect.Rect> {
-  const local = useChild(NODE_CHANNEL, frame, zero)
+export function useHierarchyNode(
+  node: MaybeRefOrGetter<HierarchyNodeInput>,
+): ComputedRef<Rect.Rect> {
+  const local = useChild(NODE_CHANNEL, node, zero)
   const origin = useOrigin()
   return computed(() => Rect.translate(local.value, origin.value.x, origin.value.y))
 }

@@ -36,11 +36,15 @@ and `Flexbox.apply` solves it. `Box` is a positioned-box spec (CSS absolute
 positioning). `Box.apply` solves it against a parent rect, and every
 non-finite input acts as unset. `Hierarchy` is a layered graph layout spec.
 `Hierarchy.apply` solves `Frame`s with ids plus `Edge` specs (which
-reference frame ids and carry `Adornment`s) through the phases in
+reference frame ids and carry `Adornment`s), with optional `Polygon` node
+shapes that ports sit on, through the phases in
 `internal/hierarchy/`: acyclic, rank (network simplex), order, position
 (Brandes-Köpf), and layout (bands, ports, routes). `lanes.ts` orders the jogs
 and U-turns of orthogonal routes, and `adornments.ts` packs adornments onto
-straight runs and sizes corners. `Rect`,
+straight runs and sizes corners. `Polygon` is a regular or star polygon that fills a rect, and
+`Polygon.apply` places it, growing a rounded one so that its rounded
+outline fills the rect (`internal/polygon.ts`, shared with the hierarchy
+ports). `Rect`,
 `Point`, `Dimensions`, and `Offset` are the 2D value types. Type-only cross-module imports can stay flat
 (`import type { Rect } from ...`). Use namespace imports for value usage.
 

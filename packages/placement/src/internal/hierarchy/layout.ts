@@ -1,5 +1,6 @@
 import { clamp, coincident } from 'curvy/number'
 import * as Track from '../../track.ts'
+import { cornerArcs, onArc } from '../polygon.ts'
 import { findReversed } from './acyclic.ts'
 import {
   type Axis,
@@ -55,6 +56,17 @@ export interface SolveNode {
   // Resolved band placement and stretch.
   readonly place: number
   readonly stretch: number
+  // The node's shape in its box, or undefined for the box itself. Ports
+  // sit on it.
+  readonly shape: ((box: LogicalBox) => SolveShape) | undefined
+}
+
+// A node's shape: closed outlines of corners in logical coordinates, and
+// the radius of the circular arcs that round every corner, which they fit
+// whole.
+export interface SolveShape {
+  readonly outlines: ReadonlyArray<ReadonlyArray<LogicalPoint>>
+  readonly radius: number
 }
 
 export interface SolvePort {
@@ -775,11 +787,20 @@ export function solve(
     edgeGap,
     sideOrder,
   )
+  // Each node's shape in its box, resolved once.
+  const shapes = new Map<number, SolveShape | undefined>()
+  const shapeOf = (node: number): SolveShape | undefined => {
+    if (!shapes.has(node)) {
+      shapes.set(node, (nodes[node] as SolveNode).shape?.(nodeBoxes[node] as LogicalBox))
+    }
+    return shapes.get(node)
+  }
   const portPoint = (end: End): LogicalPoint =>
     facePoint(
       nodeBoxes[end.node] as LogicalBox,
       end.face,
       (rankAlong.get(end) ?? orderAlong.get(end)) as number,
+      shapeOf(end.node),
     )
 
   // The lane of channel `channel` at `lane`, along the rank axis.
@@ -840,7 +861,14 @@ export function solve(
   for (const [node, list] of loops.entries()) {
     const box = nodeBoxes[node] as LogicalBox
     for (const [k, edgeIndex] of list.entries()) {
-      routes[edgeIndex] = selfLoop(box, edges[edgeIndex] as SolveEdge, k, list.length, edgeGap)
+      routes[edgeIndex] = selfLoop(
+        box,
+        shapeOf(node),
+        edges[edgeIndex] as SolveEdge,
+        k,
+        list.length,
+        edgeGap,
+      )
     }
   }
 
@@ -1299,17 +1327,76 @@ function faceLength(box: LogicalBox, face: number): number {
   return isRankFace(face) ? box.oSize : box.rSize
 }
 
-function facePoint(box: LogicalBox, face: number, along: number): LogicalPoint {
-  switch (face) {
-    case RANK_START:
-      return [along, box.r]
-    case RANK_END:
-      return [along, box.r + box.rSize]
-    case ORDER_END:
-      return [box.o + box.oSize, along]
-    default:
-      return [box.o, along]
+// The port at `along` on `face`: where the line through it across the face
+// first meets the node's shape, coming in from the face. Without a shape,
+// or where the line misses it, the port sits on the face. A shape whose
+// rounded corners grew it past the box can only bring the port in, never
+// out past the face.
+function facePoint(
+  box: LogicalBox,
+  face: number,
+  along: number,
+  shape: SolveShape | undefined,
+): LogicalPoint {
+  const rank = isRankFace(face)
+  // The axis the line runs along, and the one it holds at `along`.
+  const axis = rank ? 1 : 0
+  const held = rank ? 0 : 1
+  const fromStart = face === RANK_START || face === ORDER_START
+  const edge =
+    face === RANK_START
+      ? box.r
+      : face === RANK_END
+        ? box.r + box.rSize
+        : face === ORDER_START
+          ? box.o
+          : box.o + box.oSize
+  let hit: number | undefined
+  const meet = (value: number): void => {
+    if (hit === undefined || (fromStart ? value < hit : value > hit)) {
+      hit = value
+    }
   }
+  for (const corners of shape?.outlines ?? []) {
+    const arcs = cornerArcs(corners, (shape as SolveShape).radius)
+    for (const [i, corner] of corners.entries()) {
+      const next = (i + 1) % corners.length
+      // The side from this corner to the next, between their arcs. An end
+      // on the line meets it. Otherwise the side meets it where its ends
+      // lie on either side.
+      const a = arcs[i]?.end ?? corner
+      const b = arcs[next]?.start ?? (corners[next] as LogicalPoint)
+      const aOn = coincident(a[held], along)
+      const bOn = coincident(b[held], along)
+      if (aOn) {
+        meet(a[axis])
+      }
+      if (bOn) {
+        meet(b[axis])
+      }
+      if (!aOn && !bOn && a[held] < along !== b[held] < along) {
+        meet(a[axis] + ((along - a[held]) * (b[axis] - a[axis])) / (b[held] - a[held]))
+      }
+      // The arc that rounds this corner meets the line where its circle
+      // does, on the corner's side of its tangent points. A line that
+      // grazes the circle touches it.
+      const arc = arcs[i]
+      if (arc !== undefined) {
+        const offset = along - arc.center[held]
+        const squared = arc.radius * arc.radius - offset * offset
+        if (squared >= 0 || coincident(Math.abs(offset), arc.radius)) {
+          const root = Math.sqrt(Math.max(squared, 0))
+          for (const value of [arc.center[axis] - root, arc.center[axis] + root]) {
+            if (onArc(arc, axis === 0 ? [value, along] : [along, value])) {
+              meet(value)
+            }
+          }
+        }
+      }
+    }
+  }
+  const depth = hit === undefined ? edge : fromStart ? Math.max(hit, edge) : Math.min(hit, edge)
+  return rank ? [along, depth] : [depth, along]
 }
 
 // Positions for `count` ports on a face: `gap` apart around the center when
@@ -1549,6 +1636,7 @@ function assignColumns(
 
 function selfLoop(
   box: LogicalBox,
+  shape: SolveShape | undefined,
   edge: SolveEdge,
   k: number,
   count: number,
@@ -1569,8 +1657,8 @@ function selfLoop(
     return start + length / 2 + (sameFace ? (sign * fraction * length) / 2 : 0)
   }
 
-  const source = facePoint(box, sourceFace, portAlong(edge.sourcePort, sourceFace, -1))
-  const target = facePoint(box, targetFace, portAlong(edge.targetPort, targetFace, 1))
+  const source = facePoint(box, sourceFace, portAlong(edge.sourcePort, sourceFace, -1), shape)
+  const target = facePoint(box, targetFace, portAlong(edge.targetPort, targetFace, 1), shape)
 
   const o0 = box.o - inflate
   const o1 = box.o + box.oSize + inflate

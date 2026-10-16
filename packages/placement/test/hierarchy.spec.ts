@@ -4,8 +4,10 @@ import * as Adornment from '../src/adornment.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
 import * as Hierarchy from '../src/hierarchy.ts'
+import { type XY, cornerArcs, onArc } from '../src/internal/polygon.ts'
 import * as Interval from '../src/interval.ts'
 import * as Point from '../src/point.ts'
+import * as Polygon from '../src/polygon.ts'
 import * as Rect from '../src/rect.ts'
 
 const box = Frame.make({ width: 100, height: 40 })
@@ -41,6 +43,46 @@ const stub = (length: number, at: number) =>
 
 const labelOf = (frame: Frame.Frame, input: Omit<Adornment.AdornmentInput, 'frame'> = {}) =>
   Adornment.make({ frame, ...input })
+
+const near = (a: number, b: number) => Math.abs(a - b) < 1e-7
+
+// Whether `point` lies on `polygon` as placed in `rect`, rounded corners
+// included, within a tolerance for the growth of rounded outlines.
+const onPolygon = (point: Point.Point, polygon: Polygon.Polygon, rect: Rect.Rect) => {
+  const { outlines, radius } = Polygon.apply(polygon, rect)
+  const p: XY = [point.x, point.y]
+  return outlines.some((outline) => {
+    const corners = outline.map(({ x, y }): XY => [x, y])
+    const arcs = cornerArcs(corners, radius)
+    return corners.some((corner, i) => {
+      const arc = arcs[i]
+      if (arc !== undefined) {
+        const distance = Math.hypot(p[0] - arc.center[0], p[1] - arc.center[1])
+        if (near(distance, arc.radius) && onArc(arc, p)) {
+          return true
+        }
+      }
+      const a = arc?.end ?? corner
+      const next = (i + 1) % corners.length
+      const b = arcs[next]?.start ?? (corners[next] as XY)
+      const length = Math.hypot(b[0] - a[0], b[1] - a[1])
+      const t = ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / length ** 2
+      const cross = ((p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0])) / length
+      return t >= -1e-9 && t <= 1 + 1e-9 && near(cross, 0)
+    })
+  })
+}
+
+const expectClose = (a: Point.Point, b: Point.Point | undefined) => {
+  expect(a.x).toBeCloseTo(b?.x ?? Number.NaN, 9)
+  expect(a.y).toBeCloseTo(b?.y ?? Number.NaN, 9)
+}
+
+// Whether `point` lies on the diamond inscribed in `rect`.
+const onDiamond = (point: Point.Point, rect: Rect.Rect) =>
+  Math.abs(point.x - rect.x - rect.width / 2) / (rect.width / 2) +
+    Math.abs(point.y - rect.y - rect.height / 2) / (rect.height / 2) ===
+  1
 
 describe('make', () => {
   test('empty input applies the defaults', () => {
@@ -1159,6 +1201,170 @@ describe('apply', () => {
       ])
     })
   })
+  describe('shapes', () => {
+    const diamond = Frame.make({ id: 'd', width: 80, height: 40 })
+    const nodes = [
+      Frame.setId(small, 'a'),
+      diamond,
+      Frame.setId(small, 'b'),
+      Frame.setId(small, 'c'),
+    ]
+    const shapes = { d: Polygon.make({ phase: 0.5 }) }
+
+    test('ports meet a diamond at its tips and on its slopes', () => {
+      const layout = Hierarchy.apply(
+        nodes,
+        [
+          Edge.make({ source: 'a', target: 'd' }),
+          Edge.make({ source: 'd', target: 'b' }),
+          Edge.make({ source: 'd', target: 'c' }),
+        ],
+        spec,
+        { shapes },
+      )
+      const d = layout.nodes.d
+      // The centered port meets the top tip. The two ports out of the
+      // bottom sit 5 either side of the center, where the slopes are 2.5
+      // up from the rect.
+      expect(layout.edges[0]?.points.at(-1)).toEqual(Point.make(d.x + 40, d.top))
+      expect(layout.edges[1]?.points[0]).toEqual(Point.make(d.x + 35, d.bottom - 2.5))
+      expect(layout.edges[2]?.points[0]).toEqual(Point.make(d.x + 45, d.bottom - 2.5))
+    })
+
+    test.each(Object.entries(Hierarchy.direction))(
+      'every port lies on the outline, %s',
+      (_, direction) => {
+        const layout = Hierarchy.apply(
+          nodes,
+          [
+            Edge.make({ source: 'a', target: 'd' }),
+            Edge.make({ source: 'd', target: 'b' }),
+            Edge.make({ source: 'd', target: 'c' }),
+            Edge.make({ source: 'd', target: 'd' }),
+            Edge.make({ source: 'b', target: 'd', targetSide: Edge.side.left, targetAt: 0.25 }),
+          ],
+          Hierarchy.make({ rankGap: 40, nodeGap: 20, edgeGap: 10, direction }),
+          { shapes },
+        )
+        const d = layout.nodes.d
+        const ends = [
+          layout.edges[0]?.points.at(-1),
+          layout.edges[1]?.points[0],
+          layout.edges[2]?.points[0],
+          layout.edges[3]?.points[0],
+          layout.edges[3]?.points.at(-1),
+          layout.edges[4]?.points.at(-1),
+        ]
+        for (const point of ends) {
+          expect(onDiamond(point as Point.Point, d)).toBe(true)
+        }
+        // A fixed port on the left at a quarter of the way down meets the
+        // upper-left slope, a quarter of the width in.
+        expect(layout.edges[4]?.points.at(-1)).toEqual(Point.make(d.x + 20, d.y + 10))
+      },
+    )
+
+    test('a rounded diamond grows so its rounded tips touch the rect', () => {
+      const rounded = Polygon.make({ phase: 0.5, radius: 8 })
+      const layout = Hierarchy.apply(
+        nodes,
+        [
+          Edge.make({ source: 'a', target: 'd' }),
+          Edge.make({ source: 'd', target: 'b', sourceSide: Edge.side.left }),
+          Edge.make({ source: 'd', target: 'c', sourceSide: Edge.side.bottom, sourceAt: 0.25 }),
+        ],
+        spec,
+        { shapes: { d: rounded } },
+      )
+      const d = layout.nodes.d
+      const top = layout.edges[0]?.points.at(-1) as Point.Point
+      expect(top.x).toBe(d.x + 40)
+      expect(top.y).toBeCloseTo(d.top, 9)
+      const left = layout.edges[1]?.points[0] as Point.Point
+      expect(left.x).toBeCloseTo(d.left, 9)
+      expect(left.y).toBe(d.y + 20)
+      // Off center, the port sits on the grown diamond's outline.
+      const slope = layout.edges[2]?.points[0] as Point.Point
+      expect(slope.x).toBe(d.x + 20)
+      expect(onPolygon(slope, rounded, d)).toBe(true)
+      expect(slope.y).toBeLessThan(d.bottom)
+    })
+
+    test.each([
+      // Past the corner's arc, the port stays on the side.
+      [0.5, 10, 40],
+      // On the arc of radius 10 centered at (10, 30).
+      [0.05, 10, 30 + Math.sqrt(75)],
+      // The corners fit only at radius 20, half the height: a pill.
+      [0.1, 1000, 20 + Math.sqrt(300)],
+      [0.5, 1000, 40],
+    ])('a rounded rect puts a port at %f with radius %f %f down', (at, radius, y) => {
+      const layout = Hierarchy.apply(
+        [Frame.setId(box, 'a'), Frame.setId(box, 'b')],
+        [Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.bottom, sourceAt: at })],
+        spec,
+        { shapes: { a: Polygon.make({ radius }) } },
+      )
+      const start = layout.edges[0]?.points[0] as Point.Point
+      expect(start.x).toBe(at * 100)
+      expect(start.y).toBeCloseTo(y, 12)
+    })
+
+    test.each([
+      ['a star', Polygon.make({ sides: 5, loops: 2, phase: 0.5 })],
+      ['a rounded star', Polygon.make({ sides: 5, loops: 2, phase: 0.5, radius: 3 })],
+      ['a hexagram', Polygon.make({ sides: 6, loops: 2 })],
+      ['a rounded triangle', Polygon.make({ sides: 3, radius: 6 })],
+    ])('ports meet %s on its outline', (_, polygon) => {
+      const layout = Hierarchy.apply(
+        [Frame.setId(box, 'a'), Frame.setId(box, 'b')],
+        [0.125, 0.3, 0.5, 0.7, 0.875].map((at) =>
+          Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.bottom, sourceAt: at }),
+        ),
+        spec,
+        { shapes: { a: polygon } },
+      )
+      for (const route of layout.edges) {
+        expect(onPolygon(route.points[0] as Point.Point, polygon, layout.nodes.a)).toBe(true)
+      }
+    })
+
+    test.each([-4, Number.NaN, Number.POSITIVE_INFINITY])('a radius of %f is sharp', (radius) => {
+      const edges = [
+        Edge.make({ source: 'a', target: 'd', targetSide: Edge.side.top, targetAt: 0.125 }),
+      ]
+      expect(
+        Hierarchy.apply(nodes, edges, spec, {
+          shapes: { d: Polygon.make({ phase: 0.5, radius }) },
+        }),
+      ).toEqual(Hierarchy.apply(nodes, edges, spec, { shapes }))
+    })
+
+    test.each([
+      ['the sharp rect', Polygon.make()],
+      ['a phase of 1', Polygon.make({ phase: 1 })],
+      ['a value that is no polygon', {} as Polygon.Polygon],
+    ])('%s is no shape', (_, polygon) => {
+      const nodes = [Frame.setId(box, 'a'), Frame.setId(box, 'b')]
+      const edges = [
+        Edge.make({ source: 'a', target: 'b' }),
+        Edge.make({ source: 'a', target: 'b', sourceAt: 0.125 }),
+      ]
+      expect(Hierarchy.apply(nodes, edges, spec, { shapes: { a: polygon } })).toEqual(
+        Hierarchy.apply(nodes, edges, spec),
+      )
+    })
+
+    test('ids that name prototype properties have no shape', () => {
+      const nodes = [Frame.setId(box, 'toString'), Frame.setId(box, 'constructor')]
+      const edges = [Edge.make({ source: 'toString', target: 'constructor' })]
+      // A plain object, whose prototype has both names.
+      const shapes = JSON.parse('{}')
+      expect(Hierarchy.apply(nodes, edges, spec, { shapes })).toEqual(
+        Hierarchy.apply(nodes, edges, spec),
+      )
+    })
+  })
 })
 
 // A pseudo-random graph for property checks. A linear congruential
@@ -1518,5 +1724,83 @@ describe('properties', () => {
     expect(b.y).toBeCloseTo(0.4, 12)
     expect(c.x - b.right).toBeCloseTo(0.2, 12)
     expect(layout.nodes.a.x).toBeCloseTo(0.15, 12)
+  })
+
+  // Shapes move only the ends of routes: each port slides in along its
+  // first or last segment onto the outline, and the rest of the layout
+  // stays as it is.
+  test.each([21, 22, 23, 24])('random graph %i with shapes', (seed) => {
+    const { nodes, edges } = randomGraph(seed, 12, 18, true)
+    const kinds = [
+      Polygon.make({ phase: 0.5 }),
+      Polygon.make({ phase: 0.5, radius: 6 }),
+      Polygon.make({ radius: 1000 }),
+      Polygon.make({ sides: 5, loops: 2, phase: 0.5, radius: 2 }),
+      Polygon.make({ sides: 6, radius: 4 }),
+      undefined,
+    ]
+    const kindOf = (id: string) => kinds[Number(id.slice(1)) % kinds.length]
+    const shapes = Object.fromEntries(
+      nodes.flatMap((frame): Array<[string, Polygon.Polygon]> => {
+        const kind = kindOf(frame.id)
+        return kind === undefined ? [] : [[frame.id, kind]]
+      }),
+    )
+    for (const backEdges of Object.values(Hierarchy.backEdges)) {
+      for (const direction of Object.values(Hierarchy.direction)) {
+        const hierarchy = Hierarchy.make({
+          rankGap: 30,
+          nodeGap: 20,
+          edgeGap: 8,
+          direction,
+          backEdges,
+        })
+        const plain = Hierarchy.apply(nodes, edges, hierarchy)
+        const shaped = Hierarchy.apply(nodes, edges, hierarchy, { shapes })
+        // Adornments packed against a port move with it, which can move the
+        // bounds and so the origin of the drawing. Compare in the plain
+        // layout's frame.
+        const first = nodes[0]?.id as string
+        const dx = (plain.nodes[first] as Rect.Rect).x - (shaped.nodes[first] as Rect.Rect).x
+        const dy = (plain.nodes[first] as Rect.Rect).y - (shaped.nodes[first] as Rect.Rect).y
+        // The shift by a non-dyadic amount rounds, so compare by closeness.
+        for (const frame of nodes) {
+          const rect = Rect.translate(shaped.nodes[frame.id] as Rect.Rect, dx, dy)
+          const expected = plain.nodes[frame.id] as Rect.Rect
+          expectClose(Point.make(rect.x, rect.y), Point.make(expected.x, expected.y))
+          expect([rect.width, rect.height]).toEqual([expected.width, expected.height])
+        }
+        for (const [i, edge] of edges.entries()) {
+          const before = plain.edges[i]?.points ?? []
+          const after = (shaped.edges[i]?.points ?? []).map((point) =>
+            Point.translate(point, dx, dy),
+          )
+          expect(after).toHaveLength(before.length)
+          for (let k = 1; k + 1 < after.length; k++) {
+            expectClose(after[k] as Point.Point, before[k])
+          }
+          for (const [end, next, id] of [
+            [0, 1, edge.source],
+            [after.length - 1, after.length - 2, edge.target],
+          ] as const) {
+            const moved = after[end] as Point.Point
+            const was = before[end] as Point.Point
+            const rect = plain.nodes[id] as Rect.Rect
+            const kind = kindOf(id)
+            if (kind === undefined) {
+              expectClose(moved, was)
+              continue
+            }
+            // On the outline, inside the rect, and on the line of the
+            // segment it ends.
+            expect(onPolygon(moved, kind, rect)).toBe(true)
+            expect(Rect.contains(rect, moved)).toBe(true)
+            const neighbor = after[next] as Point.Point
+            const alongX = coincident(was.y, neighbor.y) && !coincident(was.x, neighbor.x)
+            expect(alongX ? moved.y : moved.x).toBeCloseTo(alongX ? was.y : was.x, 9)
+          }
+        }
+      }
+    }
   })
 })

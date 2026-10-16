@@ -13,7 +13,10 @@ diagrams.
   position it (`left="50%" top="50%" origin="center"` centers it).
 - `HierarchyNode` takes an `id` plus the sizing, margin, and `alignSelf`
   props of `FlexItem`. Its percentages resolve against the layout's parent,
-  because the layout's own size depends on its nodes.
+  because the layout's own size depends on its nodes. A `GraphicRect` or
+  `GraphicPolygon` that fills a node gives it the outline its edges meet,
+  so that they touch a diamond's rounded tips or a rounded rect's curve
+  rather than the bounding box.
 - `HierarchyEdge` references nodes with `from` and `to`, sets ports with
   `fromPort`/`toPort` (`'right'`, `'25%'`, or `'right 25%'`), and takes
   `weight` and `minLength`. It draws its route as a path with the paint

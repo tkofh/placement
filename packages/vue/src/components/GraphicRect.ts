@@ -1,8 +1,10 @@
 import { CubicPath2d } from 'curvy/path'
+import * as Polygon from 'placement/polygon'
 import { computed, defineComponent, h } from 'vue'
+import { useOutline } from '../composables/useOutline.ts'
 import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
 import { RADIUS_PROP_KEYS, type RadiusProps, useRadius } from '../composables/useRadius.ts'
-import { RECT_PROP_KEYS, type RectProps, useRect } from '../composables/useRect.ts'
+import { RECT_PROP_KEYS, type RectProps, fillsParent, useRect } from '../composables/useRect.ts'
 import { roundRect } from '../internal/corners.ts'
 import { type SmoothingInput, resolveSmoothing } from '../internal/props/smoothing.ts'
 
@@ -23,6 +25,15 @@ export const GraphicRect = defineComponent(
     const radius = useRadius(props)
 
     const paint = usePaint(props)
+
+    // A rect that fills a hierarchy node gives the node its outline, so
+    // edges meet its rounded corners. The outline's corners are circular,
+    // of the smaller radius.
+    useOutline(() =>
+      fillsParent(props)
+        ? Polygon.make({ radius: Math.min(radius.value.x, radius.value.y) })
+        : undefined,
+    )
 
     // Smoothed corners need a path. Plain corners keep the native rect.
     const smoothed = computed(() => {

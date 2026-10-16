@@ -2,7 +2,9 @@
 '@placement/vue': minor
 ---
 
-Add `GraphicPolygon`, which draws a closed polygon inside its box. Its
-`points` take the form of CSS `polygon()`: comma-separated `x y` pairs of
-lengths or percentages of the box, such as `'0% 0%, 100% 50%, 0% 100%'` for a
-triangle pointing right. `r` and `smoothing` round its corners.
+Add `GraphicPolygon`, which draws a regular polygon or star polygon that
+fills its box (see `placement/polygon`). `sides` sets the number of corners
+(a rect by default), `phase` slides them along their edges (`phase="0.5"`
+draws a diamond), and `loops` joins them into a star. `r` and `smoothing`
+round its corners, and a rounded polygon grows so that its rounded outline
+still fills its box.
