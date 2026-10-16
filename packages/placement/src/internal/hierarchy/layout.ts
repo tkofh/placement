@@ -1,7 +1,7 @@
 import { clamp, coincident } from 'curvy/number'
 import * as Track from '../../track.ts'
+import { findReversed } from '../graph/acyclic.ts'
 import { cornerArcs, onArc } from '../polygon.ts'
-import { findReversed } from './acyclic.ts'
 import {
   type Axis,
   type RunItem,

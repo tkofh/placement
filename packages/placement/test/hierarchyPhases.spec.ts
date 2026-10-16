@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { findReversed } from '../src/internal/hierarchy/acyclic.ts'
+import { findReversed } from '../src/internal/graph/acyclic.ts'
 import type { LayeredGraph, Segment } from '../src/internal/hierarchy/graph.ts'
 import { FAR, type Jog, NEAR, assignLanes } from '../src/internal/hierarchy/lanes.ts'
 import { countCrossings, order } from '../src/internal/hierarchy/order.ts'

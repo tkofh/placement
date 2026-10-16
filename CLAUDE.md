@@ -44,7 +44,14 @@ and U-turns of orthogonal routes, and `adornments.ts` packs adornments onto
 straight runs and sizes corners. `Polygon` is a regular or star polygon that fills a rect, and
 `Polygon.apply` places it, growing a rounded one so that its rounded
 outline fills the rect (`internal/polygon.ts`, shared with the hierarchy
-ports). `Rect`,
+ports). `internal/graph/` holds the graphs of points that the connector
+router builds on (not yet public): `graph.ts` stores them in flat arrays,
+`visibility.ts` builds the orthogonal visibility graph of obstacles and pins,
+and `search.ts` finds the cheapest path for length and turns (A\*);
+`acyclic.ts` breaks cycles and orders pairwise preferences for both
+routers. `internal/connector/nudge.ts` moves overlapping route segments
+apart with `internal/separation.ts`, a 1D separation-constraint solver
+(VPSC). `Rect`,
 `Point`, `Dimensions`, and `Offset` are the 2D value types. Type-only cross-module imports can stay flat
 (`import type { Rect } from ...`). Use namespace imports for value usage.
 

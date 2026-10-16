@@ -1,5 +1,5 @@
 import { coincident } from 'curvy/number'
-import { findReversed } from './acyclic.ts'
+import { preferredOrder } from '../graph/acyclic.ts'
 
 // Lane assignment for the parallel segments in a routing channel, the
 // ordering problem of orthogonal edge routing (Sander 2004, and the nudging
@@ -127,44 +127,9 @@ export function assignLanes(jogs: ReadonlyArray<Jog>): Lanes {
     }
   }
 
-  // An acyclic version of the preferred orders: flip each back edge.
-  const reversed = findReversed(count, preferred)
-  const before: Array<Array<number>> = jogs.map(() => [])
-  const pending = Array.from({ length: count }, () => 0)
-  for (const [k, { source, target }] of preferred.entries()) {
-    const [first, second] = reversed[k] ? [target, source] : [source, target]
-    ;(before[first] as Array<number>).push(second)
-    const waiting = pending[second] as number
-    pending[second] = waiting + 1
-  }
-
-  // A topological order that takes the lowest ready index first. Jogs with
+  // An order that follows the preferences, breaking their cycles. Jogs with
   // no preference between them keep input order.
-  const position = Array.from({ length: count }, () => -1)
-  const ready: Array<number> = []
-  for (let i = 0; i < count; i++) {
-    if (pending[i] === 0) {
-      ready.push(i)
-    }
-  }
-  let next = 0
-  while (ready.length > 0) {
-    let pick = 0
-    for (let k = 1; k < ready.length; k++) {
-      if ((ready[k] as number) < (ready[pick] as number)) {
-        pick = k
-      }
-    }
-    const jog = ready.splice(pick, 1)[0] as number
-    position[jog] = next++
-    for (const after of before[jog] as Array<number>) {
-      const left = (pending[after] as number) - 1
-      pending[after] = left
-      if (left === 0) {
-        ready.push(after)
-      }
-    }
-  }
+  const position = preferredOrder(count, preferred)
 
   // Each jog takes the lane after every overlapping jog placed before it.
   const order = Array.from({ length: count }, (_, i) => i).toSorted(
