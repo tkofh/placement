@@ -8,6 +8,18 @@ const pointsOf = (layout: Connector.ConnectorLayout, i = 0) =>
 
 const spec = Connector.make({ clearance: 10, gap: 4 })
 
+// An edge from the right of `a` to the top of `b`, with rounded corners.
+const rightToTop = (from: number, to: number) =>
+  Edge.make({
+    source: 'a',
+    target: 'b',
+    sourceSide: Edge.side.right,
+    sourceAt: from,
+    targetSide: Edge.side.top,
+    targetAt: to,
+    radius: 30,
+  })
+
 // An edge from the right of `a` to the left of `b`, at the same position
 // along both sides.
 const across = (at: number) =>
@@ -258,6 +270,27 @@ describe('apply', () => {
     )
     // The middle leg is 40 long, so each of its corners reaches 20.
     expect(layout.edges[0]?.radii).toEqual([0, 20, 20, 0])
+  })
+
+  test('the inner corner of routes that turn together shrinks to share a center', () => {
+    const rects = { a: Rect.make(0, 0, 40, 40), b: Rect.make(100, 100, 40, 40) }
+    const layout = Connector.apply(rects, [rightToTop(0.25, 0.75), rightToTop(0.75, 0.25)], spec)
+    expect(pointsOf(layout, 0)).toEqual([
+      [40, 10],
+      [130, 10],
+      [130, 100],
+    ])
+    expect(pointsOf(layout, 1)).toEqual([
+      [40, 30],
+      [110, 30],
+      [110, 100],
+    ])
+    // The outer corner reaches 30, and the inner one, 20 in and 20 over,
+    // reaches 10, about the same center (100, 40).
+    expect(layout.edges.map((route) => route?.radii)).toEqual([
+      [0, 30, 0],
+      [0, 10, 0],
+    ])
   })
 
   test('a rect that others enclose has no route', () => {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import { cornerRadii } from '../src/internal/connector/corners.ts'
 import { type XY, nudge } from '../src/internal/connector/nudge.ts'
 import type { Obstacle } from '../src/internal/graph/graph.ts'
 import { shortestPath } from '../src/internal/graph/search.ts'
@@ -256,24 +257,32 @@ describe('nudge', () => {
     expect(nb?.[1]?.[0]).toBe(10)
   })
 
-  test('a narrow channel shrinks the gaps until the routes fit', () => {
+  test.each([
+    [3, [6, 3, 0]],
+    [4, [6, 4, 2, 0]],
+  ])('a narrow channel spreads %i routes evenly between its walls', (count, expected) => {
     const walls: Array<Obstacle> = [
       { left: -20, top: 0, right: 0, bottom: 40 },
       { left: 6, top: 0, right: 26, bottom: 40 },
     ]
-    const routes = [0, 1, 2].map((k) =>
+    const routes = Array.from({ length: count }, (_, k) =>
       route([-30, -10 - k], [3, -10 - k], [3, 50 + k], [40, 50 + k]),
     )
-    const nudged = nudge(routes, walls, 8)
-    const xs = nudged.map((r) => r[1]?.[0] as number)
-    for (const x of xs) {
-      expect(x).toBeGreaterThanOrEqual(0)
-      expect(x).toBeLessThanOrEqual(6)
-    }
-    // Three distinct lanes, in some order, at least one unit apart.
-    const sorted = xs.toSorted((a, b) => a - b)
-    expect(sorted[1]! - sorted[0]!).toBeGreaterThanOrEqual(1)
-    expect(sorted[2]! - sorted[1]!).toBeGreaterThanOrEqual(1)
+    expect(nudge(routes, walls, 8).map((r) => r[1]?.[0])).toEqual(expected)
+  })
+
+  test('a squeeze beside a fixed segment splits the room evenly', () => {
+    // The pinned route holds x = 1.75, and the wall x = 4, so the two
+    // routes between share the 2.25 between them.
+    const wall: Array<Obstacle> = [{ left: 4, top: -50, right: 30, bottom: 60 }]
+    const pinned = route([1.75, -20], [1.75, 40])
+    const a = route([-30, -10], [4, -10], [4, 50], [-30, 50])
+    const b = route([-30, -5], [4, -5], [4, 45], [-30, 45])
+    expect(nudge([pinned, a, b], wall, 3)).toEqual([
+      pinned,
+      a,
+      route([-30, -5], [2.875, -5], [2.875, 45], [-30, 45]),
+    ])
   })
 
   test('a jog between two segments of one route never turns back', () => {
@@ -446,5 +455,75 @@ describe('nudging random diagrams', () => {
         }
       }
     }
+  })
+})
+
+describe('cornerRadii', () => {
+  // Routes that run right, then turn down, nested `spacing` apart, the
+  // outermost first.
+  const nest = (count: number, spacing: number) =>
+    Array.from({ length: count }, (_, k) =>
+      route([0, k * spacing], [30 - k * spacing, k * spacing], [30 - k * spacing, 40]),
+    )
+
+  test('a corner takes its share of each leg', () => {
+    expect(cornerRadii([route([0, 0], [30, 0], [30, 40], [100, 40])], [25])).toEqual([
+      [0, 20, 20, 0],
+    ])
+    expect(cornerRadii([route([0, 0], [30, 0], [30, 40])], [-1])).toEqual([[0, 0, 0]])
+  })
+
+  test.each([
+    [2, [10, 6]],
+    [3, [10, 6, 2]],
+    [4, [10, 6, 2, 0]],
+  ])('a nest of %i shrinks its inner corners to share a center', (count, expected) => {
+    const sizes = cornerRadii(
+      nest(count, 4),
+      Array.from({ length: count }, () => 10),
+    )
+    expect(sizes.map((list) => list[1])).toEqual(expected)
+    // The centers sit back from each corner along the way in and over
+    // along the way out, by its size.
+    const centers = sizes.flatMap((list, k) =>
+      (list[1] as number) > 0
+        ? [[30 - 4 * k - (list[1] as number), 4 * k + (list[1] as number)]]
+        : [],
+    )
+    for (const center of centers) {
+      expect(center).toEqual([20, 10])
+    }
+  })
+
+  test('an inner corner that short legs hold small holds the outer one too', () => {
+    // The inner route's last leg is 4 long, so its corner reaches 4 at most,
+    // and the outer corner, 4 farther out, reaches 8 about the same center.
+    const outer = route([0, 0], [30, 0], [30, 40])
+    const inner = route([0, 4], [26, 4], [26, 8])
+    expect(cornerRadii([outer, inner], [16, 16])).toEqual([
+      [0, 8, 0],
+      [0, 4, 0],
+    ])
+  })
+
+  test('uneven offsets shrink the inner corner by the larger', () => {
+    const outer = route([0, 0], [30, 0], [30, 40])
+    const inner = route([0, 8], [26, 8], [26, 40])
+    expect(cornerRadii([outer, inner], [10, 10])).toEqual([
+      [0, 10, 0],
+      [0, 2, 0],
+    ])
+  })
+
+  test('corners farther apart than they reach keep their size', () => {
+    expect(cornerRadii(nest(2, 12), [10, 10]).map((list) => list[1])).toEqual([10, 10])
+  })
+
+  test('corners that turn differently, or fan out, keep their size', () => {
+    const right = route([0, 0], [30, 0], [30, 40])
+    const left = route([0, 4], [26, 4], [26, -40])
+    const fanned = route([0, -4], [26, -4], [26, 40])
+    expect(cornerRadii([right, left], [10, 10]).map((list) => list[1])).toEqual([10, 10])
+    expect(cornerRadii([right, fanned], [10, 10]).map((list) => list[1])).toEqual([10, 10])
   })
 })

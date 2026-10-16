@@ -1,6 +1,7 @@
 import { coincident } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import type { Edge } from './edge.ts'
+import { cornerRadii } from './internal/connector/corners.ts'
 import { type RouteConstraints, type XY, nudge } from './internal/connector/nudge.ts'
 import type { Obstacle } from './internal/graph/graph.ts'
 import { type Endpoint, shortestPath } from './internal/graph/search.ts'
@@ -42,8 +43,8 @@ export interface ConnectorInput {
   /**
    * The distance between routes that run alongside each other. Where a
    * passage is too narrow for every route at this distance, the routes in it
-   * move closer together, down to touching. Defaults to `0`, which lets
-   * routes overlap.
+   * spread evenly across it instead, down to touching. Defaults to `0`,
+   * which lets routes overlap.
    */
   readonly gap?: number | undefined
   /**
@@ -224,9 +225,11 @@ export interface ConnectorApplyOptions {
  *   point is a right-angled corner.
  * - `radii`: how far the corner at each point reaches along its two legs,
  *   one per point, `0` at both ends. Each is at most the edge's `radius`,
- *   and the corners on a segment never reach past each other. A renderer
- *   that rounds corners draws circular corners of these radii, or any
- *   corner that reaches no farther.
+ *   and the corners on a segment never reach past each other. Where routes
+ *   turn together a short distance apart, each inner corner shrinks to fit
+ *   inside the one outside it, about the same center where the routes are
+ *   evenly spaced, as on a metro map. A renderer that rounds corners draws
+ *   circular corners of these radii, or any corner that reaches no farther.
  */
 export interface ConnectorRoute {
   /** The polyline from the source port to the target port. */
@@ -283,6 +286,9 @@ interface Port {
  *    points and stay out of their `avoid` rects.
  * 3. It nudges routes that run alongside each other apart, `gap` apart,
  *    ordered so that routes that share a path cross only where they must.
+ *    Where a passage is too narrow, the routes in it spread evenly across
+ *    it. A jog between turns that go opposite ways moves to the middle of
+ *    the run it shifts.
  *
  * Ports come from each edge's sides and positions. A port sits on its side
  * of its rect, at its `sourceAt` or `targetAt` along the side, and the route
@@ -293,8 +299,9 @@ interface Port {
  * from a rect to itself leaves on the right and enters on the top, by
  * default.
  *
- * Each route's corners report their `radii`, from the edge's `radius`. The
- * edge's `weight`, `minLength`, `minRadius`, and `adornments` have no effect.
+ * Each route's corners report their `radii`, from the edge's `radius`, with
+ * the inner corners of routes that turn together shrunk to nest. The edge's
+ * `weight`, `minLength`, `minRadius`, and `adornments` have no effect.
  *
  * Every input is deterministic: the same rects and edges always produce the
  * same routes. Ties fall back to the order of the rects' keys, then of the
@@ -469,12 +476,15 @@ export function apply<const K extends string>(
       }
     }),
   )
+  const sizes = cornerRadii(
+    nudged,
+    found.map((i) => (edges[i] as Edge<K>).radius),
+  )
   const result: Array<ConnectorRoute | undefined> = edges.map(() => undefined)
   for (const [k, i] of found.entries()) {
-    const points = nudged[k] as Array<XY>
     result[i] = {
-      points: points.map(([x, y]) => Point.make(x, y)),
-      radii: radiiOf(points, (edges[i] as Edge<K>).radius),
+      points: (nudged[k] as Array<XY>).map(([x, y]) => Point.make(x, y)),
+      radii: sizes[k] as Array<number>,
     }
   }
   return { edges: result }
@@ -626,25 +636,5 @@ function viaNodes(
   return via.map((point) => {
     const pin = extraPins.findIndex((p) => p.x === point.x && p.y === point.y)
     return nodes[pin] as number
-  })
-}
-
-// The size of each corner: at most the radius, and no more of a leg than
-// its share. A leg between two corners splits evenly between them, and a
-// leg from a port belongs to its one corner.
-function radiiOf(points: ReadonlyArray<XY>, radius: number): Array<number> {
-  const r = Number.isFinite(radius) && radius > 0 ? radius : 0
-  const legs = points.slice(1).map((point, i) => {
-    const previous = points[i] as XY
-    return Math.abs(point[0] - previous[0]) + Math.abs(point[1] - previous[1])
-  })
-  const last = points.length - 1
-  return points.map((_, i) => {
-    if (i === 0 || i === last) {
-      return 0
-    }
-    const before = (legs[i - 1] as number) / (i - 1 === 0 ? 1 : 2)
-    const after = (legs[i] as number) / (i === last - 1 ? 1 : 2)
-    return Math.min(r, before, after)
   })
 }

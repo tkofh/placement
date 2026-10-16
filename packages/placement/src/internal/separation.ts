@@ -44,6 +44,14 @@ export interface Conflict {
   // The variables of a block whose fixed members disagree, or whose
   // constraints could not all hold.
   readonly variables: ReadonlyArray<number>
+  // For a block whose fixed members disagree: the chain of active
+  // constraints between the two that disagree most, from the one the block
+  // puts too low to the one it puts too high. A constraint that runs along
+  // the chain pushes them apart by its gap, and one that runs against it
+  // pulls them together. `excess` is how much farther apart the chain puts
+  // the two than their desired positions are.
+  readonly chain?: ReadonlyArray<{ readonly constraint: number; readonly along: boolean }>
+  readonly excess?: number
 }
 
 export interface Placement {
@@ -419,6 +427,34 @@ export function placeSeparated(
     satisfy()
   }
 
+  // The chain of active constraints in a block from one member to another,
+  // each marked by whether it runs along the chain, left to right.
+  const chainBetween = (block: Block, from: number, to: number) => {
+    const via = new Map<number, number>([[from, -1]])
+    const queue = [from]
+    while (queue.length > 0 && !via.has(to)) {
+      const v = queue.shift() as number
+      for (const c of block.active) {
+        const { left, right } = constraints[c] as Separation
+        const other = left === v ? right : right === v ? left : -1
+        if (other !== -1 && !via.has(other)) {
+          via.set(other, c)
+          queue.push(other)
+        }
+      }
+    }
+    const chain: Array<{ constraint: number; along: boolean }> = []
+    let v = to
+    while (v !== from) {
+      const c = via.get(v) as number
+      const { left, right } = constraints[c] as Separation
+      // Coming into `v` from the left side of `c` runs along it.
+      chain.push({ constraint: c, along: right === v })
+      v = right === v ? left : right
+    }
+    return chain.toReversed()
+  }
+
   const conflicts: Array<Conflict> = []
   const reported = new Set<Block>()
   for (const block of blocks) {
@@ -429,10 +465,30 @@ export function placeSeparated(
     const disagree = block.variables.some(
       (v) => fixed[v] === 1 && !coincident(at + (offsets[v] as number), desired[v] as number),
     )
-    if (disagree) {
-      reported.add(block)
-      conflicts.push({ variables: [...block.variables] })
+    if (!disagree) {
+      continue
     }
+    // The fixed members the block puts farthest below and above where they
+    // want to be.
+    const miss = (v: number) => at + (offsets[v] as number) - (desired[v] as number)
+    let low = -1
+    let high = -1
+    for (const v of block.variables) {
+      if (fixed[v] === 1) {
+        if (low === -1 || miss(v) < miss(low)) {
+          low = v
+        }
+        if (high === -1 || miss(v) > miss(high)) {
+          high = v
+        }
+      }
+    }
+    reported.add(block)
+    conflicts.push({
+      variables: [...block.variables],
+      chain: chainBetween(block, low, high),
+      excess: miss(high) - miss(low),
+    })
   }
   for (let c = 0; c < constraints.length; c++) {
     if (violated(c)) {

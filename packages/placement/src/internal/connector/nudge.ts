@@ -47,8 +47,8 @@ interface Segment {
   readonly fixed: boolean
 }
 
-// How many times a crowded channel halves its gaps before it gives them up.
-const SHRINK_STEPS = 6
+// How many times the gaps of crowded channels shrink before they give way.
+const SHRINK_STEPS = 12
 
 // How many times the two passes repeat at most.
 const ROUNDS = 3
@@ -348,10 +348,13 @@ function nudgeAxis(
     }
   }
 
-  // Solve, and halve the gaps that crowd a channel until everything fits.
+  // Solve, and shrink the gaps that crowd a channel until everything fits.
+  // A conflict names the chain of constraints that puts two fixed segments
+  // or walls too far apart, and the gaps that push along it shrink by one
+  // factor, just enough to fit, so the segments between spread evenly.
   const scale = new Float64Array(separations.length).fill(1)
   let positions: Float64Array | undefined
-  for (let attempt = 0; attempt <= SHRINK_STEPS + 1; attempt++) {
+  for (let attempt = 0; attempt <= SHRINK_STEPS; attempt++) {
     const constraints: Array<Separation> = separations.map(({ left, right, gap: full }, k) => ({
       left,
       right,
@@ -362,12 +365,33 @@ function nudgeAxis(
     if (conflicts.length === 0) {
       break
     }
-    const crowded = new Set(conflicts.flatMap(({ variables: list }) => list))
     let changed = false
-    for (const [k, { left, right, gap: full }] of separations.entries()) {
-      if (full > 0 && crowded.has(left) && crowded.has(right) && scale[k] !== 0) {
-        scale[k] = attempt >= SHRINK_STEPS ? 0 : (scale[k] as number) / 2
-        changed = true
+    for (const { variables: list, chain, excess } of conflicts) {
+      let pushing = 0
+      for (const { constraint, along } of chain ?? []) {
+        if (along && (separations[constraint] as { gap: number }).gap > 0) {
+          pushing += (constraints[constraint] as Separation).gap
+        }
+      }
+      if (chain !== undefined && excess !== undefined && pushing > 0 && attempt < SHRINK_STEPS) {
+        const factor = Math.max(0, 1 - excess / pushing)
+        for (const { constraint, along } of chain) {
+          if (along && (separations[constraint] as { gap: number }).gap > 0) {
+            const current = scale[constraint] as number
+            scale[constraint] = current * factor
+            changed = true
+          }
+        }
+        continue
+      }
+      // Without a chain to shrink, or after too many attempts, the gaps
+      // among the crowded variables give way.
+      const crowded = new Set(list)
+      for (const [k, { left, right, gap: full }] of separations.entries()) {
+        if (full > 0 && crowded.has(left) && crowded.has(right) && scale[k] !== 0) {
+          scale[k] = attempt >= SHRINK_STEPS - 1 ? 0 : (scale[k] as number) / 2
+          changed = true
+        }
       }
     }
     if (!changed) {

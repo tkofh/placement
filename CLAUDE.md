@@ -54,7 +54,8 @@ length and turns (A\*) between sets of endpoints; `acyclic.ts` breaks
 cycles and orders pairwise preferences for both routers. Then
 `internal/connector/nudge.ts` moves overlapping route segments apart and
 centers jogs, with `internal/separation.ts`, a 1D separation-constraint
-solver (VPSC). `Rect`,
+solver (VPSC), and `internal/connector/corners.ts` sizes corners, nesting
+those of routes that turn together about one center. `Rect`,
 `Point`, `Dimensions`, and `Offset` are the 2D value types. Type-only cross-module imports can stay flat
 (`import type { Rect } from ...`). Use namespace imports for value usage.
 
