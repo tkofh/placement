@@ -27,11 +27,21 @@ export type XY = readonly [number, number]
 
 type Point = [number, number]
 
+export interface RouteConstraints {
+  // Points the route must still pass through. The segments through them do
+  // not move.
+  readonly anchors?: ReadonlyArray<XY> | undefined
+  // Rects that only this route's segments may not move into.
+  readonly avoid?: ReadonlyArray<Obstacle> | undefined
+}
+
 interface Segment {
   readonly route: number
   readonly index: number
   // The coordinate of the line it runs along, and its extent along it.
   readonly at: number
+  // Where it wants to be.
+  readonly desired: number
   readonly low: number
   readonly high: number
   readonly fixed: boolean
@@ -52,6 +62,7 @@ const ROUNDS = 3
  * neighbors.
  * @param obstacles - The rects that segments may not move into.
  * @param gap - The distance between overlapping segments.
+ * @param constraints - What each route keeps, by route index.
  * @returns The routes with their segments moved, without repeated points or
  * points in the middle of a straight run.
  */
@@ -59,17 +70,17 @@ export function nudge(
   routes: ReadonlyArray<ReadonlyArray<XY>>,
   obstacles: ReadonlyArray<Obstacle>,
   gap: number,
+  constraints: ReadonlyArray<RouteConstraints | undefined> = [],
 ): Array<Array<XY>> {
   const paths = routes.map(simplify)
-  if (Number.isFinite(gap) && gap > 0) {
-    // Moving one axis changes the extents of the other's segments, which can
-    // make them overlap, so the passes repeat until neither moves anything.
-    for (let round = 0; round < ROUNDS; round++) {
-      const movedX = nudgeAxis(paths, obstacles, gap, 0)
-      const movedY = nudgeAxis(paths, obstacles, gap, 1)
-      if (!movedX && !movedY) {
-        break
-      }
+  const spacing = Number.isFinite(gap) && gap > 0 ? gap : 0
+  // Moving one axis changes the extents of the other's segments, which can
+  // make them overlap, so the passes repeat until neither moves anything.
+  for (let round = 0; round < ROUNDS; round++) {
+    const movedX = nudgeAxis(paths, obstacles, spacing, 0, constraints)
+    const movedY = nudgeAxis(paths, obstacles, spacing, 1, constraints)
+    if (!movedX && !movedY) {
+      break
     }
   }
   return paths.map(simplify)
@@ -101,6 +112,10 @@ function simplify(route: ReadonlyArray<XY>): Array<Point> {
 
 const coord = (point: Point, axis: number) => (axis === 0 ? point[0] : point[1])
 
+// Whether `x` lies in [low, high], within rounding.
+const between = (x: number, low: number, high: number) =>
+  (x >= low || coincident(x, low)) && (x <= high || coincident(x, high))
+
 // The axis a segment runs across: 0 for a vertical segment, whose x the
 // x pass moves, 1 for a horizontal one, and -1 for a diagonal one.
 function axisOf(route: ReadonlyArray<Point>, index: number): number {
@@ -116,6 +131,7 @@ function nudgeAxis(
   obstacles: ReadonlyArray<Obstacle>,
   gap: number,
   axis: number,
+  constraints: ReadonlyArray<RouteConstraints | undefined>,
 ): boolean {
   const along = 1 - axis
   const segments: Array<Segment> = []
@@ -127,15 +143,34 @@ function nudgeAxis(
       }
       const a = coord(path[index] as Point, along)
       const b = coord(path[index + 1] as Point, along)
+      const at = coord(path[index] as Point, axis)
+      const anchored = (constraints[route]?.anchors ?? []).some((point) => {
+        const across = axis === 0 ? point[0] : point[1]
+        const on = axis === 0 ? point[1] : point[0]
+        return coincident(across, at) && between(on, Math.min(a, b), Math.max(a, b))
+      })
       const fixed =
         index === 0 ||
         index === last ||
+        anchored ||
         axisOf(path, index - 1) === -1 ||
         axisOf(path, index + 1) === -1
+      // A jog between turns that go opposite ways wants the middle of the
+      // run it shifts, between where the segments on either side of it
+      // start and end. Other segments want to stay put.
+      let desired = at
+      if (!fixed) {
+        const before = coord(path[index - 1] as Point, axis)
+        const after = coord(path[index + 2] as Point, axis)
+        if ((before - at) * (after - at) < 0) {
+          desired = (before + after) / 2
+        }
+      }
       segments.push({
         route,
         index,
-        at: coord(path[index] as Point, axis),
+        at,
+        desired,
         low: Math.min(a, b),
         high: Math.max(a, b),
         fixed,
@@ -222,7 +257,7 @@ function nudgeAxis(
 
   // The variables: one per segment, then the walls that obstacles put
   // beside the segments that move.
-  const variables: Array<Variable> = segments.map((s) => ({ desired: s.at, fixed: s.fixed }))
+  const variables: Array<Variable> = segments.map((s) => ({ desired: s.desired, fixed: s.fixed }))
   // Each separation keeps `right` at least `scale * gap` past `left`. The
   // current positions keep every order, so they meet every separation at
   // scale 0.
@@ -237,7 +272,8 @@ function nudgeAxis(
     if (segment.fixed) {
       continue
     }
-    const [low, high] = walls(obstacles, segment, axis)
+    const own = constraints[segment.route]?.avoid ?? []
+    const [low, high] = walls(own.length === 0 ? obstacles : [...obstacles, ...own], segment, axis)
     if (low !== undefined) {
       variables.push({ desired: low, fixed: true })
       separations.push({ left: variables.length - 1, right: s, gap: 0 })
@@ -342,7 +378,8 @@ function nudgeAxis(
   let anyMoved = false
   for (const [s, segment] of segments.entries()) {
     const moved = (positions as Float64Array)[s] as number
-    if (segment.fixed || moved === segment.at) {
+    // A move within rounding is no move, so the rounds can end.
+    if (segment.fixed || coincident(moved, segment.at)) {
       continue
     }
     anyMoved = true

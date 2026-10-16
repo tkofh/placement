@@ -60,16 +60,23 @@ interface Block {
   fixedCount: number
   sum: number
   weight: number
-}
-
-// Where a block's offsets start: the mean of where its fixed members put it,
-// or the weighted mean of its free members' wishes.
-function originOf(block: Block): number {
-  return block.fixedCount > 0 ? block.fixedSum / block.fixedCount : block.sum / block.weight
+  // Where its offsets start, and the multipliers of its active constraints
+  // once they are needed. Both follow its members.
+  origin: number
+  lambdas: Map<number, [number, number]> | undefined
 }
 
 function emptyBlock(): Block {
-  return { variables: [], active: [], fixedSum: 0, fixedCount: 0, sum: 0, weight: 0 }
+  return {
+    variables: [],
+    active: [],
+    fixedSum: 0,
+    fixedCount: 0,
+    sum: 0,
+    weight: 0,
+    origin: 0,
+    lambdas: undefined,
+  }
 }
 
 /**
@@ -110,6 +117,11 @@ export function placeSeparated(
         block.weight += weights[v] as number
       }
     }
+    // The mean of where its fixed members put it, or the weighted mean of
+    // its free members' wishes.
+    block.origin =
+      block.fixedCount > 0 ? block.fixedSum / block.fixedCount : block.sum / block.weight
+    block.lambdas = undefined
   }
   for (let v = 0; v < count; v++) {
     owner[v] = v
@@ -137,7 +149,7 @@ export function placeSeparated(
   const position = (v: number) =>
     fixed[v] === 1 && blockOf(v).fixedCount === 1
       ? (desired[v] as number)
-      : originOf(blockOf(v)) + (offsets[v] as number)
+      : blockOf(v).origin + (offsets[v] as number)
 
   // Joins the blocks of a constraint's two sides, so that it holds at
   // exactly its gap. The larger block keeps its offsets.
@@ -197,7 +209,7 @@ export function placeSeparated(
       }
     }
     const pull = new Map<number, [number, number]>()
-    const at = originOf(block)
+    const at = block.origin
     for (const [v] of order) {
       const away = at + (offsets[v] as number) - (desired[v] as number)
       pull.set(v, fixed[v] === 1 ? [away, 0] : [0, (weights[v] as number) * away])
@@ -220,27 +232,30 @@ export function placeSeparated(
   // Splits the block across the active constraint with the most negative
   // multiplier, if any is negative.
   const split = () => {
-    const lambdas = new Map<number, [number, number]>()
-    for (const block of blocks) {
-      if (block !== undefined && block.active.length > 0) {
-        multipliers(block, lambdas)
-      }
-    }
     let worst = -1
     let lowest: [number, number] = [0, 0]
-    for (const [c, lambda] of lambdas) {
-      const negative =
-        lambda[0] < -fixedTolerance || (lambda[0] <= fixedTolerance && lambda[1] < -freeTolerance)
-      if (!negative) {
+    for (const block of blocks) {
+      if (block === undefined || block.active.length === 0) {
         continue
       }
-      const lower =
-        worst === -1 ||
-        lambda[0] < lowest[0] - fixedTolerance ||
-        (lambda[0] <= lowest[0] + fixedTolerance && lambda[1] < lowest[1])
-      if (lower) {
-        worst = c
-        lowest = lambda
+      if (block.lambdas === undefined) {
+        block.lambdas = new Map()
+        multipliers(block, block.lambdas)
+      }
+      for (const [c, lambda] of block.lambdas) {
+        const negative =
+          lambda[0] < -fixedTolerance || (lambda[0] <= fixedTolerance && lambda[1] < -freeTolerance)
+        if (!negative) {
+          continue
+        }
+        const lower =
+          worst === -1 ||
+          lambda[0] < lowest[0] - fixedTolerance ||
+          (lambda[0] <= lowest[0] + fixedTolerance && lambda[1] < lowest[1])
+        if (lower) {
+          worst = c
+          lowest = lambda
+        }
       }
     }
     if (worst === -1) {
@@ -278,6 +293,11 @@ export function placeSeparated(
     blocks.push(rightBlock)
     for (const v of rightBlock.variables) {
       owner[v] = blocks.length - 1
+    }
+    // Both halves moved, so their constraints need another look.
+    for (const v of block.variables) {
+      mark(v)
+      touchOut(v)
     }
     return true
   }
@@ -317,10 +337,53 @@ export function placeSeparated(
     }
   }
 
+  // The variables whose blocks moved, which satisfy visits: at first all of
+  // them. A block that moves can violate the constraints into it, which
+  // visiting its members checks, and the constraints out of it, which mark
+  // the variables they lead to.
+  const position0 = new Int32Array(count)
+  for (const [k, v] of order.entries()) {
+    position0[v] = k
+  }
+  const dirty = new Uint8Array(count).fill(1)
+  let cursor = -1
+  let behind = false
+  const mark = (v: number) => {
+    dirty[v] = 1
+    if ((position0[v] as number) < cursor) {
+      behind = true
+    }
+  }
+  // Marks the variables that the constraints out of `v`'s block lead to.
+  const touchOut = (v: number) => {
+    for (const c of outgoing[v] as Array<number>) {
+      const right = (constraints[c] as Separation).right
+      if (owner[right] !== owner[v]) {
+        mark(right)
+      }
+    }
+  }
+
   // Visits the variables left to right, and merges into each one's block
   // the block behind its most violated incoming constraint, until none is.
+  // A merge can move a block that an earlier visit settled, so the visits
+  // repeat until a pass leaves nothing behind.
   const satisfy = () => {
-    for (const v of order) {
+    do {
+      behind = false
+      for (const [k, v] of order.entries()) {
+        cursor = k
+        if (dirty[v] === 0) {
+          continue
+        }
+        dirty[v] = 0
+        satisfyAt(v)
+      }
+      cursor = -1
+    } while (behind)
+  }
+  const satisfyAt = (v: number) => {
+    {
       for (;;) {
         const block = blockOf(v)
         let worst = -1
@@ -342,6 +405,10 @@ export function placeSeparated(
           break
         }
         merge(worst)
+        // The loop checks the constraints into the merged block again.
+        for (const u of blockOf(v).variables) {
+          touchOut(u)
+        }
       }
     }
   }
@@ -358,7 +425,7 @@ export function placeSeparated(
     if (block === undefined || block.fixedCount < 2) {
       continue
     }
-    const at = originOf(block)
+    const at = block.origin
     const disagree = block.variables.some(
       (v) => fixed[v] === 1 && !coincident(at + (offsets[v] as number), desired[v] as number),
     )

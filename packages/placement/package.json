@@ -26,6 +26,10 @@
       "types": "./dist/box.d.mts",
       "import": "./dist/box.mjs"
     },
+    "./connector": {
+      "types": "./dist/connector.d.mts",
+      "import": "./dist/connector.mjs"
+    },
     "./dimensions": {
       "types": "./dist/dimensions.d.mts",
       "import": "./dist/dimensions.mjs"

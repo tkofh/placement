@@ -226,10 +226,11 @@ describe('nudge', () => {
   test('routes keep their sides through a shared bend', () => {
     const p = route([0, 0], [0, 10], [30, 10], [30, 50], [60, 50])
     const q = route([10, -20], [10, 10], [30, 10], [30, 40], [60, 40])
-    // q turns off first on the outside of the bend, so it stays outside.
+    // q turns off first on the outside of the bend, so it stays outside:
+    // above p, then right of it. Each jog centers on its run, a gap apart.
     expect(nudge([p, q], [], 8)).toEqual([
-      route([0, 0], [0, 14], [26, 14], [26, 50], [60, 50]),
-      route([10, -20], [10, 6], [34, 6], [34, 40], [60, 40]),
+      route([0, 0], [0, 25], [28.5, 25], [28.5, 50], [60, 50]),
+      route([10, -20], [10, 10], [36.5, 10], [36.5, 40], [60, 40]),
     ])
   })
 
@@ -286,17 +287,12 @@ describe('nudge', () => {
   })
 
   test('segments that a move stretches into overlap move apart in another round', () => {
-    // r pushes the horizontal of p down, which stretches the vertical of p
-    // into the start of q on x = 10. p turns east there, so its vertical
-    // moves east of q.
-    const p = route([0, 0], [10, 0], [10, 10], [40, 10], [40, 30])
-    const r = route([20, -10], [20, 10], [50, 10], [50, 30])
+    // The horizontal of p centers on its run, down to y = 15, which
+    // stretches the vertical before it into the start of q on x = 10. p
+    // turns west there, so its vertical moves west of q.
+    const p = route([0, 0], [10, 0], [10, 10], [-30, 10], [-30, 30])
     const q = route([10, 11], [10, 30], [0, 30])
-    expect(nudge([p, r, q], [], 3)).toEqual([
-      route([0, 0], [13, 0], [13, 11.5], [40, 11.5], [40, 30]),
-      route([20, -10], [20, 8.5], [50, 8.5], [50, 30]),
-      q,
-    ])
+    expect(nudge([p, q], [], 3)).toEqual([route([0, 0], [7, 0], [7, 15], [-30, 15], [-30, 30]), q])
   })
 
   test('segments that meet end to end on nearby lines move a gap apart', () => {
@@ -310,6 +306,25 @@ describe('nudge', () => {
     const xc = nc?.[1]?.[0] as number
     expect(xb - xa).toBeCloseTo(3, 9)
     expect(xc - xb).toBeCloseTo(3, 9)
+  })
+
+  test('a segment through an anchor stays put', () => {
+    const outer = route([0, 0], [10, 0], [10, 30], [0, 30])
+    const inner = route([0, 10], [10, 10], [10, 20], [0, 20])
+    expect(nudge([outer, inner], [], 8, [{ anchors: [[10, 15]] }])).toEqual([
+      outer,
+      route([0, 10], [2, 10], [2, 20], [0, 20]),
+    ])
+  })
+
+  test('the rects a route avoids are walls for its segments only', () => {
+    const outer = route([0, 0], [10, 0], [10, 30], [0, 30])
+    const inner = route([0, 10], [10, 10], [10, 20], [0, 20])
+    const avoid = [{ left: 0, top: 0, right: 7, bottom: 40 }]
+    expect(nudge([outer, inner], [], 8, [undefined, { avoid }])).toEqual([
+      route([0, 0], [15, 0], [15, 30], [0, 30]),
+      route([0, 10], [7, 10], [7, 20], [0, 20]),
+    ])
   })
 
   test('a gap of zero changes nothing but the points', () => {
@@ -373,11 +388,12 @@ function randomDiagram(seed: number) {
       continue
     }
     const into = HEADINGS[to.side] as { x: number; y: number }
-    const path = shortestPath(graph, nodes[a] as number, nodes[b] as number, {
-      bendCost: 20,
-      depart: [HEADINGS[from.side] as { x: number; y: number }],
-      arrive: [{ x: -into.x, y: -into.y }],
-    })
+    const path = shortestPath(
+      graph,
+      [{ node: nodes[a] as number, headings: [HEADINGS[from.side] as { x: number; y: number }] }],
+      [{ node: nodes[b] as number, headings: [{ x: -into.x, y: -into.y }] }],
+      { bendCost: 20 },
+    )
     if (path !== undefined) {
       routes.push([...path.nodes].map((n) => [graph.xs[n] as number, graph.ys[n] as number]))
     }

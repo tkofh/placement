@@ -4,6 +4,7 @@ export default defineConfig({
   entry: [
     'src/adornment.ts',
     'src/box.ts',
+    'src/connector.ts',
     'src/dimensions.ts',
     'src/edge.ts',
     'src/flexbox.ts',

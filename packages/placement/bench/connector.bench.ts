@@ -1,7 +1,10 @@
 import { bench, describe } from 'vitest'
+import * as Connector from '../src/connector.ts'
+import * as Edge from '../src/edge.ts'
 import { type XY, nudge } from '../src/internal/connector/nudge.ts'
 import { shortestPath } from '../src/internal/graph/search.ts'
 import { type Pin, visibilityGraph } from '../src/internal/graph/visibility.ts'
+import * as Rect from '../src/rect.ts'
 
 // A deterministic diagram: boxes in a grid, with a pin on each side, and
 // routes between pins far apart, so that many share corridors.
@@ -43,11 +46,12 @@ function diagram(side: number, routeCount: number) {
     const a = (k * 37) % pins.length
     const b = (k * 53 + pins.length / 2) % pins.length
     const into = headings[b % 4] as { x: number; y: number }
-    const path = shortestPath(graph, nodes[a] as number, nodes[b] as number, {
-      bendCost: 20,
-      depart: [headings[a % 4] as { x: number; y: number }],
-      arrive: [{ x: -into.x, y: -into.y }],
-    })
+    const path = shortestPath(
+      graph,
+      [{ node: nodes[a] as number, headings: [headings[a % 4] as { x: number; y: number }] }],
+      [{ node: nodes[b] as number, headings: [{ x: -into.x, y: -into.y }] }],
+      { bendCost: 20 },
+    )
     if (path !== undefined) {
       routes.push([...path.nodes].map((n) => [graph.xs[n] as number, graph.ys[n] as number]))
     }
@@ -63,6 +67,36 @@ for (const [side, routeCount] of [
     const { obstacles, routes } = diagram(side, routeCount)
     bench('nudge', () => {
       nudge(routes, obstacles, 4)
+    })
+  })
+}
+
+// The whole pipeline: sides, ports, routes, and nudging.
+for (const [side, edgeCount] of [
+  [5, 20],
+  [10, 50],
+] as const) {
+  describe(`apply: ${side * side} rects, ${edgeCount} edges`, () => {
+    const rects: Record<string, Rect.Rect> = {}
+    for (let i = 0; i < side * side; i++) {
+      rects[`r${i}`] = Rect.make(
+        (i % side) * 140 + (i % 3) * 7,
+        Math.floor(i / side) * 140 + (i % 4) * 5,
+        sizes[i % sizes.length] as number,
+        sizes[(i + 2) % sizes.length] as number,
+      )
+    }
+    const ids = Object.keys(rects)
+    const given = Array.from({ length: edgeCount }, (_, k) =>
+      Edge.make({
+        source: ids[(k * 37) % ids.length] as string,
+        target: ids[(k * 53 + 11) % ids.length] as string,
+        sourceSide: k % 2 === 0 ? (k / 2) % 4 : undefined,
+      }),
+    )
+    const spec = Connector.make({ clearance: 6, gap: 4, bendCost: 20 })
+    bench('Connector.apply', () => {
+      Connector.apply(rects, given, spec)
     })
   })
 }

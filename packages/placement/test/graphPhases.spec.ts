@@ -5,7 +5,7 @@ import {
   type Obstacle,
   fromEdges,
 } from '../src/internal/graph/graph.ts'
-import { type SearchOptions, shortestPath } from '../src/internal/graph/search.ts'
+import { type Endpoint, type SearchOptions, shortestPath } from '../src/internal/graph/search.ts'
 import {
   ALL_DIRECTIONS,
   DOWN,
@@ -479,7 +479,12 @@ const ring = graphOf(
   ],
 )
 
-const route = (graph: Graph, from: number, to: number, options?: SearchOptions) => {
+const route = (
+  graph: Graph,
+  from: number | ReadonlyArray<Endpoint>,
+  to: number | ReadonlyArray<Endpoint>,
+  options?: SearchOptions,
+) => {
   const path = shortestPath(graph, from, to, options)
   return path === undefined ? undefined : { nodes: [...path.nodes], cost: path.cost }
 }
@@ -612,12 +617,59 @@ describe('shortestPath', () => {
   })
 
   test.each([
-    ['leaving down', { depart: [{ x: 0, y: 3 }] }, { nodes: [0, 3, 2], cost: 20 }],
-    ['arriving down', { arrive: [{ x: 0, y: 1 }] }, { nodes: [0, 1, 2], cost: 20 }],
-    ['arriving left', { arrive: [{ x: -1, y: 0 }] }, undefined],
-    ['leaving in no direction', { depart: [{ x: 0, y: 0 }] }, undefined],
-  ])('headings constrain the ends: %s', (_, options, expected) => {
-    expect(route(ring, 0, 2, options)).toEqual(expected)
+    ['leaving down', [{ node: 0, headings: [{ x: 0, y: 3 }] }], 2, { nodes: [0, 3, 2], cost: 20 }],
+    ['arriving down', 0, [{ node: 2, headings: [{ x: 0, y: 1 }] }], { nodes: [0, 1, 2], cost: 20 }],
+    ['arriving left', 0, [{ node: 2, headings: [{ x: -1, y: 0 }] }], undefined],
+    ['leaving in no direction', [{ node: 0, headings: [{ x: 0, y: 0 }] }], 2, undefined],
+  ] as const)('headings constrain the ends: %s', (_, from, to, expected) => {
+    expect(route(ring, from, to)).toEqual(expected)
+  })
+
+  test('the cheapest of several starts and ends wins, and the path names them', () => {
+    const path = shortestPath(
+      ring,
+      [{ node: 0 }, { node: 1, headings: [{ x: -1, y: 0 }] }, { node: 1 }],
+      [{ node: 3, headings: [{ x: 1, y: 0 }] }, { node: 2 }],
+    )
+    expect(path).toEqual({ nodes: Int32Array.of(1, 2), cost: 10, start: 2, end: 1 })
+    expect(shortestPath(ring, [], 2)).toBeUndefined()
+    expect(shortestPath(ring, 0, [])).toBeUndefined()
+  })
+
+  test('among paths of equal cost, the one with fewer turns wins', () => {
+    // Two paths 30 long: right, down, and right again through 1 and 2,
+    // listed first, and down, then right, through 4 and 5.
+    const graph = graphOf(
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [20, 10],
+        [0, 5],
+        [0, 10],
+      ],
+      [
+        [0, 1],
+        [0, 4],
+        [1, 2],
+        [4, 5],
+        [2, 3],
+        [5, 3],
+      ],
+    )
+    expect(route(graph, 0, 3)).toEqual({ nodes: [0, 4, 5, 3], cost: 30 })
+  })
+
+  test('a start that is an end needs an end that allows any heading', () => {
+    // Otherwise the path goes around to arrive with an allowed heading.
+    expect(route(ring, 1, [{ node: 1, headings: [{ x: 1, y: 0 }] }])).toEqual({
+      nodes: [1, 2, 3, 0, 1],
+      cost: 40,
+    })
+    expect(route(ring, 1, [{ node: 1, headings: [{ x: 1, y: 0 }] }, { node: 1 }])).toEqual({
+      nodes: [1],
+      cost: 0,
+    })
   })
 
   test('a path passes through its waypoints in order', () => {
