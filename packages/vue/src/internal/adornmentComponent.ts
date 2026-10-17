@@ -26,9 +26,11 @@ export interface EdgeAdornmentProps extends FrameItemProps {
    * How it sits on the edge. `'flow'` (default) puts it on a straight run,
    * never on a corner: in a hierarchy, the run nearest `at`, which the
    * layout makes long enough for it, and on a connector, the run nearest
-   * `at` that has room for it. Adornments at either end pack against their node. Flow
-   * adornments in one `layer` on one run line up one after another, and
-   * their margins along the line keep them, and the corners, apart.
+   * `at` that has room for it, which justifies its adornments between its
+   * corners by the layout's `justifyAdornments`. Adornments at either end
+   * pack against their node. Flow adornments in one `layer` on one run
+   * line up one after another, and their margins along the line keep
+   * them, and the corners, apart.
    * `'absolute'` puts it at `at` of the way along the drawn line, rounded
    * corners included, and takes no room.
    */

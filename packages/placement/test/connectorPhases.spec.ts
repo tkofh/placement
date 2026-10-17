@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest'
+import { lengths, pointOnDrawn } from '../src/internal/adornments.ts'
 import { cornerRadii } from '../src/internal/connector/corners.ts'
 import { type XY, nudge } from '../src/internal/connector/nudge.ts'
+import { slantJogs } from '../src/internal/connector/slants.ts'
 import type { Obstacle } from '../src/internal/graph/graph.ts'
 import { shortestPath } from '../src/internal/graph/search.ts'
 import { type Pin, visibilityGraph } from '../src/internal/graph/visibility.ts'
@@ -233,6 +235,29 @@ describe('nudge', () => {
       route([0, 0], [0, 25], [28.5, 25], [28.5, 50], [60, 50]),
       route([10, -20], [10, 10], [36.5, 10], [36.5, 40], [60, 40]),
     ])
+  })
+
+  test('a jog leaps over a line that runs alongside all of it', () => {
+    // The jog wants the middle of its run, past the other route's line. Its
+    // legs go opposite ways, so leaping moves the crossing from one leg to
+    // the other.
+    const jog = route([0, 10], [80, 10], [80, 20], [100, 20])
+    const line = route([70, -20], [70, 50])
+    expect(nudge([jog, line], [], 8)[0]).toEqual(route([0, 10], [50, 10], [50, 20], [100, 20]))
+  })
+
+  test('a jog stays behind a line that runs alongside only part of it', () => {
+    const jog = route([0, 10], [80, 10], [80, 20], [100, 20])
+    const line = route([70, -20], [70, 15])
+    expect(nudge([jog, line], [], 8)[0]).toEqual(route([0, 10], [78, 10], [78, 20], [100, 20]))
+  })
+
+  test.each([
+    [0.25, 25],
+    [0.75, 75],
+  ])('a jog at %f of its run', (jogAt, x) => {
+    const jog = route([0, 10], [80, 10], [80, 20], [100, 20])
+    expect(nudge([jog], [], 8, [{ jogAt }])[0]?.[1]).toEqual([x, 10])
   })
 
   test('a segment does not move into an obstacle beside it', () => {
@@ -525,5 +550,106 @@ describe('cornerRadii', () => {
     const fanned = route([0, -4], [26, -4], [26, 40])
     expect(cornerRadii([right, left], [10, 10]).map((list) => list[1])).toEqual([10, 10])
     expect(cornerRadii([right, fanned], [10, 10]).map((list) => list[1])).toEqual([10, 10])
+  })
+})
+
+describe('slantJogs', () => {
+  // A Z with a jog 8 long, too short for two corners that reach 8.
+  const zed = route([0, 0], [30, 0], [30, 8], [60, 8])
+  const sizes = [0, 4, 4, 0]
+  const slant = (
+    options: {
+      slant?: number
+      walls?: Array<readonly [number, number]>
+      obstacles?: Array<Obstacle>
+      others?: Array<Array<XY>>
+    } = {},
+  ) =>
+    slantJogs(
+      [zed, ...(options.others ?? [])],
+      [sizes, ...(options.others ?? []).map((other) => other.map(() => 0))],
+      [8, ...(options.others ?? []).map(() => 0)],
+      options.slant ?? 1,
+      [options.walls ?? []],
+      options.obstacles ?? [],
+    )[0]
+
+  test('a short jog slants into two arcs that meet halfway', () => {
+    // The S spans 16, what the two full corners would, and each corner
+    // turns atan(4 / 3) and reaches 5.
+    const slanted = slant()
+    expect(slanted?.points).toEqual([
+      [0, 0],
+      [27, 0],
+      [33, 8],
+      [60, 8],
+    ])
+    expect(slanted?.radii).toEqual([0, 5, 5, 0])
+    // The route is 4 shorter past the S.
+    expect(slanted?.remap(10)).toBe(10)
+    expect(slanted?.remap(50)).toBe(46)
+  })
+
+  test('a larger slant stretches the S', () => {
+    // The span is 2 * 2 * 8 - 8.
+    const [, a, b] = slant({ slant: 2 })?.points ?? []
+    expect((b?.[0] as number) - (a?.[0] as number)).toBeCloseTo(32 / 3, 9)
+  })
+
+  test.each([
+    ['no slant', { slant: 0 }],
+    ['a flow adornment on the jog', { walls: [[31, 35] as const] }],
+    ['a rect in the band beside it', { obstacles: [{ left: 31, right: 40, top: 2, bottom: 6 }] }],
+    ['a route through the band', { others: [route([33, -10], [33, 20])] }],
+  ])('%s keeps the jog upright', (_, options) => {
+    expect(slant(options)?.points).toEqual(zed)
+    expect(slant(options)?.radii).toEqual(sizes)
+  })
+
+  test('something farther along the band shortens the S', () => {
+    const slanted = slant({ obstacles: [{ left: 36, right: 40, top: 2, bottom: 6 }] })
+    const [, a, b] = slanted?.points ?? []
+    const reach = slanted?.radii[2] as number
+    // The S stops 6 past the jog, where the rect begins.
+    expect((b?.[0] as number) + reach).toBeCloseTo(36, 9)
+    expect(30 - (a?.[0] as number)).toBeCloseTo((b?.[0] as number) - 30, 9)
+  })
+
+  test('a rect that slides into the band from the side shortens the S gradually', () => {
+    // A rect beside the jog, along the legs, reaching `depth` into the band
+    // from the first leg's side.
+    const span = (depth: number) => {
+      const slanted = slant({ obstacles: [{ left: 28, right: 32, top: -10, bottom: depth }] })
+      const [, a, b] = slanted?.points ?? []
+      return (b?.[0] as number) - (a?.[0] as number) + 2 * (slanted?.radii[1] as number)
+    }
+    // Along the edge of the band, it leaves the S whole.
+    expect(span(0)).toBeCloseTo(16, 9)
+    // Each half step deeper takes 2 off the span, down to the upright jog's
+    // 8 once its room is half the jog.
+    for (const [depth, expected] of [
+      [0.5, 14],
+      [1, 12],
+      [1.5, 10],
+      [2, 8],
+      [3, 8],
+    ] as const) {
+      expect(span(depth)).toBeCloseTo(expected, 9)
+    }
+    // Past the middle of the band, the jog stands upright.
+    expect(slant({ obstacles: [{ left: 28, right: 32, top: -10, bottom: 4 }] })?.points).toEqual(
+      zed,
+    )
+  })
+
+  test('the drawn route passes through the middle of the S', () => {
+    const slanted = slant()
+    const points = slanted?.points ?? []
+    const drawn = pointOnDrawn(points, lengths(points), slanted?.radii ?? [], 0.5)
+    expect(drawn.point[0]).toBeCloseTo(30, 9)
+    expect(drawn.point[1]).toBeCloseTo(4, 9)
+    expect(drawn.tangent[0]).toBeCloseTo(0.6, 9)
+    expect(drawn.tangent[1]).toBeCloseTo(0.8, 9)
+    expect(drawn.distance).toBeCloseTo(32, 9)
   })
 })

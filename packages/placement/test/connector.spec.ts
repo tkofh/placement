@@ -38,7 +38,19 @@ const label = (at: number, position: number = Adornment.position.flow) =>
   Adornment.make({ frame: Frame.make({ width: 20, height: 10 }), at, position })
 
 describe('make', () => {
-  const defaults = { clearance: 0, gap: 0, bendCost: 0, turnCost: 0, alignAdornments: 0.5 }
+  const defaults = {
+    clearance: 0,
+    gap: 0,
+    bendCost: 0,
+    turnCost: 0,
+    alignAdornments: 0.5,
+    justifyAdornments: 0.5,
+    justifyAdornmentsSpace: 0,
+    justifyAdornmentsSpaceOuter: 0,
+    adornmentGap: 0,
+    jogAt: 0.5,
+    jogSlant: 1,
+  }
 
   test('lengths and costs default to zero, and adornments to the middle', () => {
     expect(Connector.make().toJSON()).toEqual(defaults)
@@ -51,13 +63,27 @@ describe('make', () => {
         gap: value,
         bendCost: value,
         turnCost: value,
-        alignAdornments: Number.isFinite(value) ? 0.5 : value,
+        adornmentGap: value,
+        ...Object.fromEntries(
+          [
+            'alignAdornments',
+            'justifyAdornments',
+            'justifyAdornmentsSpace',
+            'justifyAdornmentsSpaceOuter',
+            'jogAt',
+          ].map((key) => [key, Number.isFinite(value) ? defaults[key as 'jogAt'] : value]),
+        ),
       }).toJSON(),
     ).toEqual(defaults)
   })
 
   test('a finite adornment alignment stays as given', () => {
     expect(Connector.make({ alignAdornments: -1 }).alignAdornments).toBe(-1)
+  })
+
+  test('the jog position clamps to the run', () => {
+    expect(Connector.make({ jogAt: -1 }).jogAt).toBe(0)
+    expect(Connector.make({ jogAt: 2 }).jogAt).toBe(1)
   })
 
   test('isConnector', () => {
@@ -74,10 +100,20 @@ describe('setters', () => {
     ['setBendCost', Connector.setBendCost, 'bendCost'],
     ['setTurnCost', Connector.setTurnCost, 'turnCost'],
     ['setAlignAdornments', Connector.setAlignAdornments, 'alignAdornments'],
+    ['setJustifyAdornments', Connector.setJustifyAdornments, 'justifyAdornments'],
+    ['setJustifyAdornmentsSpace', Connector.setJustifyAdornmentsSpace, 'justifyAdornmentsSpace'],
+    [
+      'setJustifyAdornmentsSpaceOuter',
+      Connector.setJustifyAdornmentsSpaceOuter,
+      'justifyAdornmentsSpaceOuter',
+    ],
+    ['setAdornmentGap', Connector.setAdornmentGap, 'adornmentGap'],
+    ['setJogAt', Connector.setJogAt, 'jogAt'],
+    ['setJogSlant', Connector.setJogSlant, 'jogSlant'],
   ] as const)('%s, data-first and data-last', (_, set, key) => {
     const base = Connector.make()
-    expect(set(base, 3)[key]).toBe(3)
-    expect(base.pipe(set(3))[key]).toBe(3)
+    expect(set(base, 0.75)[key]).toBe(0.75)
+    expect(base.pipe(set(0.75))[key]).toBe(0.75)
     expect(base[key]).toBe(Connector.make().toJSON()[key])
   })
 })
@@ -99,6 +135,39 @@ describe('apply', () => {
       [100, 50],
     ])
     expect(layout.edges[0]?.radii).toEqual([0, 0, 0, 0])
+  })
+
+  test('the spec moves jogs along their runs, and an edge overrides it', () => {
+    const rects = { a: Rect.make(0, 0, 40, 20), b: Rect.make(100, 40, 40, 20) }
+    const edges = [Edge.make({ source: 'a', target: 'b' })]
+    const quarter = spec.pipe(Connector.setJogAt(0.25))
+    // A quarter of the way from the source port, and as far toward the
+    // target as the clearance lets it.
+    expect(pointsOf(Connector.apply(rects, edges, quarter))?.[1]).toEqual([55, 10])
+    expect(
+      pointsOf(Connector.apply(rects, edges, quarter, { edges: [{ jogAt: 1 }] }))?.[1],
+    ).toEqual([90, 10])
+  })
+
+  test('a jog too short for its corners slants, unless the spec keeps it upright', () => {
+    const rects = { a: Rect.make(0, 0, 40, 20), b: Rect.make(100, 8, 40, 20) }
+    const edges = [Edge.make({ source: 'a', target: 'b', sourceSide: 1, targetSide: 3, radius: 8 })]
+    const slanted = Connector.apply(rects, edges, spec).edges[0]
+    expect(slanted?.points.map(({ x, y }) => [x, y])).toEqual([
+      [40, 10],
+      [67, 10],
+      [73, 18],
+      [100, 18],
+    ])
+    expect(slanted?.radii).toEqual([0, 5, 5, 0])
+    const upright = Connector.apply(rects, edges, spec.pipe(Connector.setJogSlant(0))).edges[0]
+    expect(upright?.points.map(({ x, y }) => [x, y])).toEqual([
+      [40, 10],
+      [70, 10],
+      [70, 18],
+      [100, 18],
+    ])
+    expect(upright?.radii).toEqual([0, 4, 4, 0])
   })
 
   test('a straight route needs no corners', () => {
@@ -388,12 +457,74 @@ describe('apply', () => {
       expect(placed?.radii).toEqual([0, 10, 30, 0])
     })
 
-    test('a flow adornment in the middle centers where it falls, between corners', () => {
+    test('a flow adornment in the middle centers on its run, between corners', () => {
       const placed = route([label(0.5)], 30)
       expect(placed?.adornments).toEqual([
         { rect: Rect.make(60, 25, 20, 10), angle: 0, along: Interval.make(45, 10) },
       ])
       expect(placed?.radii).toEqual([0, 15, 15, 0])
+    })
+
+    test('a flow adornment keeps the room for the corners at the ends of its run', () => {
+      const placed = route([label(0.5)], 10, spec.pipe(Connector.setJustifyAdornments(0)))
+      expect(placed?.adornments[0]?.rect).toEqual(Rect.make(60, 20, 20, 10))
+      expect(placed?.radii).toEqual([0, 10, 10, 0])
+    })
+
+    test('a run too short for a flow adornment and its corners gives it to a longer one', () => {
+      // A jog 24 long has room for the label, 20 long, but not for its
+      // corners too. The legs on either side are as near, and the first wins.
+      const rects = { a: Rect.make(0, 0, 40, 20), b: Rect.make(24, 100, 40, 20) }
+      const edge = Edge.make({
+        source: 'a',
+        target: 'b',
+        sourceSide: Edge.side.bottom,
+        targetSide: Edge.side.top,
+        radius: 10,
+        adornments: [label(0.5)],
+      })
+      const layout = Connector.apply(rects, [edge], spec)
+      expect(pointsOf(layout)).toEqual([
+        [20, 20],
+        [20, 60],
+        [44, 60],
+        [44, 100],
+      ])
+      expect(layout.edges[0]?.adornments[0]?.rect).toEqual(Rect.make(10, 30, 20, 10))
+    })
+
+    // A straight route 60 long, from (40, 10) to (100, 10).
+    const straight = (adornments: Array<Adornment.Adornment>, connector = spec) =>
+      Connector.apply(
+        pair,
+        [Edge.make({ ...across(0.5).toJSON(), adornments })],
+        connector,
+      ).edges[0]?.adornments.map(({ rect }) => rect.x)
+
+    test.each([
+      [0, [40]],
+      [0.5, [60]],
+      [1, [80]],
+    ])('a run justifies its flow adornments at %f', (justify, expected) => {
+      expect(straight([label(0.5)], spec.pipe(Connector.setJustifyAdornments(justify)))).toEqual(
+        expected,
+      )
+    })
+
+    test('a run spreads its flow adornments, in the order of their `at`', () => {
+      const between = spec.pipe(Connector.setJustifyAdornmentsSpace(1))
+      expect(straight([label(0.75), label(0.25)], between)).toEqual([80, 40])
+      const evenly = between.pipe(Connector.setJustifyAdornmentsSpaceOuter(1))
+      const [first, second] = straight([label(0.25), label(0.75)], evenly) ?? []
+      expect(first).toBeCloseTo(40 + 20 / 3, 9)
+      expect(second).toBeCloseTo(60 + 40 / 3, 9)
+    })
+
+    test('flow adornments next to each other sit the adornment gap apart', () => {
+      const gapped = spec.pipe(Connector.setAdornmentGap(4))
+      expect(straight([label(0.25), label(0.75)], gapped)).toEqual([48, 72])
+      // The pack at the target keeps the gap from the others too.
+      expect(straight([label(0.5), arrow(1, Adornment.orient.forward)], gapped)).toEqual([53, 92])
     })
 
     test('a flow adornment moves off a run too short for it, to the nearest with room', () => {

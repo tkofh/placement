@@ -11,6 +11,7 @@ import {
 import { placeAdornments, placeFlow } from './internal/connector/adornments.ts'
 import { cornerRadii } from './internal/connector/corners.ts'
 import { type RouteConstraints, type XY, nudge } from './internal/connector/nudge.ts'
+import { slantJogs } from './internal/connector/slants.ts'
 import type { Obstacle } from './internal/graph/graph.ts'
 import { type Endpoint, shortestPath } from './internal/graph/search.ts'
 import { ALL_DIRECTIONS, type Pin, visibilityGraph } from './internal/graph/visibility.ts'
@@ -78,6 +79,57 @@ export interface ConnectorInput {
    * Defaults to `0.5`.
    */
   readonly alignAdornments?: number | undefined
+  /**
+   * Where the leftover length of a run puts the flow adornments in its
+   * middle, as `justifyContent` does in a flex container: `0` at the end
+   * of the run toward the source, `0.5` centered, `1` at the end toward the
+   * target. Non-finite values act as `0.5`. Defaults to `0.5`.
+   */
+  readonly justifyAdornments?: number | undefined
+  /**
+   * The share of a run's leftover length that goes between the flow
+   * adornments in its middle instead of to `justifyAdornments`, as
+   * `justifyContentSpace` does in a flex container: `0` none, `1` all of
+   * it. Non-finite values act as `0`. Defaults to `0`.
+   */
+  readonly justifyAdornmentsSpace?: number | undefined
+  /**
+   * The share of the spacing from `justifyAdornmentsSpace` that also goes
+   * before the first adornment and after the last, as
+   * `justifyContentSpaceOuter` does in a flex container: `0` gives
+   * space-between, `0.5` space-around, `1` space-evenly. Non-finite values
+   * act as `0`. Defaults to `0`.
+   */
+  readonly justifyAdornmentsSpaceOuter?: number | undefined
+  /**
+   * The distance between flow adornments that sit next to each other in a
+   * layer of a run, on top of their margins. Defaults to `0`.
+   */
+  readonly adornmentGap?: number | undefined
+  /**
+   * Where a jog sits along the run it shifts, between where the legs on
+   * either side of it start and end: `0` at the source end, `0.5` in the
+   * middle, `1` at the target end. A jog is the short segment between two
+   * turns that go opposite ways, the rise of a Z or S. Obstacles, and the
+   * routes alongside it, may hold it back. Values outside clamp, and
+   * non-finite values act as `0.5`. Defaults to `0.5`.
+   */
+  readonly jogAt?: number | undefined
+  /**
+   * How a jog too short for its two corners crosses over. At full size
+   * the corners of a jog `d` long need `2 * radius` of it, and below that
+   * they would shrink into a kink. Instead they slide apart along the legs,
+   * `jogSlant * (2 * radius - d)` apart, and turn less than a right angle,
+   * so the route crosses over on a slant, as an S. The S flattens as the
+   * jog shrinks, and squares up into the full corners as it grows to
+   * `2 * radius`. Larger values give longer, gentler slants. A slant takes
+   * only free length: it keeps clear of the next corner, of flow
+   * adornments, and of the routes and rects (with their clearance) between
+   * the two legs, and shrinks back toward the kink where it has less
+   * room. `0` keeps every jog upright. Negative and non-finite values act
+   * as `0`. Defaults to `1`.
+   */
+  readonly jogSlant?: number | undefined
 }
 
 /**
@@ -100,6 +152,18 @@ class Connector extends Pipeable {
   readonly turnCost: number
   /** Which side of its edge each adornment sits on: `0` left or above, `1` right or below. */
   readonly alignAdornments: number
+  /** Where a run's leftover length puts the flow adornments in its middle. */
+  readonly justifyAdornments: number
+  /** The share of a run's leftover length that goes between its adornments. */
+  readonly justifyAdornmentsSpace: number
+  /** The share of that spacing that also goes before the first and after the last. */
+  readonly justifyAdornmentsSpaceOuter: number
+  /** The distance between flow adornments next to each other on a run. */
+  readonly adornmentGap: number
+  /** Where a jog sits along the run it shifts, from `0` at the source end. */
+  readonly jogAt: number
+  /** How far a jog too short for its corners slants, `0` for not at all. */
+  readonly jogSlant: number
 
   constructor(input: ConnectorInput) {
     super()
@@ -108,14 +172,17 @@ class Connector extends Pipeable {
     this.gap = length(input.gap)
     this.bendCost = length(input.bendCost)
     this.turnCost = length(input.turnCost)
-    this.alignAdornments =
-      input.alignAdornments !== undefined && Number.isFinite(input.alignAdornments)
-        ? input.alignAdornments
-        : 0.5
+    this.alignAdornments = ratio(input.alignAdornments, 0.5)
+    this.justifyAdornments = ratio(input.justifyAdornments, 0.5)
+    this.justifyAdornmentsSpace = ratio(input.justifyAdornmentsSpace, 0)
+    this.justifyAdornmentsSpaceOuter = ratio(input.justifyAdornmentsSpaceOuter, 0)
+    this.adornmentGap = length(input.adornmentGap)
+    this.jogAt = Math.min(Math.max(ratio(input.jogAt, 0.5), 0), 1)
+    this.jogSlant = input.jogSlant === undefined ? 1 : length(input.jogSlant)
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
-    return `Connector [clearance ${this.clearance} gap ${this.gap} bend ${this.bendCost} turn ${this.turnCost} align ${this.alignAdornments}]`
+    return `Connector [clearance ${this.clearance} gap ${this.gap} bend ${this.bendCost} turn ${this.turnCost} align ${this.alignAdornments} justify ${this.justifyAdornments} jog ${this.jogAt} slant ${this.jogSlant}]`
   }
 
   /**
@@ -130,12 +197,21 @@ class Connector extends Pipeable {
       bendCost: this.bendCost,
       turnCost: this.turnCost,
       alignAdornments: this.alignAdornments,
+      justifyAdornments: this.justifyAdornments,
+      justifyAdornmentsSpace: this.justifyAdornmentsSpace,
+      justifyAdornmentsSpaceOuter: this.justifyAdornmentsSpaceOuter,
+      adornmentGap: this.adornmentGap,
+      jogAt: this.jogAt,
+      jogSlant: this.jogSlant,
     }
   }
 }
 
 const length = (value: number | undefined) =>
   value !== undefined && Number.isFinite(value) && value > 0 ? value : 0
+
+const ratio = (value: number | undefined, fallback: number) =>
+  value !== undefined && Number.isFinite(value) ? value : fallback
 
 export type { Connector }
 
@@ -236,6 +312,111 @@ export const setAlignAdornments: {
 )
 
 /**
+ * Sets where the leftover length of a run puts the flow adornments in its
+ * middle. The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The spec to update.
+ * @param justifyAdornments - The new position, from `0` (toward the source)
+ * to `1` (toward the target).
+ * @returns A new spec with the adornment justification replaced.
+ */
+export const setJustifyAdornments: {
+  (self: Connector, justifyAdornments: number): Connector
+  (justifyAdornments: number): (self: Connector) => Connector
+} = dual(
+  2,
+  (self: Connector, justifyAdornments: number) =>
+    new Connector({ ...self.toJSON(), justifyAdornments }),
+)
+
+/**
+ * Sets the share of a run's leftover length that goes between its flow
+ * adornments. The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The spec to update.
+ * @param justifyAdornmentsSpace - The new share, from `0` to `1`.
+ * @returns A new spec with the adornment spacing replaced.
+ */
+export const setJustifyAdornmentsSpace: {
+  (self: Connector, justifyAdornmentsSpace: number): Connector
+  (justifyAdornmentsSpace: number): (self: Connector) => Connector
+} = dual(
+  2,
+  (self: Connector, justifyAdornmentsSpace: number) =>
+    new Connector({ ...self.toJSON(), justifyAdornmentsSpace }),
+)
+
+/**
+ * Sets the share of the adornment spacing that also goes before the first
+ * adornment of a run and after the last. The data-last form omits `self`
+ * and returns a function of it.
+ *
+ * @param self - The spec to update.
+ * @param justifyAdornmentsSpaceOuter - The new share, from `0`
+ * (space-between) to `1` (space-evenly).
+ * @returns A new spec with the outer adornment spacing replaced.
+ */
+export const setJustifyAdornmentsSpaceOuter: {
+  (self: Connector, justifyAdornmentsSpaceOuter: number): Connector
+  (justifyAdornmentsSpaceOuter: number): (self: Connector) => Connector
+} = dual(
+  2,
+  (self: Connector, justifyAdornmentsSpaceOuter: number) =>
+    new Connector({ ...self.toJSON(), justifyAdornmentsSpaceOuter }),
+)
+
+/**
+ * Sets the distance between flow adornments next to each other on a run.
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The spec to update.
+ * @param adornmentGap - The new distance.
+ * @returns A new spec with the adornment gap replaced.
+ */
+export const setAdornmentGap: {
+  (self: Connector, adornmentGap: number): Connector
+  (adornmentGap: number): (self: Connector) => Connector
+} = dual(
+  2,
+  (self: Connector, adornmentGap: number) => new Connector({ ...self.toJSON(), adornmentGap }),
+)
+
+/**
+ * Sets where a jog sits along the run it shifts. The data-last form omits
+ * `self` and returns a function of it.
+ *
+ * @param self - The spec to update.
+ * @param jogAt - The new position, from `0` (the source end) to `1` (the
+ * target end).
+ * @returns A new spec with the jog position replaced.
+ * @example
+ * ```ts
+ * Connector.make().pipe(Connector.setJogAt(0.25)).jogAt // 0.25
+ * ```
+ */
+export const setJogAt: {
+  (self: Connector, jogAt: number): Connector
+  (jogAt: number): (self: Connector) => Connector
+} = dual(2, (self: Connector, jogAt: number) => new Connector({ ...self.toJSON(), jogAt }))
+
+/**
+ * Sets how far a jog too short for its corners slants. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The spec to update.
+ * @param jogSlant - The new slant, `0` to keep jogs upright.
+ * @returns A new spec with the jog slant replaced.
+ * @example
+ * ```ts
+ * Connector.make().pipe(Connector.setJogSlant(0)).jogSlant // 0
+ * ```
+ */
+export const setJogSlant: {
+  (self: Connector, jogSlant: number): Connector
+  (jogSlant: number): (self: Connector) => Connector
+} = dual(2, (self: Connector, jogSlant: number) => new Connector({ ...self.toJSON(), jogSlant }))
+
+/**
  * The route constraints of one edge, in the `edges` option of `apply`.
  */
 export interface ConnectorEdgeOptions {
@@ -252,6 +433,12 @@ export interface ConnectorEdgeOptions {
   readonly avoid?: ReadonlyArray<Rect.Rect> | undefined
   /** The turn the route prefers, one of the `turn` encodings. */
   readonly turn?: number | undefined
+  /**
+   * Where the route's jogs sit along the runs they shift, from `0` at the
+   * source end to `1` at the target end. A finite value overrides the
+   * spec's `jogAt`.
+   */
+  readonly jogAt?: number | undefined
 }
 
 /**
@@ -267,15 +454,22 @@ export interface ConnectorApplyOptions {
  *
  * - `points`: the polyline from the source port to the target port, with
  *   at least two points. Every segment runs along an axis, and every inner
- *   point is a right-angled corner.
+ *   point is a right-angled corner, except at a slanted jog (see
+ *   `jogSlant`), where a slanted segment joins two corners that turn less
+ *   than a right angle.
  * - `radii`: how far the corner at each point reaches along its two legs,
- *   one per point, `0` at both ends. Each is at most the edge's `radius`,
- *   and the corners on a segment never reach past each other. Where routes
- *   turn together a short distance apart, each inner corner shrinks to fit
- *   inside the one outside it, about the same center where the routes are
- *   evenly spaced, as on a metro map. No corner reaches into a flow
- *   adornment or its gaps. A renderer that rounds corners draws circular
- *   corners of these radii, or any corner that reaches no farther.
+ *   one per point, `0` at both ends. A circular corner of radius `R` that
+ *   turns `theta` reaches `R * tan(theta / 2)`, so a right-angled one
+ *   reaches `R`. A right-angled corner reaches at most the edge's `radius`, and
+ *   the corners on a segment never reach past each other. The two corners
+ *   of a slanted jog reach exactly half its slanted segment, so their arcs
+ *   meet in an S. Where routes turn together a short distance apart, each
+ *   inner corner shrinks to fit inside the one outside it, about the same
+ *   center where the routes are evenly spaced, as on a metro map. No
+ *   corner reaches into a flow adornment or its gaps. A renderer that
+ *   rounds corners draws circular corners that reach these lengths, or any
+ *   corner that reaches no farther, though a slanted jog drawn with
+ *   smaller corners shows a straight between them.
  * - `adornments`: where each adornment landed, in the edge's adornment
  *   order (see `AdornmentPlacement` in `placement/adornment`).
  */
@@ -337,8 +531,10 @@ interface Port {
  * 3. It nudges routes that run alongside each other apart, `gap` apart,
  *    ordered so that routes that share a path cross only where they must.
  *    Where a passage is too narrow, the routes in it spread evenly across
- *    it. A jog between turns that go opposite ways moves to the middle of
- *    the run it shifts.
+ *    it. A jog between turns that go opposite ways moves to `jogAt` of the
+ *    run it shifts, the middle by default. On the way it passes any route
+ *    that runs alongside all of it, which adds no crossing, but stops at
+ *    a route that runs alongside only part of it.
  *
  * Ports come from each edge's sides and positions. A port sits on its side
  * of its rect, at its `sourceAt` or `targetAt` along the side, and the route
@@ -355,14 +551,28 @@ interface Port {
  * Edges carry adornments (see `placement/adornment`), which `apply` places
  * on the routes it finds but makes no room for, so adornments on routes
  * that run close alongside each other may overlap. A flow adornment sits on
- * a straight run: those at `0` and `1` pack against their ports, and each
+ * a straight run, and each run lays out its flow adornments the way a flex
+ * container with no thickness lays out its items, its main axis pointing
+ * toward the target. Those at `0` and `1` pack against their ports. Each
  * of the others goes to the run nearest where its `at` falls that has room
- * for it (the roomiest when none has), centered on where it falls. Corners
+ * for it and for the edge's `radius` at each corner of the run. Failing
+ * that, it goes to the nearest run with room for it alone, and failing
+ * that, to the roomiest. Runs equally near go to the one nearer the
+ * source. A run's adornments keep the order of their `at`, `adornmentGap`
+ * apart, and sit between its packs and the room for its corners, placed
+ * by `justifyAdornments`, `justifyAdornmentsSpace`, and
+ * `justifyAdornmentsSpaceOuter`, as `justifyContent` places flex items.
+ * `alignAdornments` places them across the line, as `alignItems` does.
+ * Where the adornments need it, the corners give up their room. Corners
  * keep clear of flow adornments and their gaps along the line. A route
  * leaves and enters its ports straight for at least the clearance, so a
  * clearance at least as long as the end adornments keeps them off the
  * corners. An absolute adornment sits at `at` of the way along the route
  * as drawn, rounded corners included.
+ *
+ * A jog shorter than its two corners need slants into an S instead of
+ * shrinking them into a kink, as far as `jogSlant` and the free length
+ * around it allow.
  *
  * The edge's `weight`, `minLength`, and `minRadius` have no effect.
  *
@@ -536,6 +746,10 @@ export function apply<const K extends string>(
       return {
         anchors: (option?.via ?? []).map((p): XY => [p.x, p.y]),
         avoid: option?.avoid ?? [],
+        jogAt:
+          option?.jogAt !== undefined && Number.isFinite(option.jogAt)
+            ? option.jogAt
+            : connector.jogAt,
       }
     }),
   )
@@ -549,27 +763,51 @@ export function apply<const K extends string>(
   )
   const cumulative = nudged.map((route) => lengths(route))
   const flows = nudged.map((route, k) =>
-    placeFlow(route, cumulative[k] as Array<number>, adornments[k] ?? []),
+    placeFlow(route, cumulative[k] as Array<number>, adornments[k] ?? [], {
+      radius: length((edges[found[k] as number] as Edge<K>).radius),
+      gap: connector.adornmentGap,
+      justify: connector.justifyAdornments,
+      space: connector.justifyAdornmentsSpace,
+      spaceOuter: connector.justifyAdornmentsSpaceOuter,
+    }),
   )
   const sizes = cornerRadii(
     nudged,
     found.map((i) => (edges[i] as Edge<K>).radius),
     flows.map((flow) => flow.walls),
   )
+  // Short jogs slant, and the flow adornments past them move up the
+  // shorter route.
+  const slanted = slantJogs(
+    nudged,
+    sizes,
+    found.map((i) => length((edges[i] as Edge<K>).radius)),
+    connector.jogSlant,
+    flows.map((flow) => flow.walls),
+    obstacles,
+  )
   const result: Array<ConnectorRoute | undefined> = edges.map(() => undefined)
   for (const [k, i] of found.entries()) {
-    const route = nudged[k] as Array<XY>
-    const radii = sizes[k] as Array<number>
+    const { points: route, radii, remap } = slanted[k] as (typeof slanted)[number]
+    const flow = (flows[k] as { placed: ReadonlyArray<PlacedAdornment | undefined> }).placed
     const placed = placeAdornments(
       route,
-      cumulative[k] as Array<number>,
+      lengths(route),
       radii,
       adornments[k] ?? [],
-      (flows[k] as { placed: ReadonlyArray<PlacedAdornment | undefined> }).placed,
+      flow.map((adornment) =>
+        adornment === undefined
+          ? undefined
+          : {
+              center: adornment.center,
+              direction: adornment.direction,
+              along: [remap(adornment.along[0]), remap(adornment.along[1])],
+            },
+      ),
     )
     result[i] = {
       points: route.map(([x, y]) => Point.make(x, y)),
-      radii,
+      radii: [...radii],
       adornments: placed.map((adornment, a) =>
         placementOf(adornment, (edges[i] as Edge<K>).adornments[a] as Adornment),
       ),

@@ -23,8 +23,8 @@ type TypeBrand = typeof TypeBrand
  *   ranks the edge crosses, which center their adornments in the rank. A
  *   connector (see `placement/connector`) routes around placed rects and
  *   sizes no runs: each one goes to the straight run nearest where its
- *   `at` falls that has room for it, and centers on where it falls, or on
- *   the run when it falls elsewhere.
+ *   `at` falls that has room for it, and the run lays out its adornments
+ *   like a flex container, justified between its corners.
  * - `absolute` adornments sit at `at` of the way along the route as drawn,
  *   rounded corners included, wherever that falls, and take no room in the
  *   layout.

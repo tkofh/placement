@@ -8,6 +8,9 @@
       :clearance="`${clearance}px`"
       :gap="`${gap}px`"
       :bend-cost="`${bendCost}px`"
+      :justify-adornments="justify"
+      :jog-at="jogAt"
+      :jog-slant="slant"
     >
       <!-- the pool is a flex row, and each worker's box is a node -->
       <GraphicGroup left="520px" top="478px" width="456px" height="138px">
@@ -116,6 +119,18 @@
       bend cost {{ b }}
     </button>
     <span />
+    <button v-for="j in JUSTIFY" :key="j" :class="{ on: j === justify }" @click="justify = j">
+      labels {{ j }}
+    </button>
+    <span />
+    <button v-for="j in JOGS" :key="j" :class="{ on: j === jogAt }" @click="jogAt = j">
+      jog {{ j }}
+    </button>
+    <span />
+    <button v-for="k in SLANTS" :key="k" :class="{ on: k === slant }" @click="slant = k">
+      slant {{ k }}
+    </button>
+    <span />
     <button @click="reset">reset</button>
     <span />
     <NuxtLink to="/flowchart">flowchart</NuxtLink>
@@ -127,11 +142,17 @@
 const GAPS = [4, 8] as const
 const CLEARANCES = [16, 28] as const
 const BEND_COSTS = [0, 40] as const
+const JUSTIFY = ['start', 'center', 'end'] as const
+const JOGS = ['start', 'center', 'end'] as const
+const SLANTS = [0, 1, 2] as const
 
 const corners = ref(true)
 const gap = ref<number>(8)
 const clearance = ref<number>(16)
 const bendCost = ref<number>(40)
+const justify = ref<(typeof JUSTIFY)[number]>('center')
+const jogAt = ref<(typeof JOGS)[number]>('center')
+const slant = ref<number>(1)
 
 const CLIENT = 'color(display-p3 0.14 0.34 0.26)'
 const SERVICE = 'color(display-p3 0.16 0.22 0.4)'

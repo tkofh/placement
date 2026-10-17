@@ -53,10 +53,12 @@ graph of obstacles and pins, and `search.ts` finds the cheapest path for
 length and turns (A\*) between sets of endpoints; `acyclic.ts` breaks
 cycles and orders pairwise preferences for both routers. Then
 `internal/connector/nudge.ts` moves overlapping route segments apart and
-centers jogs, with `internal/separation.ts`, a 1D separation-constraint
+places jogs at `jogAt` of their runs, with `internal/separation.ts`, a 1D separation-constraint
 solver (VPSC), `internal/connector/adornments.ts` places adornments on the
 routes, and `internal/connector/corners.ts` sizes corners, nesting
-those of routes that turn together about one center. `Rect`,
+those of routes that turn together about one center, and
+`internal/connector/slants.ts` turns jogs too short for their corners
+into S curves. `Rect`,
 `Point`, `Dimensions`, and `Offset` are the 2D value types. Type-only cross-module imports can stay flat
 (`import type { Rect } from ...`). Use namespace imports for value usage.
 

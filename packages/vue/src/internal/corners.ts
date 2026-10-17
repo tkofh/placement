@@ -192,9 +192,11 @@ function fit(turn: Turn, r: number, smoothing: number, room: number) {
  * starts and ends at the middle of the first leg, which splits that leg
  * evenly between its two corners.
  *
- * `rooms`, one per point of an open polyline, caps how far each corner
+ * `rooms`, one per point of an open polyline, sets how far each corner
  * reaches along its legs, as the corner sizes that `placement/hierarchy`
- * solves do. A capped corner gives way as a crowded one does.
+ * and `placement/connector` solve do. A corner with less room gives way as
+ * a crowded one does. A corner with more room than `r` reaches, as the
+ * gentle turns of a connector's slanted jog have, grows to fill it.
  *
  * @param points - The polyline.
  * @param r - The corner radius. `0` keeps every corner sharp.
@@ -308,7 +310,18 @@ function fitCorners(
   turns.push(undefined)
 
   const s = Math.min(Math.max(smoothing, 0), 1)
-  const wanted = turns.map((turn) => (turn === undefined ? 0 : (1 + s) * r * turn.halfTan))
+  // Each corner's radius: `r`, or larger where its room asks for more.
+  const radii = turns.map((turn, i) => {
+    const cap = caps[i]!
+    if (closed || turn === undefined || !Number.isFinite(cap)) {
+      return r
+    }
+    const reach = (1 + s) * r * turn.halfTan
+    return cap > reach && !coincident(cap, reach) ? cap / ((1 + s) * turn.halfTan) : r
+  })
+  const wanted = turns.map((turn, i) =>
+    turn === undefined ? 0 : (1 + s) * radii[i]! * turn.halfTan,
+  )
 
   // The room of vertex i on the leg toward vertex j.
   const share = (i: number, j: number, length: number) => {
@@ -326,7 +339,7 @@ function fitCorners(
       share(i, i + 1, lengths[i]!),
       closed ? Number.POSITIVE_INFINITY : Math.max(caps[i]!, 0),
     )
-    const size = fit(turn, r, s, room)
+    const size = fit(turn, radii[i]!, s, room)
     return { turn, r: size.r, smoothing: size.smoothing }
   })
 

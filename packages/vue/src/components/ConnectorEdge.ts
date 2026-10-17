@@ -5,6 +5,7 @@ import { useConnectorEdge } from '../composables/useConnector.ts'
 import { PAINT_PROP_KEYS, type PaintProps } from '../composables/usePaint.ts'
 import { useEdgeRenderer } from '../internal/edge.ts'
 import { type PortInput, resolvePort } from '../internal/props/port.ts'
+import { type RatioInput, resolveRatio } from '../internal/props/ratio.ts'
 import { type SmoothingInput, resolveSmoothing } from '../internal/props/smoothing.ts'
 import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
 
@@ -35,6 +36,12 @@ export interface ConnectorEdgeProps extends PaintProps {
    * how strongly.
    */
   turn?: ConnectorEdgeTurn
+  /**
+   * Where the route's jogs sit along the runs they shift: `'start'` (the
+   * source end), `'center'`, `'end'` (the target end), or a ratio. Omitted,
+   * it takes the layout's `jogAt`.
+   */
+  jogAt?: RatioInput
   /**
    * Rounds the route's corners to this radius where it has room. Corners
    * shrink where a leg is short, a flow adornment sits close, or the edge
@@ -69,6 +76,7 @@ export const ConnectorEdge = defineComponent(
           targetAt: target.at,
           via: props.via,
           turn: Connector.turn[props.turn ?? 'none'] ?? Connector.turn.none,
+          jogAt: resolveRatio(props.jogAt, Number.NaN),
         }
       },
       () => ({ radius: radius.value, smoothing: smoothing.value }),
@@ -87,6 +95,7 @@ export const ConnectorEdge = defineComponent(
       'toPort',
       'via',
       'turn',
+      'jogAt',
       'r',
       'smoothing',
       ...PAINT_PROP_KEYS,

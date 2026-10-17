@@ -19,7 +19,9 @@ import { type Separation, type Variable, placeSeparated } from '../separation.ts
 //
 // The new positions come from a separation solver (see `separation.ts`). A
 // segment wants to stay where it is, and moves no further than the obstacles
-// beside it allow. The segments at the ends of a route attach to its pins and
+// beside it allow. A jog wants its spot along the run it shifts, and may
+// first leap over the segments of other routes that run alongside all of
+// it, since that moves a crossing from one of its legs to the other. The segments at the ends of a route attach to its pins and
 // stay put. Where a channel is too narrow for the full gap, the gaps of the
 // segments that crowd it shrink until they fit, down to none.
 
@@ -33,6 +35,10 @@ export interface RouteConstraints {
   readonly anchors?: ReadonlyArray<XY> | undefined
   // Rects that only this route's segments may not move into.
   readonly avoid?: ReadonlyArray<Obstacle> | undefined
+  // Where each jog wants to sit along the run it shifts, from 0 at the end
+  // toward the route's start to 1 at the end toward its target. Defaults
+  // to 0.5.
+  readonly jogAt?: number | undefined
 }
 
 interface Segment {
@@ -133,49 +139,9 @@ function nudgeAxis(
   axis: number,
   constraints: ReadonlyArray<RouteConstraints | undefined>,
 ): boolean {
-  const along = 1 - axis
-  const segments: Array<Segment> = []
-  for (const [route, path] of paths.entries()) {
-    const last = path.length - 2
-    for (let index = 0; index <= last; index++) {
-      if (axisOf(path, index) !== axis) {
-        continue
-      }
-      const a = coord(path[index] as Point, along)
-      const b = coord(path[index + 1] as Point, along)
-      const at = coord(path[index] as Point, axis)
-      const anchored = (constraints[route]?.anchors ?? []).some((point) => {
-        const across = axis === 0 ? point[0] : point[1]
-        const on = axis === 0 ? point[1] : point[0]
-        return coincident(across, at) && between(on, Math.min(a, b), Math.max(a, b))
-      })
-      const fixed =
-        index === 0 ||
-        index === last ||
-        anchored ||
-        axisOf(path, index - 1) === -1 ||
-        axisOf(path, index + 1) === -1
-      // A jog between turns that go opposite ways wants the middle of the
-      // run it shifts, between where the segments on either side of it
-      // start and end. Other segments want to stay put.
-      let desired = at
-      if (!fixed) {
-        const before = coord(path[index - 1] as Point, axis)
-        const after = coord(path[index + 2] as Point, axis)
-        if ((before - at) * (after - at) < 0) {
-          desired = (before + after) / 2
-        }
-      }
-      segments.push({
-        route,
-        index,
-        at,
-        desired,
-        low: Math.min(a, b),
-        high: Math.max(a, b),
-        fixed,
-      })
-    }
+  let segments = collect(paths, axis, constraints)
+  if (leap(paths, obstacles, segments, axis, constraints)) {
+    segments = collect(paths, axis, constraints)
   }
   if (segments.length === 0) {
     return false
@@ -412,6 +378,134 @@ function nudgeAxis(
     ;(path[segment.index + 1] as Point)[axis === 0 ? 0 : 1] = moved
   }
   return anyMoved
+}
+
+// The segments that run across `axis`, with where each wants to be.
+function collect(
+  paths: ReadonlyArray<ReadonlyArray<Point>>,
+  axis: number,
+  constraints: ReadonlyArray<RouteConstraints | undefined>,
+): Array<Segment> {
+  const along = 1 - axis
+  const segments: Array<Segment> = []
+  for (const [route, path] of paths.entries()) {
+    const last = path.length - 2
+    for (let index = 0; index <= last; index++) {
+      if (axisOf(path, index) !== axis) {
+        continue
+      }
+      const a = coord(path[index] as Point, along)
+      const b = coord(path[index + 1] as Point, along)
+      const at = coord(path[index] as Point, axis)
+      const anchored = (constraints[route]?.anchors ?? []).some((point) => {
+        const across = axis === 0 ? point[0] : point[1]
+        const on = axis === 0 ? point[1] : point[0]
+        return coincident(across, at) && between(on, Math.min(a, b), Math.max(a, b))
+      })
+      const fixed =
+        index === 0 ||
+        index === last ||
+        anchored ||
+        axisOf(path, index - 1) === -1 ||
+        axisOf(path, index + 1) === -1
+      // A jog between turns that go opposite ways wants its spot along the
+      // run it shifts, between where the segments on either side of it
+      // start and end: the middle, unless the route says otherwise. Other
+      // segments want to stay put.
+      let desired = at
+      if (!fixed) {
+        const before = coord(path[index - 1] as Point, axis)
+        const after = coord(path[index + 2] as Point, axis)
+        if ((before - at) * (after - at) < 0) {
+          desired = before + jogAtOf(constraints[route]) * (after - before)
+        }
+      }
+      segments.push({
+        route,
+        index,
+        at,
+        desired,
+        low: Math.min(a, b),
+        high: Math.max(a, b),
+        fixed,
+      })
+    }
+  }
+  return segments
+}
+
+function jogAtOf(constraints: RouteConstraints | undefined): number {
+  const value = constraints?.jogAt
+  return value !== undefined && Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 0.5
+}
+
+// Moves each jog that wants to be elsewhere past the segments of other
+// routes that run alongside all of it, toward where it wants to be, before
+// the solve. The separations keep every segment on its side of the others,
+// so without this a jog stays behind a line that it could cross for free:
+// its legs go opposite ways, so one leg's crossing with that line moves to
+// the other. The jog stops before any segment that overlaps only part of
+// it, or belongs to its own route, and before the walls. Returns whether
+// any jog moved.
+function leap(
+  paths: Array<Array<Point>>,
+  obstacles: ReadonlyArray<Obstacle>,
+  segments: ReadonlyArray<Segment>,
+  axis: number,
+  constraints: ReadonlyArray<RouteConstraints | undefined>,
+): boolean {
+  const moves: Array<[Segment, number]> = []
+  for (const jog of segments) {
+    if (jog.fixed || coincident(jog.desired, jog.at)) {
+      continue
+    }
+    const own = constraints[jog.route]?.avoid ?? []
+    const [low, high] = walls(own.length === 0 ? obstacles : [...obstacles, ...own], jog, axis)
+    const step = jog.desired > jog.at ? 1 : -1
+    const limit =
+      step > 0
+        ? Math.min(jog.desired, high ?? jog.desired)
+        : Math.max(jog.desired, low ?? jog.desired)
+    const ahead = segments
+      .filter((other) => {
+        const distance = step * (other.at - jog.at)
+        return (
+          other !== jog &&
+          distance > 0 &&
+          !coincident(other.at, jog.at) &&
+          (step * (limit - other.at) > 0 || coincident(other.at, limit)) &&
+          (other.low < jog.high || coincident(other.low, jog.high)) &&
+          (other.high > jog.low || coincident(other.high, jog.low))
+        )
+      })
+      .toSorted((a, b) => step * (a.at - b.at))
+    let passed: number | undefined
+    let target = limit
+    for (const other of ahead) {
+      const alongside =
+        other.route !== jog.route &&
+        other.low < jog.low &&
+        !coincident(other.low, jog.low) &&
+        other.high > jog.high &&
+        !coincident(other.high, jog.high)
+      if (!alongside) {
+        // Halfway to the segment that stops it, which the solve then moves
+        // the jog toward.
+        target = ((passed ?? jog.at) + other.at) / 2
+        break
+      }
+      passed = other.at
+    }
+    if (passed !== undefined) {
+      moves.push([jog, target])
+    }
+  }
+  for (const [jog, target] of moves) {
+    const path = paths[jog.route] as Array<Point>
+    ;(path[jog.index] as Point)[axis === 0 ? 0 : 1] = target
+    ;(path[jog.index + 1] as Point)[axis === 0 ? 0 : 1] = target
+  }
+  return moves.length > 0
 }
 
 // The nearest obstacle edges on each side of a segment, among the obstacles

@@ -230,6 +230,29 @@ describe('routing', () => {
     expect(routes(root)[0]).toHaveLength(6)
   })
 
+  test('jogAt moves jogs along their runs, and an edge overrides the layout', async () => {
+    const { root } = await mountLayout({ clearance: 10, jogAt: 'start' }, () => [
+      edge({ from: 'a', to: 'b' }),
+      edge({ from: 'a', to: 'b', fromPort: 'bottom', toPort: 'top', jogAt: 'end' }),
+      node('a', rects.a),
+      node('b', rects.b),
+    ])
+    const solved = Connector.apply(
+      { a: rects.a, b: rects.b },
+      [
+        Edge.make({ source: 'a', target: 'b' }),
+        Edge.make({ source: 'a', target: 'b', sourceSide: 2, targetSide: 0 }),
+      ],
+      Connector.make({ clearance: 10, jogAt: 0 }),
+      { edges: [undefined, { jogAt: 1 }] },
+    )
+
+    expect(routes(root)).toEqual(solved.edges.map(pointsOf))
+    // Against the source's clearance, and against the target's.
+    expect(solved.edges[0]?.points[1]?.x).toBe(90)
+    expect(solved.edges[1]?.points[1]?.y).toBe(110)
+  })
+
   test('a layout prop replaces the other routing props', async () => {
     const { root } = await mountLayout({ clearance: 40, layout: spec }, graph)
     expect(routes(root)).toEqual(expected.edges.map(pointsOf))
@@ -331,7 +354,7 @@ describe('adornments', () => {
       width: 30,
       height: 10,
     })
-    // Above the line, centered on where it falls.
+    // Above the line, centered on its run.
     expect(label!.rect).toEqual(Rect.make(135, 25, 30, 10))
     expect(findOne(root, 'dot').props).toEqual({
       x: dot!.rect.x,
@@ -340,6 +363,28 @@ describe('adornments', () => {
       height: 10,
     })
   })
+})
+
+test.each([
+  [{ justifyAdornments: 'space-between' }, [80, 190]],
+  [{ justifyAdornments: 'start', adornmentGap: 4 }, [80, 114]],
+  [{ justifyAdornments: 'end', adornmentGap: '1%' }, [156, 190]],
+] as const)('%o lays out the labels on a run', async (layout, xs) => {
+  const pair = { a: rects.a, b: Rect.make(220, 20, 60, 30) }
+  const { root } = await mountLayout({ clearance: 10, ...layout }, () => [
+    edge({ from: 'a', to: 'b' }, () =>
+      ['first', 'second'].map((tag, i) =>
+        h(
+          ConnectorAdornment,
+          { at: 0.25 + i / 2, width: 30, height: 10 },
+          { default: ({ rect }: { rect: Rect.Rect }) => [probe(rect, tag)] },
+        ),
+      ),
+    ),
+    node('a', pair.a),
+    node('b', pair.b),
+  ])
+  expect([findOne(root, 'first').props['x'], findOne(root, 'second').props['x']]).toEqual(xs)
 })
 
 describe('reactivity', () => {

@@ -198,6 +198,19 @@ describe('roundPolyline', () => {
     // Then the radius shrinks too.
     expect(begins([0, 4, 0])).toBeCloseTo(96, 9)
   })
+
+  test('a room past what the radius reaches grows the corner to fill it', () => {
+    // A slanted jog: two corners that turn atan(4 / 3) each way and meet
+    // halfway, (30, 4), with no straight between them.
+    const ess = [point([0, 0]), point([27, 0]), point([33, 8]), point([60, 8])]
+    const curves = curvesOf(roundPolyline(ess, 2, 0, false, [0, 5, 5, 0]))
+    expect(curves[1]!.x.c0).toBeCloseTo(22, 9)
+    const join = curves.findIndex((curve) => Math.abs(curve.x.c0 - 30) < 1e-9)
+    expect(join).toBeGreaterThan(1)
+    expect(curves[join]!.y.c0).toBeCloseTo(4, 9)
+    // An open polyline without rooms keeps its radius.
+    expect(curvesOf(roundPolyline(ess, 2, 0))[1]!.x.c0).toBeCloseTo(26, 9)
+  })
 })
 
 describe('roundRect', () => {

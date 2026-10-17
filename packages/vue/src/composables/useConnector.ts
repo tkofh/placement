@@ -222,7 +222,7 @@ export function useConnectorEdge(
   const { adornments, solve: solveEdge } = useEdgeAdornments(ADORNMENT_CHANNEL)
 
   const input = computed((): EdgeEntry => {
-    const { via, avoid, turn, ...ends } = toValue(edge)
+    const { via, avoid, turn, jogAt, ...ends } = toValue(edge)
     const { radius, smoothing } = toValue(drawing)
     const reach = 1 + Math.min(Math.max(smoothing, 0), 1)
     return {
@@ -231,7 +231,7 @@ export function useConnectorEdge(
         radius: reach * Math.max(radius, 0),
         adornments: adornments.value,
       }),
-      options: { via, avoid, turn },
+      options: { via, avoid, turn, jogAt },
     }
   })
 

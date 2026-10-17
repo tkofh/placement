@@ -385,8 +385,32 @@ export interface DrawnPoint {
   readonly distance: number
 }
 
-// The point at `fraction` of the length of the route drawn with right-angled
-// corners of `radii`, each a quarter circle.
+// The circle of the corner at point `i`, which reaches `reach` along its
+// legs: the turning angle, the radius, and the unit normal from the
+// incoming leg toward the circle's center. A right-angled corner is a
+// quarter circle of radius `reach`, exactly.
+function cornerCircle(
+  u: LogicalPoint,
+  v: LogicalPoint,
+  reach: number,
+): { readonly theta: number; readonly radius: number; readonly normal: LogicalPoint } {
+  const cos = u[0] * v[0] + u[1] * v[1]
+  if (coincident(cos, 0)) {
+    return { theta: Math.PI / 2, radius: reach, normal: v }
+  }
+  const theta = Math.atan2(Math.abs(u[0] * v[1] - u[1] * v[0]), cos)
+  const n: LogicalPoint = [v[0] - cos * u[0], v[1] - cos * u[1]]
+  const size = Math.hypot(n[0], n[1])
+  return {
+    theta,
+    radius: reach / Math.tan(theta / 2),
+    normal: size > 0 ? [n[0] / size, n[1] / size] : [0, 0],
+  }
+}
+
+// The point at `fraction` of the length of the route drawn with circular
+// corners that reach `radii` along their legs: quarter circles where the
+// route turns a right angle.
 export function pointOnDrawn(
   points: ReadonlyArray<LogicalPoint>,
   cumulative: ReadonlyArray<number>,
@@ -400,12 +424,17 @@ export function pointOnDrawn(
     const length = (cumulative[i + 1] as number) - (cumulative[i] as number)
     return length > 0 ? [(bo - ao) / length, (br - ar) / length] : [0, 0]
   }
+  // The circle of the corner at the end of segment i.
+  const circleAt = (i: number) => cornerCircle(unitAt(i), unitAt(i + 1), radii[i + 1] as number)
 
   let total = 0
   for (let i = 0; i + 1 < count; i++) {
     const length = (cumulative[i + 1] as number) - (cumulative[i] as number)
     total += length - (radii[i] as number) - (radii[i + 1] as number)
-    total += (Math.PI / 2) * (radii[i + 1] as number)
+    if (i + 2 < count && (radii[i + 1] as number) > 0) {
+      const { theta, radius } = circleAt(i)
+      total += theta * radius
+    }
   }
   let remaining = Math.min(Math.max(fraction, 0), 1) * total
 
@@ -429,20 +458,23 @@ export function pointOnDrawn(
       }
     }
     remaining -= straight
-    const arc = (Math.PI / 2) * endRadius
-    if (remaining <= arc && endRadius > 0) {
-      const v = unitAt(i + 1)
-      const phi = remaining / endRadius
+    if (endRadius <= 0) {
+      continue
+    }
+    const { theta, radius, normal: n } = circleAt(i)
+    const arc = theta * radius
+    if (remaining <= arc) {
+      const phi = remaining / radius
       const sin = Math.sin(phi)
       const cos = Math.cos(phi)
       const [co, cr] = points[i + 1] as LogicalPoint
       return {
         point: [
-          co - u[0] * endRadius + u[0] * endRadius * sin + v[0] * endRadius * (1 - cos),
-          cr - u[1] * endRadius + u[1] * endRadius * sin + v[1] * endRadius * (1 - cos),
+          co - u[0] * endRadius + u[0] * radius * sin + n[0] * radius * (1 - cos),
+          cr - u[1] * endRadius + u[1] * radius * sin + n[1] * radius * (1 - cos),
         ],
-        tangent: [u[0] * cos + v[0] * sin, u[1] * cos + v[1] * sin],
-        distance: (cumulative[i + 1] as number) - endRadius + (2 * endRadius * phi) / (Math.PI / 2),
+        tangent: [u[0] * cos + n[0] * sin, u[1] * cos + n[1] * sin],
+        distance: (cumulative[i + 1] as number) - endRadius + (2 * endRadius * phi) / theta,
       }
     }
     remaining -= arc

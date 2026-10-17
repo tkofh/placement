@@ -15,9 +15,20 @@ routes that turn together get corners about one center, as on a metro map.
 An auto side is the side of the cheapest route, and auto ports that share a
 side spread out without crossing. Each edge can also pass through `via`
 points, stay out of its own `avoid` rects, and prefer clockwise or
-counterclockwise turns. Routes place their edges' adornments (`flow` ones
-on the straight run where they fall, packed against the port at either
-end, with corners kept clear of them; `absolute` ones on the route as
-drawn), and the spec's `alignAdornments` picks their side of the line.
+counterclockwise turns. A jog, the rise of a Z-shaped route, sits at the
+spec's `jogAt` of the run it shifts (the middle by default, or per edge),
+and passes routes that run alongside all of it, since that adds no
+crossing. A jog too short for its two corners slants into an S (two arcs
+that meet halfway) instead of shrinking them into a kink, as far as the
+spec's `jogSlant` and the free length around it allow, so a route's
+`points` may include one slanted segment per such jog. Routes place their
+edges' adornments. Each straight run lays out
+its `flow` adornments like a flex container with no thickness: packed
+against the port at either end, otherwise on the run nearest where they
+fall that has room for them and its corners, justified by
+`justifyAdornments`, `justifyAdornmentsSpace`, and
+`justifyAdornmentsSpaceOuter`, `adornmentGap` apart, and aligned across the
+line by `alignAdornments`, with corners kept clear of them. `absolute`
+adornments sit on the route as drawn.
 `AdornmentPlacement` in `placement/adornment` is the shape that both
 layouts report placed adornments in.
