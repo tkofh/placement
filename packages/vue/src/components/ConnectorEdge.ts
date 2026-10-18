@@ -2,7 +2,7 @@ import * as Connector from 'placement/connector'
 import type * as Point from 'placement/point'
 import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
 import { useConnectorEdge } from '../composables/useConnector.ts'
-import { PAINT_PROP_KEYS, type PaintProps } from '../composables/usePaint.ts'
+import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
 import { useEdgeRenderer } from '../internal/edge.ts'
 import { type PortInput, resolvePort } from '../internal/props/port.ts'
 import { type RatioInput, resolveRatio } from '../internal/props/ratio.ts'
@@ -11,6 +11,11 @@ import { type LengthPercentageInput, useLengthPercentage } from '../props/length
 
 export type ConnectorEdgeTurn = keyof typeof Connector.turn
 
+/**
+ * The props of `ConnectorEdge`. The width of its `stroke` (1 for a stroke
+ * without one) is the edge's thickness, which the layout keeps its gaps
+ * and clearance between, unless `thickness` says otherwise.
+ */
 export interface ConnectorEdgeProps extends PaintProps {
   /** The `id` of the node the edge leaves. */
   from?: string
@@ -56,12 +61,32 @@ export interface ConnectorEdgeProps extends PaintProps {
    * crowded one gives up smoothing before radius.
    */
   smoothing?: SmoothingInput
+  /**
+   * The width the layout routes the edge as, in place of its stroke's: set
+   * it to keep routes still while the stroke changes, as on hover.
+   * Percentages resolve against the width of the edge's parent.
+   */
+  thickness?: LengthPercentageInput
 }
 
 export const ConnectorEdge = defineComponent(
   (props: ConnectorEdgeProps, { slots }) => {
     const radius = useLengthPercentage(() => props.r, 0)
     const smoothing = computed(() => resolveSmoothing(props.smoothing))
+    // The stroke's width, which SVG draws as 1 when a stroke leaves it out.
+    const paint = usePaint(props)
+    const pinned = useLengthPercentage(() => props.thickness, Number.NaN)
+    const thickness = computed(() => {
+      if (Number.isFinite(pinned.value)) {
+        return Math.max(pinned.value, 0)
+      }
+      const { stroke, 'stroke-width': width } = paint.value
+      if (stroke === undefined) {
+        return 0
+      }
+      const value = width === undefined ? 1 : Number.parseFloat(width)
+      return Number.isFinite(value) && value > 0 ? value : 0
+    })
 
     const solution = useConnectorEdge(
       () => {
@@ -79,7 +104,7 @@ export const ConnectorEdge = defineComponent(
           jogAt: resolveRatio(props.jogAt, Number.NaN),
         }
       },
-      () => ({ radius: radius.value, smoothing: smoothing.value }),
+      () => ({ radius: radius.value, smoothing: smoothing.value, thickness: thickness.value }),
     )
 
     // The drawn line stops short of each end by the length of the trimming
@@ -98,6 +123,7 @@ export const ConnectorEdge = defineComponent(
       'jogAt',
       'r',
       'smoothing',
+      'thickness',
       ...PAINT_PROP_KEYS,
     ],
     inheritAttrs: false,

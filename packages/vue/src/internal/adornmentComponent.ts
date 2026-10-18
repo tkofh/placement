@@ -3,7 +3,7 @@ import * as Frame from 'placement/frame'
 import { type MaybeRefOrGetter, type Ref, type VNode, computed, h } from 'vue'
 import { useParentRectRegistration } from '../composables/useSizingContext.ts'
 import { finiteNumber } from './curve.ts'
-import type { EdgeAdornmentInput } from './edge.ts'
+import type { EdgeAdornmentInput, EdgeAdornmentPlacement } from './edge.ts'
 import { FRAME_ITEM_PROP_KEYS, type FrameItemProps, useFrameInput } from './frame.ts'
 import { type RatioInput, resolveRatio } from './props/ratio.ts'
 import { useGroupRenderer } from './render.ts'
@@ -84,7 +84,7 @@ export function useEdgeAdornmentRenderer(
   basis: Parameters<typeof useFrameInput>[1],
   register: (
     adornment: MaybeRefOrGetter<EdgeAdornmentInput>,
-  ) => Readonly<Ref<Adornment.AdornmentPlacement>>,
+  ) => Readonly<Ref<EdgeAdornmentPlacement>>,
 ): () => VNode | Array<VNode> {
   const input = useFrameInput(props, basis)
 
@@ -120,7 +120,11 @@ export function useEdgeAdornmentRenderer(
   const render = useGroupRenderer(rect, () => boolProp(props.debug))
 
   return () => {
-    const { angle, rect: placed } = placement.value
+    const { angle, rect: placed, drawn } = placement.value
+    // Another edge draws the adornment this one shares at a merged end.
+    if (drawn === false) {
+      return []
+    }
     const children = render()
     if (angle === 0) {
       return children

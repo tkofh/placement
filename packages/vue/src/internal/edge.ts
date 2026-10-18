@@ -42,11 +42,27 @@ export interface EdgeAdornmentInput {
   readonly trims?: boolean
 }
 
-/** An edge's solved route: its polyline, its corner sizes, and its adornments. */
+/**
+ * An edge's solved route: its polyline, its corner sizes, how far inside
+ * the outermost corner of its nest each corner sits (`0` or left out for
+ * none), its adornments, and whether it draws each one. An end that merges with other edges' ends
+ * leaves the adornments they share there to one of them. Adornments draw
+ * when `drawn` leaves them out.
+ */
 export interface EdgeRoute {
   readonly points: ReadonlyArray<Point.Point>
   readonly radii: ReadonlyArray<number>
+  readonly insets?: ReadonlyArray<number>
   readonly adornments: ReadonlyArray<Adornment.AdornmentPlacement>
+  readonly drawn?: ReadonlyArray<boolean>
+}
+
+/**
+ * Where an adornment landed, and `drawn: false` when another edge draws
+ * the same adornment in its place.
+ */
+export type EdgeAdornmentPlacement = Adornment.AdornmentPlacement & {
+  readonly drawn?: boolean
 }
 
 export const emptyRoute: EdgeRoute = { points: [], radii: [], adornments: [] }
@@ -90,9 +106,7 @@ export function useEdgeAdornments(channel: string): {
   readonly adornments: ComputedRef<ReadonlyArray<Adornment.Adornment>>
   readonly solve: (route: Readonly<Ref<EdgeRoute>>) => ComputedRef<EdgeSolution>
 } {
-  const children = shallowRef<
-    ReadonlyArray<Child<EdgeAdornmentInput, Adornment.AdornmentPlacement>>
-  >([])
+  const children = shallowRef<ReadonlyArray<Child<EdgeAdornmentInput, EdgeAdornmentPlacement>>>([])
 
   // The route comes from the layout, which needs the adornments first, so
   // the assignment waits for `solve`.
@@ -102,7 +116,7 @@ export function useEdgeAdornments(channel: string): {
   // instead (see `useChildren.ts`), so the mapper assigns directly.
   const ssr = isSSR()
 
-  useChildren<EdgeAdornmentInput, Adornment.AdornmentPlacement>(channel, (list) => {
+  useChildren<EdgeAdornmentInput, EdgeAdornmentPlacement>(channel, (list) => {
     children.value = list
     if (ssr) {
       assign?.()
@@ -135,14 +149,22 @@ export function useEdgeAdornments(channel: string): {
       return { start, end }
     })
 
-    const line = computed(() => drawnLine(route.value.points, route.value.radii, insets.value))
+    const line = computed(() =>
+      drawnLine(route.value.points, route.value.radii, insets.value, route.value.insets),
+    )
 
     // As in the layouts, the mapper records the list and an effect writes
     // the outputs.
     const write = () => {
-      const placed = route.value.adornments
+      const { adornments: placed, drawn } = route.value
       for (const [k, child] of children.value.entries()) {
-        child.output.value = placed[k] ?? unplaced
+        const placement = placed[k]
+        child.output.value =
+          placement === undefined
+            ? unplaced
+            : drawn?.[k] === false
+              ? { ...placement, drawn: false }
+              : placement
       }
     }
     assign = write
@@ -164,13 +186,13 @@ export function useEdgeAdornments(channel: string): {
  *
  * @param channel - The adornment channel of the edge's layout.
  * @param adornment - The adornment's frame and where it sits.
- * @returns Where the adornment landed.
+ * @returns Where the adornment landed, and whether its edge draws it.
  */
 export function useEdgeAdornment(
   channel: string,
   adornment: MaybeRefOrGetter<EdgeAdornmentInput>,
-): Readonly<Ref<Adornment.AdornmentPlacement>> {
-  return useChild(channel, adornment, unplaced)
+): Readonly<Ref<EdgeAdornmentPlacement>> {
+  return useChild<EdgeAdornmentInput, EdgeAdornmentPlacement>(channel, adornment, unplaced)
 }
 
 /**
@@ -197,13 +219,13 @@ export function useEdgeRenderer(
   const paint = usePaint(props)
 
   const pathData = computed(() => {
-    const { points, rooms } = solution.value.line
+    const { points, rooms, nests } = solution.value.line
     if (points.length < 2) {
       return undefined
     }
     const r = toValue(radius)
     if (r > 0) {
-      const rounded = roundPolyline(points, r, toValue(smoothing), false, rooms)
+      const rounded = roundPolyline(points, r, toValue(smoothing), false, rooms, nests)
       return rounded === undefined ? undefined : CubicPath2d.toPathData(rounded)
     }
     const vectors = points.map((point) => Vector2.make(point.x, point.y))

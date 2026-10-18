@@ -19,13 +19,23 @@ import type { XY } from './nudge.ts'
 // around it move.
 //
 // The S takes only free length. On each side of the jog it stops short of
-// the next corner (or of the next short jog's S, up to half the leg), of
-// the stretches flow adornments wall off, and of anything inside the band
-// between the two legs: the other routes, and the rects grown by their
-// clearance. What dips into the band only from an edge holds the S back by
-// how deep it reaches. With less room, the corners take a smaller reach,
-// down to the orthogonal corners that share the jog. Every limit moves
-// with the geometry, so the S grows and shrinks without jumping.
+// the next corner (or of the next short jog's S, up to half the leg), and
+// of the stretches flow adornments wall off. It starts and ends past
+// anything its legs pass through, such as the rect a port leaves or a
+// route that crosses a leg, and stays upright for anything on the jog. And
+// the curve itself keeps the gap from the strokes of the routes alongside
+// its legs (the merge gap from those that share a merge with it), ends
+// short of the strokes of those across them, and keeps half its own stroke
+// from the rects grown by their clearance: a wider S
+// reaches farther into the band between the legs at every point, so the
+// widest that clears them is found by halving. With less room, the corners
+// take a smaller reach, down to the orthogonal corners that share the jog.
+// Every limit moves with the geometry, so the S grows and shrinks without
+// jumping, though it shrinks fast for something near the end of a leg,
+// where the arc runs close along it.
+//
+// A jog in a bundle, or where a route leaves a group, is the merge's, and
+// stays upright (see `exempt`).
 
 /** A route with its short jogs slanted. */
 export interface SlantedRoute {
@@ -38,6 +48,77 @@ export interface SlantedRoute {
    * length along the slanted one.
    */
   readonly remap: (distance: number) => number
+}
+
+/** The space an S keeps from the strokes around it. */
+export interface Strokes {
+  /** The space between the strokes of routes. */
+  readonly gap?: number | undefined
+  /** How thick each route draws. */
+  readonly thickness?: ReadonlyArray<number> | undefined
+  /**
+   * The merges each route's start and end lead into, as ids shared by the
+   * routes of each merge, or `-1`. Routes that share one keep the merge gap
+   * instead of the gap.
+   */
+  readonly merges?: ReadonlyArray<readonly [number, number]> | undefined
+  /** The space between the strokes of routes that share a merge. */
+  readonly mergeGap?: number | undefined
+}
+
+// How many times the room for an S halves while it looks for the widest
+// that clears everything.
+const HALVINGS = 24
+
+// A box around a jog: its extent along the legs, from the jog, toward the
+// route's end, and across them.
+interface Box {
+  readonly u0: number
+  readonly u1: number
+  readonly c0: number
+  readonly c1: number
+}
+
+const less = (a: number, b: number) => a < b && !coincident(a, b)
+
+// How far an S may reach for a box that touches the upright jog or its
+// legs: short of the box along the leg it touches, and none for one on the
+// jog. `undefined` for a box that touches neither.
+function touches(box: Box, from: number, to: number): number | undefined {
+  const inside = (c: number) => less(box.c0, c) && less(c, box.c1)
+  const [low, high] = from < to ? [from, to] : [to, from]
+  if (less(box.u0, 0) && less(0, box.u1) && less(box.c0, high) && less(low, box.c1)) {
+    return 0
+  }
+  let reach: number | undefined
+  if (less(box.u0, 0) && inside(from)) {
+    reach = Math.max(-box.u1, 0)
+  }
+  if (less(0, box.u1) && inside(to)) {
+    reach = Math.min(reach ?? Number.POSITIVE_INFINITY, Math.max(box.u0, 0))
+  }
+  return reach
+}
+
+// Whether an S of half-span `half` crossing `d` from `from`, toward the
+// side `toward`, passes through a box. Its two arcs leave each leg along it
+// and meet halfway, so across it moves one way all along: the stretch of it
+// alongside the box spans across between its two ends there.
+function crosses(box: Box, half: number, d: number, from: number, toward: number): boolean {
+  if (!less(box.u0, half) || !less(-half, box.u1)) {
+    return false
+  }
+  const u0 = Math.max(box.u0, -half)
+  const u1 = Math.min(box.u1, half)
+  // Each arc turns `theta`, with tan(theta / 2) = d / (2 * half).
+  const theta = 2 * Math.atan(d / (2 * half))
+  const radius = half / Math.sin(theta)
+  const across = (u: number) =>
+    u <= 0
+      ? from + toward * (radius - Math.sqrt(Math.max(radius * radius - (u + half) ** 2, 0)))
+      : from + toward * (d - radius + Math.sqrt(Math.max(radius * radius - (half - u) ** 2, 0)))
+  const [a, b] = [across(u0), across(u1)]
+  return less(box.c0, Math.max(a, b)) && less(Math.min(a, b), box.c1)
 }
 
 interface Slant {
@@ -59,6 +140,11 @@ interface Slant {
  * keeps the shape continuous. `0` slants nothing.
  * @param walls - The stretches of each route that its flow adornments take.
  * @param obstacles - The rects, grown by the clearance.
+ * @param exempt - The jogs of each route, by the index of their first point,
+ * to leave as they are, such as the steps of merged lanes onto their
+ * shared line.
+ * @param strokes - The gap between the strokes of routes, and how thick
+ * each route draws, which an S keeps clear by.
  * @returns Each route with its short jogs slanted.
  */
 export function slantJogs(
@@ -68,7 +154,23 @@ export function slantJogs(
   slant: number,
   walls: ReadonlyArray<ReadonlyArray<readonly [number, number]>>,
   obstacles: ReadonlyArray<Obstacle>,
+  exempt: ReadonlyArray<ReadonlySet<number>> = [],
+  strokes: Strokes = {},
 ): Array<SlantedRoute> {
+  const spacing =
+    Number.isFinite(strokes.gap) && (strokes.gap ?? 0) > 0 ? (strokes.gap as number) : 0
+  const width = (route: number) => {
+    const value = strokes.thickness?.[route] ?? 0
+    return Number.isFinite(value) && value > 0 ? value : 0
+  }
+  const tight =
+    Number.isFinite(strokes.mergeGap) && (strokes.mergeGap ?? 0) > 0
+      ? Math.min(strokes.mergeGap as number, spacing)
+      : 0
+  const partners = (a: number, b: number) => {
+    const [p, q] = [strokes.merges?.[a], strokes.merges?.[b]]
+    return p !== undefined && q !== undefined && p.some((id) => id >= 0 && q.includes(id))
+  }
   // Everything a slant keeps clear of: each route's segments, by route, and
   // the obstacles, as boxes.
   const boxes = routes.map((points) =>
@@ -104,6 +206,7 @@ export function slantJogs(
       const same = heading(points, i - 1)
       const next = heading(points, i + 1)
       if (
+        !(exempt[route]?.has(i) ?? false) &&
         same[0] === next[0] &&
         same[1] === next[1] &&
         d < 2 * reach &&
@@ -160,52 +263,79 @@ export function slantJogs(
         }
       }
 
-      // Anything inside the band between the legs, by how far it sits from
-      // the jog along them, and how deep it reaches into the band. One that
-      // reaches the middle stops the S where it begins. One that only
-      // dips in from an edge lets the S reach past it, by its full spread
-      // at the edge itself, so a rect or route that slides in from the side
-      // shortens the S gradually.
-      const low = Math.min(p[across] as number, q[across] as number)
-      const high = Math.max(p[across] as number, q[across] as number)
+      // The S may not come within reach of anything else: the other
+      // routes and the route's own far stretches, by the gap between their
+      // strokes, and the rects, by half its own. Each, as a box grown by
+      // that, is checked against the S as drawn: two arcs from the leg
+      // before the jog to the leg after it. A wider S reaches farther into
+      // the band between the legs at every point, so the widest that clears
+      // everything is found by halving, and it moves with the geometry
+      // around it.
+      const launch = p[across] as number
+      const finish = q[across] as number
+      const toward = Math.sign(finish - launch)
       const jogAt = p[along] as number
-      const full = spread(d)
-      const clear = (box: Obstacle) => {
-        const [lo, hi] = across === 0 ? [box.left, box.right] : [box.top, box.bottom]
-        const from = Math.max(lo, low)
-        const to = Math.min(hi, high)
-        if (!(to > from) || coincident(to, from)) {
+      let most = Math.min(before, after)
+      const own = width(route)
+      const near: Array<Box> = []
+      const consider = (box: Obstacle, keep: number) => {
+        const [a0, a1] = along === 0 ? [box.left, box.right] : [box.top, box.bottom]
+        const [c0, c1] = along === 0 ? [box.top, box.bottom] : [box.left, box.right]
+        const grown: Box = {
+          u0: (sign > 0 ? a0 - jogAt : jogAt - a1) - keep,
+          u1: (sign > 0 ? a1 - jogAt : jogAt - a0) + keep,
+          c0: c0 - keep,
+          c1: c1 + keep,
+        }
+        if (!less(grown.u0, most) || !less(-most, grown.u1)) {
           return
         }
-        const middle = (low + high) / 2
-        const depth =
-          from <= middle && to >= middle
-            ? d / 2
-            : Math.max(Math.min(from - low, high - from), Math.min(to - low, high - to))
-        const past = full * (1 - Math.min(depth / (d / 2), 1))
-        const [start, end] = along === 0 ? [box.left, box.right] : [box.top, box.bottom]
-        const [near, far] = sign > 0 ? [start - jogAt, end - jogAt] : [jogAt - end, jogAt - start]
-        if (near > 0 || coincident(near, 0)) {
-          after = Math.min(after, near + past)
-        } else if (far < 0 || coincident(far, 0)) {
-          before = Math.min(before, -far + past)
+        // The S starts and ends past anything its legs pass through, such
+        // as the rect a port leaves or a route that crosses a leg, and
+        // stays upright for anything on the jog itself.
+        const upright = touches(grown, launch, finish)
+        if (upright === undefined) {
+          near.push(grown)
         } else {
-          before = Math.min(before, past)
-          after = Math.min(after, past)
+          most = Math.min(most, upright)
         }
       }
       for (const [other, list] of boxes.entries()) {
+        const strokes = (own + width(other)) / 2
+        const keep = (other !== route && partners(route, other) ? tight : spacing) + strokes
         for (const [segment, box] of list.entries()) {
           if (other !== route || segment < i - 1 || segment > i + 1) {
-            clear(box)
+            // A route across the legs needs only the S to end short of its
+            // stroke; one alongside them keeps the gap.
+            const across = along === 0 ? box.left === box.right : box.top === box.bottom
+            consider(box, across ? strokes : keep)
           }
         }
       }
       for (const box of obstacles) {
-        clear(box)
+        consider(box, own / 2)
       }
-
-      const room = Math.min(before, after)
+      const clears = (room: number) => {
+        const fitted = fit(d, reach, slant, room)
+        if (fitted === undefined) {
+          return true
+        }
+        const half = fitted.w / 2 + fitted.reach
+        return near.every((box) => !crosses(box, half, d, launch, toward))
+      }
+      let room = most
+      if (!clears(most)) {
+        let [low, high] = [0, most]
+        for (let step = 0; step < HALVINGS; step++) {
+          const middle = (low + high) / 2
+          if (clears(middle)) {
+            low = middle
+          } else {
+            high = middle
+          }
+        }
+        room = low
+      }
       const fitted = fit(d, reach, slant, room)
       if (fitted !== undefined) {
         slants.push({ index: i, ...fitted })

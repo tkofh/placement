@@ -11,6 +11,11 @@ const end = (c: Curve) =>
 const startTangent = (c: Curve) => [c.x.c1, c.y.c1] as const
 const endTangent = (c: Curve) =>
   [c.x.c1 + 2 * c.x.c2 + 3 * c.x.c3, c.y.c1 + 2 * c.y.c2 + 3 * c.y.c3] as const
+const pointAt = (c: Curve, t: number) =>
+  [
+    c.x.c0 + t * (c.x.c1 + t * (c.x.c2 + t * c.x.c3)),
+    c.y.c0 + t * (c.y.c1 + t * (c.y.c2 + t * c.y.c3)),
+  ] as const
 const curvature = (c: Curve, t: number) => Math.abs(CubicCurve2d.curvature(c, t))
 
 function curvesOf(path: CubicPath2d.CubicPath2d | undefined): Array<Curve> {
@@ -197,6 +202,41 @@ describe('roundPolyline', () => {
     expect(begins([0, 10, 0])).toBeCloseTo(90, 9)
     // Then the radius shrinks too.
     expect(begins([0, 4, 0])).toBeCloseTo(96, 9)
+  })
+
+  test('a nested corner is its outermost corner moved in by its inset', () => {
+    // Two L's 4 apart, with corners on the line x + y = 100. The outer one
+    // reaches (1 + 0.6) * 10 = 16, and the inner one 4 less.
+    const outer = [point([0, 0]), point([100, 0]), point([100, 100])]
+    const inner = [point([0, 4]), point([96, 4]), point([96, 100])]
+    // Where a corner crosses the line through both corners.
+    const apex = (curves: Array<Curve>) => {
+      const side = (c: Curve, t: number) => pointAt(c, t)[0] + pointAt(c, t)[1] - 100
+      const c = curves.find((curve) => side(curve, 0) * side(curve, 1) <= 0)!
+      let [lo, hi] = [0, 1]
+      for (let k = 0; k < 60; k++) {
+        const mid = (lo + hi) / 2
+        ;[lo, hi] = side(c, lo) * side(c, mid) <= 0 ? [lo, mid] : [mid, hi]
+      }
+      return pointAt(c, lo)
+    }
+    const a = apex(curvesOf(roundPolyline(outer, 10, 0.6, false, [0, 16, 0])))
+    const b = apex(curvesOf(roundPolyline(inner, 10, 0.6, false, [0, 12, 0], [0, 4, 0])))
+    // The apexes sit the inset apart, so the two share a center there, to
+    // within the cubics that draw a smoothed corner.
+    expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeCloseTo(4, 3)
+    // It fills its room: radius 6, smoothing 1.
+    expect(curvesOf(roundPolyline(inner, 10, 0.6, false, [0, 12, 0], [0, 4, 0]))[1]!.x.c0).toBe(84)
+    // Without the inset it keeps the radius and loses smoothing, so it bulges.
+    const c = apex(curvesOf(roundPolyline(inner, 10, 0.6, false, [0, 12, 0])))
+    expect(Math.hypot(a[0] - c[0], a[1] - c[1])).toBeGreaterThan(4.5)
+  })
+
+  test('a corner nested past its outermost radius fills its room smoothly', () => {
+    const inner = [point([0, 12]), point([88, 12]), point([88, 100])]
+    // Room 4, inset 12 inside a corner of radius 10: radius 2, smoothing 1.
+    const curves = curvesOf(roundPolyline(inner, 10, 0.6, false, [0, 4, 0], [0, 12, 0]))
+    expect(curves[1]!.x.c0).toBeCloseTo(84, 9)
   })
 
   test('a room past what the radius reaches grows the corner to fill it', () => {

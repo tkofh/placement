@@ -19,7 +19,16 @@ describe('edge', () => {
     expect(edge.targetAt).toBe(Number.POSITIVE_INFINITY)
     expect(edge.radius).toBe(0)
     expect(edge.minRadius).toBe(0)
+    expect(edge.thickness).toBe(0)
     expect(edge.adornments).toEqual([])
+  })
+
+  test('setThickness sets the stroke width, in both forms', () => {
+    const edge = Edge.make({ source: 'a', target: 'b' })
+    expect(Edge.setThickness(edge, 2).thickness).toBe(2)
+    expect(edge.pipe(Edge.setThickness(1.5)).thickness).toBe(1.5)
+    expect(Edge.make(Edge.setThickness(edge, 2).toJSON()).thickness).toBe(2)
+    expect(edge.thickness).toBe(0)
   })
 
   test('ids keep their literal types', () => {

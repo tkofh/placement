@@ -320,6 +320,143 @@ describe('adornments', () => {
     expect(findOne(root, 'path').props['d']).toBe(data)
   })
 
+  test('merged ends draw their shared arrowhead once, and every line stops behind it', async () => {
+    const merged = { a: rects.a, d: Rect.make(20, 120, 60, 30), b: Rect.make(220, 70, 60, 30) }
+    const arrow = () => [adornment({ at: 'end', width: 8, height: 6 }, 'arrow')]
+    const { root } = await mountLayout({ clearance: 10, gap: 4, merge: 'side' }, () => [
+      edge({ from: 'a', to: 'b', toPort: 'left' }, arrow),
+      edge({ from: 'd', to: 'b', toPort: 'left' }, arrow),
+      node('a', merged.a),
+      node('d', merged.d),
+      node('b', merged.b),
+    ])
+    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+    const core = Connector.apply(
+      merged,
+      [
+        Edge.make({ source: 'a', target: 'b', targetSide: Edge.side.left, adornments: [head] }),
+        Edge.make({ source: 'd', target: 'b', targetSide: Edge.side.left, adornments: [head] }),
+      ],
+      Connector.make({ clearance: 10, gap: 4, merge: Connector.merge.side }),
+    )
+    expect(routes(root)).toEqual(core.edges.map(pointsOf))
+    expect(core.edges.map((route) => route?.merged)).toEqual([
+      [-1, 0],
+      [-1, 0],
+    ])
+    expect(findAll(root, 'arrow').map((n) => n.props)).toEqual([
+      { x: 212, y: 82, width: 8, height: 6 },
+    ])
+    // Both lines end at the back of the arrowhead, on the line out of the
+    // port.
+    for (const path of findAll(root, 'path')) {
+      expect(String(path.props['d']).trim().endsWith('212,85')).toBe(true)
+    }
+  })
+
+  test.each([0, 16, undefined])('a crossing cost of %s reaches the core', async (cost) => {
+    // Ports on the bottom of a trade places when their routes would cross,
+    // with a crossing cost.
+    const traded = {
+      a: Rect.make(0, 0, 40, 40),
+      b: Rect.make(140, 100, 40, 40),
+      c: Rect.make(150, 0, 40, 40),
+    }
+    const pairs = [
+      ['b', 'c'],
+      ['a', 'b'],
+      ['b', 'a'],
+    ] as const
+    const { root } = await mountLayout(
+      {
+        clearance: 10,
+        gap: 4,
+        bendCost: 40,
+        ...(cost === undefined ? {} : { crossingCost: cost }),
+      },
+      () => [
+        ...pairs.map(([from, to]) => edge({ from, to })),
+        ...(['a', 'b', 'c'] as const).map((id) => node(id, traded[id])),
+      ],
+    )
+    const core = Connector.apply(
+      traded,
+      pairs.map(([source, target]) => Edge.make({ source, target })),
+      Connector.make({ clearance: 10, gap: 4, bendCost: 40, crossingCost: cost ?? 16 }),
+    )
+    expect(routes(root)).toEqual(core.edges.map(pointsOf))
+  })
+
+  test('the merge gap reaches the core', async () => {
+    const merged = { a: rects.a, d: Rect.make(20, 120, 60, 30), b: Rect.make(220, 70, 60, 30) }
+    const arrow = () => [adornment({ at: 'end', width: 8, height: 6 }, 'arrow')]
+    const { root } = await mountLayout(
+      { clearance: 10, gap: 4, merge: 'near', mergeGap: 2 },
+      () => [
+        edge({ from: 'a', to: 'b', toPort: 'left' }, arrow),
+        edge({ from: 'd', to: 'b', toPort: 'left' }, arrow),
+        node('a', merged.a),
+        node('d', merged.d),
+        node('b', merged.b),
+      ],
+    )
+    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+    const core = Connector.apply(
+      merged,
+      (['a', 'd'] as const).map((source) =>
+        Edge.make({ source, target: 'b', targetSide: Edge.side.left, adornments: [head] }),
+      ),
+      Connector.make({ clearance: 10, gap: 4, merge: Connector.merge.near, mergeGap: 2 }),
+    )
+    expect(routes(root)).toEqual(core.edges.map(pointsOf))
+  })
+
+  test.each([
+    ['black 3px', {}, 3],
+    ['black', {}, 1],
+    ['black 6px', { thickness: '3px' }, 3],
+  ] as const)(
+    'a stroke of %s %o reaches the core as thickness %i',
+    async (stroke, pinned, thickness) => {
+      const merged = { a: rects.a, d: Rect.make(20, 120, 60, 30), b: Rect.make(220, 70, 60, 30) }
+      const arrow = () => [adornment({ at: 'end', width: 8, height: 6 }, 'arrow')]
+      const { root } = await mountLayout(
+        { clearance: 10, gap: 4, merge: 'side', mergeGap: 2 },
+        () => [
+          edge({ from: 'a', to: 'b', toPort: 'left', stroke, ...pinned }, arrow),
+          edge({ from: 'd', to: 'b', toPort: 'left', stroke, ...pinned }, arrow),
+          node('a', merged.a),
+          node('d', merged.d),
+          node('b', merged.b),
+        ],
+      )
+      const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+      const core = Connector.apply(
+        merged,
+        (['a', 'd'] as const).map((source) =>
+          Edge.make({
+            source,
+            target: 'b',
+            targetSide: Edge.side.left,
+            thickness,
+            adornments: [head],
+          }),
+        ),
+        Connector.make({ clearance: 10, gap: 4, merge: Connector.merge.side, mergeGap: 2 }),
+      )
+      expect(routes(root)).toEqual(core.edges.map(pointsOf))
+      // Thicker strokes set the lanes farther apart than bare lines.
+      const bare = Connector.apply(
+        merged,
+        (['a', 'd'] as const).map((source) =>
+          Edge.make({ source, target: 'b', targetSide: Edge.side.left, adornments: [head] }),
+        ),
+        Connector.make({ clearance: 10, gap: 4, merge: Connector.merge.side, mergeGap: 2 }),
+      )
+      expect(core.edges.map(pointsOf)).not.toEqual(bare.edges.map(pointsOf))
+    },
+  )
+
   test('labels reach the core adornments', async () => {
     const { root } = await mountAdorned(
       () => [

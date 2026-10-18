@@ -1,4 +1,4 @@
-import type * as Adornment from 'placement/adornment'
+import { coincident } from 'curvy/number'
 import * as Connector from 'placement/connector'
 import * as Edge from 'placement/edge'
 import type * as Rect from 'placement/rect'
@@ -13,6 +13,7 @@ import {
 } from 'vue'
 import {
   type EdgeAdornmentInput,
+  type EdgeAdornmentPlacement,
   type EdgeRoute,
   type EdgeSolution,
   emptyRoute,
@@ -60,6 +61,8 @@ export interface ConnectorEdgeDrawing {
   readonly radius: number
   /** The corner smoothing. */
   readonly smoothing: number
+  /** The stroke width, which the layout keeps its gaps between. Defaults to `0`. */
+  readonly thickness?: number
 }
 
 interface EdgeEntry {
@@ -117,12 +120,19 @@ function solve(
   const routes = new Map<EdgeChild, EdgeRoute>()
   for (const [index, child] of routed.entries()) {
     const route = layout.edges[index]
+    const { source, target, adornments } = specs[index]!
     if (route === undefined) {
-      const { source, target } = specs[index]!
       problems.push(`no route connects the edge "${source}" -> "${target}"`)
-    } else {
-      routes.set(child, route)
+      continue
     }
+    // At an end merged with others, one of their edges draws the adornments
+    // they share there.
+    const shared = route.merged.map((leader) => leader >= 0 && leader !== index)
+    const drawn = adornments.map((adornment) => {
+      const at = Number.isFinite(adornment.at) ? Math.min(Math.max(adornment.at, 0), 1) : 0.5
+      return !((coincident(at, 0) && shared[0]) || (coincident(at, 1) && shared[1]))
+    })
+    routes.set(child, drawn.includes(false) ? { ...route, drawn } : route)
   }
   return { edges: routes, problems }
 }
@@ -223,12 +233,13 @@ export function useConnectorEdge(
 
   const input = computed((): EdgeEntry => {
     const { via, avoid, turn, jogAt, ...ends } = toValue(edge)
-    const { radius, smoothing } = toValue(drawing)
+    const { radius, smoothing, thickness = 0 } = toValue(drawing)
     const reach = 1 + Math.min(Math.max(smoothing, 0), 1)
     return {
       edge: Edge.make({
         ...ends,
         radius: reach * Math.max(radius, 0),
+        thickness,
         adornments: adornments.value,
       }),
       options: { via, avoid, turn, jogAt },
@@ -246,6 +257,6 @@ export function useConnectorEdge(
  */
 export function useConnectorAdornment(
   adornment: MaybeRefOrGetter<EdgeAdornmentInput>,
-): Readonly<Ref<Adornment.AdornmentPlacement>> {
+): Readonly<Ref<EdgeAdornmentPlacement>> {
   return useEdgeAdornment(ADORNMENT_CHANNEL, adornment)
 }

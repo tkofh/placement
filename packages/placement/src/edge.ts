@@ -87,6 +87,14 @@ export interface EdgeInput<K extends string> {
    * above `radius` act as `radius`. Defaults to `0`.
    */
   readonly minRadius?: number | undefined
+  /**
+   * How thick the edge draws, its stroke width. `Connector.apply` (from
+   * `placement/connector`) keeps its gaps between the strokes rather than
+   * the lines they follow, and sizes the turns of merged lanes to leave
+   * their gap inside them. `Hierarchy.apply` does not read it yet. Negative
+   * and non-finite values act as `0`. Defaults to `0`.
+   */
+  readonly thickness?: number | undefined
   /** The adornments carried by the edge, from `placement/adornment`. Defaults to none. */
   readonly adornments?: ReadonlyArray<Adornment> | undefined
 }
@@ -129,6 +137,8 @@ class Edge<K extends string> extends Pipeable {
   readonly radius: number
   /** The raw minimum corner radius. Layout clamps it to `[0, radius]`. */
   readonly minRadius: number
+  /** The raw stroke width. Layout treats negative and non-finite values as `0`. */
+  readonly thickness: number
   /** The adornments carried by the edge, in input order. */
   readonly adornments: ReadonlyArray<Adornment>
 
@@ -145,6 +155,7 @@ class Edge<K extends string> extends Pipeable {
     this.targetAt = input.targetAt ?? Number.POSITIVE_INFINITY
     this.radius = input.radius ?? 0
     this.minRadius = input.minRadius ?? 0
+    this.thickness = input.thickness ?? 0
     this.adornments = input.adornments ?? []
   }
 
@@ -171,6 +182,7 @@ class Edge<K extends string> extends Pipeable {
       targetAt: this.targetAt,
       radius: this.radius,
       minRadius: this.minRadius,
+      thickness: this.thickness,
       adornments: this.adornments,
     }
   }
@@ -354,6 +366,28 @@ export const setRadius: {
   (args) => isEdge(args[0]),
   <K extends string>(self: Edge<K>, radius: number, minRadius?: number) =>
     new Edge({ ...self.toJSON(), radius, minRadius: minRadius ?? self.minRadius }),
+)
+
+/**
+ * Sets how thick the edge draws. The data-last form omits `self` and
+ * returns a function of it.
+ *
+ * @param self - The edge to update.
+ * @param thickness - The stroke width.
+ * @returns A new edge with the thickness replaced.
+ * @example
+ * ```ts
+ * const edge = Edge.make({ source: 'a', target: 'b' })
+ * Edge.setThickness(edge, 2).thickness // 2
+ * edge.pipe(Edge.setThickness(1.5)).thickness // 1.5
+ * ```
+ */
+export const setThickness: {
+  <K extends string>(self: Edge<K>, thickness: number): Edge<K>
+  (thickness: number): <K extends string>(self: Edge<K>) => Edge<K>
+} = dual(
+  2,
+  <K extends string>(self: Edge<K>, thickness: number) => new Edge({ ...self.toJSON(), thickness }),
 )
 
 /**

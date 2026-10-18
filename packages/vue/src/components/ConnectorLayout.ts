@@ -21,8 +21,10 @@ export interface ConnectorLayoutProps extends RectProps {
    */
   clearance?: LengthPercentageInput
   /**
-   * The distance between routes that run alongside each other. Where a
-   * passage is too narrow, the routes in it spread evenly across it.
+   * The space between the strokes of routes that run alongside each other,
+   * edge to edge, whatever each edge's stroke width. Where a passage is too
+   * narrow, the routes in it spread evenly across it. Flow adornments
+   * prefer stretches where no other route comes this near them.
    */
   gap?: LengthPercentageInput
   /**
@@ -35,6 +37,14 @@ export interface ConnectorLayoutProps extends RectProps {
    * length.
    */
   turnCost?: LengthPercentageInput
+  /**
+   * The cost of each crossing, as a length: a route takes a detour up to
+   * this long to cross one line fewer. Ports and merged lanes next to each
+   * other also trade places when their lines would cross. `16px` by
+   * default, and `0` routes each line with no regard for the others,
+   * which is faster.
+   */
+  crossingCost?: LengthPercentageInput
   /**
    * Which side of their edge adornments sit on, as `alignItems` places flex
    * items across the line: `'start'`, `'center'` (default), `'end'`, or a
@@ -71,8 +81,29 @@ export interface ConnectorLayoutProps extends RectProps {
    * room, and `0` keeps jogs upright.
    */
   jogSlant?: number
+  /**
+   * Which edge ends merge: `'none'` (default), `'side'`, or `'near'`. Ends
+   * merge when they sit on one side of one node with the same adornments
+   * there, none counting as the same, and share one port and one copy of
+   * the adornments: their lines come in on lanes `mergeGap` apart and step
+   * together right behind the adornments. `'side'` merges every such end
+   * on a side, and `'near'` only those whose routes come in from the same
+   * way.
+   */
+  merge?: ConnectorMergeInput
+  /**
+   * The space between the strokes of merged lanes, `gap` by default, and
+   * between their lines while they run together back from the merge. It is
+   * also the space inside the turns each lane steps onto the shared line
+   * with. `0` makes lanes that touch. Percentages resolve against the
+   * width of the layout's parent.
+   */
+  mergeGap?: LengthPercentageInput
   debug?: boolean
 }
+
+/** A merge setting for `ConnectorLayout`. */
+export type ConnectorMergeInput = keyof typeof Connector.merge
 
 export const ConnectorLayout = defineComponent(
   (props: ConnectorLayoutProps, { expose }) => {
@@ -84,7 +115,9 @@ export const ConnectorLayout = defineComponent(
     const gap = useLengthPercentage(() => props.gap, 0)
     const bendCost = useLengthPercentage(() => props.bendCost, 0)
     const turnCost = useLengthPercentage(() => props.turnCost, 0)
+    const crossingCost = useLengthPercentage(() => props.crossingCost, 16)
     const adornmentGap = useLengthPercentage(() => props.adornmentGap, 0)
+    const mergeGap = useLengthPercentage(() => props.mergeGap, Number.NaN)
     const justify = useJustifyContent(() => props.justifyAdornments, keywordResults.center)
 
     const layout = computed(() => {
@@ -96,6 +129,7 @@ export const ConnectorLayout = defineComponent(
         gap: gap.value,
         bendCost: bendCost.value,
         turnCost: turnCost.value,
+        crossingCost: crossingCost.value,
         alignAdornments: resolveRatio(props.alignAdornments, 0.5),
         justifyAdornments: justify.value.justifyContent,
         justifyAdornmentsSpace: justify.value.justifyContentSpace,
@@ -103,6 +137,8 @@ export const ConnectorLayout = defineComponent(
         adornmentGap: adornmentGap.value,
         jogAt: resolveRatio(props.jogAt, 0.5),
         jogSlant: props.jogSlant,
+        merge: Connector.merge[props.merge ?? 'none'],
+        mergeGap: mergeGap.value,
       })
     })
 
@@ -121,11 +157,14 @@ export const ConnectorLayout = defineComponent(
       'gap',
       'bendCost',
       'turnCost',
+      'crossingCost',
       'alignAdornments',
       'justifyAdornments',
       'adornmentGap',
       'jogAt',
       'jogSlant',
+      'merge',
+      'mergeGap',
       'debug',
     ],
     inheritAttrs: false,

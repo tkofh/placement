@@ -19,6 +19,10 @@ import type { Graph, Obstacle } from './graph.ts'
 // A path may start at any of several endpoints and end at any of several,
 // each with the headings it allows, so one search can choose a port.
 //
+// A path that runs straight on through a node where other paths run
+// straight on the other way crosses them, at a cost each. The estimate
+// leaves crossings out, so it stays a lower bound.
+//
 // Costs are float sums, so comparing them uses `coincident`. A path replaces
 // another only when it is cheaper beyond rounding, or as cheap with fewer
 // turns, and the queue pops equal costs in the order they were pushed, so
@@ -44,6 +48,14 @@ export interface SearchOptions {
   // Rects whose interior the path may not cross. It may run along their
   // edges.
   readonly avoid?: ReadonlyArray<Obstacle>
+  // The cost of each crossing, where the path runs straight on through a
+  // node that other paths run straight on through the other way. Defaults
+  // to `0`.
+  readonly crossingCost?: number
+  // How many other paths run straight on through each node, at `2 * node`
+  // horizontally and `2 * node + 1` vertically, on a graph whose edges are
+  // all horizontal or vertical.
+  readonly through?: ArrayLike<number>
 }
 
 export interface Path {
@@ -79,10 +91,9 @@ export function shortestPath(
 ): Path | undefined {
   const { xs, ys, offsets, sources, targets, weights } = graph
   const weightOf = (e: number) => (weights === undefined ? 1 : (weights[e] as number))
-  const dxOf = (e: number) =>
-    (xs[targets[e] as number] as number) - (xs[sources[e] as number] as number)
-  const dyOf = (e: number) =>
-    (ys[targets[e] as number] as number) - (ys[sources[e] as number] as number)
+  const { dxs, dys } = spansOf(graph)
+  const dxOf = (e: number) => dxs[e] as number
+  const dyOf = (e: number) => dys[e] as number
   const nodeCount = xs.length
   const valid = (node: number) => Number.isInteger(node) && node >= 0 && node < nodeCount
   const starts = endpoints(from)
@@ -99,6 +110,8 @@ export function shortestPath(
   const bendCost = finiteCost(options.bendCost)
   const clockwiseCost = bendCost + finiteCost(options.clockwiseCost)
   const counterclockwiseCost = bendCost + finiteCost(options.counterclockwiseCost)
+  const crossingCost = graph.orthogonal ? finiteCost(options.crossingCost) : 0
+  const through = crossingCost > 0 ? options.through : undefined
   const avoid = (options.avoid ?? []).filter(
     (r) =>
       Number.isFinite(r.left) &&
@@ -176,26 +189,28 @@ export function shortestPath(
     const node = targets[e] as number
     const hx = Math.sign(dxOf(e))
     const hy = Math.sign(dyOf(e))
-    const turns = (target: number) =>
-      turnCost > 0 && (hx !== 0 || hy !== 0) ? turnCost * turnsTo(node, target, hx, hy) : 0
+    const turning = turnCost > 0 && (hx !== 0 || hy !== 0)
     if (leg < lastLeg) {
       const at = via[leg] as number
-      return graph.minWeight * (distance(node, at) + (rest[leg] as number)) + turns(at)
+      return (
+        graph.minWeight * (distance(node, at) + (rest[leg] as number)) +
+        (turning ? turnCost * turnsTo(node, at, hx, hy) : 0)
+      )
     }
     let best = Number.POSITIVE_INFINITY
     for (const end of ends) {
-      best = Math.min(best, graph.minWeight * distance(node, end.node) + turns(end.node))
+      best = Math.min(
+        best,
+        graph.minWeight * distance(node, end.node) +
+          (turning ? turnCost * turnsTo(node, end.node, hx, hy) : 0),
+      )
     }
     return best
   }
 
   const edgeCount = targets.length
-  const stateCount = legCount * edgeCount
-  const cost = new Float64Array(stateCount).fill(Number.POSITIVE_INFINITY)
-  const bends = new Int32Array(stateCount)
-  const parent = new Int32Array(stateCount).fill(-1)
-  const closed = new Uint8Array(stateCount)
-  const queue = new Queue()
+  const { cost, bends, parent, seen, done, round, queue } = scratchFor(graph, legCount * edgeCount)
+  queue.clear()
 
   // Whether each half-edge may be used: 0 unknown, 1 open, 2 closed.
   const usable = new Uint8Array(edgeCount)
@@ -215,11 +230,12 @@ export function shortestPath(
   }
 
   const relax = (state: number, total: number, turns: number, from: number) => {
-    const known = cost[state] as number
+    const known = seen[state] === round ? (cost[state] as number) : Number.POSITIVE_INFINITY
     const better =
       known === Number.POSITIVE_INFINITY ||
       (coincident(total, known) ? turns < (bends[state] as number) : total < known)
     if (better) {
+      seen[state] = round
       cost[state] = total
       bends[state] = turns
       parent[state] = from
@@ -242,10 +258,10 @@ export function shortestPath(
 
   while (queue.size > 0) {
     const state = queue.pop()
-    if (closed[state] === 1) {
+    if (done[state] === round) {
       continue
     }
-    closed[state] = 1
+    done[state] = round
     const leg = Math.floor(state / edgeCount)
     const e = state - leg * edgeCount
     const node = targets[e] as number
@@ -290,12 +306,174 @@ export function shortestPath(
           turned = 1
         } else if (ax * bx + ay * by < 0) {
           continue
+        } else if (through !== undefined) {
+          // Straight on, across the paths that run through the other way.
+          turn = crossingCost * (through[2 * node + (ay === 0 ? 1 : 0)] ?? 0)
         }
       }
       relax(leg * edgeCount + f, total + lb * weightOf(f) + turn, turns + turned, state)
     }
   }
   return undefined
+}
+
+/**
+ * Finds the paths of several routes on one graph, each among the others so
+ * that it crosses as few of them as it can afford: first among the paths
+ * found before it, then once more, for each path that crosses another,
+ * among all the others' latest paths.
+ *
+ * @param graph - The graph the paths run on, with horizontal and vertical
+ * edges.
+ * @param count - How many routes there are.
+ * @param crossingCost - The cost of each crossing. With none, each route's
+ * path is found once, on its own.
+ * @param find - Finds route `k`'s path, given how many other paths run
+ * straight on through each node (see `SearchOptions.through`).
+ * @returns Each route's path, or `undefined` where it has none, and how
+ * many of them run straight on through each node, or `undefined` with no
+ * crossing cost.
+ */
+export function searchAll(
+  graph: Graph,
+  count: number,
+  crossingCost: number,
+  find: (k: number, through: ArrayLike<number> | undefined) => Path | undefined,
+): { paths: Array<Path | undefined>; through: Int32Array | undefined } {
+  const paths: Array<Path | undefined> = []
+  if (!(crossingCost > 0) || !graph.orthogonal) {
+    for (let k = 0; k < count; k++) {
+      paths.push(find(k, undefined))
+    }
+    return { paths, through: undefined }
+  }
+  const through = new Int32Array(2 * graph.xs.length)
+  for (let k = 0; k < count; k++) {
+    const path = find(k, through)
+    markThrough(graph, through, path, 1)
+    paths.push(path)
+  }
+  // A path that crosses none of the others keeps its place.
+  for (let k = 0; k < count; k++) {
+    markThrough(graph, through, paths[k], -1)
+    if (crossesThrough(graph, through, paths[k])) {
+      paths[k] = find(k, through)
+    }
+    markThrough(graph, through, paths[k], 1)
+  }
+  return { paths, through }
+}
+
+/**
+ * Counts a path into, or out of, how many paths run straight on through
+ * each node (see `SearchOptions.through`).
+ *
+ * @param graph - The graph the path runs on.
+ * @param through - The counts, at `2 * node` horizontally and
+ * `2 * node + 1` vertically, which this updates.
+ * @param path - The path, or `undefined` for none.
+ * @param by - `1` to count the path in, `-1` to count it out.
+ */
+export function markThrough(
+  graph: Graph,
+  through: Int32Array,
+  path: Path | undefined,
+  by: number,
+): void {
+  straightOn(graph, path, (slot) => {
+    const count = through[slot] as number
+    through[slot] = count + by
+  })
+}
+
+// Whether a path runs straight on across any of the paths counted in
+// `through`.
+function crossesThrough(graph: Graph, through: Int32Array, path: Path | undefined): boolean {
+  let crossed = false
+  straightOn(graph, path, (_, across) => {
+    crossed ||= (through[across] as number) > 0
+  })
+  return crossed
+}
+
+// Calls `visit` with the slots in `through` of each node that a path runs
+// straight on through: its own axis there, and the other.
+function straightOn(
+  graph: Graph,
+  path: Path | undefined,
+  visit: (slot: number, across: number) => void,
+): void {
+  const { xs, ys } = graph
+  const nodes = path?.nodes ?? []
+  for (let k = 1; k + 1 < nodes.length; k++) {
+    const [a, b, c] = [nodes[k - 1] as number, nodes[k] as number, nodes[k + 1] as number]
+    const [x, y] = [xs[b] as number, ys[b] as number]
+    const [ux, uy, vx, vy] = [
+      x - (xs[a] as number),
+      y - (ys[a] as number),
+      (xs[c] as number) - x,
+      (ys[c] as number) - y,
+    ]
+    if (uy === 0 && vy === 0 && ux * vx > 0) {
+      visit(2 * b, 2 * b + 1)
+    } else if (ux === 0 && vx === 0 && uy * vy > 0) {
+      visit(2 * b + 1, 2 * b)
+    }
+  }
+}
+
+// The state of a search, kept with its graph for the next search on it.
+// A state's cost, turns, and parent count only when `seen` holds the
+// current round, and it is closed when `done` does.
+interface Scratch {
+  readonly cost: Float64Array
+  readonly bends: Int32Array
+  readonly parent: Int32Array
+  readonly seen: Uint32Array
+  readonly done: Uint32Array
+  readonly queue: Queue
+  round: number
+}
+
+const scratches = new WeakMap<Graph, Scratch>()
+const spans = new WeakMap<Graph, { dxs: Float64Array; dys: Float64Array }>()
+
+// The axis distances that each half-edge of `graph` spans, kept with the
+// graph for the next search on it.
+function spansOf(graph: Graph): { dxs: Float64Array; dys: Float64Array } {
+  let found = spans.get(graph)
+  if (found === undefined) {
+    const { xs, ys, sources, targets } = graph
+    const dxs = new Float64Array(targets.length)
+    const dys = new Float64Array(targets.length)
+    for (let e = 0; e < targets.length; e++) {
+      dxs[e] = (xs[targets[e] as number] as number) - (xs[sources[e] as number] as number)
+      dys[e] = (ys[targets[e] as number] as number) - (ys[sources[e] as number] as number)
+    }
+    found = { dxs, dys }
+    spans.set(graph, found)
+  }
+  return found
+}
+
+// The scratch state of a search on `graph` with `size` states, for a new
+// round.
+function scratchFor(graph: Graph, size: number): Scratch {
+  let scratch = scratches.get(graph)
+  if (scratch === undefined || scratch.seen.length < size || scratch.round === 0xffffffff) {
+    scratch = {
+      cost: new Float64Array(size),
+      bends: new Int32Array(size),
+      parent: new Int32Array(size),
+      seen: new Uint32Array(size),
+      done: new Uint32Array(size),
+      queue: scratch?.queue ?? new Queue(),
+      round: 0,
+    }
+    scratches.set(graph, scratch)
+  }
+  scratch.round++
+  return scratch
 }
 
 interface Resolved {
@@ -422,84 +600,144 @@ function trace(
   return Int32Array.from(nodes.toReversed())
 }
 
+// Whether an entry with priority `priority`, `turns` turns, and push order
+// `order` pops before one with `p`, `t`, and `o`.
+function precedes(
+  priority: number,
+  turns: number,
+  order: number,
+  p: number,
+  t: number,
+  o: number,
+): boolean {
+  if (!coincident(priority, p)) {
+    return priority < p
+  }
+  return turns === t ? order < o : turns < t
+}
+
 // A binary heap of states by priority, then by turns. Priorities within
 // rounding distance pop with fewer turns first, then in the order they were
-// pushed.
+// pushed. Its entries live in typed arrays that grow as needed and are kept
+// from one search to the next.
 class Queue {
-  #priorities: Array<number> = []
-  #turns: Array<number> = []
-  #states: Array<number> = []
-  #order: Array<number> = []
+  #priorities = new Float64Array(64)
+  #turns = new Int32Array(64)
+  #states = new Int32Array(64)
+  #order = new Float64Array(64)
+  #size = 0
   #pushed = 0
 
   get size(): number {
-    return this.#states.length
+    return this.#size
+  }
+
+  clear(): void {
+    this.#size = 0
+    this.#pushed = 0
   }
 
   push(priority: number, turns: number, state: number): void {
-    this.#priorities.push(priority)
-    this.#turns.push(turns)
-    this.#states.push(state)
-    this.#order.push(this.#pushed++)
-    let i = this.#states.length - 1
+    if (this.#size === this.#states.length) {
+      this.#grow()
+    }
+    const order = this.#pushed++
+    // Moves the parents down past the new entry, then puts it in the hole.
+    let i = this.#size++
     while (i > 0) {
       const up = (i - 1) >> 1
-      if (!this.#first(i, up)) {
+      if (!this.#precedes(priority, turns, order, up)) {
         break
       }
-      this.#swap(i, up)
+      this.#move(up, i)
       i = up
     }
+    this.#put(i, priority, turns, state, order)
   }
 
   pop(): number {
     const top = this.#states[0] as number
-    const last = this.#states.length - 1
-    this.#swap(0, last)
-    this.#priorities.pop()
-    this.#turns.pop()
-    this.#states.pop()
-    this.#order.pop()
+    const last = --this.#size
+    const priority = this.#priorities[last] as number
+    const turns = this.#turns[last] as number
+    const state = this.#states[last] as number
+    const order = this.#order[last] as number
+    // Moves the smaller children up past the last entry, then puts it in
+    // the hole.
     let i = 0
     for (;;) {
       const left = 2 * i + 1
+      if (left >= last) {
+        break
+      }
       const right = left + 1
-      let best = i
-      if (left < last && this.#first(left, best)) {
-        best = left
+      const child =
+        right < last &&
+        this.#precedes(
+          this.#priorities[right] as number,
+          this.#turns[right] as number,
+          this.#order[right] as number,
+          left,
+        )
+          ? right
+          : left
+      if (
+        !precedes(
+          this.#priorities[child] as number,
+          this.#turns[child] as number,
+          this.#order[child] as number,
+          priority,
+          turns,
+          order,
+        )
+      ) {
+        break
       }
-      if (right < last && this.#first(right, best)) {
-        best = right
-      }
-      if (best === i) {
-        return top
-      }
-      this.#swap(i, best)
-      i = best
+      this.#move(child, i)
+      i = child
     }
-  }
-
-  #first(a: number, b: number): boolean {
-    const p = this.#priorities[a] as number
-    const q = this.#priorities[b] as number
-    if (!coincident(p, q)) {
-      return p < q
+    if (last > 0) {
+      this.#put(i, priority, turns, state, order)
     }
-    const s = this.#turns[a] as number
-    const t = this.#turns[b] as number
-    return s === t ? (this.#order[a] as number) < (this.#order[b] as number) : s < t
+    return top
   }
 
-  #swap(a: number, b: number): void {
-    swap(this.#priorities, a, b)
-    swap(this.#turns, a, b)
-    swap(this.#states, a, b)
-    swap(this.#order, a, b)
+  // Whether an entry pops before the one at `at`.
+  #precedes(priority: number, turns: number, order: number, at: number): boolean {
+    return precedes(
+      priority,
+      turns,
+      order,
+      this.#priorities[at] as number,
+      this.#turns[at] as number,
+      this.#order[at] as number,
+    )
   }
-}
 
-function swap(list: Array<number>, a: number, b: number): void {
-  const held = list[a] as number
-  list[a] = list[b] as number
-  list[b] = held
+  #move(from: number, to: number): void {
+    this.#priorities[to] = this.#priorities[from] as number
+    this.#turns[to] = this.#turns[from] as number
+    this.#states[to] = this.#states[from] as number
+    this.#order[to] = this.#order[from] as number
+  }
+
+  #put(at: number, priority: number, turns: number, state: number, order: number): void {
+    this.#priorities[at] = priority
+    this.#turns[at] = turns
+    this.#states[at] = state
+    this.#order[at] = order
+  }
+
+  #grow(): void {
+    const size = 2 * this.#states.length
+    const grown = <T extends Float64Array | Int32Array>(list: T, make: (n: number) => T): T => {
+      const next = make(size)
+      next.set(list)
+      return next
+    }
+    this.#priorities = grown(this.#priorities, (n) => new Float64Array(n))
+    this.#turns = grown(this.#turns, (n) => new Int32Array(n))
+    this.#states = grown(this.#states, (n) => new Int32Array(n))
+    this.#order = grown(this.#order, (n) => new Float64Array(n))
+  }
 }

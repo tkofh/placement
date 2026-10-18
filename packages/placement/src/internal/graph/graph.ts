@@ -4,8 +4,8 @@ import type { Rect } from '../../rect.ts'
 // flat arrays in compressed sparse rows: the edges that leave node `i` are
 // the half-edges `offsets[i]` up to `offsets[i + 1]`, in the order given.
 // An undirected edge is two half-edges, one each way. Searches index their
-// state by half-edge and work out its length and heading from the points as
-// they go, which costs less than storing them for every half-edge.
+// state by half-edge, and keep the axis distances each half-edge spans, and
+// their own state, with the graph for the next search on it.
 
 export interface Graph {
   readonly xs: Float64Array

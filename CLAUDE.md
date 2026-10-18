@@ -50,15 +50,20 @@ between rects that are already placed, keyed by id, around the others. It
 builds on `internal/graph/` (not yet public): `graph.ts` stores graphs of
 points in flat arrays, `visibility.ts` builds the orthogonal visibility
 graph of obstacles and pins, and `search.ts` finds the cheapest path for
-length and turns (A\*) between sets of endpoints; `acyclic.ts` breaks
+length, turns, and crossings (A\*) between sets of endpoints, and routes
+several paths among one another, `crossings.ts` counts the crossings
+between two paths, shared runs included; `acyclic.ts` breaks
 cycles and orders pairwise preferences for both routers. Then
-`internal/connector/nudge.ts` moves overlapping route segments apart and
+`internal/connector/nudge.ts` moves overlapping route segments apart,
+keeps other routes out of the bundles of merged routes, and
 places jogs at `jogAt` of their runs, with `internal/separation.ts`, a 1D separation-constraint
 solver (VPSC), `internal/connector/adornments.ts` places adornments on the
 routes, and `internal/connector/corners.ts` sizes corners, nesting
 those of routes that turn together about one center, and
-`internal/connector/slants.ts` turns jogs too short for their corners
-into S curves. `Rect`,
+`internal/connector/ports.ts` slides auto ports to straighten the short
+jogs right past them, `internal/connector/slants.ts` turns jogs too short
+for their corners into S curves, and `internal/connector/merge.ts` leads
+the lanes of merged ends onto their shared port. `Rect`,
 `Point`, `Dimensions`, and `Offset` are the 2D value types. Type-only cross-module imports can stay flat
 (`import type { Rect } from ...`). Use namespace imports for value usage.
 

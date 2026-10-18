@@ -179,6 +179,21 @@ function fit(turn: Turn, r: number, smoothing: number, room: number) {
   return { r: room / turn.halfTan, smoothing: 0 }
 }
 
+// The inner corner of a nest, `inset` inside its outermost corner: that
+// corner as it would fit with the inset's more room, moved in by the inset.
+// Its radius shrinks by the inset and its smoothing grows to fill the room,
+// up to 1. Past the outer corner's radius, it keeps the room with full
+// smoothing.
+function nested(turn: Turn, r: number, smoothing: number, room: number, inset: number) {
+  const outer = fit(turn, r, smoothing, room + inset)
+  const radius = outer.r - inset
+  if (!(radius > 0) || coincident(radius, 0)) {
+    return { r: room / (2 * turn.halfTan), smoothing: 1 }
+  }
+  const filled = room / (radius * turn.halfTan) - 1
+  return { r: radius, smoothing: Math.min(Math.max(filled, outer.smoothing), 1) }
+}
+
 /**
  * Rounds the corners of a polyline with smoothed fillets of radius `r`.
  *
@@ -198,11 +213,20 @@ function fit(turn: Turn, r: number, smoothing: number, room: number) {
  * a crowded one does. A corner with more room than `r` reaches, as the
  * gentle turns of a connector's slanted jog have, grows to fill it.
  *
+ * `nests`, one per point, sets how far inside the outermost corner of its
+ * nest each corner sits, for the inner corners of routes that turn
+ * together. Such a corner is drawn as that outermost corner, fitted to its
+ * room plus the inset, moved in by the inset: its radius shrinks by the
+ * inset, so the nest keeps one center, and its smoothing grows to fill its
+ * room, up to `1`. It never takes more radius than the corners outside it.
+ *
  * @param points - The polyline.
  * @param r - The corner radius. `0` keeps every corner sharp.
  * @param smoothing - From `0` (circular fillets) to `1` (fully smoothed).
  * @param closed - Whether the last point joins back to the first.
  * @param rooms - The most each corner may reach along its legs, per point.
+ * @param nests - How far inside the outermost corner of its nest each
+ * corner sits, per point.
  * @returns The rounded path, or `undefined` for fewer than two distinct points.
  */
 export function roundPolyline(
@@ -211,8 +235,9 @@ export function roundPolyline(
   smoothing: number,
   closed = false,
   rooms?: ReadonlyArray<number>,
+  nests?: ReadonlyArray<number>,
 ): CubicPath2d.CubicPath2d | undefined {
-  const fitted = fitCorners(points, r, smoothing, closed, rooms)
+  const fitted = fitCorners(points, r, smoothing, closed, rooms, nests)
   if (fitted === undefined) {
     return undefined
   }
@@ -253,6 +278,7 @@ function fitCorners(
   smoothing: number,
   closed: boolean,
   rooms?: ReadonlyArray<number>,
+  nests?: ReadonlyArray<number>,
 ):
   | {
       readonly distinct: ReadonlyArray<XY>
@@ -262,16 +288,21 @@ function fitCorners(
     }
   | undefined {
   let distinct: Array<XY> = []
-  // The cap on each distinct point's corner: the least of its repeats'.
+  // The cap on each distinct point's corner: the least of its repeats'. And
+  // its inset in a nest: the most of theirs.
   const caps: Array<number> = []
+  const insets: Array<number> = []
   for (const [i, { x, y }] of points.entries()) {
     const cap = rooms?.[i] ?? Number.POSITIVE_INFINITY
+    const inset = nests?.[i] ?? 0
     const last = distinct.at(-1)
     if (last === undefined || !coincident(last[0], x) || !coincident(last[1], y)) {
       distinct.push([x, y])
       caps.push(cap)
+      insets.push(inset)
     } else {
       caps[caps.length - 1] = Math.min(caps.at(-1)!, cap)
+      insets[insets.length - 1] = Math.max(insets.at(-1)!, inset)
     }
   }
   if (closed) {
@@ -339,7 +370,11 @@ function fitCorners(
       share(i, i + 1, lengths[i]!),
       closed ? Number.POSITIVE_INFINITY : Math.max(caps[i]!, 0),
     )
-    const size = fit(turn, radii[i]!, s, room)
+    const inset = closed ? 0 : insets[i]!
+    const size =
+      inset > 0 && Number.isFinite(inset)
+        ? nested(turn, radii[i]!, s, room, inset)
+        : fit(turn, radii[i]!, s, room)
     return { turn, r: size.r, smoothing: size.smoothing }
   })
 

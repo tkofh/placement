@@ -1,11 +1,18 @@
 import { describe, expect, test } from 'vitest'
+import { crossingsBetween } from '../src/internal/graph/crossings.ts'
 import {
   type Graph,
   type GraphEdge,
   type Obstacle,
   fromEdges,
 } from '../src/internal/graph/graph.ts'
-import { type Endpoint, type SearchOptions, shortestPath } from '../src/internal/graph/search.ts'
+import {
+  type Endpoint,
+  type SearchOptions,
+  markThrough,
+  searchAll,
+  shortestPath,
+} from '../src/internal/graph/search.ts'
 import {
   ALL_DIRECTIONS,
   DOWN,
@@ -773,6 +780,111 @@ describe('shortestPath', () => {
     const bent = shortestPath(graph, 1, 3, { bendCost: 100 })
     expect([...(bent?.nodes ?? [])]).toEqual([1, 0, 3])
     expect(bent?.cost).toBeCloseTo(10 * Math.SQRT2 + 20 + 100, 12)
+  })
+})
+
+// A grid of `columns` by `rows` nodes 10 apart, numbered row by row from
+// the top left, joined to their neighbors by the edges `keep` accepts.
+function grid(
+  columns: number,
+  rows: number,
+  keep: (a: number, b: number) => boolean = () => true,
+): Graph {
+  const points: Array<[number, number]> = []
+  const pairs: Array<[number, number]> = []
+  for (let k = 0; k < columns * rows; k++) {
+    points.push([(k % columns) * 10, Math.floor(k / columns) * 10])
+    if (k % columns > 0 && keep(k - 1, k)) {
+      pairs.push([k - 1, k])
+    }
+    if (k >= columns && keep(k - columns, k)) {
+      pairs.push([k - columns, k])
+    }
+  }
+  return graphOf(points, pairs)
+}
+
+describe('crossings', () => {
+  // 0 1 2
+  // 3 4 5
+  // 6 7 8
+  const square = grid(3, 3)
+
+  test.each([
+    [10, [3, 4, 5]],
+    [50, [3, 0, 1, 2, 5]],
+  ])('a crossing that costs %i takes the path %j', (crossingCost, expected) => {
+    // Another path runs straight down through the middle.
+    const through = new Int32Array(2 * square.xs.length)
+    markThrough(square, through, shortestPath(square, 1, 7), 1)
+    expect(route(square, 3, 5, { crossingCost, through })?.nodes).toEqual(expected)
+  })
+
+  test('a path that turns where another runs straight on pays nothing', () => {
+    const graph = grid(3, 3, (a, b) => !(a === 0 && b === 1))
+    const through = new Int32Array(2 * graph.xs.length)
+    markThrough(graph, through, shortestPath(graph, 1, 7), 1)
+    expect(route(graph, 3, 1, { crossingCost: 50, bendCost: 5, through })).toEqual({
+      nodes: [3, 4, 1],
+      cost: 25,
+    })
+  })
+
+  test('counting a path out undoes counting it in', () => {
+    const through = new Int32Array(2 * square.xs.length)
+    const path = shortestPath(square, 1, 7)
+    markThrough(square, through, path, 1)
+    expect([...through].filter((count) => count !== 0)).toEqual([1])
+    markThrough(square, through, path, -1)
+    expect(through.every((count) => count === 0)).toBe(true)
+  })
+
+  test('the first path found runs again among all the others', () => {
+    // The path down from 1 to 7 goes first, straight through 4, where the
+    // path across from 3 to 5, which must run east all the way, crosses
+    // it. Found again among the others, the first one takes the long way
+    // around instead.
+    const graph = grid(3, 3, (a, b) => !(a === 1 && b === 2) && !(a === 2 && b === 5) && b !== 8)
+    const east = [{ x: 1, y: 0 }]
+    const ends = [
+      [1, 7],
+      [[{ node: 3, headings: east }], [{ node: 5, headings: east }]],
+    ] as const
+    const find = (crossingCost: number) =>
+      searchAll(graph, 2, crossingCost, (k, through) => {
+        const [from, to] = ends[k] as readonly [number | Array<Endpoint>, number | Array<Endpoint>]
+        return shortestPath(graph, from, to, {
+          crossingCost,
+          ...(through === undefined ? {} : { through }),
+        })
+      }).paths.map((path) => Array.from(path?.nodes ?? []))
+    expect(find(30)).toEqual([
+      [1, 0, 3, 6, 7],
+      [3, 4, 5],
+    ])
+    expect(find(0)).toEqual([
+      [1, 4, 7],
+      [3, 4, 5],
+    ])
+  })
+
+  //  0  1  2  3
+  //  4  5  6  7
+  //  8  9 10 11
+  const wide = grid(4, 3)
+
+  test.each([
+    ['meet and run straight across', [3, 4, 5], [1, 4, 7], 1, square],
+    ['meet where both turn', [3, 4, 1], [5, 4, 7], 0, square],
+    ['share a run, in from one side and out the other', [4, 5, 6, 7], [1, 5, 6, 10], 1, wide],
+    ['share a run, in and out on one side', [4, 5, 6, 7], [1, 5, 6, 2], 0, wide],
+    ['share a run the other way, across', [4, 5, 6, 7], [10, 6, 5, 1], 1, wide],
+    ['share a run the other way, on one side', [4, 5, 6, 7], [10, 6, 5, 9], 0, wide],
+    ['share a run that one starts on', [4, 5, 6, 7], [5, 6, 10], 0, wide],
+    ['share a run that one ends on', [4, 5, 6, 7], [1, 5, 6], 0, wide],
+  ] as const)('paths that %s cross %i times', (_, p, q, expected, graph) => {
+    expect(crossingsBetween(graph, p, q)).toBe(expected)
+    expect(crossingsBetween(graph, q, p)).toBe(expected)
   })
 })
 
