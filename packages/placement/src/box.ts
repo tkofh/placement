@@ -1,7 +1,6 @@
 import { clamp } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import * as AspectRatio from './aspectRatio.ts'
-import { type RawAspectRatio, toRawRatio } from './internal/aspectRatio.ts'
 import * as Rect from './rect.ts'
 import { normalizeTRBL } from './utils/arguments.ts'
 
@@ -14,7 +13,7 @@ const Raw: unique symbol = Symbol('placement/box/raw')
 
 type RawInput = {
   readonly [K in Exclude<keyof BoxInput, 'aspectRatio'>]-?: number | undefined
-} & { readonly aspectRatio: RawAspectRatio }
+} & { readonly aspectRatio: AspectRatio.AspectRatio | undefined }
 
 /**
  * The construction input for `make`. Every field is optional, and passing
@@ -131,7 +130,7 @@ class Box extends Pipeable {
       left: input.left ?? undefined,
       width: input.width ?? undefined,
       height: input.height ?? undefined,
-      aspectRatio: toRawRatio(input.aspectRatio),
+      aspectRatio: input.aspectRatio ?? undefined,
       minWidth: input.minWidth ?? undefined,
       minHeight: input.minHeight ?? undefined,
       maxWidth: input.maxWidth ?? undefined,
@@ -193,8 +192,7 @@ class Box extends Pipeable {
    * Non-positive and non-finite ratios act as unset in `apply`.
    */
   get aspectRatio(): number {
-    const raw = this[Raw].aspectRatio
-    return raw === undefined ? Number.NaN : AspectRatio.toNumber(raw)
+    return AspectRatio.toNumber(this[Raw].aspectRatio ?? Number.NaN)
   }
 
   /**
@@ -241,8 +239,7 @@ class Box extends Pipeable {
 
   /**
    * Returns the box's raw inputs. Unset fields come back as `undefined`,
-   * never as a sentinel. A ratio pair comes back as a copy (or as its width
-   * when its height is `1`). `JSON.stringify` drops unset fields and writes
+   * never as a sentinel. `JSON.stringify` drops unset fields and writes
    * non-finite values as `null`. `make` reads `null` back as unset, so a
    * JSON round trip keeps every meaning.
    *
@@ -334,7 +331,10 @@ export const apply: {
   const bottomIsSet = Number.isFinite(bottom)
   const leftIsSet = Number.isFinite(left)
 
-  const ratio = self.aspectRatio
+  // The value gates the derivation, and the ratio as given derives the
+  // extent, so a pair rounds once.
+  const aspectRatio = self[Raw].aspectRatio ?? Number.NaN
+  const ratio = AspectRatio.toNumber(aspectRatio)
 
   let width = Number.isFinite(self.width)
     ? clamp(self.width, minWidth, maxWidth)
@@ -348,14 +348,11 @@ export const apply: {
       ? clamp(parent.height - top - bottom, minHeight, maxHeight)
       : Number.NaN
 
-  // The value gates the derivation, and the raw ratio derives the extent,
-  // so a pair rounds once.
-  const rawRatio = self[Raw].aspectRatio
-  if (rawRatio !== undefined && Number.isFinite(ratio) && ratio > 0) {
+  if (Number.isFinite(ratio) && ratio > 0) {
     if (Number.isNaN(width) && !Number.isNaN(height)) {
-      width = clamp(AspectRatio.widthFor(rawRatio, height), minWidth, maxWidth)
+      width = clamp(AspectRatio.widthFor(aspectRatio, height), minWidth, maxWidth)
     } else if (Number.isNaN(height) && !Number.isNaN(width)) {
-      height = clamp(AspectRatio.heightFor(rawRatio, width), minHeight, maxHeight)
+      height = clamp(AspectRatio.heightFor(aspectRatio, width), minHeight, maxHeight)
     }
   }
 

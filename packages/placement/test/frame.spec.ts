@@ -446,16 +446,15 @@ describe('aspect ratio pairs', () => {
 
   test('a ratio over 1 behaves as its number', () => {
     for (const input of [{ height: 7 }, { width: 7 }, { minHeight: 3 }, {}]) {
-      expect(Frame.make({ ...input, aspectRatio: [16 / 9, 1] }).toJSON()).toEqual(
-        Frame.make({ ...input, aspectRatio: 16 / 9 }).toJSON(),
-      )
+      const pair = Frame.make({ ...input, aspectRatio: [16 / 9, 1] })
+      const number = Frame.make({ ...input, aspectRatio: 16 / 9 })
+      expect([pair.width, pair.height]).toEqual([number.width, number.height])
     }
   })
 
-  test('toJSON keeps a copy of the pair and a JSON round trip restores it', () => {
+  test('toJSON keeps the pair and a JSON round trip restores it', () => {
     const frame = Frame.make({ height: 7, aspectRatio: r169 })
-    expect(frame.toJSON().aspectRatio).toEqual(r169)
-    expect(frame.toJSON().aspectRatio).not.toBe(r169)
+    expect(frame.toJSON().aspectRatio).toBe(r169)
     const revived = Frame.make(JSON.parse(JSON.stringify(frame)))
     expect(revived.toJSON().aspectRatio).toEqual(r169)
     expect(revived.width).toBe(112 / 9)

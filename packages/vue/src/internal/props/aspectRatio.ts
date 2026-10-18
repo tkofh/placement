@@ -7,19 +7,19 @@ import { createCache } from '../cache.ts'
 // `null` marks the values that fall back to the caller's `auto`: the keyword
 // itself, and degenerate ratios (`1/0`). A ratio keeps its two parts as a
 // `[width, height]` pair, and a bare number parses over `1`.
-type RatioPair = readonly [width: number, height: number]
-
-const aspectRatio = map(oneOf([ratio(), keyword('auto')]), (value): RatioPair | null =>
-  isRatioValue(value) && !value.isDegenerate ? [value.numerator, value.denominator] : null,
+const aspectRatio = map(
+  oneOf([ratio(), keyword('auto')]),
+  (value): AspectRatio.AspectRatio | null =>
+    isRatioValue(value) && !value.isDegenerate ? [value.numerator, value.denominator] : null,
 )
 
 export type AspectRatioParser = typeof aspectRatio
 
 export type AspectRatioInput = ParserInput<AspectRatioParser> | number | undefined
 
-const cache = createCache<string, RatioPair | null>(512)
+const cache = createCache<string, AspectRatio.AspectRatio | null>(512)
 
-function parseAspectRatio(input: string): RatioPair | null {
+function parseAspectRatio(input: string): AspectRatio.AspectRatio | null {
   return cache(input, () => {
     const parsed = parse(input, aspectRatio)
     return parsed.valid ? parsed.value : null
@@ -29,8 +29,7 @@ function parseAspectRatio(input: string): RatioPair | null {
 /**
  * Parses a ratio prop into what the core ratio fields take: a number, or a
  * `[width, height]` pair, so that the core derives extents from `16 / 9`
- * with one rounding (see `placement/aspectRatio`). A ratio over `1` comes
- * back as its width.
+ * with one rounding (see `placement/aspectRatio`).
  *
  * @param input - The prop value.
  * @param auto - The value for unset, `auto`, degenerate, and unparsable inputs.
@@ -44,11 +43,7 @@ export function toAspectRatio(
     return input ?? auto
   }
 
-  const parsed = parseAspectRatio(input)
-  if (parsed === null) {
-    return auto
-  }
-  return parsed[1] === 1 ? parsed[0] : parsed
+  return parseAspectRatio(input) ?? auto
 }
 
 export function resolveAspectRatio(

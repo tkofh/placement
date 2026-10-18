@@ -1,6 +1,5 @@
 import { Pipeable, dual } from 'curvy/utils'
 import type * as AspectRatio from './aspectRatio.ts'
-import { type RawAspectRatio, toRawRatio } from './internal/aspectRatio.ts'
 import { type NormalizedSizing, normalizeSizing, normalizeTRBL } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/frame')
@@ -16,7 +15,7 @@ type RawSizing = {
     | number
     | undefined
 } & {
-  readonly aspectRatio: RawAspectRatio
+  readonly aspectRatio: AspectRatio.AspectRatio | undefined
 }
 
 /**
@@ -242,7 +241,7 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
     const raw: RawSizing = {
       width: input.width,
       height: input.height,
-      aspectRatio: toRawRatio(input.aspectRatio),
+      aspectRatio: input.aspectRatio,
       minWidth: input.minWidth,
       minHeight: input.minHeight,
       maxWidth: input.maxWidth,
@@ -340,8 +339,6 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
   /**
    * Returns the raw inputs of the frame, including its `id`. Unset sizing
    * fields come back as `undefined`, never as their resolved values.
-   * A ratio pair comes back as a copy, or as its width when its height is
-   * `1`.
    * `JSON.stringify` drops the unset fields (and an unset `id`) and writes
    * infinite values (`align`/`stretch` inherit, auto offsets) as `null`. The `make` factory reads `null` back as the default
    * of the field. A JSON round trip therefore keeps inheritance but turns
