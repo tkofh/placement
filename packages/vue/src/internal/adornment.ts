@@ -4,7 +4,7 @@ import * as Point from 'placement/point'
 // for the adornments there, with the size each corner may take.
 
 // Pulls the end of a polyline back by `length`, dropping the points it
-// passes, and their values per point (corner sizes and nest insets) with
+// passes, and their values per point (corner sizes and nest outsets) with
 // them. A line shorter than `length` keeps only its first point twice, so
 // it still draws nothing longer than itself.
 function trimEnd(
@@ -46,8 +46,8 @@ function trimEnd(
 }
 
 /**
- * A drawn line: its points, the most each of its corners may reach along
- * its legs, and how far inside the outermost corner of its nest each sits.
+ * A drawn line: its points, how far each of its corners reaches along its
+ * legs, and how far outside the innermost corner of its nest each sits.
  */
 export interface DrawnLine {
   readonly points: ReadonlyArray<Point.Point>
@@ -61,8 +61,8 @@ export interface DrawnLine {
  * @param route - The route's points.
  * @param radii - The size of the route's corner at each point.
  * @param insets - How far each end of the line stops short of the route's.
- * @param nests - How far inside the outermost corner of its nest the corner
- * at each point sits, `0` for none.
+ * @param nests - How far outside the innermost corner of its nest the
+ * corner at each point sits, `0` for none.
  * @returns The drawn line.
  */
 export function drawnLine(

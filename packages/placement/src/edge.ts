@@ -71,22 +71,17 @@ export interface EdgeInput<K extends string> {
    */
   readonly targetAt?: number | undefined
   /**
-   * How far each corner of the route reaches along its two legs, at most:
-   * its radius, for a circular corner. Renderers that round corners draw
-   * them this size where the route has room, and the route reports the size
-   * of each corner. Negative and non-finite values act as `0`. Defaults to
-   * `0`, sharp corners.
+   * How far each corner of the route reaches along its two legs, at least:
+   * its radius, for a circular corner. Where layout sets the length of a
+   * run (along the flow, and out of each port), it keeps room for corners
+   * this size, and only a leg too short for it, such as a run across the
+   * flow between nodes that sit close, holds a corner smaller. The corners
+   * of routes that turn together grow outward from this size, so that they
+   * nest about one center. The route reports the size of each corner, and
+   * renderers that round corners draw them that size. Negative and
+   * non-finite values act as `0`. Defaults to `0`, sharp corners.
    */
   readonly radius?: number | undefined
-  /**
-   * How far each corner reaches at least. Where layout sets the length of a
-   * run (along the flow, and out of each port), it keeps room for corners
-   * this size, and corners shrink from `radius` toward it only where the
-   * route has less room. Runs across the flow take their length from where
-   * the nodes sit, so a short one can hold only smaller corners. Values
-   * above `radius` act as `radius`. Defaults to `0`.
-   */
-  readonly minRadius?: number | undefined
   /**
    * How thick the edge draws, its stroke width. `Connector.apply` (from
    * `placement/connector`) keeps its gaps between the strokes rather than
@@ -135,8 +130,6 @@ class Edge<K extends string> extends Pipeable {
   readonly targetAt: number
   /** The raw corner radius. Layout treats negative and non-finite values as `0`. */
   readonly radius: number
-  /** The raw minimum corner radius. Layout clamps it to `[0, radius]`. */
-  readonly minRadius: number
   /** The raw stroke width. Layout treats negative and non-finite values as `0`. */
   readonly thickness: number
   /** The adornments carried by the edge, in input order. */
@@ -154,7 +147,6 @@ class Edge<K extends string> extends Pipeable {
     this.targetSide = input.targetSide ?? Number.POSITIVE_INFINITY
     this.targetAt = input.targetAt ?? Number.POSITIVE_INFINITY
     this.radius = input.radius ?? 0
-    this.minRadius = input.minRadius ?? 0
     this.thickness = input.thickness ?? 0
     this.adornments = input.adornments ?? []
   }
@@ -181,7 +173,6 @@ class Edge<K extends string> extends Pipeable {
       targetSide: this.targetSide,
       targetAt: this.targetAt,
       radius: this.radius,
-      minRadius: this.minRadius,
       thickness: this.thickness,
       adornments: this.adornments,
     }
@@ -344,28 +335,25 @@ export const setTargetPort: {
 )
 
 /**
- * Sets the corner radius, and optionally the minimum radius. An omitted
- * `minRadius` keeps the current one. The data-last form omits `self` and
- * returns a function of it.
+ * Sets the corner radius. The data-last form omits `self` and returns a
+ * function of it.
  *
  * @param self - The edge to update.
- * @param radius - How far each corner reaches along its legs, at most.
- * @param minRadius - How far each corner reaches, at least.
+ * @param radius - How far each corner reaches along its legs, at least.
  * @returns A new edge with the radius replaced.
  * @example
  * ```ts
  * const edge = Edge.make({ source: 'a', target: 'b' })
- * Edge.setRadius(edge, 12, 6).minRadius // 6
+ * Edge.setRadius(edge, 12).radius // 12
  * edge.pipe(Edge.setRadius(8)).radius // 8
  * ```
  */
 export const setRadius: {
-  <K extends string>(self: Edge<K>, radius: number, minRadius?: number): Edge<K>
-  (radius: number, minRadius?: number): <K extends string>(self: Edge<K>) => Edge<K>
+  <K extends string>(self: Edge<K>, radius: number): Edge<K>
+  (radius: number): <K extends string>(self: Edge<K>) => Edge<K>
 } = dual(
-  (args) => isEdge(args[0]),
-  <K extends string>(self: Edge<K>, radius: number, minRadius?: number) =>
-    new Edge({ ...self.toJSON(), radius, minRadius: minRadius ?? self.minRadius }),
+  2,
+  <K extends string>(self: Edge<K>, radius: number) => new Edge({ ...self.toJSON(), radius }),
 )
 
 /**

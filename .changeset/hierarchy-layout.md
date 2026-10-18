@@ -35,11 +35,11 @@ flowcharts often draw loops.
 Edges carry a `weight`, a `minLength`, ports (`sourceSide`/`sourceAt`,
 `targetSide`/`targetAt`, each auto when omitted), corner sizes, and
 adornments. A route reports how far each of its corners reaches
-(`radii`): up to the edge's `radius`, shrinking where a leg is short or an
-adornment sits close, and how far inside the outermost corner of its nest
-each corner sits (`insets`) where routes turn together. The layout keeps
-room for corners of the edge's `minRadius` along the flow and out of each
-port.
+(`radii`): the edge's `radius` at least, more where routes turn together
+and nest about one center, and less only where a run across the flow is
+short or an adornment sits close, and how far outside the innermost
+corner of its nest each corner sits (`outsets`). The layout keeps room for
+corners of the edge's `radius` along the flow and out of each port.
 
 An `Adornment` is a `Frame` that decorates an edge, such as a label or an
 arrowhead, placed at `at` along it and turned to face along the line or

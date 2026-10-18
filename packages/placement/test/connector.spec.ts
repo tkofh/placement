@@ -651,7 +651,7 @@ describe('apply', () => {
     expect(layout.edges[0]?.radii).toEqual([0, 20, 20, 0])
   })
 
-  test('the inner corner of routes that turn together shrinks to share a center', () => {
+  test('the outer corner of routes that turn together grows to share a center', () => {
     const rects = { a: Rect.make(0, 0, 40, 40), b: Rect.make(100, 100, 40, 40) }
     const layout = Connector.apply(rects, [rightToTop(0.25, 0.75), rightToTop(0.75, 0.25)], spec)
     expect(pointsOf(layout, 0)).toEqual([
@@ -664,16 +664,16 @@ describe('apply', () => {
       [110, 30],
       [110, 100],
     ])
-    // The outer corner reaches 30, and the inner one, 20 in and 20 over,
-    // reaches 10, about the same center (100, 40).
+    // The inner corner reaches 30, and the outer one, 20 out and 20 over,
+    // reaches 50, about the same center (80, 60).
     expect(layout.edges.map((route) => route?.radii)).toEqual([
+      [0, 50, 0],
       [0, 30, 0],
-      [0, 10, 0],
     ])
-    // The inner corner reports how far inside the outer one it sits.
-    expect(layout.edges.map((route) => route?.insets)).toEqual([
-      [0, 0, 0],
+    // The outer corner reports how far outside the inner one it sits.
+    expect(layout.edges.map((route) => route?.outsets)).toEqual([
       [0, 20, 0],
+      [0, 0, 0],
     ])
   })
 
@@ -995,7 +995,7 @@ describe('apply', () => {
       const edge = edges[k] as Edge.Edge<string>
       const points = route.points
       expect(route.radii).toHaveLength(points.length)
-      expect(route.insets).toHaveLength(points.length)
+      expect(route.outsets).toHaveLength(points.length)
       // Each end sits on the boundary of its rect, and the route leaves it
       // straight out from that side.
       for (const [id, a, b] of [
@@ -1137,18 +1137,20 @@ describe('merging', () => {
     }
   })
 
-  test('a route that leaves a group going on turns as tight as the merge gap', () => {
+  test('a route that leaves a group going on keeps its radius', () => {
     const layout = Connector.apply(
       rects,
       [into('a', { radius: 8 }), into('b', { radius: 8 }), into('c', { radius: 8 })],
       merging(Connector.merge.side),
     )
-    // b turns down off the lanes where a and c go on up together: it turns
-    // at the merge gap, 4, and a keeps its radius.
+    // b turns down off the lanes where a and c go on up together: it keeps
+    // its radius, and a, turning up around c's corner 4 inside its own,
+    // grows to 12 to share its center.
     expect(pointsAt(layout, 1)?.[2]).toEqual([50, 24])
-    expect(layout.edges[1]?.radii[2]).toBe(4)
+    expect(layout.edges[1]?.radii[2]).toBe(8)
     expect(pointsAt(layout, 0)?.[2]).toEqual([50, 20])
-    expect(layout.edges[0]?.radii[2]).toBe(8)
+    expect(layout.edges[0]?.radii[2]).toBe(12)
+    expect(layout.edges[2]?.radii[2]).toBe(8)
   })
 
   test('the merge gap sets the lanes apart', () => {
@@ -1427,6 +1429,68 @@ describe('notes', () => {
     )
     expect(layout.notes).toEqual([
       { kind: Connector.note.overflow, edge: 0, adornment: 0, need: 40 },
+    ])
+  })
+})
+
+describe('held runs', () => {
+  test('a run that waypoints hold goes around the port leg of another route', () => {
+    // The route from c to the top of b passes two waypoints on the line
+    // down from a's bottom port, where the route from a to the right side
+    // of b runs. Nudging can move neither run, so the first goes around
+    // instead of running on up the port leg.
+    const rects = {
+      a: Rect.make(140, 340, 30, 50),
+      b: Rect.make(50, 440, 70, 40),
+      c: Rect.make(120, 580, 50, 20),
+    }
+    const layout = Connector.apply(
+      rects,
+      [
+        Edge.make({
+          source: 'a',
+          target: 'b',
+          sourceSide: 2,
+          sourceAt: 0.5,
+          targetSide: 1,
+          targetAt: 0.5,
+        }),
+        Edge.make({
+          source: 'c',
+          target: 'b',
+          sourceSide: 0,
+          sourceAt: 0.6,
+          targetSide: 0,
+          targetAt: 0.5,
+        }),
+      ],
+      Connector.make({ clearance: 14, gap: 8, bendCost: 44 }),
+      {
+        edges: [
+          {},
+          {
+            via: [
+              { x: 155, y: 556, arriving: { x: 0, y: -1 } },
+              { x: 155, y: 544, arriving: { x: 0, y: -1 } },
+            ],
+          },
+        ],
+      },
+    )
+    expect(pointsOf(layout, 0)).toEqual([
+      [155, 390],
+      [155, 460],
+      [120, 460],
+    ])
+    expect(pointsOf(layout, 1)).toEqual([
+      [150, 580],
+      [150, 564],
+      [155, 564],
+      [155, 495],
+      [134, 495],
+      [134, 426],
+      [85, 426],
+      [85, 440],
     ])
   })
 })

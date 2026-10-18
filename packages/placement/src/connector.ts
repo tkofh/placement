@@ -569,27 +569,28 @@ export interface ConnectorApplyOptions<K extends string = string> {
  * - `radii`: how far the corner at each point reaches along its two legs,
  *   one per point, `0` at both ends. A circular corner of radius `R` that
  *   turns `theta` reaches `R * tan(theta / 2)`, so a right-angled one
- *   reaches `R`. A right-angled corner reaches at most the edge's `radius`, and
- *   the corners on a segment never reach past each other. The two corners
- *   of a slanted jog reach exactly half its slanted segment, so their arcs
- *   meet in an S. Where routes turn together a short distance apart, each
- *   inner corner shrinks to fit inside the one outside it, about the same
- *   center where the routes are evenly spaced, as on a metro map. It
- *   follows the outer corner down as a short leg holds that in, and past
- *   the shared center grows back by as far as it sits past, so it never
- *   jumps. Inside a corner that a slanted jog turns less than a right
- *   angle, the radius of that corner's arc bounds it in place of the
- *   size, so it grows back as the slant flattens. No
- *   corner reaches into a flow adornment or its gaps. A renderer that
- *   rounds corners draws circular corners that reach these lengths, or any
- *   corner that reaches no farther, though a slanted jog drawn with
- *   smaller corners shows a straight between them.
- * - `insets`: for each inner corner that a nest sized, how far inside the
- *   outermost corner of the nest it sits, one per point, and `0` for the
+ *   reaches `R`. A right-angled corner reaches at least the edge's
+ *   `radius`, unless a leg is too short for it: the corners on a segment
+ *   never reach past each other, and no corner reaches into a flow
+ *   adornment or its gaps. The two corners of a slanted jog reach exactly
+ *   half its slanted segment, so their arcs meet in an S. Where routes
+ *   turn together a short distance apart, the innermost corner keeps the
+ *   radius and each corner outside it grows by how far it sits outside the
+ *   one inside it, so the corners share a center where the routes are
+ *   evenly spaced, as on a metro map. The growth tapers off as the routes
+ *   drift apart, down to none at both radii together, so no corner jumps.
+ *   Around a corner that a slanted jog turns less than a right angle, the
+ *   corners inside grow to the radius of its arc less how far they sit
+ *   inside, where that is more than their own. A renderer that rounds
+ *   corners draws circular corners that reach these lengths, or any corner
+ *   that reaches no farther, though a slanted jog drawn with smaller
+ *   corners shows a straight between them.
+ * - `outsets`: for each corner that a nest grew, how far outside the
+ *   innermost corner of the nest it sits, one per point, and `0` for the
  *   others. A renderer that draws corners other than circles keeps the
- *   nest about one center by drawing each such corner as the outermost
- *   one moved in by its inset: what the outermost corner's radius would be
- *   at its size plus the inset, less the inset.
+ *   nest about one center by drawing each such corner as the innermost
+ *   one moved out by its outset: what the innermost corner's radius is at
+ *   its size less the outset, plus the outset.
  * - `adornments`: where each adornment landed, in the edge's adornment
  *   order (see `AdornmentPlacement` in `placement/adornment`).
  */
@@ -599,10 +600,10 @@ export interface ConnectorRoute {
   /** The size of the corner at each point, `0` at both ends. */
   readonly radii: ReadonlyArray<number>
   /**
-   * How far inside the outermost corner of its nest the corner at each
+   * How far outside the innermost corner of its nest the corner at each
    * point sits, `0` for one that does not nest.
    */
-  readonly insets: ReadonlyArray<number>
+  readonly outsets: ReadonlyArray<number>
   /** Where each adornment landed, in the edge's adornment order. */
   readonly adornments: ReadonlyArray<AdornmentPlacement>
   /**
@@ -773,11 +774,8 @@ export interface ConnectorLayout<K extends string = string> {
  * bundle as far from the merge as its run allows, short of room for the
  * corner past it (and the adornments at its port, when that comes next).
  * A route that goes on alone there, from a group of which at least two go
- * on together, turns as tight as the merge allows: the merge gap inside
- * its stroke, or that plus the offsets of the parting corners nested
- * inside it, and its parting jog stays upright. A pair that parts, or a
- * route whose last partner ends, leaves no group, and turns as usual.
- * The whisk is as long as the outermost lane's step needs past the
+ * on together, keeps its parting jog upright. The whisk is as long as the
+ * outermost lane's step needs past the
  * adornments, or half the room before the next rect in front, or before
  * the far end of one of its routes that faces it, less the gap, if less,
  * with the arcs shrunk to fit. Other routes keep out of it, and
@@ -785,9 +783,10 @@ export interface ConnectorLayout<K extends string = string> {
  * adornments, the ends share the port as they are. Each route's `merged`
  * names the edge that draws the shared adornments.
  *
- * Each route's corners report their `radii`, from the edge's `radius`, with
- * the inner corners of routes that turn together shrunk to nest, down to
- * half the edge's `thickness`, where the inside of the stroke would fold.
+ * Each route's corners report their `radii`: the edge's `radius` at least,
+ * except where a leg is too short for it, and the corners of routes that
+ * turn together grown outward from the innermost by how far they sit
+ * outside one another, so that they nest about one center.
  *
  * Edges carry adornments (see `placement/adornment`), which `apply` places
  * on the routes it finds but makes no room for, so adornments on routes
@@ -828,7 +827,7 @@ export interface ConnectorLayout<K extends string = string> {
  * longer one less, down to none at the short length, so ports move
  * smoothly; what is left slants.
  *
- * The edge's `weight`, `minLength`, and `minRadius` have no effect.
+ * The edge's `weight` and `minLength` have no effect.
  *
  * Where the rects leave too little room, the routes give something up and
  * the layout's `notes` say what, and how much more room would have fit it

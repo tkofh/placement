@@ -63,7 +63,7 @@ export interface HierarchyNodeInput {
 export type HierarchyEdgeRoute = EdgeRoute
 
 /** The edge fields a `useHierarchyEdge` caller supplies. Adornments come from adornment children. */
-export type HierarchyEdgeInput = Omit<Edge.EdgeInput<string>, 'adornments' | 'radius' | 'minRadius'>
+export type HierarchyEdgeInput = Omit<Edge.EdgeInput<string>, 'adornments' | 'radius'>
 
 /**
  * An adornment on an edge: the core adornment (see `placement/adornment`),
@@ -81,10 +81,8 @@ export type HierarchyAdornmentPlacement = Adornment.AdornmentPlacement
  * corner reaches `1 + smoothing` times its radius along each leg.
  */
 export interface HierarchyEdgeDrawing {
-  /** The corner radius, `0` for sharp corners. */
+  /** The corner radius, `0` for sharp corners, which the layout keeps room for. */
   readonly radius: number
-  /** The least radius the layout keeps room for. */
-  readonly minRadius: number
   /** The corner smoothing. */
   readonly smoothing: number
 }
@@ -169,7 +167,7 @@ function translateRoute(route: HierarchyEdgeRoute, origin: Point.Point): Hierarc
   return {
     points: route.points.map((point) => Point.translate(point, x, y)),
     radii: route.radii,
-    ...(route.insets === undefined ? {} : { insets: route.insets }),
+    ...(route.outsets === undefined ? {} : { outsets: route.outsets }),
     adornments: route.adornments.map((placed) => ({
       ...placed,
       rect: Rect.translate(placed.rect, x, y),
@@ -318,17 +316,16 @@ export function useHierarchyNode(
  */
 export function useHierarchyEdge(
   edge: MaybeRefOrGetter<HierarchyEdgeInput>,
-  drawing: MaybeRefOrGetter<HierarchyEdgeDrawing> = { radius: 0, minRadius: 0, smoothing: 0 },
+  drawing: MaybeRefOrGetter<HierarchyEdgeDrawing> = { radius: 0, smoothing: 0 },
 ): ComputedRef<HierarchyEdgeSolution> {
   const { adornments, solve: solveEdge } = useEdgeAdornments(ADORNMENT_CHANNEL)
 
   const input = computed(() => {
-    const { radius, minRadius, smoothing } = toValue(drawing)
+    const { radius, smoothing } = toValue(drawing)
     const reach = 1 + Math.min(Math.max(smoothing, 0), 1)
     return Edge.make({
       ...toValue(edge),
       radius: reach * Math.max(radius, 0),
-      minRadius: reach * Math.max(minRadius, 0),
       adornments: adornments.value,
     })
   })

@@ -61,16 +61,18 @@ room in front of its port for the end's adornments and corner costs more),
 `spread.ts`
 spreads auto ports along shared sides and groups the ends that merge,
 `merge.ts` plans the lanes and whisks of merges, `routing.ts` finds the
-routes and trades ends that cross, `nudge.ts` moves overlapping segments
+routes (a run that waypoints hold goes around the port legs of other
+routes) and trades ends that cross, `nudge.ts` moves overlapping segments
 apart (with `internal/separation.ts`, a 1D separation-constraint solver,
 VPSC) and keeps other routes out of merged bundles, `ports.ts` slides auto
 ports to straighten short jogs, `adornments.ts` places adornments on the
-routes, `corners.ts` sizes corners, nesting those of routes that turn
-together about one center, and `slants.ts` turns jogs too short for their
-corners into S curves. `route.ts` is the polyline those passes read, with
+routes, `corners.ts` sizes corners (the edge's radius is the least a corner
+turns, and the corners of routes that turn together grow outward from the
+innermost to share a center), and `slants.ts` turns jogs too short for
+their corners into S curves. `route.ts` is the polyline those passes read, with
 its lengths, headings, and segment boxes worked out once. `locks.ts`
 carries what a pass decided to the
-passes after it (upright jogs, set corner sizes, parting corners), so the
+passes after it (upright jogs, set corner sizes), so the
 order of `solve` is the order in which decisions yield. The phases build
 on `internal/graph/` (not yet public): `graph.ts` stores graphs of points
 in flat arrays, `visibility.ts` builds the orthogonal visibility graph of

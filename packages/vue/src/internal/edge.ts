@@ -43,16 +43,16 @@ export interface EdgeAdornmentInput {
 }
 
 /**
- * An edge's solved route: its polyline, its corner sizes, how far inside
- * the outermost corner of its nest each corner sits (`0` or left out for
- * none), its adornments, and whether it draws each one. An end that merges with other edges' ends
- * leaves the adornments they share there to one of them. Adornments draw
- * when `drawn` leaves them out.
+ * An edge's solved route: its polyline, its corner sizes, how far outside
+ * the innermost corner of its nest each corner sits (`0` or left out for
+ * none), its adornments, and whether it draws each one. An end that merges
+ * with other edges' ends leaves the adornments they share there to one of
+ * them. Adornments draw when `drawn` leaves them out.
  */
 export interface EdgeRoute {
   readonly points: ReadonlyArray<Point.Point>
   readonly radii: ReadonlyArray<number>
-  readonly insets?: ReadonlyArray<number>
+  readonly outsets?: ReadonlyArray<number>
   readonly adornments: ReadonlyArray<Adornment.AdornmentPlacement>
   readonly drawn?: ReadonlyArray<boolean>
 }
@@ -150,7 +150,7 @@ export function useEdgeAdornments(channel: string): {
     })
 
     const line = computed(() =>
-      drawnLine(route.value.points, route.value.radii, insets.value, route.value.insets),
+      drawnLine(route.value.points, route.value.radii, insets.value, route.value.outsets),
     )
 
     // As in the layouts, the mapper records the list and an effect writes

@@ -192,15 +192,15 @@ describe('solving', () => {
     )
   })
 
-  test('minR keeps room for corners in the layout', async () => {
+  test('the radius keeps room for corners in the layout', async () => {
     const fan = ['a', 'b', 'c'].map((id) => Frame.make({ id, width: 40, height: 20 }))
     const { root } = await mountLayout({ rankGap: 20, nodeGap: 10 }, () => [
-      ...['b', 'c'].map((to) => edge({ from: 'a', to, r: 12, minR: 12 })),
+      ...['b', 'c'].map((to) => edge({ from: 'a', to, r: 12 })),
       ...fan.map((frame) => node(frame.id, 40, 20)),
     ])
     const solved = Hierarchy.apply(
       fan,
-      ['b', 'c'].map((target) => Edge.make({ source: 'a', target, radius: 12, minRadius: 12 })),
+      ['b', 'c'].map((target) => Edge.make({ source: 'a', target, radius: 12 })),
       Hierarchy.make({ rankGap: 20, nodeGap: 10 }),
     )
 
@@ -628,7 +628,7 @@ describe('end adornments', () => {
     const fan = ['a', 'b', 'c'].map((id) => Frame.make({ id, width: 40, height: 20 }))
     const { root } = await mountLayout({ rankGap: 20, nodeGap: 10 }, () => [
       ...['b', 'c'].map((to) =>
-        edge({ from: 'a', to, r: 4, minR: 4, smoothing: 0.5 }, () => [
+        edge({ from: 'a', to, r: 4, smoothing: 0.5 }, () => [
           adornment({ at: 'end', width: 8, height: 6, marginLeft: 6 }, 'arrow'),
         ]),
       ),
@@ -642,7 +642,7 @@ describe('end adornments', () => {
     const solvedFan = Hierarchy.apply(
       fan,
       ['b', 'c'].map((target) =>
-        Edge.make({ source: 'a', target, radius: 6, minRadius: 6, adornments: [arrow] }),
+        Edge.make({ source: 'a', target, radius: 6, adornments: [arrow] }),
       ),
       Hierarchy.make({ rankGap: 20, nodeGap: 10 }),
     )

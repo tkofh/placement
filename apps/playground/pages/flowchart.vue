@@ -23,7 +23,6 @@
         :from="edge.from"
         :to="edge.to"
         :r="smooth ? '12px' : '0px'"
-        :min-r="smooth ? '6px' : '0px'"
         :smoothing="smooth ? 0.8 : 0"
         stroke="color(srgb 1 1 1 / 0.45) 1.5px"
       >

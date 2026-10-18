@@ -450,24 +450,26 @@ describe('tier 0: what a layout never does', () => {
     }
   })
 
-  // The corner at each point: one size and inset per point, none at the
-  // ends, at most the edge's radius, and the two corners on a leg never
-  // past each other.
+  // The corner at each point: one size and outset per point, none at the
+  // ends, none on an edge without a radius, and the two corners on a leg
+  // never past each other.
   const expectCorners = (
     edge: Edge.Edge<string>,
     route: Connector.ConnectorRoute,
     where: string,
     legs: boolean,
   ) => {
-    const { points, radii, insets } = route
+    const { points, radii, outsets } = route
     expect(radii, where).toHaveLength(points.length)
-    expect(insets, where).toHaveLength(points.length)
+    expect(outsets, where).toHaveLength(points.length)
     expect(radii[0], where).toBe(0)
     expect(radii[radii.length - 1], where).toBe(0)
     for (const [k, radius] of radii.entries()) {
       expect(radius, `${where} corner ${k}`).toBeGreaterThanOrEqual(0)
-      expect(radius, `${where} corner ${k}`).toBeLessThanOrEqual(edge.radius + EPSILON)
-      expect(insets[k], `${where} inset ${k}`).toBeGreaterThanOrEqual(0)
+      if (!(edge.radius > 0)) {
+        expect(radius, `${where} corner ${k}`).toBe(0)
+      }
+      expect(outsets[k], `${where} outset ${k}`).toBeGreaterThanOrEqual(0)
       if (legs && k > 0) {
         const leg = lengthOf(points[k - 1] as Point.Point, points[k] as Point.Point)
         expect(radius + (radii[k - 1] as number), `${where} leg ${k - 1}`).toBeLessThanOrEqual(
@@ -744,10 +746,10 @@ describe('tier 1 and 3: what a layout prefers, and says when it cannot', () => {
         expect(other.points[k]?.y, `${where} point ${k}`).toBeCloseTo(point.y + dy, 6)
       }
       expect(other.radii, where).toHaveLength(route.radii.length)
-      expect(other.insets, where).toHaveLength(route.insets.length)
+      expect(other.outsets, where).toHaveLength(route.outsets.length)
       for (const [k, radius] of route.radii.entries()) {
         expect(other.radii[k], `${where} corner ${k}`).toBeCloseTo(radius, 9)
-        expect(other.insets[k], `${where} inset ${k}`).toBeCloseTo(route.insets[k] as number, 9)
+        expect(other.outsets[k], `${where} outset ${k}`).toBeCloseTo(route.outsets[k] as number, 9)
       }
       expect(other.merged, where).toEqual(route.merged)
       expect(other.adornments, where).toHaveLength(route.adornments.length)

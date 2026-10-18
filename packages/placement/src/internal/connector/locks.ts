@@ -14,8 +14,6 @@ export interface Locks {
   readonly upright: Set<number>
   /** The corners whose size is set, by point index, and their size. */
   readonly cornerSize: Map<number, number>
-  /** The corners where the route parts from a bundle, which turn tight. */
-  readonly parting: Set<number>
 }
 
 /**
@@ -26,7 +24,6 @@ export interface Locks {
 export const emptyLocks = (): Locks => ({
   upright: new Set(),
   cornerSize: new Map(),
-  parting: new Set(),
 })
 
 /**
@@ -44,6 +41,5 @@ export function shiftLocks(locks: Locks, by: number): Locks {
   return {
     upright: new Set([...locks.upright].map((index) => index + by)),
     cornerSize: new Map([...locks.cornerSize].map(([index, size]) => [index + by, size])),
-    parting: new Set([...locks.parting].map((index) => index + by)),
   }
 }

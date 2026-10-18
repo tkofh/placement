@@ -828,11 +828,21 @@ function simplify(route: ReadonlyArray<XY>): Array<Point> {
 }
 
 // The axis a segment runs across: 0 for a vertical segment, whose x the
-// x pass moves, 1 for a horizontal one, and -1 for a diagonal one.
+// x pass moves, 1 for a horizontal one, and -1 for a diagonal one or one
+// of no length, which neither pass moves.
 function axisOf(route: ReadonlyArray<Point>, index: number): Axis | -1 {
   const [x0, y0] = route[index] as Point
   const [x1, y1] = route[index + 1] as Point
-  return x0 === x1 ? 0 : y0 === y1 ? 1 : -1
+  return x0 === x1 ? (y0 === y1 ? -1 : 0) : y0 === y1 ? 1 : -1
+}
+
+// Whether a segment runs diagonally. One of no length does not: it is
+// where a jog moved onto the line of the segment past it, and the
+// segments on either side of it run on as one.
+function slanted(route: ReadonlyArray<Point>, index: number): boolean {
+  const [x0, y0] = route[index] as Point
+  const [x1, y1] = route[index + 1] as Point
+  return x0 !== x1 && y0 !== y1
 }
 
 // Moves the segments that run across `axis`: vertical ones for axis 0,
@@ -1314,8 +1324,8 @@ function collect(
         index === 0 ||
         index === last ||
         anchored ||
-        axisOf(path, index - 1) === -1 ||
-        axisOf(path, index + 1) === -1
+        slanted(path, index - 1) ||
+        slanted(path, index + 1)
       // A jog between turns that go opposite ways wants its spot along the
       // run it shifts, between where the segments on either side of it
       // start and end: the middle, unless the route says otherwise. Other

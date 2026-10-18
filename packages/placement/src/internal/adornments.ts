@@ -295,21 +295,26 @@ export function distanceAlong(
 }
 
 // The size of each corner of an orthogonal route: how far it reaches along
-// each of its legs, `0` at the two ends. Each corner takes up to `radius`,
-// but never past a wall (a stretch of the route that flow adornments
-// occupy, as lengths along it) or the route's ends, and two corners on one
-// leg share its length. Shared legs settle shortest first: a corner limited
-// elsewhere keeps its size and the other takes the rest, otherwise both take
-// half. A last pass gives each corner whatever its legs still have room for.
+// each of its legs, `0` at the two ends. Each corner takes up to `radius`
+// (one for every corner, or one per point), but never past a wall (a
+// stretch of the route that flow adornments occupy, as lengths along it)
+// or the route's ends, and two corners on one leg share its length. Shared
+// legs settle shortest first: a corner limited elsewhere keeps its size and
+// the other takes the rest, otherwise both take half. A last pass gives
+// each corner whatever its legs still have room for.
 export function resolveRadii(
   points: ReadonlyArray<LogicalPoint>,
   cumulative: ReadonlyArray<number>,
-  radius: number,
+  radius: number | ReadonlyArray<number>,
   walls: ReadonlyArray<readonly [number, number]>,
 ): Array<number> {
   const count = points.length
   const radii: Array<number> = points.map(() => 0)
-  if (count < 3 || !(radius > 0)) {
+  const wanted = (i: number): number => {
+    const value = typeof radius === 'number' ? radius : radius[i]
+    return value !== undefined && Number.isFinite(value) && value > 0 ? value : 0
+  }
+  if (count < 3 || !points.some((_, i) => wanted(i) > 0)) {
     return radii
   }
   const at = (i: number) => cumulative[i] as number
@@ -346,7 +351,7 @@ export function resolveRadii(
   for (let i = 1; i + 1 < count; i++) {
     const before = legs[i - 1] as Leg
     const after = legs[i] as Leg
-    radii[i] = Math.min(radius, before.fromEnd, after.fromStart)
+    radii[i] = Math.min(wanted(i), before.fromEnd, after.fromStart)
   }
 
   const shared = legs
@@ -376,7 +381,7 @@ export function resolveRadii(
     const after = legs[i] as Leg
     const roomBefore = before.shared ? before.length - (radii[i - 1] as number) : before.fromEnd
     const roomAfter = after.shared ? after.length - (radii[i + 1] as number) : after.fromStart
-    radii[i] = Math.max(Math.min(radius, roomBefore, roomAfter), 0)
+    radii[i] = Math.max(Math.min(wanted(i), roomBefore, roomAfter), 0)
   }
   return radii
 }

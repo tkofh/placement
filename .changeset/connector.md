@@ -18,16 +18,18 @@ routes cross trade places when that leaves fewer crossings. Routes are orthogona
 their ports straight out from the side, and report their corner `radii`.
 Gaps are between strokes: `Edge` gains a `thickness` (and
 `Edge.setThickness`), and routes sit their gap apart plus half of each
-thickness, keep half their thickness more off the rects they run along
-where they can, and keep inner corners at least half their thickness so
-the inside of the stroke never folds.
-Routes in a passage too narrow for the gap spread evenly across it, and
-routes that turn together get corners about one center, as on a metro map.
-An inner corner follows its outer one smoothly, down as a short leg holds
-the outer one in, back up past their shared center and as a slanted jog
-flattens it, and each
-route's `insets` say how far inside the outermost corner of its nest each
-corner sits.
+thickness, and keep half their thickness more off the rects they run along
+where they can.
+Routes in a passage too narrow for the gap spread evenly across it.
+An edge's `radius` is the least its corners turn: every corner reaches
+that far unless a leg is too short for it, and `Edge.minRadius` is gone.
+Routes that turn together get corners about one center, as on a metro
+map: the innermost corner keeps the radius and each corner outside it
+grows by how far it sits outside the one inside it, tapering off as the
+routes drift apart so that no corner jumps, and each route's `outsets`
+say how far outside the innermost corner of its nest each corner sits.
+Around a corner that a slanted jog flattens, the corners inside grow to
+its arc.
 An auto side is the side of the cheapest route, where a side with less
 room in front of its port than the end needs for its adornments and the
 corner past them costs up to twice the bend cost more, so an end comes in
@@ -47,7 +49,9 @@ line of a wall. Routes that run alongside each other sit in the order
 their ends ask for; two that must cross whichever way they sit take the
 sides that leave them where they want to be, and where the orders that
 pairs of routes ask for conflict, the pairs that must cross anyway give
-way first, so the lanes of a merge peel off in order. A jog, the rise of a Z-shaped route, sits at the
+way first, so the lanes of a merge peel off in order. A route whose
+waypoints hold a run on the line of another route's port leg, which
+nudging can move neither of, goes around it instead. A jog, the rise of a Z-shaped route, sits at the
 spec's `jogAt` of the run it shifts (the middle by default, or per edge),
 and passes routes that run alongside all of it, since that adds no
 crossing. A jog too short for its two corners slants into an S (two arcs
@@ -79,8 +83,8 @@ steps out past them once it clears its rect. A route parts from its bundle
 as far from the merge as its corners leave room for. Routes whose ends at one rect could
 merge pull each other along while sides are chosen, so they come in
 on one side and merge (a tenth less along a partner's route). Where a route goes
-on alone from a group that goes on without it, it turns as tight as the
-merge gap allows; a pair that parts leaves no group, and turns as usual.
+on alone from a group that goes on without it, its parting jog stays
+upright.
 A short jog right past an auto port slides the port along its side to
 straighten the route where it can, and a slanted jog keeps its curve the
 gap from the routes and rects beside it. Jogs in a bundle, or where a

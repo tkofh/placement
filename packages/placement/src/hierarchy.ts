@@ -232,12 +232,15 @@ export const isHierarchy = (value: unknown): value is Hierarchy => {
  *   point is a right-angled corner. An edge the connector found no route
  *   for, which a note of the layout reports, has no points.
  * - `radii`: how far the corner at each point reaches along its two legs,
- *   one per point, `0` at both ends. Each is at most the edge's `radius`,
- *   and the corners on a segment never reach past each other or into a
- *   flow adornment. A renderer that rounds corners draws circular corners
- *   of these radii, or any corner that reaches no farther.
- * - `insets`: how far inside the outermost corner of its nest each corner
- *   sits, for the corners of routes that turn together, one per point.
+ *   one per point, `0` at both ends. Each is at least the edge's `radius`,
+ *   unless a leg is too short for it: the corners on a segment never reach
+ *   past each other or into a flow adornment. The corners of routes that
+ *   turn together grow outward from the innermost, so that they nest about
+ *   one center. A renderer that rounds corners draws circular corners of
+ *   these radii, or any corner that reaches no farther.
+ * - `outsets`: how far outside the innermost corner of its nest each
+ *   corner sits, for the corners of routes that turn together, one per
+ *   point.
  * - `adornments`: where each adornment landed, in the edge's adornment
  *   order.
  */
@@ -246,8 +249,8 @@ export interface HierarchyRoute {
   readonly points: ReadonlyArray<Point.Point>
   /** The size of the corner at each point, `0` at both ends. */
   readonly radii: ReadonlyArray<number>
-  /** How far inside its nest's outermost corner each corner sits. */
-  readonly insets: ReadonlyArray<number>
+  /** How far outside its nest's innermost corner each corner sits. */
+  readonly outsets: ReadonlyArray<number>
   /** Where each adornment landed, in the edge's adornment order. */
   readonly adornments: ReadonlyArray<AdornmentPlacement>
 }
@@ -341,7 +344,7 @@ const ROUNDS = 3
  * edge that shifts across the flow does so on a jog between two ranks, and
  * jogs that share the space between two ranks sit `edgeGap` apart, in an
  * order that avoids crossings. That space grows to fit them, and to keep
- * room for corners of each edge's `minRadius` and for the flow adornments
+ * room for corners of each edge's `radius` and for the flow adornments
  * at each end of an edge on a straight run. An edge that leaves a node
  * through a side across the flow, or around the node from the side facing
  * away, runs beside the node, and step 4 reserves room beside it.
@@ -445,7 +448,6 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
     if (source === undefined || target === undefined) {
       throw new RangeError(`Edge ${i} references an id that no frame has`)
     }
-    const radius = finite(Math.max(edge.radius, 0))
     return {
       source,
       target,
@@ -453,7 +455,7 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
       minLength: Number.isFinite(edge.minLength) ? Math.max(Math.ceil(edge.minLength), 1) : 1,
       sourcePort: resolvePort(edge.sourceSide, edge.sourceAt, hierarchy.direction),
       targetPort: resolvePort(edge.targetSide, edge.targetAt, hierarchy.direction),
-      minRadius: Math.min(finite(Math.max(edge.minRadius, 0)), radius),
+      radius: finite(Math.max(edge.radius, 0)),
       adornments: edge.adornments.map((adornment) => resolveEdgeAdornment(adornment, hierarchy)),
     }
   })
@@ -612,7 +614,7 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
         return {
           points: [],
           radii: [],
-          insets: [],
+          outsets: [],
           adornments: (edges[i] as Edge.Edge<string>).adornments.map(() => ({
             rect: Rect.make(),
             angle: 0,
@@ -623,7 +625,7 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
       return {
         points: route.points.map(point),
         radii: route.radii,
-        insets: route.insets,
+        outsets: route.outsets,
         adornments: route.adornments.map((placed) => ({
           rect: rect(placed.rect),
           angle: placed.angle,

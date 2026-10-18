@@ -7,7 +7,7 @@ import * as Rect from '../../rect.ts'
 import type { PlacedAdornment, SolveAdornment } from '../adornments.ts'
 import type { XY } from '../orient.ts'
 import { placeAdornments, placeFlow } from './adornments.ts'
-import { cornerInsets, cornerRadii } from './corners.ts'
+import { cornerOutsets, cornerRadii } from './corners.ts'
 import { type Locks, emptyLocks, shiftLocks } from './locks.ts'
 import { addWhisk, planMerges, stepped } from './merge.ts'
 import { type RouteConstraints, bundled, nudgeRoutes } from './nudge.ts'
@@ -39,7 +39,7 @@ import { type SharedEnd, placePorts } from './spread.ts'
 // 5. `nudge` moves routes that run alongside each other apart.
 // 6. `straightenPorts` slides auto ports to take out short jogs.
 // 7. The whisks lead merged ends onto their shared ports, and the jogs and
-//    corners that later passes leave alone are noted.
+//    corner sizes that later passes leave alone are noted.
 // 8. `placeFlow` lays out the flow adornments, whose stretches wall off
 //    corners.
 // 9. `cornerRadii` sizes the corners, `slantJogs` slants the short jogs,
@@ -177,10 +177,10 @@ export function solve(problem: Problem): ConnectorLayout {
 
   // Merged ends lead from their lanes to the shared port. Their steps keep
   // the corners they were given, so nothing slants them further. Where a
-  // route leaves a group that goes on without it, it turns as tight as the
-  // merge allows, and the jog that leaves it stays upright. A jog in a
-  // bundle turns with it, so it stays upright too. The locks carry these
-  // decisions to the passes that size corners and slant jogs.
+  // route leaves a group that goes on without it, the jog that leaves it
+  // stays upright. A jog in a bundle turns with it, so it stays upright
+  // too. The locks carry these decisions to the passes that size corners
+  // and slant jogs.
   const mergesOf = found.map(
     (i) => [mergeOf.get(endId(i, 0)) ?? -1, mergeOf.get(endId(i, 1)) ?? -1] as const,
   )
@@ -189,7 +189,6 @@ export function solve(problem: Problem): ConnectorLayout {
     const i = found[k] as number
     let locks = emptyLocks()
     for (const corner of parting[k] ?? []) {
-      locks.parting.add(corner)
       locks.upright.add(corner - 1).add(corner)
     }
     for (const segment of coupled[k] ?? []) {
@@ -246,16 +245,12 @@ export function solve(problem: Problem): ConnectorLayout {
         : [],
     )
   })
-  // The steps keep the corners they were given, and nest with nothing.
+  // The steps keep the corners they were given.
   const radii = found.map((i) => (edges[i] as ProblemEdge).radius)
   const walls = flows.map((flow) => flow.walls)
   const thickness = found.map((i) => (edges[i] as ProblemEdge).thickness)
-  // The tightest a merged route turns: the merge gap inside its stroke.
-  const turning = thickness.map((width) => mergeGap + width / 2)
-  const tight = { thickness, exits: locks.map((held) => held.parting), turning }
   const sizes = cornerRadii(nudged, radii, walls, {
     fixed: locks.map((held) => held.cornerSize),
-    ...tight,
   })
   // Short jogs slant, and the flow adornments past them move up the
   // shorter route.
@@ -272,7 +267,7 @@ export function solve(problem: Problem): ConnectorLayout {
   // Then the corners settle on the routes as drawn. A slanted corner keeps
   // its size, and so do the corners at the far ends of its legs, which the
   // slant made room beside; the corners nested inside a slanted one grow
-  // with its arc.
+  // to its arc.
   const shaped = slanted.map(({ route }) => route)
   const settled = cornerRadii(nudged, radii, walls, {
     fixed: slanted.map(({ route: { points }, radii: slantedSizes }, k) => {
@@ -291,9 +286,8 @@ export function solve(problem: Problem): ConnectorLayout {
       return kept
     }),
     shaped,
-    ...tight,
   })
-  const insets = cornerInsets(nudged, settled, shaped)
+  const outsets = cornerOutsets(nudged, settled, shaped)
 
   // What the routes gave up, and what would have fit them.
   const notes: Array<ConnectorNote> = []
@@ -353,7 +347,7 @@ export function solve(problem: Problem): ConnectorLayout {
     result[i] = {
       points: single ? [points[0] as Point.Point, points[0] as Point.Point] : points,
       radii: single ? [0, 0] : routeRadii,
-      insets: single ? [0, 0] : (insets[k] as Array<number>),
+      outsets: single ? [0, 0] : (outsets[k] as Array<number>),
       adornments: landed.map((adornment, a) => placementOf(adornment, list[a] as SolveAdornment)),
       merged: [leaders.get(endId(i, 0)) ?? -1, leaders.get(endId(i, 1)) ?? -1],
     }

@@ -73,7 +73,7 @@ export interface SolveEdge {
   readonly targetPort: SolvePort
   // The least each corner reaches along its legs, finite and at least 0,
   // which the channels keep room for.
-  readonly minRadius: number
+  readonly radius: number
   // The adornments in logical terms, for the room they take.
   readonly adornments: ReadonlyArray<SolveAdornment>
 }
@@ -352,7 +352,7 @@ export function place(
             face === sourceFace ? stubOf(edge, 0, face) : 0,
             face === targetFace ? stubOf(edge, 1, face) : 0,
           )
-          runBeside(node, face, past(straightFor(stub, edge.minRadius)))
+          runBeside(node, face, past(straightFor(stub, edge.radius)))
         }
       }
     }
@@ -442,7 +442,7 @@ export function place(
           face: upperPort.face >= 0 ? upperPort.face : RANK_END,
           at: upperPort.at,
           stub: runLength(upperItems),
-          corner: edge.minRadius,
+          corner: edge.radius,
           direction: 1,
           toward: anchors[chain[1] as number] as number,
         },
@@ -452,7 +452,7 @@ export function place(
           face: lowerPort.face >= 0 ? lowerPort.face : RANK_START,
           at: lowerPort.at,
           stub: runLength(lowerItems),
-          corner: edge.minRadius,
+          corner: edge.radius,
           direction: -1,
           toward: anchors[chain[chain.length - 2] as number] as number,
         },
@@ -680,7 +680,7 @@ export function place(
       const edge = edges[edgeIndex] as SolveEdge
       for (const [end, port] of [edge.sourcePort, edge.targetPort].entries()) {
         const face = port.face >= 0 ? port.face : ORDER_END
-        const out = straightFor(stubOf(edge, end, face), edge.minRadius)
+        const out = straightFor(stubOf(edge, end, face), edge.radius)
         if (face === RANK_START) {
           need((ranks[node] as number) - 1, past(out) - faceInset(node, -1))
         } else if (face === RANK_END) {
@@ -797,8 +797,8 @@ export function place(
         { face: targetFace, at: at(edge.targetPort, 1) },
       ]
       stubs[index] = [
-        straightFor(packOf(edge.adornments, 0, sourceFace, true, options.mirror), edge.minRadius),
-        straightFor(packOf(edge.adornments, 1, targetFace, false, options.mirror), edge.minRadius),
+        straightFor(packOf(edge.adornments, 0, sourceFace, true, options.mirror), edge.radius),
+        straightFor(packOf(edge.adornments, 1, targetFace, false, options.mirror), edge.radius),
       ]
     }
   }

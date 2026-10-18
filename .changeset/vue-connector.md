@@ -22,8 +22,8 @@ routes between boxes that are already placed, around the others.
   `jogAt`, `r`, `smoothing`, and paint props, and draws its route as a path, with
   corners rounded within the sizes the layout solved. Its stroke width is
   the thickness the layout routes it with, unless a `thickness` prop pins
-  it, as for a stroke that widens on hover. The inner corners of
-  routes that turn together draw as their outermost corner moved in, so
+  it, as for a stroke that widens on hover. The corners of
+  routes that turn together draw as their innermost corner moved out, so
   smoothed corners keep one center too.
 - `ConnectorAdornment` decorates an edge with the props of
   `HierarchyAdornment`. At `'start'` or `'end'`, it packs against the node

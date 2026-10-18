@@ -18,7 +18,6 @@ describe('edge', () => {
     expect(edge.targetSide).toBe(Number.POSITIVE_INFINITY)
     expect(edge.targetAt).toBe(Number.POSITIVE_INFINITY)
     expect(edge.radius).toBe(0)
-    expect(edge.minRadius).toBe(0)
     expect(edge.thickness).toBe(0)
     expect(edge.adornments).toEqual([])
   })
@@ -84,14 +83,10 @@ describe('edge', () => {
     expect(Edge.setSourcePort(base, Edge.side.top).sourceAt).toBe(Number.POSITIVE_INFINITY)
   })
 
-  test('setRadius sets the radius and an optional minimum, in both forms', () => {
-    expect(Edge.setRadius(base, 12, 4)).toMatchObject({ radius: 12, minRadius: 4 })
-    expect(base.pipe(Edge.setRadius(8, 2))).toMatchObject({ radius: 8, minRadius: 2 })
-    // An omitted minimum keeps the current one.
-    const rounded = Edge.setRadius(base, 12, 4)
-    expect(Edge.setRadius(rounded, 6)).toMatchObject({ radius: 6, minRadius: 4 })
-    expect(rounded.pipe(Edge.setRadius(10))).toMatchObject({ radius: 10, minRadius: 4 })
-    expect(base).toMatchObject({ radius: 0, minRadius: 0 })
+  test('setRadius sets the radius, in both forms', () => {
+    expect(Edge.setRadius(base, 12).radius).toBe(12)
+    expect(base.pipe(Edge.setRadius(8)).radius).toBe(8)
+    expect(base.radius).toBe(0)
   })
 
   test('setTargetPort sets the side and an optional position', () => {
