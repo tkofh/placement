@@ -1,5 +1,7 @@
 import { Pipeable, dual } from 'curvy/utils'
+import type * as AspectRatio from './aspectRatio.ts'
 import type { DimensionsLike } from './dimensions.ts'
+import { type RawAspectRatio, toRawRatio } from './internal/aspectRatio.ts'
 import {
   HasPercent,
   type RawLength,
@@ -32,7 +34,7 @@ type LengthField =
   | 'maxHeight'
 
 type RawLengths = { readonly [K in LengthField]: RawLength } & {
-  readonly aspectRatio: number | undefined
+  readonly aspectRatio: RawAspectRatio
 }
 
 const LENGTH_FIELDS: ReadonlyArray<LengthField> = [
@@ -117,11 +119,14 @@ export interface FrameInput<K extends string | undefined = string | undefined> {
    */
   readonly height?: Length.LengthInput | undefined
   /**
-   * The width-to-height ratio (`width / height`). The frame uses it to
-   * derive whichever of `width` and `height` is unset. Non-positive and
-   * `NaN` ratios act as unset. If you omit it, the ratio is unset.
+   * The width-to-height ratio, as a number (`width / height`) or an
+   * `AspectRatio` (from `placement/aspectRatio`). The frame uses it to
+   * derive whichever of `width` and `height` is unset. An `AspectRatio`
+   * derives it with one rounding (see `AspectRatio.heightFor`). Ratios
+   * whose value is non-positive or `NaN` act as unset. If you omit it, the
+   * ratio is unset.
    */
-  readonly aspectRatio?: number | undefined
+  readonly aspectRatio?: AspectRatio.AspectRatioInput | undefined
   /**
    * The lower bound on the resolved width. Negative values clamp to `0`.
    * Defaults to `0`. A percentage is of the container's width.
@@ -280,7 +285,7 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
       offsetLeft: toRaw(input.offsetLeft),
       width: toRaw(input.width),
       height: toRaw(input.height),
-      aspectRatio: input.aspectRatio,
+      aspectRatio: toRawRatio(input.aspectRatio),
       minWidth: toRaw(input.minWidth),
       minHeight: toRaw(input.minHeight),
       maxWidth: toRaw(input.maxWidth),
@@ -392,7 +397,9 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
    * fields come back as `undefined`, never as their resolved values.
    * Percentages come back as `Length`s, which `JSON.stringify` writes as
    * `{ value, unit }` records and `make` reads back. A `'px'` length comes
-   * back as its number.
+   * back as its number. An `AspectRatio` comes back as itself, written as a
+   * `{ numerator, denominator }` record, unless its denominator is `1`, when
+   * it comes back as its numerator.
    * `JSON.stringify` drops the unset fields (and an unset `id`) and writes
    * infinite values (`align`/`stretch` inherit, auto offsets) as `null`. The `make` factory reads `null` back as the default
    * of the field. A JSON round trip therefore keeps inheritance but turns
@@ -841,19 +848,26 @@ export const setHeight: {
  * data-last form omits `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param aspectRatio - The new ratio, as `width / height`.
+ * @param aspectRatio - The new ratio, as `width / height` or an `AspectRatio`.
  * @returns A new frame with the ratio replaced.
  * @example
  * ```ts
  * Frame.setAspectRatio(Frame.make({ width: 100 }), 4).height // 25
+ * Frame.setAspectRatio(Frame.make({ height: 7 }), AspectRatio.make(16, 9)).width
+ * // 12.444444444444445
  * ```
  */
 export const setAspectRatio: {
-  <K extends string | undefined>(self: Frame<K>, aspectRatio: number): Frame<K>
-  (aspectRatio: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(
+    self: Frame<K>,
+    aspectRatio: AspectRatio.AspectRatioInput,
+  ): Frame<K>
+  (
+    aspectRatio: AspectRatio.AspectRatioInput,
+  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, aspectRatio: number) =>
+  <K extends string | undefined>(self: Frame<K>, aspectRatio: AspectRatio.AspectRatioInput) =>
     new Frame({ ...self.toJSON(), aspectRatio }),
 )
 

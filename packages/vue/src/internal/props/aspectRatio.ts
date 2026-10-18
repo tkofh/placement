@@ -1,34 +1,61 @@
+import * as AspectRatio from 'placement/aspectRatio'
 import { type ParserInput, map, oneOf, parse } from 'valued'
 import { keyword } from 'valued/data/keyword'
 import { isRatioValue, ratio } from 'valued/data/ratio'
 import { createCache } from '../cache.ts'
 
 // `null` marks the values that fall back to the caller's `auto`: the keyword
-// itself, and degenerate ratios (`1/0`).
-const aspectRatio = map(oneOf([ratio(), keyword('auto')]), (value): number | null =>
-  isRatioValue(value) && !value.isDegenerate ? value.value : null,
+// itself, and degenerate ratios (`1/0`). A bare number parses over `1`, and
+// the core stores such a ratio as its numerator.
+const aspectRatio = map(
+  oneOf([ratio(), keyword('auto')]),
+  (value): AspectRatio.AspectRatio | null =>
+    isRatioValue(value) && !value.isDegenerate
+      ? AspectRatio.make(value.numerator, value.denominator)
+      : null,
 )
 
-export type AspectRatio = typeof aspectRatio
+export type AspectRatioParser = typeof aspectRatio
 
-export type AspectRatioInput = ParserInput<AspectRatio> | number | undefined
+export type AspectRatioInput = ParserInput<AspectRatioParser> | number | undefined
 
-const cache = createCache<string, number | null>(512)
+const cache = createCache<string, AspectRatio.AspectRatio | null>(512)
 
-function parseAspectRatio(input: string): number | null {
+function parseAspectRatio(input: string): AspectRatio.AspectRatio | null {
   return cache(input, () => {
     const parsed = parse(input, aspectRatio)
     return parsed.valid ? parsed.value : null
   })
 }
 
-export function resolveAspectRatio(
+/**
+ * Parses a ratio prop into what the core ratio fields take: a number, or
+ * an `AspectRatio` that keeps the numerator and the denominator, so that
+ * the core derives extents from `16 / 9` with one rounding (see
+ * `placement/aspectRatio`). A ratio over `1` comes back as its numerator.
+ *
+ * @param input - The prop value.
+ * @param auto - The value for unset, `auto`, degenerate, and unparsable inputs.
+ * @returns The ratio input.
+ */
+export function toAspectRatio(
   input: AspectRatioInput,
   auto = Number.POSITIVE_INFINITY,
-): number {
+): AspectRatio.AspectRatioInput {
   if (typeof input === 'number' || input === undefined) {
     return input ?? auto
   }
 
-  return parseAspectRatio(input) ?? auto
+  const parsed = parseAspectRatio(input)
+  if (parsed === null) {
+    return auto
+  }
+  return parsed.denominator === 1 ? parsed.numerator : parsed
+}
+
+export function resolveAspectRatio(
+  input: AspectRatioInput,
+  auto = Number.POSITIVE_INFINITY,
+): number {
+  return AspectRatio.toNumber(toAspectRatio(input, auto))
 }

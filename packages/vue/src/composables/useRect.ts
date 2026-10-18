@@ -6,7 +6,7 @@ import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 import type { AspectRatioInput } from '../internal/props/aspectRatio.ts'
 import type { OriginInput } from '../internal/props/origin.ts'
 import { type Size1DInput, resolveSize1D } from '../internal/props/size1d.ts'
-import { useAspectRatio } from '../props/aspectRatio.ts'
+import { useAspectRatioInput } from '../props/aspectRatio.ts'
 import { useLength } from '../props/lengthPercentage.ts'
 import { useOrigin } from '../props/origin.ts'
 import { useParentHeight, useParentWidth, useParentX, useParentY } from './useSizingContext.ts'
@@ -141,7 +141,7 @@ export function useRect(props: RectProps, options: UseRectOptions = {}): Compute
   // resolves them against the parent rect (see `placement/box`).
   const width = useLength(() => props.width, Number.NaN)
   const height = useLength(() => props.height, Number.NaN)
-  const aspectRatio = useAspectRatio(() => props.aspectRatio, Number.NaN)
+  const aspectRatio = useAspectRatioInput(() => props.aspectRatio, Number.NaN)
   const minWidth = useLength(() => props.minWidth, Number.NaN)
   const minHeight = useLength(() => props.minHeight, Number.NaN)
   const maxWidth = useLength(() => props.maxWidth, Number.NaN)

@@ -22,6 +22,10 @@
       "types": "./dist/adornment.d.mts",
       "import": "./dist/adornment.mjs"
     },
+    "./aspectRatio": {
+      "types": "./dist/aspectRatio.d.mts",
+      "import": "./dist/aspectRatio.mjs"
+    },
     "./box": {
       "types": "./dist/box.d.mts",
       "import": "./dist/box.mjs"

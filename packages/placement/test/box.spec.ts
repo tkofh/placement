@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import * as AspectRatio from '../src/aspectRatio.ts'
 import * as Box from '../src/box.ts'
 import * as Dimensions from '../src/dimensions.ts'
 import * as Length from '../src/length.ts'
@@ -408,5 +409,54 @@ describe('percentages', () => {
     const nan = Rect.make(0, 0, Number.NaN, 100)
     expect(Box.apply(Box.make({ width: pct(50), height: 10 }), nan).height).toBe(10)
     expect(Box.resolve(Box.make({ width: pct(50) }), nan).width).toBeNaN()
+  })
+})
+
+describe('aspect ratio pairs', () => {
+  const r169 = AspectRatio.make(16, 9)
+
+  test('a pair derives the width with one rounding', () => {
+    const box = Box.make({ height: 7, aspectRatio: r169 })
+    expect(Box.apply(box, parent).width).toBe(112 / 9)
+    expect(box.pipe(Box.apply(parent)).width).toBe(112 / 9)
+  })
+
+  test('a pair derives the height from inset-determined width', () => {
+    expect(Box.apply(Box.make({ left: 0, right: 240, aspectRatio: r169 }), parent)).toEqual(
+      Rect.make(0, 0, 160, 90),
+    )
+  })
+
+  test('a ratio over 1 behaves as its number', () => {
+    for (const input of [{ height: 7 }, { width: 7 }, { top: 0, bottom: 0 }]) {
+      expect(
+        Box.apply(Box.make({ ...input, aspectRatio: AspectRatio.make(16 / 9) }), parent),
+      ).toEqual(Box.apply(Box.make({ ...input, aspectRatio: 16 / 9 }), parent))
+    }
+  })
+
+  test('the getter reads the value and toJSON keeps the pair', () => {
+    const box = Box.make({ aspectRatio: r169 })
+    expect(box.aspectRatio).toBe(16 / 9)
+    expect(box.toJSON().aspectRatio).toBe(r169)
+    expect(Box.make({ aspectRatio: AspectRatio.make(2) }).toJSON().aspectRatio).toBe(2)
+  })
+
+  test('a JSON round trip keeps the pair', () => {
+    const box = Box.make({ height: 7, aspectRatio: r169 })
+    const revived = Box.make(JSON.parse(JSON.stringify(box)))
+    expect(revived.toJSON().aspectRatio).toEqual(r169)
+    expect(Box.apply(revived, parent)).toEqual(Box.apply(box, parent))
+  })
+
+  test('setAspectRatio takes a pair', () => {
+    const box = Box.make({ height: 7 })
+    expect(Box.apply(Box.setAspectRatio(box, r169), parent).width).toBe(112 / 9)
+    expect(Box.apply(box.pipe(Box.setAspectRatio(r169)), parent).width).toBe(112 / 9)
+  })
+
+  test('a degenerate pair acts as unset', () => {
+    const box = Box.make({ height: 10, aspectRatio: AspectRatio.make(1, 0) })
+    expect(Box.apply(box, parent).width).toBe(400)
   })
 })

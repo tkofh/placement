@@ -1,4 +1,6 @@
 import { clamp } from 'curvy/number'
+import type * as AspectRatio from '../aspectRatio.ts'
+import { heightOf, valueOf, widthOf } from '../internal/ratio.ts'
 
 // Generic so that `Box` and `Frame` can pass `Length` inputs through. A
 // missing value defaults to `0`.
@@ -87,14 +89,16 @@ export interface NormalizedSizing {
 }
 
 // Resolves a width/height pair from inputs that can be unset (NaN means
-// unset) and an optional aspect ratio (0 means unset). If both dimensions are
+// unset) and an optional aspect ratio (0 means unset). The ratio's value
+// gates the derivation, and the ratio itself derives the extent, so a
+// `16 / 9` ratio rounds once (see `placement/aspectRatio`). If both dimensions are
 // definite, they win. If one dimension is definite and a ratio is set, the
 // ratio derives the other. A ratio alone applies against the clamped zero
 // fallbacks. Otherwise, both fall back to clamped zero. Crossed constraints
 // resolve as CSS clamp() does: the maximum rises to the minimum, so the
 // minimum wins.
 export function normalizeSizing(
-  aspectRatio: number,
+  aspectRatio: AspectRatio.AspectRatioInput,
   width: number,
   height: number,
   minWidth: number,
@@ -104,7 +108,7 @@ export function normalizeSizing(
 ): NormalizedSizing {
   const min = [Math.max(minWidth, 0), Math.max(minHeight, 0)] as const
   const max = [Math.max(maxWidth, min[0]), Math.max(maxHeight, min[1])] as const
-  const ratio = Math.max(aspectRatio, 0)
+  const ratio = Math.max(valueOf(aspectRatio), 0)
 
   const widthIsSet = !Number.isNaN(width)
   const heightIsSet = !Number.isNaN(height)
@@ -117,20 +121,20 @@ export function normalizeSizing(
     resolvedHeight = clamp(height, min[1], max[1])
   } else if (ratio > 0 && widthIsSet) {
     resolvedWidth = clamp(width, min[0], max[0])
-    resolvedHeight = clamp(resolvedWidth / ratio, min[1], max[1])
+    resolvedHeight = clamp(heightOf(aspectRatio, resolvedWidth), min[1], max[1])
   } else if (ratio > 0 && heightIsSet) {
     resolvedHeight = clamp(height, min[1], max[1])
-    resolvedWidth = clamp(resolvedHeight * ratio, min[0], max[0])
+    resolvedWidth = clamp(widthOf(aspectRatio, resolvedHeight), min[0], max[0])
   } else {
     const fallbackWidth = clamp(widthIsSet ? width : 0, min[0], max[0])
     const fallbackHeight = clamp(heightIsSet ? height : 0, min[1], max[1])
 
     if (ratio > 0 && fallbackWidth === 0) {
       resolvedHeight = fallbackHeight
-      resolvedWidth = clamp(fallbackHeight * ratio, min[0], max[0])
+      resolvedWidth = clamp(widthOf(aspectRatio, fallbackHeight), min[0], max[0])
     } else if (ratio > 0) {
       resolvedWidth = fallbackWidth
-      resolvedHeight = clamp(fallbackWidth / ratio, min[1], max[1])
+      resolvedHeight = clamp(heightOf(aspectRatio, fallbackWidth), min[1], max[1])
     } else {
       resolvedWidth = fallbackWidth
       resolvedHeight = fallbackHeight

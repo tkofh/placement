@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import * as AspectRatio from '../src/aspectRatio.ts'
 import * as Dimensions from '../src/dimensions.ts'
 import * as Flexbox from '../src/flexbox.ts'
 import * as Frame from '../src/frame.ts'
@@ -514,5 +515,51 @@ describe('percentages', () => {
     expect(resolved.toJSON().minWidth).toBeUndefined()
     expect(resolved.minWidth).toBe(0)
     expect(resolved.offsetTop).toBeNaN()
+  })
+})
+
+describe('aspect ratio pairs', () => {
+  const r169 = AspectRatio.make(16, 9)
+
+  test.each([
+    ['height set', { height: 7, aspectRatio: r169 }, 112 / 9, 7],
+    ['width set', { width: 160, aspectRatio: r169 }, 160, 90],
+    ['min height only', { minHeight: 7, aspectRatio: r169 }, 112 / 9, 7],
+    ['min width only', { minWidth: 160, aspectRatio: r169 }, 160, 90],
+  ] as const)('%s derives with one rounding', (_, input, width, height) => {
+    const frame = Frame.make(input)
+    expect(frame.width).toBe(width)
+    expect(frame.height).toBe(height)
+  })
+
+  test('a ratio over 1 behaves as its number', () => {
+    for (const input of [{ height: 7 }, { width: 7 }, { minHeight: 3 }, {}]) {
+      expect(Frame.make({ ...input, aspectRatio: AspectRatio.make(16 / 9) }).toJSON()).toEqual(
+        Frame.make({ ...input, aspectRatio: 16 / 9 }).toJSON(),
+      )
+    }
+  })
+
+  test('toJSON keeps the pair and a JSON round trip restores it', () => {
+    const frame = Frame.make({ height: 7, aspectRatio: r169 })
+    expect(frame.toJSON().aspectRatio).toBe(r169)
+    const revived = Frame.make(JSON.parse(JSON.stringify(frame)))
+    expect(revived.toJSON().aspectRatio).toEqual(r169)
+    expect(revived.width).toBe(112 / 9)
+  })
+
+  test('setAspectRatio takes a pair', () => {
+    expect(Frame.setAspectRatio(Frame.make({ height: 7 }), r169).width).toBe(112 / 9)
+    expect(Frame.make({ height: 7 }).pipe(Frame.setAspectRatio(r169)).width).toBe(112 / 9)
+  })
+
+  test('flex items derive through the pair', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ height: 7, aspectRatio: r169 })],
+        Flexbox.make({}),
+        Rect.make(400),
+      ),
+    ).toEqual([Rect.make(0, 0, 112 / 9, 7)])
   })
 })
