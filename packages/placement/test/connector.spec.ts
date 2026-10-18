@@ -355,6 +355,101 @@ describe('apply', () => {
     expect(pointsOf(routed(40), 1)?.[0]).toEqual([240, 180])
   })
 
+  test('routes that part from a merge in order keep it through unavoidable crossings', () => {
+    // Three routes merge on the left of db and run back west as one bundle,
+    // then turn north and peel off west one by one: auth first, then
+    // billing, then orders. The routes from events down to the workers
+    // must cross all three, and billing's route to events must cross
+    // orders' route to db, so the segments on the shared column prefer
+    // orders in a cycle. The cycle breaks at those unavoidable crossings,
+    // not at the bundle's own order: auth's column sits west of billing's,
+    // and billing's west of orders', so none crosses another's lane.
+    const rects = {
+      orders: Rect.make(512, 96, 120, 40),
+      billing: Rect.make(500, 260, 120, 40),
+      auth: Rect.make(505, 342, 112, 40),
+      events: Rect.make(784, 176, 136, 40),
+      db: Rect.make(784, 360, 120, 40),
+      mailer: Rect.make(557, 540, 112, 36),
+      indexer: Rect.make(692, 540, 112, 36),
+    }
+    const head = arrow(1, Adornment.orient.forward)
+    const edge = (source: keyof typeof rects, target: keyof typeof rects) =>
+      Edge.make({ source, target, radius: 16, thickness: 2, adornments: [head] })
+    const edges = [
+      edge('auth', 'db'),
+      edge('billing', 'events'),
+      edge('orders', 'db'),
+      edge('billing', 'db'),
+      edge('events', 'mailer'),
+      edge('events', 'indexer'),
+    ]
+    const layout = Connector.apply(
+      rects,
+      edges,
+      Connector.make({ clearance: 16, gap: 8, merge: Connector.merge.side, mergeGap: 4 }),
+    )
+    // The column of each route to db: the x of its last vertical segment.
+    const column = (i: number) => {
+      const points = layout.edges[i]?.points ?? []
+      for (let k = points.length - 1; k > 0; k--) {
+        const [a, b] = [points[k - 1] as Point.Point, points[k] as Point.Point]
+        if (a.x === b.x && a.y !== b.y) {
+          return a.x
+        }
+      }
+      return Number.NaN
+    }
+    const [auth, orders, billing] = [column(0), column(2), column(3)]
+    expect(auth).toBeLessThan(billing)
+    expect(billing).toBeLessThan(orders)
+    // The bundle keeps the merge gap, with the strokes 2 wide.
+    expect(billing - auth).toBeCloseTo(6, 9)
+    expect(orders - billing).toBeCloseTo(6, 9)
+  })
+
+  test('an auto end comes in on a side with room for its corner and arrowhead', () => {
+    // Down the seam between b and c, 10 apart, the route reaches the right
+    // of b with one corner, but only 5 in front of the port. Round the top
+    // it needs a corner more and 10 more length, 30 at a corner cost of 20.
+    const rects = {
+      a: Rect.make(125, 0, 40, 20),
+      b: Rect.make(100, 100, 40, 20),
+      c: Rect.make(150, 100, 40, 20),
+    }
+    const tight = Connector.make({ clearance: 10, gap: 4, bendCost: 20 })
+    const routed = (edge: Edge.Edge<'a' | 'b' | 'c'>) =>
+      pointsOf(Connector.apply(rects, [edge], tight))
+    expect(routed(Edge.make({ source: 'a', target: 'b' }))).toEqual([
+      [145, 20],
+      [145, 110],
+      [140, 110],
+    ])
+    // With a corner of 10 and an arrowhead of 10, the end needs 20, and
+    // falls short by its whole radius: twice the corner cost, 40. Round the
+    // top, the nudge gives the final leg room for both.
+    const dressed = Edge.make({
+      source: 'a',
+      target: 'b',
+      radius: 10,
+      adornments: [arrow(1, Adornment.orient.forward)],
+    })
+    const layout = Connector.apply(rects, [dressed], tight)
+    expect(pointsOf(layout)).toEqual([
+      [145, 20],
+      [145, 60],
+      [120, 60],
+      [120, 100],
+    ])
+    expect(layout.edges[0]?.radii).toEqual([0, 10, 10, 0])
+    // A given side has no rival.
+    expect(routed(dressed.pipe(Edge.setTargetPort(Edge.side.right, 0.5)))).toEqual([
+      [145, 20],
+      [145, 110],
+      [140, 110],
+    ])
+  })
+
   test('ends next to each other whose routes cross trade ports', () => {
     // From the middle of the bottom of a, the routes to and from b run on
     // one path and never part, so the edge order places them, and they

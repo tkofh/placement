@@ -644,6 +644,53 @@ describe('shortestPath', () => {
     expect(shortestPath(ring, 0, [])).toBeUndefined()
   })
 
+  test('the cost of an endpoint weighs against the path to it', () => {
+    // The next node costs 10 to reach, the one past it 20.
+    expect(route(ring, 0, [{ node: 1, cost: 5 }, { node: 2 }])).toEqual({
+      nodes: [0, 1],
+      cost: 15,
+    })
+    expect(route(ring, 0, [{ node: 1, cost: 15 }, { node: 2 }])).toEqual({
+      nodes: [0, 1, 2],
+      cost: 20,
+    })
+    expect(route(ring, [{ node: 0, cost: 15 }, { node: 3 }], 2)).toEqual({
+      nodes: [3, 2],
+      cost: 10,
+    })
+    // Negative and non-finite costs are none.
+    expect(route(ring, 0, [{ node: 1, cost: -5 }, { node: 2 }])).toEqual({
+      nodes: [0, 1],
+      cost: 10,
+    })
+    expect(route(ring, 0, [{ node: 1, cost: Number.NaN }])).toEqual({ nodes: [0, 1], cost: 10 })
+  })
+
+  test('a path goes on past an end that costs more than the way to another', () => {
+    // Only the end at 2 that is reached heading down lies past 1.
+    const path = shortestPath(ring, 0, [
+      { node: 1, cost: 100 },
+      { node: 2, headings: [{ x: 0, y: 1 }] },
+    ])
+    expect(path).toEqual({ nodes: Int32Array.of(0, 1, 2), cost: 20, start: 0, end: 1 })
+  })
+
+  test('a path of one node costs its endpoints, the cheapest pair', () => {
+    expect(route(ring, [{ node: 2, cost: 3 }], [{ node: 2, cost: 4 }])).toEqual({
+      nodes: [2],
+      cost: 7,
+    })
+    const path = shortestPath(
+      ring,
+      [
+        { node: 2, cost: 3 },
+        { node: 2, cost: 1 },
+      ],
+      [{ node: 2, cost: 4 }, { node: 2 }],
+    )
+    expect(path).toEqual({ nodes: Int32Array.of(2), cost: 1, start: 1, end: 1 })
+  })
+
   test('among paths of equal cost, the one with fewer turns wins', () => {
     // Two paths 30 long: right, down, and right again through 1 and 2,
     // listed first, and down, then right, through 4 and 5.

@@ -11,11 +11,15 @@ import {
   pinOf,
   portOf,
   rectAt,
+  tightCostAt,
 } from './problem.ts'
 
 // The side selection phase. An auto side is the side of the cheapest route
 // over all four candidates, searched on one graph with a port at the middle
-// of every candidate side (or at the given position). With merging on, the
+// of every candidate side (or at the given position). A candidate with less
+// room in front of its port than the end needs for its adornments and
+// corner costs more (see `tightCostAt`), so an end comes in on a side with
+// room where that costs less than the way around. With merging on, the
 // routes whose ends at one rect could merge pull each other along, so that
 // they come in on one side. The search also yields a trial route, from the
 // middle of each side, for every edge with an auto position, which orders
@@ -41,6 +45,8 @@ interface Candidate {
   readonly side: number
   readonly pin: number
   readonly outward: number
+  // What the end costs on this side for the room it lacks there.
+  readonly cost: number
 }
 
 /**
@@ -75,18 +81,21 @@ export function chooseSides(problem: Problem): Sides {
       [edge.ends[0].rect, source, edge.ends[0].at, 1],
       [edge.ends[1].rect, target, edge.ends[1].at, -1],
     ] as const
-    return ends.map(([owner, side, at, outward]) =>
+    return ends.map(([owner, side, at, outward], end) =>
       (side === undefined ? [0, 1, 2, 3] : [side]).map((s): Candidate => {
         const port = portOf(problem, owner, s, at ?? 0.5)
         pins.push(pinOf(port, owner))
-        return { side: s, pin: pins.length - 1, outward }
+        // A given side has no rival, so its room weighs nothing.
+        const cost = side === undefined ? tightCostAt(problem, i, end, s, at ?? 0.5) : 0
+        return { side: s, pin: pins.length - 1, outward, cost }
       }),
     )
   })
   const { graph, pins: nodes } = visibilityGraph(obstacles, pins)
-  const endpoint = ({ side, pin, outward: scale }: Candidate): Endpoint => ({
+  const endpoint = ({ side, pin, outward: scale, cost }: Candidate): Endpoint => ({
     node: nodes[pin] as number,
     headings: [headingOf(side, scale)],
+    cost,
   })
   // The routes whose ends at one rect could merge pull each other along,
   // so that they come in on one side.

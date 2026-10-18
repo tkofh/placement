@@ -1,4 +1,8 @@
 import { describe, expect, test } from 'vitest'
+import * as Adornment from '../src/adornment.ts'
+import * as Connector from '../src/connector.ts'
+import * as Edge from '../src/edge.ts'
+import * as Frame from '../src/frame.ts'
 import { lengths, pointOnDrawn } from '../src/internal/adornments.ts'
 import { cornerInsets, cornerRadii } from '../src/internal/connector/corners.ts'
 import { addWhisk, step } from '../src/internal/connector/merge.ts'
@@ -10,12 +14,14 @@ import {
   partingSide,
 } from '../src/internal/connector/nudge.ts'
 import { straightenPorts } from '../src/internal/connector/ports.ts'
+import { normalize, roomAt, tightCostAt } from '../src/internal/connector/problem.ts'
 import { type Route, routeOf } from '../src/internal/connector/route.ts'
 import { type SlantedRoute, slantJogs } from '../src/internal/connector/slants.ts'
 import type { Obstacle } from '../src/internal/graph/graph.ts'
 import { shortestPath } from '../src/internal/graph/search.ts'
 import { type Pin, visibilityGraph } from '../src/internal/graph/visibility.ts'
 import { type Separation, type Variable, placeSeparated } from '../src/internal/separation.ts'
+import * as Rect from '../src/rect.ts'
 
 const place = (variables: ReadonlyArray<Variable>, constraints: ReadonlyArray<Separation>) => {
   const { positions, conflicts } = placeSeparated(variables, constraints)
@@ -317,6 +323,28 @@ describe('nudge', () => {
       pinned,
       a,
       route([-30, -5], [2.875, -5], [2.875, 45], [-30, 45]),
+    ])
+  })
+
+  test('the ranges two segments may sit in order them, whatever their sides say', () => {
+    // The two share y = 50 and part to different sides at the two ends, so
+    // a crossing is unavoidable, and the sides alone put a above b. But a
+    // runs straight through an anchor 4 below its line and keeps the gap
+    // from it, so it may only move down, and b likewise only up.
+    const a = route([0, 100], [0, 50], [100, 50], [100, 0])
+    const b = route([20, 0], [20, 50], [120, 50], [120, 100])
+    expect(nudge([a, b], [], 8)).toEqual([
+      route([0, 100], [0, 46], [100, 46], [100, 0]),
+      route([20, 0], [20, 54], [120, 54], [120, 100]),
+    ])
+    expect(
+      nudge([a, b], [], 8, [
+        { anchors: [[100, 46]], straight: [[100, 46]] },
+        { anchors: [[120, 54]], straight: [[120, 54]] },
+      ]),
+    ).toEqual([
+      route([0, 100], [0, 54], [100, 54], [100, 0]),
+      route([20, 0], [20, 46], [120, 46], [120, 100]),
     ])
   })
 
@@ -1270,5 +1298,55 @@ describe('slantJogs', () => {
     expect(drawn.tangent[0]).toBeCloseTo(0.6, 9)
     expect(drawn.tangent[1]).toBeCloseTo(0.8, 9)
     expect(drawn.distance).toBeCloseTo(32, 9)
+  })
+})
+
+describe('tight ends', () => {
+  // b has a neighbor 10 apart on its right, so the obstacles grow 5 toward
+  // each other there, and a across the seam above.
+  const rects = {
+    a: Rect.make(125, 0, 40, 20),
+    b: Rect.make(100, 100, 40, 20),
+    c: Rect.make(150, 100, 40, 20),
+  }
+  const spec = Connector.make({ clearance: 10, gap: 4, bendCost: 20 })
+  const arrow = Adornment.make({
+    frame: Frame.make({ width: 8, height: 6, offsetLeft: 2 }),
+    at: 1,
+    orient: Adornment.orient.forward,
+  })
+  const problemOf = (input: Partial<Edge.EdgeInput<'a' | 'b' | 'c'>> = {}) =>
+    normalize(rects, [Edge.make({ source: 'a', target: 'b', ...input })], spec)
+
+  test('the room in front of a port runs to the nearest obstacle across its line', () => {
+    const problem = problemOf()
+    // Up to a's obstacle, to c's, and off the bottom and left.
+    expect(roomAt(problem, 1, 0, 120)).toBe(70)
+    expect(roomAt(problem, 1, 1, 110)).toBe(5)
+    expect(roomAt(problem, 1, 2, 120)).toBe(Number.POSITIVE_INFINITY)
+    expect(roomAt(problem, 1, 3, 110)).toBe(Number.POSITIVE_INFINITY)
+    // Along the top of b, past a's obstacle, nothing is in front.
+    expect(roomAt(problem, 1, 0, 105)).toBe(Number.POSITIVE_INFINITY)
+    // An obstacle whose edge is on the line does not block it.
+    expect(roomAt(problem, 1, 0, 115)).toBe(Number.POSITIVE_INFINITY)
+    // An avoided rect counts too, and one that covers the port leaves none.
+    expect(roomAt(problem, 1, 2, 120, [Rect.make(0, 150, 200, 10)])).toBe(30)
+    expect(roomAt(problem, 1, 2, 120, [Rect.make(0, 110, 200, 20)])).toBe(0)
+  })
+
+  test.each([
+    ['nothing', {}, 0],
+    ['a corner', { radius: 10 }, 20],
+    ['an arrowhead', { adornments: [arrow] }, 20],
+    ['both', { radius: 10, adornments: [arrow] }, 40],
+    ['a corner too large to lose', { radius: 20, adornments: [arrow] }, 40],
+    ['a corner with room to spare', { radius: 2 }, 0],
+  ])('an end that needs %s costs by its shortfall, up to twice a corner', (_, input, cost) => {
+    const problem = problemOf(input)
+    // 5 in front of the right side, which the arrowhead alone, 10, falls
+    // short of by half its length; the corner of 10 by half its radius.
+    expect(tightCostAt(problem, 0, 1, 1, 0.5)).toBe(cost)
+    expect(tightCostAt(problem, 0, 1, 0, 0.5)).toBe(0)
+    expect(tightCostAt(problem, 0, 0, 2, 0.5)).toBe(0)
   })
 })

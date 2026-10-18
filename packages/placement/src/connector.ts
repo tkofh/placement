@@ -78,8 +78,10 @@ export interface ConnectorInput {
    * to this long to save a corner. Among routes of equal cost, the one with
    * fewer corners wins anyway. It is the one scale of every cost: a
    * crossing costs two fifths of it (a route takes a detour up to that long
-   * to cross one route fewer), and a corner that turns against an edge's
-   * preferred `turn` costs it twice over. A route crosses another where it
+   * to cross one route fewer), a corner that turns against an edge's
+   * preferred `turn` costs it twice over, and an auto end with no room in
+   * front of its port for its adornments and corner costs up to twice it
+   * (see `apply`). A route crosses another where it
    * runs straight on across a stretch that the other runs straight along.
    * Routes find these among the routes found before them, then again among
    * all the others. An omitted or non-finite value is auto: twice the
@@ -710,7 +712,10 @@ export interface ConnectorLayout<K extends string = string> {
  *    all the others.
  * 3. It nudges routes that run alongside each other apart, their strokes
  *    `gap` apart (see the edges' `thickness`), ordered so that routes that
- *    share a path cross only where they must.
+ *    share a path cross only where they must. Where two must cross
+ *    whichever way they sit, they sit where they want to be, and where
+ *    the orders that pairs of routes ask for conflict, the pairs that must
+ *    cross anyway give way first.
  *    Where a passage is too narrow, the routes in it spread evenly across
  *    it. A jog between turns that go opposite ways moves to `jogAt` of the
  *    run it shifts, the middle by default. On the way it passes any route
@@ -720,7 +725,15 @@ export interface ConnectorLayout<K extends string = string> {
  * Ports come from each edge's sides and positions. A port sits on its side
  * of its rect, at its `sourceAt` or `targetAt` along the side, and the route
  * leaves it straight out from the side. An auto side (an omitted or
- * non-finite one) is the side of the cheapest route among all four. With
+ * non-finite one) is the side of the cheapest route among all four. An end
+ * needs a straight run out of its port for the flow adornments packed
+ * there and the corner past them, the edge's `radius`; where a side has
+ * less room in front of its port than that, up to the nearest rect across
+ * the line out of it, the corner would shrink and the adornments spill
+ * around it, so the side costs more: up to twice the `bendCost`, growing
+ * with the shortfall until it is as long as the radius or the pack,
+ * whichever is longer. An end comes in on a side with room where that
+ * costs less than the way around. With
  * `merge` on, a route's length costs a tenth less where it runs along
  * the route of an edge whose end at one of its rects could merge with
  * its own, so ends come in on one side to merge there where that costs

@@ -28,7 +28,11 @@ the outer one in, back up past their shared center and as a slanted jog
 flattens it, and each
 route's `insets` say how far inside the outermost corner of its nest each
 corner sits.
-An auto side is the side of the cheapest route, and auto ports that share a
+An auto side is the side of the cheapest route, where a side with less
+room in front of its port than the end needs for its adornments and the
+corner past them costs up to twice the bend cost more, so an end comes in
+on a side with room where that costs less than the way around. Auto ports
+that share a
 side spread out in the order their routes part in, so that the routes nest
 instead of crossing at the rect. Ports sit on the rects, or on the shapes
 that `apply`'s `shapes` option gives them, as `Hierarchy.apply` takes
@@ -39,7 +43,11 @@ each with the way the route arrives there (`arriving`) and leaves
 gap from it; stay out of its own `avoid` rects; and prefer clockwise or
 counterclockwise turns. Nudging never takes a waypoint off its route, and
 a segment that moves takes the open side of one that stays put on the
-line of a wall. A jog, the rise of a Z-shaped route, sits at the
+line of a wall. Routes that run alongside each other sit in the order
+their ends ask for; two that must cross whichever way they sit take the
+sides that leave them where they want to be, and where the orders that
+pairs of routes ask for conflict, the pairs that must cross anyway give
+way first, so the lanes of a merge peel off in order. A jog, the rise of a Z-shaped route, sits at the
 spec's `jogAt` of the run it shifts (the middle by default, or per edge),
 and passes routes that run alongside all of it, since that adds no
 crossing. A jog too short for its two corners slants into an S (two arcs

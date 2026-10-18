@@ -61,22 +61,49 @@ export function findReversed(
 }
 
 // Returns the position of each item in an order that follows as many of the
-// preferred pairs as it can: each edge prefers its source before its target.
-// When the preferences form a cycle, a depth-first search in input order
-// breaks it. Among the items that are free to go next, the lowest index goes
-// first, so items without a preference between them keep input order.
+// preferred pairs as it can, the weightier first: each edge prefers its
+// source before its target. The edges are taken from the heaviest down, and
+// in input order among equals, and each that would close a cycle with those
+// taken before it is left out, so a cycle breaks at its lightest edge. Every
+// edge weighs the same when `weights` leaves it out. Among the items that
+// are free to go next, the lowest index goes first, so items without a
+// preference between them keep input order.
 export function preferredOrder(
   count: number,
   preferred: ReadonlyArray<DirectedEdge>,
+  weights: ReadonlyArray<number> = [],
 ): Array<number> {
-  const reversed = findReversed(count, preferred)
+  const weight = (k: number) => weights[k] ?? 0
+  const taken = [...preferred.keys()].toSorted((a, b) => weight(b) - weight(a) || a - b)
   const before: Array<Array<number>> = Array.from({ length: count }, () => [])
   const pending = Array.from({ length: count }, () => 0)
-  for (const [k, { source, target }] of preferred.entries()) {
-    const [first, second] = reversed[k] ? [target, source] : [source, target]
-    ;(before[first] as Array<number>).push(second)
-    const waiting = pending[second] as number
-    pending[second] = waiting + 1
+  // Whether `to` already follows `from` through the edges taken.
+  const follows = (from: number, to: number) => {
+    const seen = new Uint8Array(count)
+    const stack = [from]
+    seen[from] = 1
+    while (stack.length > 0) {
+      const node = stack.pop() as number
+      if (node === to) {
+        return true
+      }
+      for (const next of before[node] as Array<number>) {
+        if (seen[next] === 0) {
+          seen[next] = 1
+          stack.push(next)
+        }
+      }
+    }
+    return false
+  }
+  for (const k of taken) {
+    const { source, target } = preferred[k] as DirectedEdge
+    if (source === target || follows(target, source)) {
+      continue
+    }
+    ;(before[source] as Array<number>).push(target)
+    const waiting = pending[target] as number
+    pending[target] = waiting + 1
   }
 
   const position = Array.from({ length: count }, () => -1)

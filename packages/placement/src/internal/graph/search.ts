@@ -19,7 +19,10 @@ import type { Graph, Obstacle } from './graph.ts'
 // zero, relative to their lengths, and their dot product is positive.
 //
 // A path may start at any of several endpoints and end at any of several,
-// each with the headings it allows, so one search can choose a port.
+// each with the headings it allows and a cost of its own, so one search can
+// choose a port, and weigh the ports against the paths to them. A path that
+// arrives at an end with a cost is not done: it moves to a final state that
+// costs that much more, and pops when nothing cheaper is left.
 //
 // A path that runs straight on through a node where other paths run
 // straight on the other way crosses them, at a cost each. The estimate
@@ -40,6 +43,9 @@ export interface Endpoint {
   // The headings the path may leave or arrive with, as vectors of any
   // length. Any heading when omitted.
   readonly headings?: ReadonlyArray<PointLike> | undefined
+  // Added to the cost of a path that starts or ends here. Negative and
+  // non-finite values act as `0`, the default.
+  readonly cost?: number | undefined
 }
 
 export interface SearchOptions {
@@ -94,8 +100,9 @@ export interface Path {
  * @param to - The end node, or the endpoints the path may end at.
  * @param options - The costs and constraints of the path.
  * @returns The cheapest path, or `undefined` when no path meets the
- * constraints. A path from a node to itself, through waypoints at that
- * node, is that node alone at no cost, when the end allows any heading.
+ * constraints. Its cost includes the costs of its endpoints. A path from a
+ * node to itself, through waypoints at that node, is that node alone, at
+ * the cost of its endpoints, when the end allows any heading.
  */
 export function shortestPath(
   graph: Graph,
@@ -162,17 +169,30 @@ export function shortestPath(
     }
     return next
   }
-  // The first end at `node` that allows arriving along (dx, dy), or -1.
-  const arrival = (node: number, dx: number, dy: number, length: number) =>
-    ends.findIndex((end) => end.node === node && matches(end.headings, dx, dy, length))
+  // Whether end `end` at `node` allows arriving along (dx, dy).
+  const arrives = (end: Resolved, node: number, dx: number, dy: number, length: number) =>
+    end.node === node && matches(end.headings, dx, dy, length)
 
+  // A start that is an end, with every waypoint there, is a path of one
+  // node: the cheapest such pair of endpoints, the first among ties.
+  let trivial: Path | undefined
   for (const [index, start] of starts.entries()) {
-    if (passed(0, start.node) === lastLeg) {
-      const end = ends.findIndex((e) => e.node === start.node && e.headings === undefined)
-      if (end !== -1) {
-        return { nodes: Int32Array.of(start.node), cost: 0, start: index, end }
+    if (passed(0, start.node) !== lastLeg) {
+      continue
+    }
+    for (const [end, e] of ends.entries()) {
+      const total = start.cost + e.cost
+      if (
+        e.node === start.node &&
+        e.headings === undefined &&
+        (trivial === undefined || before(total, trivial.cost))
+      ) {
+        trivial = { nodes: Int32Array.of(start.node), cost: total, start: index, end }
       }
     }
+  }
+  if (trivial !== undefined) {
+    return trivial
   }
 
   const distance = graph.orthogonal
@@ -240,7 +260,10 @@ export function shortestPath(
   }
 
   const edgeCount = targets.length
-  const { cost, bends, parent, seen, done, round, queue } = scratchFor(graph, legCount * edgeCount)
+  // The states past the last leg: one per end, which a path that arrives
+  // at an end with a cost moves to, for that cost more.
+  const final = legCount * edgeCount
+  const { cost, bends, parent, seen, done, round, queue } = scratchFor(graph, final + ends.length)
   queue.clear()
 
   // Whether each half-edge may be used: 0 unknown, 1 open, 2 closed.
@@ -270,9 +293,36 @@ export function shortestPath(
       cost[state] = total
       bends[state] = turns
       parent[state] = from
-      const leg = Math.floor(state / edgeCount)
-      queue.push(total + estimate(leg, state - leg * edgeCount), turns, state)
+      if (state >= final) {
+        queue.push(total, turns, state)
+      } else {
+        const leg = Math.floor(state / edgeCount)
+        queue.push(total + estimate(leg, state - leg * edgeCount), turns, state)
+      }
     }
+  }
+
+  // The path that arrived in `state` at end `end`, at `total`. Its start is
+  // the cheapest of the starts that leave its first node its way, which is
+  // the one whose cost it carries.
+  const finish = (state: number, end: number, total: number): Path => {
+    const nodes = trace(state, parent, sources, targets, edgeCount)
+    const first = nodes[0] as number
+    const leave = firstState(state, parent) % edgeCount
+    const dx = dxOf(leave)
+    const dy = dyOf(leave)
+    const length = lengthOf(dx, dy)
+    let start = -1
+    for (const [index, s] of starts.entries()) {
+      if (
+        s.node === first &&
+        matches(s.headings, dx, dy, length) &&
+        (start === -1 || before(s.cost, (starts[start] as Resolved).cost))
+      ) {
+        start = index
+      }
+    }
+    return { nodes, cost: total, start, end }
   }
 
   for (const start of starts) {
@@ -282,7 +332,7 @@ export function shortestPath(
       const dy = dyOf(e)
       const length = lengthOf(dx, dy)
       if (open(e) && matches(start.headings, dx, dy, length)) {
-        relax(leg * edgeCount + e, lengthCost(e, length), 0, -1)
+        relax(leg * edgeCount + e, start.cost + lengthCost(e, length), 0, -1)
       }
     }
   }
@@ -293,6 +343,10 @@ export function shortestPath(
       continue
     }
     done[state] = round
+    if (state >= final) {
+      // A path that has paid for its end, and nothing open costs less.
+      return finish(parent[state] as number, state - final, cost[state] as number)
+    }
     const leg = Math.floor(state / edgeCount)
     const e = state - leg * edgeCount
     const node = targets[e] as number
@@ -315,17 +369,17 @@ export function shortestPath(
     // that way.
     const leaving = leg > 0 && via[leg - 1] === node ? viaLeavings[leg - 1] : undefined
     if (leg === lastLeg) {
-      const end = arrival(node, ax, ay, la)
-      if (end !== -1) {
-        const nodes = trace(state, parent, sources, targets, edgeCount)
-        const first = nodes[0] as number
-        const leave = firstState(state, parent) % edgeCount
-        const dx = dxOf(leave)
-        const dy = dyOf(leave)
-        const start = starts.findIndex(
-          (s) => s.node === first && matches(s.headings, dx, dy, lengthOf(dx, dy)),
-        )
-        return { nodes, cost: total, start, end }
+      // At an end that costs nothing, the path is done: nothing open costs
+      // less. An end with a cost is a step more, and the path goes on too,
+      // since another end past it may come out cheaper.
+      for (const [end, e] of ends.entries()) {
+        if (!arrives(e, node, ax, ay, la)) {
+          continue
+        }
+        if (e.cost === 0) {
+          return finish(state, end, total)
+        }
+        relax(final + end, total + e.cost, turns, state)
       }
     }
 
@@ -558,12 +612,17 @@ function scratchFor(graph: Graph, size: number): Scratch {
 interface Resolved {
   readonly node: number
   readonly headings: Array<Direction> | undefined
+  readonly cost: number
 }
 
 const endpoints = (value: number | ReadonlyArray<Endpoint>): Array<Resolved> =>
   typeof value === 'number'
-    ? [{ node: value, headings: undefined }]
-    : value.map(({ node, headings: list }) => ({ node, headings: headings(list) }))
+    ? [{ node: value, headings: undefined, cost: 0 }]
+    : value.map(({ node, headings: list, cost }) => ({
+        node,
+        headings: headings(list),
+        cost: positiveLength(cost),
+      }))
 
 // The state a path starts with: the first of its chain of parents.
 function firstState(state: number, parent: Int32Array): number {

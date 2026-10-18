@@ -4,7 +4,7 @@ import type { Edge } from '../../edge.ts'
 import type * as Point from '../../point.ts'
 import * as Polygon from '../../polygon.ts'
 import type * as Rect from '../../rect.ts'
-import { atMost, overlaps } from '../../utils/tolerance.ts'
+import { atMost, before, inside, overlaps } from '../../utils/tolerance.ts'
 import { type Axis, type SolveAdornment, resolveAdornment } from '../adornments.ts'
 import type { Obstacle } from '../graph/graph.ts'
 import { ALL_DIRECTIONS, type Pin } from '../graph/visibility.ts'
@@ -53,11 +53,14 @@ export interface Settings {
 }
 
 // The costs that derive from the cost of a corner: a crossing costs this
-// share of it, a corner against the preferred turn costs as much again,
-// and a stretch along a merge partner costs this share of its length less.
+// share of it, a corner against the preferred turn costs as much again, a
+// stretch along a merge partner costs this share of its length less, and
+// an end with no room in front of its port for its adornments and corner
+// costs up to this share of it.
 const CROSSING_SHARE = 0.4
 const TURN_SHARE = 1
 const MERGE_PULL = 0.1
+const TIGHT_SHARE = 2
 
 /** The turn encodings of `placement/connector`. */
 export const CLOCKWISE = 1
@@ -162,6 +165,11 @@ export interface Problem {
   readonly bendCost: number
   /** The cost of each crossing. */
   readonly crossingCost: number
+  /**
+   * The most an end costs for the room it lacks in front of its port (see
+   * `tightCostAt`).
+   */
+  readonly tightCost: number
   /** The partner discount while sides are chosen, `0` with merging off. */
   readonly pull: number
   /** The rects, by index. */
@@ -286,6 +294,7 @@ export function normalize(
     mergeGap: Number.isFinite(settings.mergeGap) ? settings.mergeGap : settings.gap,
     bendCost,
     crossingCost: CROSSING_SHARE * bendCost,
+    tightCost: TIGHT_SHARE * bendCost,
     pull: merging ? MERGE_PULL : 0,
     boxes,
     obstacles,
@@ -323,6 +332,91 @@ export function packAt(problem: Problem, edge: number, end: number, side: number
     heading > 0 ? 1 : -1,
     problem.settings.adornmentGap,
   )
+}
+
+/**
+ * The room in front of a port: how far a route can run straight out from a
+ * port on `side` of a rect, `on` along it, before the nearest obstacle or
+ * avoided rect across its line. `0` where one covers the port, and
+ * `Infinity` with nothing in front.
+ *
+ * @param problem - The problem.
+ * @param rect - The rect index.
+ * @param side - The side the port sits on.
+ * @param on - The port's coordinate along the side.
+ * @param avoid - The rects the route stays out of, besides the obstacles.
+ * @returns The room.
+ */
+export function roomAt(
+  problem: Problem,
+  rect: number,
+  side: number,
+  on: number,
+  avoid: ReadonlyArray<Obstacle> = [],
+): number {
+  const nAxis = normalAxis(side)
+  const sAxis = sideAxis(side)
+  const sign = outwardSign(side)
+  const depth = depthOf(problem, rect, side, on)
+  let room = Number.POSITIVE_INFINITY
+  const consider = (o: Obstacle) => {
+    // Only a rect whose interior the line out of the port runs through
+    // blocks it, and only one that reaches past the port.
+    if (!inside(on, lo(o, sAxis), hi(o, sAxis))) {
+      return
+    }
+    const [near, far] = sign > 0 ? [lo(o, nAxis), hi(o, nAxis)] : [hi(o, nAxis), lo(o, nAxis)]
+    if (before(0, sign * (far - depth))) {
+      room = Math.min(room, Math.max(sign * (near - depth), 0))
+    }
+  }
+  for (const [j, o] of problem.obstacles.entries()) {
+    if (j !== rect) {
+      consider(o)
+    }
+  }
+  for (const o of avoid) {
+    consider(o)
+  }
+  return room
+}
+
+/**
+ * What an end of an edge costs for the room it lacks in front of a port on
+ * `side`, `at` along it: a tight end. The end needs its adornments, packed
+ * at the port, and the edge's `radius` past them for the corner, in a
+ * straight run; with less room, the corner shrinks and the adornments
+ * spill around it. The cost grows with the shortfall, to the problem's
+ * `tightCost` once it is as long as the radius or the pack, whichever is
+ * longer.
+ *
+ * @param problem - The problem.
+ * @param edge - The edge index.
+ * @param end - The end, `0` or `1`.
+ * @param side - The side the port sits on.
+ * @param at - The position along the side, from `0` to `1`.
+ * @returns The cost, `0` for an end with room.
+ */
+export function tightCostAt(
+  problem: Problem,
+  edge: number,
+  end: number,
+  side: number,
+  at: number,
+): number {
+  const { radius, avoid } = problem.edges[edge] as ProblemEdge
+  const rect = rectAt(problem.edges[edge] as ProblemEdge, end)
+  const pack = packAt(problem, edge, end, side)
+  const need = pack + radius
+  if (need === 0) {
+    return 0
+  }
+  const on = alongSide(problem.boxes[rect] as Rect.Rect, side, at)
+  const shortfall = need - roomAt(problem, rect, side, on, avoid)
+  if (!(shortfall > 0)) {
+    return 0
+  }
+  return problem.tightCost * Math.min(1, shortfall / Math.max(radius, pack))
 }
 
 /**
