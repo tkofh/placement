@@ -1,16 +1,6 @@
 import { Pipeable, dual } from 'curvy/utils'
 import type * as AspectRatio from './aspectRatio.ts'
-import type { DimensionsLike } from './dimensions.ts'
 import { type RawAspectRatio, toRawRatio } from './internal/aspectRatio.ts'
-import {
-  HasPercent,
-  type RawLength,
-  absolute,
-  anyPercent,
-  resolveRaw,
-  toRaw,
-} from './internal/length.ts'
-import * as Length from './length.ts'
 import { type NormalizedSizing, normalizeSizing, normalizeTRBL } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/frame')
@@ -21,34 +11,13 @@ type TypeBrand = typeof TypeBrand
 const Raw: unique symbol = Symbol('placement/frame/raw')
 const Sizing: unique symbol = Symbol('placement/frame/sizing')
 
-type LengthField =
-  | 'offsetTop'
-  | 'offsetRight'
-  | 'offsetBottom'
-  | 'offsetLeft'
-  | 'width'
-  | 'height'
-  | 'minWidth'
-  | 'minHeight'
-  | 'maxWidth'
-  | 'maxHeight'
-
-type RawLengths = { readonly [K in LengthField]: RawLength } & {
+type RawSizing = {
+  readonly [K in 'width' | 'height' | 'minWidth' | 'minHeight' | 'maxWidth' | 'maxHeight']:
+    | number
+    | undefined
+} & {
   readonly aspectRatio: RawAspectRatio
 }
-
-const LENGTH_FIELDS: ReadonlyArray<LengthField> = [
-  'offsetTop',
-  'offsetRight',
-  'offsetBottom',
-  'offsetLeft',
-  'width',
-  'height',
-  'minWidth',
-  'minHeight',
-  'maxWidth',
-  'maxHeight',
-]
 
 /**
  * The construction input for `make`. Every field is optional. Passing
@@ -60,15 +29,6 @@ const LENGTH_FIELDS: ReadonlyArray<LengthField> = [
  * unset and get no default. These are `width`, `height`, `aspectRatio`, and
  * the min/max constraints. The frame derives them from the fields that are
  * set (see `Frame`). The `id` stays `undefined` when omitted.
- *
- * The offsets, sizes, and constraints take a `Length` as well as a number.
- * A number is pixels. `Flexbox.apply` resolves percentages against the
- * container's inner rect: `offsetLeft`, `offsetRight`, `width`,
- * `minWidth`, and `maxWidth` against its width, and `offsetTop`,
- * `offsetBottom`, `height`, `minHeight`, and `maxHeight` against its
- * height. The vertical offsets differ from CSS margins, which are all
- * percentages of the width. Other layouts read an unresolved percentage as
- * unset, so resolve the frame first with `resolve`.
  *
  * The type parameter `K` is the literal type of `id`, or `undefined` when
  * the frame has none.
@@ -85,39 +45,38 @@ export interface FrameInput<K extends string | undefined = string | undefined> {
    * Space reserved above the frame, which is its top margin in the
    * container. A non-finite value requests an auto margin. Layout then gives
    * the edge an equal share of the free space on its axis. Defaults to `0`.
-   * A percentage is of the container's height.
    */
-  readonly offsetTop?: Length.LengthInput | undefined
+  readonly offsetTop?: number | undefined
   /**
    * Space reserved to the right of the frame, which is its right margin. A
    * non-finite value requests an auto margin. Layout then gives the edge an
-   * equal share of the free space on its axis. Defaults to `0`. A percentage is of the container's width.
+   * equal share of the free space on its axis. Defaults to `0`.
    */
-  readonly offsetRight?: Length.LengthInput | undefined
+  readonly offsetRight?: number | undefined
   /**
    * Space reserved below the frame, which is its bottom margin. A non-finite
    * value requests an auto margin. Layout then gives the edge an equal share
-   * of the free space on its axis. Defaults to `0`. A percentage is of the container's height.
+   * of the free space on its axis. Defaults to `0`.
    */
-  readonly offsetBottom?: Length.LengthInput | undefined
+  readonly offsetBottom?: number | undefined
   /**
    * Space reserved to the left of the frame, which is its left margin. A
    * non-finite value requests an auto margin. Layout then gives the edge an
-   * equal share of the free space on its axis. Defaults to `0`. A percentage is of the container's width.
+   * equal share of the free space on its axis. Defaults to `0`.
    */
-  readonly offsetLeft?: Length.LengthInput | undefined
+  readonly offsetLeft?: number | undefined
   /**
    * The preferred width. If you omit it, the width is unset. The resolved
    * width then derives from the height and `aspectRatio`, or falls back to
-   * `0`. A percentage is of the container's width.
+   * `0`.
    */
-  readonly width?: Length.LengthInput | undefined
+  readonly width?: number | undefined
   /**
    * The preferred height. If you omit it, the height is unset. The resolved
    * height then derives from the width and `aspectRatio`, or falls back to
-   * `0`. A percentage is of the container's height.
+   * `0`.
    */
-  readonly height?: Length.LengthInput | undefined
+  readonly height?: number | undefined
   /**
    * The width-to-height ratio, as a number (`width / height`) or an
    * `AspectRatio` (from `placement/aspectRatio`). The frame uses it to
@@ -129,24 +88,24 @@ export interface FrameInput<K extends string | undefined = string | undefined> {
   readonly aspectRatio?: AspectRatio.AspectRatioInput | undefined
   /**
    * The lower bound on the resolved width. Negative values clamp to `0`.
-   * Defaults to `0`. A percentage is of the container's width.
+   * Defaults to `0`.
    */
-  readonly minWidth?: Length.LengthInput | undefined
+  readonly minWidth?: number | undefined
   /**
    * The lower bound on the resolved height. Negative values clamp to `0`.
-   * Defaults to `0`. A percentage is of the container's height.
+   * Defaults to `0`.
    */
-  readonly minHeight?: Length.LengthInput | undefined
+  readonly minHeight?: number | undefined
   /**
    * The upper bound on the resolved width. Negative values clamp to `0`.
-   * Defaults to `Infinity` (unconstrained). A percentage is of the container's width.
+   * Defaults to `Infinity` (unconstrained).
    */
-  readonly maxWidth?: Length.LengthInput | undefined
+  readonly maxWidth?: number | undefined
   /**
    * The upper bound on the resolved height. Negative values clamp to `0`.
-   * Defaults to `Infinity` (unconstrained). A percentage is of the container's height.
+   * Defaults to `Infinity` (unconstrained).
    */
-  readonly maxHeight?: Length.LengthInput | undefined
+  readonly maxHeight?: number | undefined
   /**
    * The flex grow factor: the frame's share of positive free space along
    * the container's main axis, in proportion to the other items' factors.
@@ -196,12 +155,6 @@ export interface FrameInput<K extends string | undefined = string | undefined> {
  * - If nothing is set, both dimensions fall back to `0`, clamped.
  *
  * The resolution arithmetic is exact IEEE 754 (see PRECISION.md).
- *
- * A frame keeps its percentages until a basis is known. `resolve` turns
- * them into numbers, and `Flexbox.apply` resolves every frame against the
- * container's inner rect. Until then, the sizing getters read a percentage
- * as unset and the offsets read it as `0`, as CSS does against an
- * indefinite basis. `toJSON` returns it as the `Length` it is.
  *
  * The type parameter `K` is the literal type of `id`. A frame without an id
  * is a `Frame<undefined>`. The bare `Frame` type accepts any frame.
@@ -268,50 +221,43 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
    */
   readonly stretch: number
 
-  // The frame stores length and sizing inputs raw (undefined means unset)
-  // so that unset-ness and percentages survive setter round trips. It
-  // resolves them once at construction.
-  readonly [Raw]: RawLengths
-  readonly [HasPercent]: boolean
+  // The frame stores sizing inputs raw (undefined means unset) so that
+  // unset-ness survives setter round trips. It resolves them once at
+  // construction.
+  readonly [Raw]: RawSizing
   readonly [Sizing]: NormalizedSizing
 
   constructor(input: FrameInput<K>) {
     super()
 
-    const raw: RawLengths = {
-      offsetTop: toRaw(input.offsetTop),
-      offsetRight: toRaw(input.offsetRight),
-      offsetBottom: toRaw(input.offsetBottom),
-      offsetLeft: toRaw(input.offsetLeft),
-      width: toRaw(input.width),
-      height: toRaw(input.height),
-      aspectRatio: toRawRatio(input.aspectRatio),
-      minWidth: toRaw(input.minWidth),
-      minHeight: toRaw(input.minHeight),
-      maxWidth: toRaw(input.maxWidth),
-      maxHeight: toRaw(input.maxHeight),
-    }
-
     this.id = input.id as K
-    this.offsetTop = absolute(raw.offsetTop) ?? 0
-    this.offsetRight = absolute(raw.offsetRight) ?? 0
-    this.offsetBottom = absolute(raw.offsetBottom) ?? 0
-    this.offsetLeft = absolute(raw.offsetLeft) ?? 0
+    this.offsetTop = input.offsetTop ?? 0
+    this.offsetRight = input.offsetRight ?? 0
+    this.offsetBottom = input.offsetBottom ?? 0
+    this.offsetLeft = input.offsetLeft ?? 0
     this.grow = input.grow ?? 0
     this.shrink = input.shrink ?? 0
     this.align = input.align ?? Number.POSITIVE_INFINITY
     this.stretch = input.stretch ?? Number.POSITIVE_INFINITY
 
+    const raw: RawSizing = {
+      width: input.width,
+      height: input.height,
+      aspectRatio: toRawRatio(input.aspectRatio),
+      minWidth: input.minWidth,
+      minHeight: input.minHeight,
+      maxWidth: input.maxWidth,
+      maxHeight: input.maxHeight,
+    }
     this[Raw] = raw
-    this[HasPercent] = anyPercent(raw, LENGTH_FIELDS)
     this[Sizing] = normalizeSizing(
       raw.aspectRatio ?? 0,
-      absolute(raw.width) ?? Number.NaN,
-      absolute(raw.height) ?? Number.NaN,
-      absolute(raw.minWidth) ?? 0,
-      absolute(raw.minHeight) ?? 0,
-      absolute(raw.maxWidth) ?? Number.POSITIVE_INFINITY,
-      absolute(raw.maxHeight) ?? Number.POSITIVE_INFINITY,
+      raw.width ?? Number.NaN,
+      raw.height ?? Number.NaN,
+      raw.minWidth ?? 0,
+      raw.minHeight ?? 0,
+      raw.maxWidth ?? Number.POSITIVE_INFINITY,
+      raw.maxHeight ?? Number.POSITIVE_INFINITY,
     )
   }
 
@@ -395,9 +341,7 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
   /**
    * Returns the raw inputs of the frame, including its `id`. Unset sizing
    * fields come back as `undefined`, never as their resolved values.
-   * Percentages come back as `Length`s, which `JSON.stringify` writes as
-   * `{ value, unit }` records and `make` reads back. A `'px'` length comes
-   * back as its number. An `AspectRatio` comes back as itself, written as a
+   * An `AspectRatio` comes back as itself, written as a
    * `{ numerator, denominator }` record, unless its denominator is `1`, when
    * it comes back as its numerator.
    * `JSON.stringify` drops the unset fields (and an unset `id`) and writes
@@ -410,10 +354,10 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
   toJSON(): FrameInput<K> {
     return {
       id: this.id,
-      offsetTop: this[Raw].offsetTop ?? this.offsetTop,
-      offsetRight: this[Raw].offsetRight ?? this.offsetRight,
-      offsetBottom: this[Raw].offsetBottom ?? this.offsetBottom,
-      offsetLeft: this[Raw].offsetLeft ?? this.offsetLeft,
+      offsetTop: this.offsetTop,
+      offsetRight: this.offsetRight,
+      offsetBottom: this.offsetBottom,
+      offsetLeft: this.offsetLeft,
       width: this[Raw].width,
       height: this[Raw].height,
       aspectRatio: this[Raw].aspectRatio,
@@ -493,69 +437,9 @@ export const setId: {
     new Frame<J>({ ...self.toJSON(), id }),
 )
 
-/**
- * Resolves the frame's percentages against a container's extents and
- * returns a frame with numbers in their place. `offsetLeft`, `offsetRight`,
- * `width`, `minWidth`, and `maxWidth` are percentages of `basis.width`.
- * `offsetTop`, `offsetBottom`, `height`, `minHeight`, and `maxHeight` are
- * percentages of `basis.height`. Each one resolves by `Length.resolve`
- * (from `placement/length`), so `p%` becomes `basis * p / 100`. A sizing
- * percentage that resolves to `NaN` (against a `NaN` basis) becomes unset.
- * An offset keeps the `NaN`, so it becomes an auto margin.
- *
- * A frame without percentages comes back as `self`. `Flexbox.apply` calls
- * `resolve` with the container's inner rect, so a flex item only needs it
- * to read its getters against a basis. Layouts that do not resolve
- * percentages, such as `Hierarchy.apply`, need it first. The data-last
- * form omits `self` and returns a function of it.
- *
- * @param self - The frame to resolve.
- * @param basis - The extents that percentages are of. A `Rect` works.
- * @returns A frame whose every length field is a number or unset.
- * @example
- * ```ts
- * const item = Frame.make({ width: Length.percent(50), offsetTop: Length.percent(10) })
- * Frame.resolve(item, Dimensions.make(400, 200)).width // 200
- * item.pipe(Frame.resolve(Dimensions.make(400, 200))).offsetTop // 20
- * ```
- */
-export const resolve: {
-  <K extends string | undefined>(self: Frame<K>, basis: DimensionsLike): Frame<K>
-  (basis: DimensionsLike): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(2, <K extends string | undefined>(self: Frame<K>, basis: DimensionsLike): Frame<K> => {
-  if (!self[HasPercent]) {
-    return self
-  }
-
-  const raw = self[Raw]
-
-  const { width, height } = basis
-  return new Frame<K>({
-    ...self.toJSON(),
-    offsetTop: resolveRaw(raw.offsetTop, height),
-    offsetRight: resolveRaw(raw.offsetRight, width),
-    offsetBottom: resolveRaw(raw.offsetBottom, height),
-    offsetLeft: resolveRaw(raw.offsetLeft, width),
-    width: resolveSizing(raw.width, width),
-    height: resolveSizing(raw.height, height),
-    minWidth: resolveSizing(raw.minWidth, width),
-    minHeight: resolveSizing(raw.minHeight, height),
-    maxWidth: resolveSizing(raw.maxWidth, width),
-    maxHeight: resolveSizing(raw.maxHeight, height),
-  })
-})
-
-// A NaN sizing field is not unset in `make` (a NaN minimum poisons the
-// clamp), so a percentage that resolves to NaN becomes unset instead. A
-// number stays as it was, so `resolve` never changes what `make` decided.
-const resolveSizing = (raw: RawLength, basis: number): number | undefined => {
-  const value = resolveRaw(raw, basis)
-  return Length.isLength(raw) && Number.isNaN(value) ? undefined : value
-}
-
 // Setters rebuild from the raw inputs (toJSON), never from the resolved
 // sizing. Setters with optional trailing arguments dispatch on isFrame. The
-// first argument of the data-last form is always a length input, so the two forms
+// first argument of the data-last form is always a number, so the two forms
 // cannot collide.
 
 /**
@@ -579,50 +463,37 @@ const resolveSizing = (raw: RawLength, basis: number): number | undefined => {
  * ```
  */
 export const setOffset: {
-  <K extends string | undefined>(self: Frame<K>, offset: Length.LengthInput): Frame<K>
+  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
+  <K extends string | undefined>(self: Frame<K>, offsetY: number, offsetX: number): Frame<K>
   <K extends string | undefined>(
     self: Frame<K>,
-    offsetY: Length.LengthInput,
-    offsetX: Length.LengthInput,
+    offsetTop: number,
+    offsetX: number,
+    offsetBottom: number,
   ): Frame<K>
   <K extends string | undefined>(
     self: Frame<K>,
-    offsetTop: Length.LengthInput,
-    offsetX: Length.LengthInput,
-    offsetBottom: Length.LengthInput,
+    offsetTop: number,
+    offsetRight: number,
+    offsetBottom: number,
+    offsetLeft: number,
   ): Frame<K>
-  <K extends string | undefined>(
-    self: Frame<K>,
-    offsetTop: Length.LengthInput,
-    offsetRight: Length.LengthInput,
-    offsetBottom: Length.LengthInput,
-    offsetLeft: Length.LengthInput,
-  ): Frame<K>
-  (offset: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (offsetY: number, offsetX: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
   (
-    offsetY: Length.LengthInput,
-    offsetX: Length.LengthInput,
+    offsetTop: number,
+    offsetX: number,
+    offsetBottom: number,
   ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
   (
-    offsetTop: Length.LengthInput,
-    offsetX: Length.LengthInput,
-    offsetBottom: Length.LengthInput,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-  (
-    offsetTop: Length.LengthInput,
-    offsetRight: Length.LengthInput,
-    offsetBottom: Length.LengthInput,
-    offsetLeft: Length.LengthInput,
+    offsetTop: number,
+    offsetRight: number,
+    offsetBottom: number,
+    offsetLeft: number,
   ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(
-    self: Frame<K>,
-    a: Length.LengthInput,
-    b?: Length.LengthInput,
-    c?: Length.LengthInput,
-    d?: Length.LengthInput,
-  ) => {
+  <K extends string | undefined>(self: Frame<K>, a: number, b?: number, c?: number, d?: number) => {
     const [top, right, bottom, left] = normalizeTRBL(a, b, c, d)
     return new Frame({
       ...self.toJSON(),
@@ -645,24 +516,17 @@ export const setOffset: {
  * @returns A new frame with the horizontal offsets replaced.
  */
 export const setOffsetX: {
-  <K extends string | undefined>(self: Frame<K>, offset: Length.LengthInput): Frame<K>
-  <K extends string | undefined>(
-    self: Frame<K>,
-    offsetLeft: Length.LengthInput,
-    offsetRight: Length.LengthInput,
-  ): Frame<K>
-  (offset: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
+  <K extends string | undefined>(self: Frame<K>, offsetLeft: number, offsetRight: number): Frame<K>
+  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
   (
-    offsetLeft: Length.LengthInput,
-    offsetRight: Length.LengthInput,
+    offsetLeft: number,
+    offsetRight: number,
   ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(
-    self: Frame<K>,
-    left: Length.LengthInput,
-    right?: Length.LengthInput,
-  ) => new Frame({ ...self.toJSON(), offsetLeft: left, offsetRight: right ?? left }),
+  <K extends string | undefined>(self: Frame<K>, left: number, right?: number) =>
+    new Frame({ ...self.toJSON(), offsetLeft: left, offsetRight: right ?? left }),
 )
 
 /**
@@ -676,24 +540,17 @@ export const setOffsetX: {
  * @returns A new frame with the vertical offsets replaced.
  */
 export const setOffsetY: {
-  <K extends string | undefined>(self: Frame<K>, offset: Length.LengthInput): Frame<K>
-  <K extends string | undefined>(
-    self: Frame<K>,
-    offsetTop: Length.LengthInput,
-    offsetBottom: Length.LengthInput,
-  ): Frame<K>
-  (offset: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
+  <K extends string | undefined>(self: Frame<K>, offsetTop: number, offsetBottom: number): Frame<K>
+  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
   (
-    offsetTop: Length.LengthInput,
-    offsetBottom: Length.LengthInput,
+    offsetTop: number,
+    offsetBottom: number,
   ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(
-    self: Frame<K>,
-    top: Length.LengthInput,
-    bottom?: Length.LengthInput,
-  ) => new Frame({ ...self.toJSON(), offsetTop: top, offsetBottom: bottom ?? top }),
+  <K extends string | undefined>(self: Frame<K>, top: number, bottom?: number) =>
+    new Frame({ ...self.toJSON(), offsetTop: top, offsetBottom: bottom ?? top }),
 )
 
 /**
@@ -705,11 +562,11 @@ export const setOffsetY: {
  * @returns A new frame with the top offset replaced.
  */
 export const setOffsetTop: {
-  <K extends string | undefined>(self: Frame<K>, offset: Length.LengthInput): Frame<K>
-  (offset: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
+  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, offset: Length.LengthInput) =>
+  <K extends string | undefined>(self: Frame<K>, offset: number) =>
     new Frame({ ...self.toJSON(), offsetTop: offset }),
 )
 
@@ -722,11 +579,11 @@ export const setOffsetTop: {
  * @returns A new frame with the right offset replaced.
  */
 export const setOffsetRight: {
-  <K extends string | undefined>(self: Frame<K>, offset: Length.LengthInput): Frame<K>
-  (offset: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
+  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, offset: Length.LengthInput) =>
+  <K extends string | undefined>(self: Frame<K>, offset: number) =>
     new Frame({ ...self.toJSON(), offsetRight: offset }),
 )
 
@@ -739,11 +596,11 @@ export const setOffsetRight: {
  * @returns A new frame with the bottom offset replaced.
  */
 export const setOffsetBottom: {
-  <K extends string | undefined>(self: Frame<K>, offset: Length.LengthInput): Frame<K>
-  (offset: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
+  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, offset: Length.LengthInput) =>
+  <K extends string | undefined>(self: Frame<K>, offset: number) =>
     new Frame({ ...self.toJSON(), offsetBottom: offset }),
 )
 
@@ -756,11 +613,11 @@ export const setOffsetBottom: {
  * @returns A new frame with the left offset replaced.
  */
 export const setOffsetLeft: {
-  <K extends string | undefined>(self: Frame<K>, offset: Length.LengthInput): Frame<K>
-  (offset: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
+  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, offset: Length.LengthInput) =>
+  <K extends string | undefined>(self: Frame<K>, offset: number) =>
     new Frame({ ...self.toJSON(), offsetLeft: offset }),
 )
 
@@ -781,22 +638,12 @@ export const setOffsetLeft: {
  * ```
  */
 export const setSize: {
-  <K extends string | undefined>(
-    self: Frame<K>,
-    width: Length.LengthInput,
-    height?: Length.LengthInput,
-  ): Frame<K>
-  (
-    width: Length.LengthInput,
-    height?: Length.LengthInput,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, width: number, height?: number): Frame<K>
+  (width: number, height?: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(
-    self: Frame<K>,
-    width: Length.LengthInput,
-    height?: Length.LengthInput,
-  ) => new Frame({ ...self.toJSON(), width, height: height ?? width }),
+  <K extends string | undefined>(self: Frame<K>, width: number, height?: number) =>
+    new Frame({ ...self.toJSON(), width, height: height ?? width }),
 )
 
 /**
@@ -815,11 +662,11 @@ export const setSize: {
  * ```
  */
 export const setWidth: {
-  <K extends string | undefined>(self: Frame<K>, width: Length.LengthInput): Frame<K>
-  (width: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, width: number): Frame<K>
+  (width: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, width: Length.LengthInput) =>
+  <K extends string | undefined>(self: Frame<K>, width: number) =>
     new Frame({ ...self.toJSON(), width }),
 )
 
@@ -834,11 +681,11 @@ export const setWidth: {
  * @returns A new frame with the height replaced.
  */
 export const setHeight: {
-  <K extends string | undefined>(self: Frame<K>, height: Length.LengthInput): Frame<K>
-  (height: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, height: number): Frame<K>
+  (height: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, height: Length.LengthInput) =>
+  <K extends string | undefined>(self: Frame<K>, height: number) =>
     new Frame({ ...self.toJSON(), height }),
 )
 
@@ -881,22 +728,12 @@ export const setAspectRatio: {
  * @returns A new frame with both minimums set.
  */
 export const setMinSize: {
-  <K extends string | undefined>(
-    self: Frame<K>,
-    minWidth: Length.LengthInput,
-    minHeight?: Length.LengthInput,
-  ): Frame<K>
-  (
-    minWidth: Length.LengthInput,
-    minHeight?: Length.LengthInput,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, minWidth: number, minHeight?: number): Frame<K>
+  (minWidth: number, minHeight?: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(
-    self: Frame<K>,
-    minWidth: Length.LengthInput,
-    minHeight?: Length.LengthInput,
-  ) => new Frame({ ...self.toJSON(), minWidth, minHeight: minHeight ?? minWidth }),
+  <K extends string | undefined>(self: Frame<K>, minWidth: number, minHeight?: number) =>
+    new Frame({ ...self.toJSON(), minWidth, minHeight: minHeight ?? minWidth }),
 )
 
 /**
@@ -908,11 +745,11 @@ export const setMinSize: {
  * @returns A new frame with the minimum width replaced.
  */
 export const setMinWidth: {
-  <K extends string | undefined>(self: Frame<K>, minWidth: Length.LengthInput): Frame<K>
-  (minWidth: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, minWidth: number): Frame<K>
+  (minWidth: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, minWidth: Length.LengthInput) =>
+  <K extends string | undefined>(self: Frame<K>, minWidth: number) =>
     new Frame({ ...self.toJSON(), minWidth }),
 )
 
@@ -925,11 +762,11 @@ export const setMinWidth: {
  * @returns A new frame with the minimum height replaced.
  */
 export const setMinHeight: {
-  <K extends string | undefined>(self: Frame<K>, minHeight: Length.LengthInput): Frame<K>
-  (minHeight: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, minHeight: number): Frame<K>
+  (minHeight: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, minHeight: Length.LengthInput) =>
+  <K extends string | undefined>(self: Frame<K>, minHeight: number) =>
     new Frame({ ...self.toJSON(), minHeight }),
 )
 
@@ -943,22 +780,12 @@ export const setMinHeight: {
  * @returns A new frame with both maximums set.
  */
 export const setMaxSize: {
-  <K extends string | undefined>(
-    self: Frame<K>,
-    maxWidth: Length.LengthInput,
-    maxHeight?: Length.LengthInput,
-  ): Frame<K>
-  (
-    maxWidth: Length.LengthInput,
-    maxHeight?: Length.LengthInput,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, maxWidth: number, maxHeight?: number): Frame<K>
+  (maxWidth: number, maxHeight?: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(
-    self: Frame<K>,
-    maxWidth: Length.LengthInput,
-    maxHeight?: Length.LengthInput,
-  ) => new Frame({ ...self.toJSON(), maxWidth, maxHeight: maxHeight ?? maxWidth }),
+  <K extends string | undefined>(self: Frame<K>, maxWidth: number, maxHeight?: number) =>
+    new Frame({ ...self.toJSON(), maxWidth, maxHeight: maxHeight ?? maxWidth }),
 )
 
 /**
@@ -978,11 +805,11 @@ export const setMaxSize: {
  * ```
  */
 export const setMaxWidth: {
-  <K extends string | undefined>(self: Frame<K>, maxWidth: Length.LengthInput): Frame<K>
-  (maxWidth: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, maxWidth: number): Frame<K>
+  (maxWidth: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, maxWidth: Length.LengthInput) =>
+  <K extends string | undefined>(self: Frame<K>, maxWidth: number) =>
     new Frame({ ...self.toJSON(), maxWidth }),
 )
 
@@ -997,11 +824,11 @@ export const setMaxWidth: {
  * @returns A new frame with the maximum height replaced.
  */
 export const setMaxHeight: {
-  <K extends string | undefined>(self: Frame<K>, maxHeight: Length.LengthInput): Frame<K>
-  (maxHeight: Length.LengthInput): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, maxHeight: number): Frame<K>
+  (maxHeight: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, maxHeight: Length.LengthInput) =>
+  <K extends string | undefined>(self: Frame<K>, maxHeight: number) =>
     new Frame({ ...self.toJSON(), maxHeight }),
 )
 

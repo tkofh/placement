@@ -5,7 +5,7 @@ import { number } from 'valued/data/number'
 import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
 import { useFlexItem } from '../composables/useFlex.ts'
 import { useParentRectRegistration } from '../composables/useSizingContext.ts'
-import { FRAME_ITEM_PROP_KEYS, type FrameItemProps, useFrameLengths } from '../internal/frame.ts'
+import { FRAME_ITEM_PROP_KEYS, type FrameItemProps, useFrameInput } from '../internal/frame.ts'
 import { useGroupRenderer } from '../internal/render.ts'
 import { boolProp } from '../internal/utils.ts'
 
@@ -25,8 +25,7 @@ function resolveNumber(value: number | `${number}` | undefined): number {
 
 export const FlexItem = defineComponent(
   (props: FlexItemProps) => {
-    // `Flexbox.apply` resolves percentages against the layout's inner rect.
-    const input = useFrameLengths(props)
+    const input = useFrameInput(props)
 
     const self = computed(() =>
       Frame.make({

@@ -1,10 +1,9 @@
 import type { FrameInput } from 'placement/frame'
-import * as Length from 'placement/length'
-import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
+import { type ComputedRef, type MaybeRefOrGetter, computed } from 'vue'
 import { SIZE_PROP_KEYS, type SizeProps } from '../composables/useRect.ts'
+import { computedTRBLOffset } from '../data/offset.ts'
 import { useAspectRatioInput } from '../props/aspectRatio.ts'
-import { type LengthPercentageInput, useLength } from '../props/lengthPercentage.ts'
-import { useOverrideablePercentBasis } from './parent.ts'
+import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
 import { type AlignSelfInput, resolveAlignSelf } from './props/alignSelf.ts'
 
 /** The props that every frame-backed item shares: size, margins, and self alignment. */
@@ -33,56 +32,9 @@ function unsetIfNaN<T extends number | object>(value: T): T | undefined {
 }
 
 /**
- * Parses the shared item props into `Frame.make` input and leaves
- * percentages unresolved. Use it where the layout resolves them, as
- * `Flexbox.apply` does against the container's inner rect (see
- * `placement/frame`). Each axis stays raw: the core owns the
- * width/height/ratio interaction and the min/max clamping.
- */
-export function useFrameLengths(props: FrameItemProps): ComputedRef<FrameInput<undefined>> {
-  const width = useLength(() => props.width, Number.NaN)
-  const height = useLength(() => props.height, Number.NaN)
-  const aspectRatio = useAspectRatioInput(() => props.aspectRatio, Number.NaN)
-  const minWidth = useLength(() => props.minWidth, Number.NaN)
-  const minHeight = useLength(() => props.minHeight, Number.NaN)
-  const maxWidth = useLength(() => props.maxWidth, Number.NaN)
-  const maxHeight = useLength(() => props.maxHeight, Number.NaN)
-
-  const marginTop = useLength(() => props.marginTop, 0)
-  const marginRight = useLength(() => props.marginRight, 0)
-  const marginBottom = useLength(() => props.marginBottom, 0)
-  const marginLeft = useLength(() => props.marginLeft, 0)
-
-  return computed(() => ({
-    width: unsetIfNaN(width.value),
-    height: unsetIfNaN(height.value),
-    aspectRatio: unsetIfNaN(aspectRatio.value),
-    minWidth: unsetIfNaN(minWidth.value),
-    minHeight: unsetIfNaN(minHeight.value),
-    maxWidth: unsetIfNaN(maxWidth.value),
-    maxHeight: unsetIfNaN(maxHeight.value),
-    offsetTop: marginTop.value,
-    offsetRight: marginRight.value,
-    offsetBottom: marginBottom.value,
-    offsetLeft: marginLeft.value,
-    ...resolveAlignSelf(props.alignSelf),
-  }))
-}
-
-// A size that resolves to NaN becomes unset, while an offset keeps the NaN
-// as an auto margin, as `Frame.resolve` does.
-function size(value: Length.LengthInput | undefined, basis: number): number | undefined {
-  return value === undefined ? undefined : unsetIfNaN(Length.resolve(value, basis))
-}
-
-function offset(value: Length.LengthInput | undefined, basis: number): number | undefined {
-  return value === undefined ? undefined : Length.resolve(value, basis)
-}
-
-/**
- * Resolves the shared item props into `Frame.make` input, percentages
- * included. Use it where the layout does not resolve percentages itself,
- * as for hierarchy nodes and edge adornments.
+ * Resolves the shared item props into `Frame.make` input. Each axis
+ * resolves raw: the core owns the width/height/ratio interaction and the
+ * min/max clamping (see `placement/frame`).
  */
 export function useFrameInput(
   props: FrameItemProps,
@@ -92,27 +44,36 @@ export function useFrameInput(
   },
 ): ComputedRef<FrameInput<undefined>> {
   // Without an explicit basis, percentages resolve against the parent rect.
-  const x = useOverrideablePercentBasis(basis?.width ?? 'width')
-  const y = useOverrideablePercentBasis(basis?.height ?? 'height')
+  const x = basis?.width ?? 'width'
+  const y = basis?.height ?? 'height'
 
-  const lengths = useFrameLengths(props)
+  const width = useLengthPercentage(() => props.width, Number.NaN, x)
+  const height = useLengthPercentage(() => props.height, Number.NaN, y)
+  const aspectRatio = useAspectRatioInput(() => props.aspectRatio, Number.NaN)
+  const minWidth = useLengthPercentage(() => props.minWidth, Number.NaN, x)
+  const minHeight = useLengthPercentage(() => props.minHeight, Number.NaN, y)
+  const maxWidth = useLengthPercentage(() => props.maxWidth, Number.NaN, x)
+  const maxHeight = useLengthPercentage(() => props.maxHeight, Number.NaN, y)
 
-  return computed(() => {
-    const input = lengths.value
-    const width = toValue(x)
-    const height = toValue(y)
-    return {
-      ...input,
-      width: size(input.width, width),
-      height: size(input.height, height),
-      minWidth: size(input.minWidth, width),
-      minHeight: size(input.minHeight, height),
-      maxWidth: size(input.maxWidth, width),
-      maxHeight: size(input.maxHeight, height),
-      offsetTop: offset(input.offsetTop, height),
-      offsetRight: offset(input.offsetRight, width),
-      offsetBottom: offset(input.offsetBottom, height),
-      offsetLeft: offset(input.offsetLeft, width),
-    }
-  })
+  const marginTop = useLengthPercentage(() => props.marginTop, 0, y)
+  const marginRight = useLengthPercentage(() => props.marginRight, 0, x)
+  const marginBottom = useLengthPercentage(() => props.marginBottom, 0, y)
+  const marginLeft = useLengthPercentage(() => props.marginLeft, 0, x)
+
+  const margin = computedTRBLOffset(marginTop, marginRight, marginBottom, marginLeft)
+
+  return computed(() => ({
+    width: unsetIfNaN(width.value),
+    height: unsetIfNaN(height.value),
+    aspectRatio: unsetIfNaN(aspectRatio.value),
+    minWidth: unsetIfNaN(minWidth.value),
+    minHeight: unsetIfNaN(minHeight.value),
+    maxWidth: unsetIfNaN(maxWidth.value),
+    maxHeight: unsetIfNaN(maxHeight.value),
+    offsetTop: margin.value.top,
+    offsetRight: margin.value.right,
+    offsetBottom: margin.value.bottom,
+    offsetLeft: margin.value.left,
+    ...resolveAlignSelf(props.alignSelf),
+  }))
 }

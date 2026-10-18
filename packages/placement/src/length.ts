@@ -12,8 +12,8 @@ export type Unit = 'px' | '%'
 
 /**
  * What a length field accepts: a plain number, read as pixels, or a
- * `Length`. `Box.make` and `Frame.make` take this type for every inset,
- * size, constraint, and offset.
+ * `Length`. The layout specs (`Box`, `Frame`) take numbers, so whatever
+ * owns the basis resolves a length with `resolve` before it builds a spec.
  */
 export type LengthInput = number | Length
 

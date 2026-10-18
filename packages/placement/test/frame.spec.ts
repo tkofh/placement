@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import * as AspectRatio from '../src/aspectRatio.ts'
-import * as Dimensions from '../src/dimensions.ts'
 import * as Flexbox from '../src/flexbox.ts'
 import * as Frame from '../src/frame.ts'
-import * as Length from '../src/length.ts'
 import * as Rect from '../src/rect.ts'
 
 describe('frame', () => {
@@ -429,92 +427,6 @@ describe('frame through a Proxy', () => {
       )
       expect(rects).toHaveLength(2)
     })
-  })
-})
-
-describe('percentages', () => {
-  const pct = Length.percent
-  const basis = Dimensions.make(400, 200)
-
-  const cases: Array<[string, Frame.FrameInput<undefined>, Frame.FrameInput<undefined>]> = [
-    ['offsetTop', { offsetTop: pct(10) }, { offsetTop: 20 }],
-    ['offsetRight', { offsetRight: pct(10) }, { offsetRight: 40 }],
-    ['offsetBottom', { offsetBottom: pct(25) }, { offsetBottom: 50 }],
-    ['offsetLeft', { offsetLeft: pct(25) }, { offsetLeft: 100 }],
-    ['width', { width: pct(50) }, { width: 200 }],
-    ['height', { height: pct(50) }, { height: 100 }],
-    ['minWidth', { minWidth: pct(10) }, { minWidth: 40 }],
-    ['minHeight', { minHeight: pct(10) }, { minHeight: 20 }],
-    ['maxWidth', { width: 1000, maxWidth: pct(50) }, { width: 1000, maxWidth: 200 }],
-    ['maxHeight', { height: 1000, maxHeight: pct(50) }, { height: 1000, maxHeight: 100 }],
-    ['ratio', { width: pct(50), aspectRatio: 4 }, { width: 200, aspectRatio: 4 }],
-    ['px length', { width: Length.px(20), offsetTop: Length.px(4) }, { width: 20, offsetTop: 4 }],
-  ]
-
-  test.each(cases)('%s resolves against its basis', (_, input, numeric) => {
-    const expected = Frame.make(numeric).toJSON()
-    expect(Frame.resolve(Frame.make(input), basis).toJSON()).toEqual(expected)
-    expect(Frame.make(input).pipe(Frame.resolve(basis)).toJSON()).toEqual(expected)
-  })
-
-  test('resolve keeps the id and the non-length fields', () => {
-    const frame = Frame.make({ id: 'a', width: pct(50), grow: 1, align: 0.5 })
-    const resolved = Frame.resolve(frame, Rect.make(10, 10, 400, 200))
-    expect(resolved.id).toBe('a')
-    expect(resolved.width).toBe(200)
-    expect(resolved.grow).toBe(1)
-    expect(resolved.align).toBe(0.5)
-  })
-
-  test('resolve returns a frame without percentages as it is', () => {
-    const frame = Frame.make({ width: 100, offsetTop: Length.px(4) })
-    expect(Frame.resolve(frame, basis)).toBe(frame)
-  })
-
-  test('getters read an unresolved percentage as unset', () => {
-    const frame = Frame.make({
-      width: pct(50),
-      height: 10,
-      aspectRatio: 2,
-      minHeight: pct(10),
-      maxHeight: pct(1),
-      offsetLeft: pct(10),
-    })
-    // The width is unset, so it derives from the height through the ratio.
-    expect(frame.width).toBe(20)
-    expect(frame.minHeight).toBe(0)
-    expect(frame.maxHeight).toBe(Number.POSITIVE_INFINITY)
-    expect(frame.offsetLeft).toBe(0)
-  })
-
-  test('toJSON keeps percentages and a JSON round trip restores them', () => {
-    const frame = Frame.make({ width: pct(50), offsetTop: pct(10), offsetLeft: 4 })
-    expect(frame.toJSON().width).toEqual(pct(50))
-    expect(frame.toJSON().offsetTop).toEqual(pct(10))
-    expect(frame.toJSON().offsetLeft).toBe(4)
-    const revived = Frame.make(JSON.parse(JSON.stringify(frame)))
-    expect(Frame.resolve(revived, basis).toJSON()).toEqual(Frame.resolve(frame, basis).toJSON())
-  })
-
-  test('setters take lengths', () => {
-    const frame = Frame.make({}).pipe(
-      Frame.setSize(pct(50), pct(25)),
-      Frame.setOffset(pct(10), pct(5)),
-      Frame.setMaxWidth(pct(40)),
-    )
-    const resolved = Frame.resolve(frame, basis)
-    expect(resolved.width).toBe(160)
-    expect(resolved.height).toBe(50)
-    expect(resolved.offsetTop).toBe(20)
-    expect(resolved.offsetLeft).toBe(20)
-  })
-
-  test('against a NaN basis a size becomes unset and an offset becomes auto', () => {
-    const nan = Dimensions.make(Number.NaN, Number.NaN)
-    const resolved = Frame.resolve(Frame.make({ minWidth: pct(10), offsetTop: pct(10) }), nan)
-    expect(resolved.toJSON().minWidth).toBeUndefined()
-    expect(resolved.minWidth).toBe(0)
-    expect(resolved.offsetTop).toBeNaN()
   })
 })
 

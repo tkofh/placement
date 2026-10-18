@@ -25,9 +25,9 @@ function parseSize1DInput(input: string): Size1DValue | null {
 }
 
 /**
- * Parses a size input into what the core length fields take: a number of
- * pixels, or a percentage `Length` that the core resolves against its
- * basis. Unset, `auto`, and unparsable inputs give `auto`.
+ * Parses a size input into a `Length` input: a number of pixels, or a
+ * percentage `Length` for `Length.resolve` to resolve against its basis.
+ * Unset, `auto`, and unparsable inputs give `auto`.
  *
  * @param input - The prop value.
  * @param auto - The value for unset, `auto`, and unparsable inputs.

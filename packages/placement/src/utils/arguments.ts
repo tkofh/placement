@@ -2,14 +2,12 @@ import { clamp } from 'curvy/number'
 import type * as AspectRatio from '../aspectRatio.ts'
 import { heightOf, valueOf, widthOf } from '../internal/ratio.ts'
 
-// Generic so that `Box` and `Frame` can pass `Length` inputs through. A
-// missing value defaults to `0`.
-export function normalizeTRBL<T = number>(
-  a?: T,
-  b?: T,
-  c?: T,
-  d?: T,
-): [T | 0, T | 0, T | 0, T | 0] {
+export function normalizeTRBL(
+  a?: number,
+  b?: number,
+  c?: number,
+  d?: number,
+): [number, number, number, number] {
   // top, right, bottom, left
   if (d != null) {
     return [a ?? 0, b ?? 0, c ?? 0, d]

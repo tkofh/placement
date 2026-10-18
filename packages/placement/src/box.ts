@@ -1,18 +1,8 @@
 import { clamp } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import type * as AspectRatio from './aspectRatio.ts'
-import type { DimensionsLike } from './dimensions.ts'
 import { type RawAspectRatio, toRawRatio } from './internal/aspectRatio.ts'
-import {
-  HasPercent,
-  type RawLength,
-  absolute,
-  anyPercent,
-  resolveRaw,
-  toRaw,
-} from './internal/length.ts'
 import { heightOf, valueOf, widthOf } from './internal/ratio.ts'
-import type * as Length from './length.ts'
 import * as Rect from './rect.ts'
 import { normalizeTRBL } from './utils/arguments.ts'
 
@@ -23,11 +13,9 @@ type TypeBrand = typeof TypeBrand
 // fields, so reads still work through a `Proxy` (Vue's `ref`/`reactive`).
 const Raw: unique symbol = Symbol('placement/box/raw')
 
-type LengthField = Exclude<keyof BoxInput, 'aspectRatio'>
-
-type RawInput = { readonly [K in LengthField]: RawLength } & {
-  readonly aspectRatio: RawAspectRatio
-}
+type RawInput = {
+  readonly [K in Exclude<keyof BoxInput, 'aspectRatio'>]-?: number | undefined
+} & { readonly aspectRatio: RawAspectRatio }
 
 /**
  * The construction input for `make`. Every field is optional, and passing
@@ -40,55 +28,48 @@ type RawInput = { readonly [K in LengthField]: RawLength } & {
  * `apply` resolves them against a parent (see `apply` for the resolution
  * order). Unset constraints default to `0` (minimums) and `Infinity`
  * (maximums).
- *
- * Every field except `aspectRatio` takes a `Length` as well as a number. A
- * number is pixels. A percentage resolves against the parent that `apply`
- * gets, with the bases of CSS absolute positioning: `left`, `right`,
- * `width`, `minWidth`, and `maxWidth` against the parent's width, and
- * `top`, `bottom`, `height`, `minHeight`, and `maxHeight` against its
- * height.
  */
 export interface BoxInput {
   /**
    * The gap between the parent's top edge and the box, as `top` in CSS
    * absolute positioning. When set, it anchors the vertical position.
    * Together with `bottom`, it also determines an unset height. It is unset
-   * when omitted or non-finite. A percentage is of the parent's height.
+   * when omitted or non-finite.
    */
-  readonly top?: Length.LengthInput | undefined
+  readonly top?: number | undefined
   /**
    * The gap between the box and the parent's right edge, as `right` in CSS
    * absolute positioning. When it is set and `left` is unset, the box
    * anchors to the right edge. Together with `left`, it also determines an
-   * unset width. It is unset when omitted or non-finite. A percentage is of the parent's width.
+   * unset width. It is unset when omitted or non-finite.
    */
-  readonly right?: Length.LengthInput | undefined
+  readonly right?: number | undefined
   /**
    * The gap between the box and the parent's bottom edge, as `bottom` in
    * CSS absolute positioning. When it is set and `top` is unset, the box
    * anchors to the bottom edge. Together with `top`, it also determines an
-   * unset height. It is unset when omitted or non-finite. A percentage is of the parent's height.
+   * unset height. It is unset when omitted or non-finite.
    */
-  readonly bottom?: Length.LengthInput | undefined
+  readonly bottom?: number | undefined
   /**
    * The gap between the parent's left edge and the box, as `left` in CSS
    * absolute positioning. When set, it anchors the horizontal position.
    * Together with `right`, it also determines an unset width. It is unset
-   * when omitted or non-finite. A percentage is of the parent's width.
+   * when omitted or non-finite.
    */
-  readonly left?: Length.LengthInput | undefined
+  readonly left?: number | undefined
   /**
    * The preferred width. It is unset when omitted or non-finite. The
    * resolved width then derives from the horizontal insets, from the height
-   * and `aspectRatio`, or fills the parent (see `apply`). A percentage is of the parent's width.
+   * and `aspectRatio`, or fills the parent (see `apply`).
    */
-  readonly width?: Length.LengthInput | undefined
+  readonly width?: number | undefined
   /**
    * The preferred height. It is unset when omitted or non-finite. The
    * resolved height then derives from the vertical insets, from the width
-   * and `aspectRatio`, or fills the parent (see `apply`). A percentage is of the parent's height.
+   * and `aspectRatio`, or fills the parent (see `apply`).
    */
-  readonly height?: Length.LengthInput | undefined
+  readonly height?: number | undefined
   /**
    * The width-to-height ratio, as a number (`width / height`) or an
    * `AspectRatio` (from `placement/aspectRatio`). It derives the dimension
@@ -100,26 +81,26 @@ export interface BoxInput {
   readonly aspectRatio?: AspectRatio.AspectRatioInput | undefined
   /**
    * The lower bound on the resolved width. Negative values clamp to `0`.
-   * The default is `0`. Non-finite values act as unset. A percentage is of the parent's width.
+   * The default is `0`. Non-finite values act as unset.
    */
-  readonly minWidth?: Length.LengthInput | undefined
+  readonly minWidth?: number | undefined
   /**
    * The lower bound on the resolved height. Negative values clamp to `0`.
-   * The default is `0`. Non-finite values act as unset. A percentage is of the parent's height.
+   * The default is `0`. Non-finite values act as unset.
    */
-  readonly minHeight?: Length.LengthInput | undefined
+  readonly minHeight?: number | undefined
   /**
    * The upper bound on the resolved width. Negative values clamp to `0`.
    * If the bounds cross, `minWidth` wins, as in CSS `clamp()`. The default
-   * is `Infinity` (unconstrained). Non-finite values act as unset. A percentage is of the parent's width.
+   * is `Infinity` (unconstrained). Non-finite values act as unset.
    */
-  readonly maxWidth?: Length.LengthInput | undefined
+  readonly maxWidth?: number | undefined
   /**
    * The upper bound on the resolved height. Negative values clamp to `0`.
    * If the bounds cross, `minHeight` wins, as in CSS `clamp()`. The default
-   * is `Infinity` (unconstrained). Non-finite values act as unset. A percentage is of the parent's height.
+   * is `Infinity` (unconstrained). Non-finite values act as unset.
    */
-  readonly maxHeight?: Length.LengthInput | undefined
+  readonly maxHeight?: number | undefined
 }
 
 /**
@@ -133,87 +114,78 @@ export interface BoxInput {
  * the raw inputs, so a dimension left to derive keeps re-deriving after any
  * setter. `apply` resolves the box again against each parent it gets.
  *
- * A box keeps its percentages until a parent is known. `resolve` turns them
- * into numbers, and `apply` resolves them first. Until then, the getters
- * read a percentage as unset, as CSS does against an indefinite basis, and
- * `toJSON` returns it as the `Length` it is.
- *
  * Create a box with `make`.
  */
 class Box extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
   readonly [Raw]: RawInput
-  readonly [HasPercent]: boolean
 
   constructor(input: BoxInput) {
     super()
 
-    // `toRaw` and `?? undefined` also catch the `null`s of a JSON round trip.
+    // `?? undefined` also catches the `null`s of a JSON round trip.
     this[Raw] = {
-      top: toRaw(input.top),
-      right: toRaw(input.right),
-      bottom: toRaw(input.bottom),
-      left: toRaw(input.left),
-      width: toRaw(input.width),
-      height: toRaw(input.height),
+      top: input.top ?? undefined,
+      right: input.right ?? undefined,
+      bottom: input.bottom ?? undefined,
+      left: input.left ?? undefined,
+      width: input.width ?? undefined,
+      height: input.height ?? undefined,
       aspectRatio: toRawRatio(input.aspectRatio),
-      minWidth: toRaw(input.minWidth),
-      minHeight: toRaw(input.minHeight),
-      maxWidth: toRaw(input.maxWidth),
-      maxHeight: toRaw(input.maxHeight),
+      minWidth: input.minWidth ?? undefined,
+      minHeight: input.minHeight ?? undefined,
+      maxWidth: input.maxWidth ?? undefined,
+      maxHeight: input.maxHeight ?? undefined,
     }
-    this[HasPercent] = anyPercent(this[Raw], LENGTH_FIELDS)
   }
 
   /**
-   * The raw top inset, or `NaN` when unset or a percentage. Any non-finite
-   * value acts as unset in `apply`.
+   * The raw top inset, or `NaN` when unset. Any non-finite value acts as
+   * unset in `apply`.
    */
   get top(): number {
-    return absolute(this[Raw].top) ?? Number.NaN
+    return this[Raw].top ?? Number.NaN
   }
 
   /**
-   * The raw right inset, or `NaN` when unset or a percentage. Any
-   * non-finite value acts as unset in `apply`.
+   * The raw right inset, or `NaN` when unset. Any non-finite value acts as
+   * unset in `apply`.
    */
   get right(): number {
-    return absolute(this[Raw].right) ?? Number.NaN
+    return this[Raw].right ?? Number.NaN
   }
 
   /**
-   * The raw bottom inset, or `NaN` when unset or a percentage. Any
-   * non-finite value acts as unset in `apply`.
+   * The raw bottom inset, or `NaN` when unset. Any non-finite value acts as
+   * unset in `apply`.
    */
   get bottom(): number {
-    return absolute(this[Raw].bottom) ?? Number.NaN
+    return this[Raw].bottom ?? Number.NaN
   }
 
   /**
-   * The raw left inset, or `NaN` when unset or a percentage. Any
-   * non-finite value acts as unset in `apply`.
+   * The raw left inset, or `NaN` when unset. Any non-finite value acts as
+   * unset in `apply`.
    */
   get left(): number {
-    return absolute(this[Raw].left) ?? Number.NaN
+    return this[Raw].left ?? Number.NaN
   }
 
   /**
-   * The raw preferred width, or `NaN` when unset or a percentage. Any
-   * non-finite value acts as unset in `apply`, which resolves the used
-   * width against a parent.
+   * The raw preferred width, or `NaN` when unset. Any non-finite value acts
+   * as unset in `apply`, which resolves the used width against a parent.
    */
   get width(): number {
-    return absolute(this[Raw].width) ?? Number.NaN
+    return this[Raw].width ?? Number.NaN
   }
 
   /**
-   * The raw preferred height, or `NaN` when unset or a percentage. Any
-   * non-finite value acts as unset in `apply`, which resolves the used
-   * height against a parent.
+   * The raw preferred height, or `NaN` when unset. Any non-finite value acts
+   * as unset in `apply`, which resolves the used height against a parent.
    */
   get height(): number {
-    return absolute(this[Raw].height) ?? Number.NaN
+    return this[Raw].height ?? Number.NaN
   }
 
   /**
@@ -228,41 +200,39 @@ class Box extends Pipeable {
 
   /**
    * The effective lower bound on the resolved width. It is the raw input
-   * clamped to `>= 0`, or `0` when unset, non-finite, or a percentage.
+   * clamped to `>= 0`, or `0` when unset or non-finite.
    */
   get minWidth(): number {
-    const raw = absolute(this[Raw].minWidth) ?? 0
+    const raw = this[Raw].minWidth ?? 0
     return Number.isFinite(raw) ? Math.max(raw, 0) : 0
   }
 
   /**
    * The effective lower bound on the resolved height. It is the raw input
-   * clamped to `>= 0`, or `0` when unset, non-finite, or a percentage.
+   * clamped to `>= 0`, or `0` when unset or non-finite.
    */
   get minHeight(): number {
-    const raw = absolute(this[Raw].minHeight) ?? 0
+    const raw = this[Raw].minHeight ?? 0
     return Number.isFinite(raw) ? Math.max(raw, 0) : 0
   }
 
   /**
    * The effective upper bound on the resolved width. It is the raw input
-   * clamped to `>= 0`, or `Infinity` when unset, non-finite, or a
-   * percentage. If the bounds
+   * clamped to `>= 0`, or `Infinity` when unset or non-finite. If the bounds
    * cross, it rises to `minWidth`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxWidth(): number {
-    const raw = absolute(this[Raw].maxWidth) ?? Number.POSITIVE_INFINITY
+    const raw = this[Raw].maxWidth ?? Number.POSITIVE_INFINITY
     return Number.isFinite(raw) ? Math.max(raw, this.minWidth) : Number.POSITIVE_INFINITY
   }
 
   /**
    * The effective upper bound on the resolved height. It is the raw input
-   * clamped to `>= 0`, or `Infinity` when unset, non-finite, or a
-   * percentage. If the bounds
+   * clamped to `>= 0`, or `Infinity` when unset or non-finite. If the bounds
    * cross, it rises to `minHeight`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxHeight(): number {
-    const raw = absolute(this[Raw].maxHeight) ?? Number.POSITIVE_INFINITY
+    const raw = this[Raw].maxHeight ?? Number.POSITIVE_INFINITY
     return Number.isFinite(raw) ? Math.max(raw, this.minHeight) : Number.POSITIVE_INFINITY
   }
 
@@ -272,13 +242,11 @@ class Box extends Pipeable {
 
   /**
    * Returns the box's raw inputs. Unset fields come back as `undefined`,
-   * never as a sentinel, and percentages come back as `Length`s. A `'px'`
-   * length comes back as its number. `JSON.stringify` drops unset fields,
-   * writes non-finite values as `null`, and writes a percentage as its
-   * `{ value, unit }` record. An `AspectRatio` comes back as itself (or as
-   * its numerator over a denominator of `1`) and is written as a
-   * `{ numerator, denominator }` record. `make` reads `null` back as unset
-   * and each record back as its value, so a JSON round trip keeps every
+   * never as a sentinel. An `AspectRatio` comes back as itself (or as its
+   * numerator when its denominator is `1`). `JSON.stringify` drops unset
+   * fields, writes non-finite values as `null`, and writes an `AspectRatio`
+   * as its `{ numerator, denominator }` record. `make` reads `null` back as
+   * unset and the record back as a ratio, so a JSON round trip keeps every
    * meaning.
    *
    * @returns The raw input record, of the shape `make` accepts.
@@ -319,71 +287,8 @@ export const isBox = (value: unknown): value is Box => {
 }
 
 /**
- * Resolves the box's percentages against a parent's extents and returns a
- * box with numbers in their place. The bases are those of CSS absolute
- * positioning. `left`, `right`, `width`, `minWidth`, and `maxWidth` are
- * percentages of `parent.width`. `top`, `bottom`, `height`, `minHeight`,
- * and `maxHeight` are percentages of `parent.height`. Each one resolves by
- * `Length.resolve` (from `placement/length`), so `p%` becomes
- * `basis * p / 100`.
- *
- * A box without percentages comes back as `self`. `apply` calls `resolve`
- * first, so a box only needs it to read its getters against a basis. The
- * data-last form omits `self` and returns a function of it.
- *
- * @param self - The box to resolve.
- * @param parent - The extents that percentages are of. A `Rect` works.
- * @returns A box whose every length field is a number or unset.
- * @example
- * ```ts
- * const box = Box.make({ left: Length.percent(10), width: Length.percent(50) })
- * Box.resolve(box, Dimensions.make(400, 200)).width // 200
- * box.pipe(Box.resolve(Dimensions.make(400, 200))).left // 40
- * ```
- */
-export const resolve: {
-  (self: Box, parent: DimensionsLike): Box
-  (parent: DimensionsLike): (self: Box) => Box
-} = dual(2, (self: Box, parent: DimensionsLike): Box => {
-  if (!self[HasPercent]) {
-    return self
-  }
-
-  const raw = self[Raw]
-
-  const { width, height } = parent
-  return new Box({
-    top: resolveRaw(raw.top, height),
-    right: resolveRaw(raw.right, width),
-    bottom: resolveRaw(raw.bottom, height),
-    left: resolveRaw(raw.left, width),
-    width: resolveRaw(raw.width, width),
-    height: resolveRaw(raw.height, height),
-    aspectRatio: raw.aspectRatio,
-    minWidth: resolveRaw(raw.minWidth, width),
-    minHeight: resolveRaw(raw.minHeight, height),
-    maxWidth: resolveRaw(raw.maxWidth, width),
-    maxHeight: resolveRaw(raw.maxHeight, height),
-  })
-})
-
-const LENGTH_FIELDS: ReadonlyArray<LengthField> = [
-  'top',
-  'right',
-  'bottom',
-  'left',
-  'width',
-  'height',
-  'minWidth',
-  'minHeight',
-  'maxWidth',
-  'maxHeight',
-]
-
-/**
  * Solves the box against a parent rect, as in CSS absolute positioning.
- * Percentages resolve against the parent first (see `resolve` for the
- * basis of each field). Each axis then resolves independently. The rules below show the horizontal
+ * Each axis resolves independently. The rules below show the horizontal
  * axis. The vertical axis mirrors them with `top`/`bottom`/`height`.
  *
  * The used width is the first of these that applies:
@@ -425,31 +330,30 @@ export const apply: {
   (self: Box, parent: Rect.Rect): Rect.Rect
   (parent: Rect.Rect): (self: Box) => Rect.Rect
 } = dual(2, (self: Box, parent: Rect.Rect): Rect.Rect => {
-  const box = resolve(self, parent)
-  const { top, right, bottom, left, minWidth, minHeight, maxWidth, maxHeight } = box
+  const { top, right, bottom, left, minWidth, minHeight, maxWidth, maxHeight } = self
 
   const topIsSet = Number.isFinite(top)
   const rightIsSet = Number.isFinite(right)
   const bottomIsSet = Number.isFinite(bottom)
   const leftIsSet = Number.isFinite(left)
 
-  const ratio = box.aspectRatio
+  const ratio = self.aspectRatio
 
-  let width = Number.isFinite(box.width)
-    ? clamp(box.width, minWidth, maxWidth)
+  let width = Number.isFinite(self.width)
+    ? clamp(self.width, minWidth, maxWidth)
     : leftIsSet && rightIsSet
       ? clamp(parent.width - left - right, minWidth, maxWidth)
       : Number.NaN
 
-  let height = Number.isFinite(box.height)
-    ? clamp(box.height, minHeight, maxHeight)
+  let height = Number.isFinite(self.height)
+    ? clamp(self.height, minHeight, maxHeight)
     : topIsSet && bottomIsSet
       ? clamp(parent.height - top - bottom, minHeight, maxHeight)
       : Number.NaN
 
   // The value gates the derivation, and the raw ratio derives the extent,
   // so a pair rounds once.
-  const rawRatio = box[Raw].aspectRatio
+  const rawRatio = self[Raw].aspectRatio
   if (rawRatio !== undefined && Number.isFinite(ratio) && ratio > 0) {
     if (Number.isNaN(width) && !Number.isNaN(height)) {
       width = clamp(widthOf(rawRatio, height), minWidth, maxWidth)
@@ -491,7 +395,7 @@ export const apply: {
 
 // Setters rebuild from the raw inputs (toJSON), never from a resolved value.
 // Setters with optional trailing arguments dispatch on isBox. The data-last
-// form's first argument is always a length input, so the forms cannot collide.
+// form's first argument is always a number, so the forms cannot collide.
 
 /**
  * Sets all four insets in CSS shorthand order. One value sets every edge.
@@ -514,38 +418,17 @@ export const apply: {
  * ```
  */
 export const setInset: {
-  (self: Box, inset: Length.LengthInput): Box
-  (self: Box, insetY: Length.LengthInput, insetX: Length.LengthInput): Box
-  (self: Box, top: Length.LengthInput, insetX: Length.LengthInput, bottom: Length.LengthInput): Box
-  (
-    self: Box,
-    top: Length.LengthInput,
-    right: Length.LengthInput,
-    bottom: Length.LengthInput,
-    left: Length.LengthInput,
-  ): Box
-  (inset: Length.LengthInput): (self: Box) => Box
-  (insetY: Length.LengthInput, insetX: Length.LengthInput): (self: Box) => Box
-  (
-    top: Length.LengthInput,
-    insetX: Length.LengthInput,
-    bottom: Length.LengthInput,
-  ): (self: Box) => Box
-  (
-    top: Length.LengthInput,
-    right: Length.LengthInput,
-    bottom: Length.LengthInput,
-    left: Length.LengthInput,
-  ): (self: Box) => Box
+  (self: Box, inset: number): Box
+  (self: Box, insetY: number, insetX: number): Box
+  (self: Box, top: number, insetX: number, bottom: number): Box
+  (self: Box, top: number, right: number, bottom: number, left: number): Box
+  (inset: number): (self: Box) => Box
+  (insetY: number, insetX: number): (self: Box) => Box
+  (top: number, insetX: number, bottom: number): (self: Box) => Box
+  (top: number, right: number, bottom: number, left: number): (self: Box) => Box
 } = dual(
   (args) => isBox(args[0]),
-  (
-    self: Box,
-    a: Length.LengthInput,
-    b?: Length.LengthInput,
-    c?: Length.LengthInput,
-    d?: Length.LengthInput,
-  ) => {
+  (self: Box, a: number, b?: number, c?: number, d?: number) => {
     const [top, right, bottom, left] = normalizeTRBL(a, b, c, d)
     return new Box({ ...self.toJSON(), top, right, bottom, left })
   },
@@ -562,13 +445,13 @@ export const setInset: {
  * @returns A new box with the horizontal insets replaced.
  */
 export const setInsetX: {
-  (self: Box, inset: Length.LengthInput): Box
-  (self: Box, left: Length.LengthInput, right: Length.LengthInput): Box
-  (inset: Length.LengthInput): (self: Box) => Box
-  (left: Length.LengthInput, right: Length.LengthInput): (self: Box) => Box
+  (self: Box, inset: number): Box
+  (self: Box, left: number, right: number): Box
+  (inset: number): (self: Box) => Box
+  (left: number, right: number): (self: Box) => Box
 } = dual(
   (args) => isBox(args[0]),
-  (self: Box, left: Length.LengthInput, right?: Length.LengthInput) =>
+  (self: Box, left: number, right?: number) =>
     new Box({ ...self.toJSON(), left, right: right ?? left }),
 )
 
@@ -583,13 +466,13 @@ export const setInsetX: {
  * @returns A new box with the vertical insets replaced.
  */
 export const setInsetY: {
-  (self: Box, inset: Length.LengthInput): Box
-  (self: Box, top: Length.LengthInput, bottom: Length.LengthInput): Box
-  (inset: Length.LengthInput): (self: Box) => Box
-  (top: Length.LengthInput, bottom: Length.LengthInput): (self: Box) => Box
+  (self: Box, inset: number): Box
+  (self: Box, top: number, bottom: number): Box
+  (inset: number): (self: Box) => Box
+  (top: number, bottom: number): (self: Box) => Box
 } = dual(
   (args) => isBox(args[0]),
-  (self: Box, top: Length.LengthInput, bottom?: Length.LengthInput) =>
+  (self: Box, top: number, bottom?: number) =>
     new Box({ ...self.toJSON(), top, bottom: bottom ?? top }),
 )
 
@@ -602,9 +485,9 @@ export const setInsetY: {
  * @returns A new box with the top inset replaced.
  */
 export const setTop: {
-  (self: Box, top: Length.LengthInput): Box
-  (top: Length.LengthInput): (self: Box) => Box
-} = dual(2, (self: Box, top: Length.LengthInput) => new Box({ ...self.toJSON(), top }))
+  (self: Box, top: number): Box
+  (top: number): (self: Box) => Box
+} = dual(2, (self: Box, top: number) => new Box({ ...self.toJSON(), top }))
 
 /**
  * Sets the right inset and leaves the other edges unchanged. A non-finite
@@ -615,9 +498,9 @@ export const setTop: {
  * @returns A new box with the right inset replaced.
  */
 export const setRight: {
-  (self: Box, right: Length.LengthInput): Box
-  (right: Length.LengthInput): (self: Box) => Box
-} = dual(2, (self: Box, right: Length.LengthInput) => new Box({ ...self.toJSON(), right }))
+  (self: Box, right: number): Box
+  (right: number): (self: Box) => Box
+} = dual(2, (self: Box, right: number) => new Box({ ...self.toJSON(), right }))
 
 /**
  * Sets the bottom inset and leaves the other edges unchanged. A non-finite
@@ -628,9 +511,9 @@ export const setRight: {
  * @returns A new box with the bottom inset replaced.
  */
 export const setBottom: {
-  (self: Box, bottom: Length.LengthInput): Box
-  (bottom: Length.LengthInput): (self: Box) => Box
-} = dual(2, (self: Box, bottom: Length.LengthInput) => new Box({ ...self.toJSON(), bottom }))
+  (self: Box, bottom: number): Box
+  (bottom: number): (self: Box) => Box
+} = dual(2, (self: Box, bottom: number) => new Box({ ...self.toJSON(), bottom }))
 
 /**
  * Sets the left inset and leaves the other edges unchanged. A non-finite
@@ -641,9 +524,9 @@ export const setBottom: {
  * @returns A new box with the left inset replaced.
  */
 export const setLeft: {
-  (self: Box, left: Length.LengthInput): Box
-  (left: Length.LengthInput): (self: Box) => Box
-} = dual(2, (self: Box, left: Length.LengthInput) => new Box({ ...self.toJSON(), left }))
+  (self: Box, left: number): Box
+  (left: number): (self: Box) => Box
+} = dual(2, (self: Box, left: number) => new Box({ ...self.toJSON(), left }))
 
 /**
  * Sets the preferred width and height. The width comes first, the opposite
@@ -661,11 +544,11 @@ export const setLeft: {
  * ```
  */
 export const setSize: {
-  (self: Box, width: Length.LengthInput, height?: Length.LengthInput): Box
-  (width: Length.LengthInput, height?: Length.LengthInput): (self: Box) => Box
+  (self: Box, width: number, height?: number): Box
+  (width: number, height?: number): (self: Box) => Box
 } = dual(
   (args) => isBox(args[0]),
-  (self: Box, width: Length.LengthInput, height?: Length.LengthInput) =>
+  (self: Box, width: number, height?: number) =>
     new Box({ ...self.toJSON(), width, height: height ?? width }),
 )
 
@@ -680,9 +563,9 @@ export const setSize: {
  * @returns A new box with the width replaced.
  */
 export const setWidth: {
-  (self: Box, width: Length.LengthInput): Box
-  (width: Length.LengthInput): (self: Box) => Box
-} = dual(2, (self: Box, width: Length.LengthInput) => new Box({ ...self.toJSON(), width }))
+  (self: Box, width: number): Box
+  (width: number): (self: Box) => Box
+} = dual(2, (self: Box, width: number) => new Box({ ...self.toJSON(), width }))
 
 /**
  * Sets the preferred height and leaves the other inputs as they were, an
@@ -695,9 +578,9 @@ export const setWidth: {
  * @returns A new box with the height replaced.
  */
 export const setHeight: {
-  (self: Box, height: Length.LengthInput): Box
-  (height: Length.LengthInput): (self: Box) => Box
-} = dual(2, (self: Box, height: Length.LengthInput) => new Box({ ...self.toJSON(), height }))
+  (self: Box, height: number): Box
+  (height: number): (self: Box) => Box
+} = dual(2, (self: Box, height: number) => new Box({ ...self.toJSON(), height }))
 
 /**
  * Sets the width-to-height ratio. In `apply`, the ratio derives the
@@ -728,11 +611,11 @@ export const setAspectRatio: {
  * @returns A new box with both minimums set.
  */
 export const setMinSize: {
-  (self: Box, minWidth: Length.LengthInput, minHeight?: Length.LengthInput): Box
-  (minWidth: Length.LengthInput, minHeight?: Length.LengthInput): (self: Box) => Box
+  (self: Box, minWidth: number, minHeight?: number): Box
+  (minWidth: number, minHeight?: number): (self: Box) => Box
 } = dual(
   (args) => isBox(args[0]),
-  (self: Box, minWidth: Length.LengthInput, minHeight?: Length.LengthInput) =>
+  (self: Box, minWidth: number, minHeight?: number) =>
     new Box({ ...self.toJSON(), minWidth, minHeight: minHeight ?? minWidth }),
 )
 
@@ -745,9 +628,9 @@ export const setMinSize: {
  * @returns A new box with the minimum width replaced.
  */
 export const setMinWidth: {
-  (self: Box, minWidth: Length.LengthInput): Box
-  (minWidth: Length.LengthInput): (self: Box) => Box
-} = dual(2, (self: Box, minWidth: Length.LengthInput) => new Box({ ...self.toJSON(), minWidth }))
+  (self: Box, minWidth: number): Box
+  (minWidth: number): (self: Box) => Box
+} = dual(2, (self: Box, minWidth: number) => new Box({ ...self.toJSON(), minWidth }))
 
 /**
  * Sets the minimum height, the lower clamp on the resolved height. The
@@ -758,9 +641,9 @@ export const setMinWidth: {
  * @returns A new box with the minimum height replaced.
  */
 export const setMinHeight: {
-  (self: Box, minHeight: Length.LengthInput): Box
-  (minHeight: Length.LengthInput): (self: Box) => Box
-} = dual(2, (self: Box, minHeight: Length.LengthInput) => new Box({ ...self.toJSON(), minHeight }))
+  (self: Box, minHeight: number): Box
+  (minHeight: number): (self: Box) => Box
+} = dual(2, (self: Box, minHeight: number) => new Box({ ...self.toJSON(), minHeight }))
 
 /**
  * Sets the maximum width and height, width first. One value sets both
@@ -772,11 +655,11 @@ export const setMinHeight: {
  * @returns A new box with both maximums set.
  */
 export const setMaxSize: {
-  (self: Box, maxWidth: Length.LengthInput, maxHeight?: Length.LengthInput): Box
-  (maxWidth: Length.LengthInput, maxHeight?: Length.LengthInput): (self: Box) => Box
+  (self: Box, maxWidth: number, maxHeight?: number): Box
+  (maxWidth: number, maxHeight?: number): (self: Box) => Box
 } = dual(
   (args) => isBox(args[0]),
-  (self: Box, maxWidth: Length.LengthInput, maxHeight?: Length.LengthInput) =>
+  (self: Box, maxWidth: number, maxHeight?: number) =>
     new Box({ ...self.toJSON(), maxWidth, maxHeight: maxHeight ?? maxWidth }),
 )
 
@@ -791,9 +674,9 @@ export const setMaxSize: {
  * @returns A new box with the maximum width replaced.
  */
 export const setMaxWidth: {
-  (self: Box, maxWidth: Length.LengthInput): Box
-  (maxWidth: Length.LengthInput): (self: Box) => Box
-} = dual(2, (self: Box, maxWidth: Length.LengthInput) => new Box({ ...self.toJSON(), maxWidth }))
+  (self: Box, maxWidth: number): Box
+  (maxWidth: number): (self: Box) => Box
+} = dual(2, (self: Box, maxWidth: number) => new Box({ ...self.toJSON(), maxWidth }))
 
 /**
  * Sets the maximum height, the upper clamp on the resolved height. The
@@ -806,6 +689,6 @@ export const setMaxWidth: {
  * @returns A new box with the maximum height replaced.
  */
 export const setMaxHeight: {
-  (self: Box, maxHeight: Length.LengthInput): Box
-  (maxHeight: Length.LengthInput): (self: Box) => Box
-} = dual(2, (self: Box, maxHeight: Length.LengthInput) => new Box({ ...self.toJSON(), maxHeight }))
+  (self: Box, maxHeight: number): Box
+  (maxHeight: number): (self: Box) => Box
+} = dual(2, (self: Box, maxHeight: number) => new Box({ ...self.toJSON(), maxHeight }))
