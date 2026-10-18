@@ -74,6 +74,10 @@
       "types": "./dist/track.d.mts",
       "import": "./dist/track.mjs"
     },
+    "./unstable/model": {
+      "types": "./dist/unstable/model.d.mts",
+      "import": "./dist/unstable/model.mjs"
+    },
     "./unstable/utils": {
       "types": "./dist/unstable/utils.d.mts",
       "import": "./dist/unstable/utils.mjs"
@@ -91,6 +95,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "alien-signals": "^3.2.1",
     "curvy": "^2.0.0-alpha.17"
   },
   "devDependencies": {

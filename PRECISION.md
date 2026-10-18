@@ -95,6 +95,11 @@ available size by more than the hybrid band. Three `0.1`-wide items fit a
 - Degenerate divisions (`aspectRatio` of a zero-height dimensions,
   `scaleToWidth` of a zero-width dimensions) return what IEEE division
   produces: `Infinity` or `NaN`. Constructions do not invent fallback values.
+- Change detection in `placement/unstable/model` compares rect fields
+  exactly (`Object.is`). It asks whether an output changed, which is a
+  question about the values themselves: the solvers are pure, so equal inputs
+  give equal outputs, and a tolerance would hide a real sub-epsilon move from
+  subscribers.
 
 ## Working with the model
 

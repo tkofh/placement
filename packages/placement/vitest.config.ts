@@ -5,5 +5,9 @@ export default defineConfig({
     chaiConfig: {
       truncateThreshold: 0,
     },
+    typecheck: {
+      enabled: true,
+      include: ['test/**/*.test-d.ts'],
+    },
   },
 })

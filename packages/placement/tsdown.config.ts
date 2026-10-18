@@ -16,6 +16,7 @@ export default defineConfig({
     'src/polygon.ts',
     'src/rect.ts',
     'src/track.ts',
+    'src/unstable/model.ts',
     'src/unstable/utils.ts',
   ],
   format: 'esm',
