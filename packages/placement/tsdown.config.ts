@@ -11,6 +11,7 @@ export default defineConfig({
     'src/frame.ts',
     'src/hierarchy.ts',
     'src/interval.ts',
+    'src/length.ts',
     'src/offset.ts',
     'src/point.ts',
     'src/polygon.ts',

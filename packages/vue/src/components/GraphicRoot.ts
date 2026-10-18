@@ -13,7 +13,7 @@ import {
 } from '../composables/useRect.ts'
 import { useSizingContextRoot } from '../composables/useSizingContext.ts'
 import { resolveAspectRatio } from '../internal/props/aspectRatio.ts'
-import { resolveSize1D } from '../internal/props/size1d.ts'
+import { toLength } from '../internal/props/size1d.ts'
 import { provideShouldRenderGroups } from '../internal/render.ts'
 import { boolProp } from '../internal/utils.ts'
 import { useOrigin } from '../props/origin.ts'
@@ -32,16 +32,17 @@ export const GraphicRoot = defineComponent(
 
     // The measured <svg> is both the percent basis and the fill target. A
     // dimension that the props leave undetermined falls back to the measured
-    // size, constrained (see `placement/box`).
+    // size, constrained, and `Box.apply` resolves percentages against it
+    // (see `placement/box`).
     const box = computed(() =>
       Box.make({
-        width: resolveSize1D(props.width, Number.NaN, domRect.value.width),
-        height: resolveSize1D(props.height, Number.NaN, domRect.value.height),
+        width: toLength(props.width, Number.NaN),
+        height: toLength(props.height, Number.NaN),
         aspectRatio: resolveAspectRatio(props.aspectRatio, Number.NaN),
-        minWidth: resolveSize1D(props.minWidth, Number.NaN, domRect.value.width),
-        minHeight: resolveSize1D(props.minHeight, Number.NaN, domRect.value.height),
-        maxWidth: resolveSize1D(props.maxWidth, Number.NaN, domRect.value.width),
-        maxHeight: resolveSize1D(props.maxHeight, Number.NaN, domRect.value.height),
+        minWidth: toLength(props.minWidth, Number.NaN),
+        minHeight: toLength(props.minHeight, Number.NaN),
+        maxWidth: toLength(props.maxWidth, Number.NaN),
+        maxHeight: toLength(props.maxHeight, Number.NaN),
       }),
     )
 

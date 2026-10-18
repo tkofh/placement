@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import * as Flexbox from '../src/flexbox.ts'
 import * as Frame from '../src/frame.ts'
+import * as Length from '../src/length.ts'
 import * as Rect from '../src/rect.ts'
 
 function c(
@@ -776,5 +777,49 @@ describe('offsets are physical in reversed flows (regression)', () => {
         Rect.make(300),
       ),
     ).toEqual([Rect.make(0, 0, 100)])
+  })
+})
+
+describe('percentages', () => {
+  const pct = Length.percent
+  const inner = Rect.make(10, 20, 400, 200)
+
+  test('frames resolve against the container rect', () => {
+    expect(
+      Flexbox.apply(
+        [
+          Frame.make({ width: pct(25), height: pct(50) }),
+          Frame.make({ width: pct(50), height: 10, offsetLeft: pct(5), offsetTop: pct(10) }),
+        ],
+        Flexbox.make({}),
+        inner,
+      ),
+    ).toEqual([Rect.make(10, 20, 100, 100), Rect.make(130, 40, 200, 10)])
+  })
+
+  test('a percentage frame lays out as its resolved frame', () => {
+    const frames = [
+      Frame.make({ width: pct(50), minHeight: pct(25), grow: 1 }),
+      Frame.make({ width: 100, maxWidth: pct(20), offsetRight: pct(10) }),
+      Frame.make({ width: 100, aspectRatio: 2 }),
+    ]
+    const layout = Flexbox.make({ wrap: Flexbox.wrap.wrap })
+    expect(Flexbox.apply(frames, layout, inner)).toEqual(
+      Flexbox.apply(
+        frames.map((frame) => Frame.resolve(frame, inner)),
+        layout,
+        inner,
+      ),
+    )
+  })
+
+  test('a column container resolves on the same physical bases', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ width: pct(50), height: pct(25) })],
+        Flexbox.make({ direction: Flexbox.direction.column }),
+        inner,
+      ),
+    ).toEqual([Rect.make(10, 20, 200, 50)])
   })
 })

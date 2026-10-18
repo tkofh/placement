@@ -54,6 +54,10 @@
       "types": "./dist/interval.d.mts",
       "import": "./dist/interval.mjs"
     },
+    "./length": {
+      "types": "./dist/length.d.mts",
+      "import": "./dist/length.mjs"
+    },
     "./offset": {
       "types": "./dist/offset.d.mts",
       "import": "./dist/offset.mjs"

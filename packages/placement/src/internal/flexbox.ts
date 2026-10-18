@@ -1,6 +1,6 @@
 import { EPSILON, RELATIVE_TOLERANCE, clamp } from 'curvy/number'
 import { Pipeable } from 'curvy/utils'
-import type { Frame } from '../frame.ts'
+import * as Frame from '../frame.ts'
 import type { Interval } from '../interval.ts'
 import * as Rect from '../rect.ts'
 import * as Track from '../track.ts'
@@ -377,7 +377,7 @@ const columnAxes: AxisView = {
   crossOffsetEnd: 'offsetRight',
 }
 
-function computeItem(frame: Frame, flexbox: Flexbox, axes: AxisView) {
+function computeItem(frame: Frame.Frame, flexbox: Flexbox, axes: AxisView) {
   const basisMain = frame[axes.mainDimension]
   // Frame offsets are physical (offsetLeft always names the left edge). A
   // reversed flow lays the main track out logically and then reflects it,
@@ -448,7 +448,7 @@ function computeCrossTrack(
 }
 
 function computeTracks(
-  frames: ReadonlyArray<Frame>,
+  frames: ReadonlyArray<Frame.Frame>,
   flexbox: Flexbox,
   parent: Rect.Rect,
   axes: AxisView,
@@ -534,6 +534,25 @@ function computeTracks(
   }
 }
 
+// Resolves the percentages of every frame against the container. The input
+// array comes back as it is when no frame has a percentage.
+function resolveFrames(
+  frames: ReadonlyArray<Frame.Frame>,
+  parent: Rect.Rect,
+): ReadonlyArray<Frame.Frame> {
+  let resolved: Array<Frame.Frame> | undefined
+  const len = frames.length
+  for (let i = 0; i < len; i++) {
+    const frame = frames[i] as Frame.Frame
+    const next = Frame.resolve(frame, parent)
+    if (next !== frame) {
+      resolved ??= frames.slice(0, i)
+    }
+    resolved?.push(next)
+  }
+  return resolved ?? frames
+}
+
 /**
  * Lays out `frames` as flex items inside `parent` and returns their rects,
  * in frame order, in `parent`'s coordinate space.
@@ -543,6 +562,11 @@ function computeTracks(
  * first. Then the justify and align ratios place the rest. A frame whose
  * `align` or `stretch` is non-finite (both default to `Infinity`) inherits
  * the container's `alignItems` or `stretchItems`.
+ *
+ * Percentages in the frames resolve against `parent`, the container's
+ * inner rect, through `Frame.resolve`: horizontal offsets and widths
+ * against `parent.width`, vertical offsets and heights against
+ * `parent.height`.
  *
  * Frame offsets are physical in every direction. `offsetLeft` pads the
  * item's left edge even in `rowReverse`. A non-finite offset is an auto
@@ -574,7 +598,7 @@ function computeTracks(
  * ```
  */
 export function apply(
-  frames: ReadonlyArray<Frame>,
+  frames: ReadonlyArray<Frame.Frame>,
   flexbox: Flexbox,
   parent: Rect.Rect,
 ): ReadonlyArray<Rect.Rect> {
@@ -584,7 +608,12 @@ export function apply(
 
   const axes = flexbox.isRow ? rowAxes : columnAxes
 
-  const { mainTracks, crossTracks, lineItems } = computeTracks(frames, flexbox, parent, axes)
+  const { mainTracks, crossTracks, lineItems } = computeTracks(
+    resolveFrames(frames, parent),
+    flexbox,
+    parent,
+    axes,
+  )
 
   const rects: Array<Rect.Rect> = []
 

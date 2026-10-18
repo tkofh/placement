@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import * as Box from '../src/box.ts'
+import * as Dimensions from '../src/dimensions.ts'
+import * as Length from '../src/length.ts'
 import * as Rect from '../src/rect.ts'
 
 const parent = Rect.make(400, 200)
@@ -328,5 +330,83 @@ describe('box through a Proxy', () => {
     expect(box.toJSON()).toEqual({ top: 10, left: 20, width: 100, aspectRatio: 2 })
     expect(Box.setTop(box, 5).top).toBe(5)
     expect(Box.apply(box, parent)).toEqual(Rect.make(20, 10, 100, 50))
+  })
+})
+
+describe('percentages', () => {
+  const pct = Length.percent
+
+  // Each percentage resolves against the parent's width (horizontal fields)
+  // or height (vertical fields), then solves as the equivalent number.
+  const cases: Array<[string, Box.BoxInput, Box.BoxInput]> = [
+    ['left', { left: pct(10), width: 100 }, { left: 40, width: 100 }],
+    ['right', { right: pct(25), width: 100 }, { right: 100, width: 100 }],
+    ['top', { top: pct(10), height: 50 }, { top: 20, height: 50 }],
+    ['bottom', { bottom: pct(25), height: 50 }, { bottom: 50, height: 50 }],
+    ['width', { width: pct(50) }, { width: 200 }],
+    ['height', { height: pct(50) }, { height: 100 }],
+    ['minWidth', { width: 10, minWidth: pct(50) }, { width: 10, minWidth: 200 }],
+    ['minHeight', { height: 10, minHeight: pct(50) }, { height: 10, minHeight: 100 }],
+    ['maxWidth', { maxWidth: pct(25) }, { maxWidth: 100 }],
+    ['maxHeight', { maxHeight: pct(25) }, { maxHeight: 50 }],
+    ['inset pair', { left: pct(10), right: pct(10) }, { left: 40, right: 40 }],
+    ['ratio from a percentage', { width: pct(50), aspectRatio: 4 }, { width: 200, aspectRatio: 4 }],
+    ['px length', { left: Length.px(10), width: Length.px(20) }, { left: 10, width: 20 }],
+  ]
+
+  test.each(cases)('%s resolves against its basis', (_, input, numeric) => {
+    const expected = Box.apply(Box.make(numeric), offsetParent)
+    expect(Box.apply(Box.make(input), offsetParent)).toEqual(expected)
+    expect(Box.make(input).pipe(Box.apply(offsetParent))).toEqual(expected)
+  })
+
+  test('resolve replaces percentages with numbers', () => {
+    const box = Box.make({ top: pct(10), left: pct(10), width: pct(50), maxHeight: pct(25) })
+    const resolved = { top: 20, left: 40, width: 200, maxHeight: 50 }
+    expect(Box.resolve(box, parent).toJSON()).toEqual(resolved)
+    expect(box.pipe(Box.resolve(Dimensions.make(400, 200))).toJSON()).toEqual(resolved)
+  })
+
+  test('resolve returns a box without percentages as it is', () => {
+    const box = Box.make({ top: 10, width: Length.px(100) })
+    expect(Box.resolve(box, parent)).toBe(box)
+  })
+
+  test('getters read an unresolved percentage as unset', () => {
+    const box = Box.make({
+      top: pct(10),
+      width: pct(50),
+      minWidth: pct(10),
+      maxWidth: pct(90),
+    })
+    expect(box.top).toBeNaN()
+    expect(box.width).toBeNaN()
+    expect(box.minWidth).toBe(0)
+    expect(box.maxWidth).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  test('a px length reads as its number', () => {
+    const box = Box.make({ left: Length.px(10) })
+    expect(box.left).toBe(10)
+    expect(box.toJSON()).toEqual({ left: 10 })
+  })
+
+  test('setters take lengths', () => {
+    const box = Box.make({}).pipe(Box.setWidth(pct(50)), Box.setInset(pct(10), 0))
+    expect(Box.apply(box, parent)).toEqual(Rect.make(0, 20, 200, 160))
+    expect(Box.apply(Box.setSize(Box.make({}), pct(25)), parent)).toEqual(Rect.make(0, 0, 100, 50))
+  })
+
+  test('a JSON round trip keeps percentages', () => {
+    const box = Box.make({ left: pct(10), width: pct(50), height: 20 })
+    const revived = Box.make(JSON.parse(JSON.stringify(box)))
+    expect(revived.toJSON()).toEqual(box.toJSON())
+    expect(Box.apply(revived, parent)).toEqual(Box.apply(box, parent))
+  })
+
+  test('a NaN basis leaves the field unset', () => {
+    const nan = Rect.make(0, 0, Number.NaN, 100)
+    expect(Box.apply(Box.make({ width: pct(50), height: 10 }), nan).height).toBe(10)
+    expect(Box.resolve(Box.make({ width: pct(50) }), nan).width).toBeNaN()
   })
 })
