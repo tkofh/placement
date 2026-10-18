@@ -169,6 +169,7 @@ function translateRoute(route: HierarchyEdgeRoute, origin: Point.Point): Hierarc
   return {
     points: route.points.map((point) => Point.translate(point, x, y)),
     radii: route.radii,
+    ...(route.insets === undefined ? {} : { insets: route.insets }),
     adornments: route.adornments.map((placed) => ({
       ...placed,
       rect: Rect.translate(placed.rect, x, y),

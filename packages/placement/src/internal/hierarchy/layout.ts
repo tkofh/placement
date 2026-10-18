@@ -3,31 +3,27 @@ import * as Track from '../../track.ts'
 import {
   type Axis,
   type LogicalPoint,
-  type PlacedAdornment,
   type RunItem,
   type Sign,
   type SolveAdornment,
-  distanceAlong,
-  lengths,
   measure,
-  packRun,
-  placeAbsolute,
-  pointOnDrawn,
-  resolveRadii,
   runLength,
 } from '../adornments.ts'
 import { findReversed } from '../graph/acyclic.ts'
-import { cornerArcs, onArc } from '../polygon.ts'
 import type { LayeredGraph, Segment } from './graph.ts'
-import { FAR, type Jog, NEAR, assignLanes } from './lanes.ts'
 import { order } from './order.ts'
 import { type Extent, position, separate } from './position.ts'
 import { type RankEdge, rank } from './rank.ts'
 
-// The layered layout solver. It works in logical coordinates: `o` runs along
-// the order axis (across the flow) and `r` along the rank axis (with the
-// flow, starting at 0). The public module resolves frames and edges into
-// these logical inputs and maps the results back to physical space.
+// The placement half of the layered layout. It works in logical
+// coordinates: `o` runs along the order axis (across the flow) and `r`
+// along the rank axis (with the flow, starting at 0). The public module
+// resolves frames and edges into these logical inputs, maps the placed
+// boxes back to physical space, and routes the edges with the connector,
+// which takes the boxes as obstacles, the waypoints through the slots that
+// ordering reserved for each edge, and the faces its ports sit on. Where
+// the connector's notes say a channel or a gap between nodes was too
+// narrow for its routes, the public module grows it and places again.
 //
 // Logical faces of a node, clockwise in logical space: 0 is the rank-start
 // face (upstream), 1 the order-end face, 2 the rank-end face (downstream),
@@ -58,17 +54,6 @@ export interface SolveNode {
   // Resolved band placement and stretch.
   readonly place: number
   readonly stretch: number
-  // The node's shape in its box, or undefined for the box itself. Ports
-  // sit on it.
-  readonly shape: ((box: LogicalBox) => SolveShape) | undefined
-}
-
-// A node's shape: closed outlines of corners in logical coordinates, and
-// the radius of the circular arcs that round every corner, which they fit
-// whole.
-export interface SolveShape {
-  readonly outlines: ReadonlyArray<ReadonlyArray<LogicalPoint>>
-  readonly radius: number
 }
 
 export interface SolvePort {
@@ -86,10 +71,10 @@ export interface SolveEdge {
   readonly minLength: number
   readonly sourcePort: SolvePort
   readonly targetPort: SolvePort
-  // The most and the least each corner reaches along its legs, finite and
-  // with 0 <= minRadius <= radius.
-  readonly radius: number
+  // The least each corner reaches along its legs, finite and at least 0,
+  // which the channels keep room for.
   readonly minRadius: number
+  // The adornments in logical terms, for the room they take.
   readonly adornments: ReadonlyArray<SolveAdornment>
 }
 
@@ -112,15 +97,58 @@ export interface LogicalBox {
   readonly rSize: number
 }
 
-export type { LogicalPoint, PlacedAdornment }
+export type { LogicalPoint }
 
-export interface SolveResult {
+/**
+ * What a placement grew, past what its inputs ask for, to fit the routes
+ * of the placement before it.
+ */
+export interface Growth {
+  /**
+   * The extra size of each channel, by channel index: channel `k` follows
+   * rank `k`, and channel `-1` precedes the first rank.
+   */
+  readonly channels: ReadonlyMap<number, number>
+  /**
+   * The extra separation between two nodes in one rank, keyed by
+   * `a * nodeCount + b` for node indices `a < b`.
+   */
+  readonly pairs: ReadonlyMap<number, number>
+  /** The extra room on both sides of a node, by node index. */
+  readonly beside: ReadonlyMap<number, number>
+}
+
+/** No growth. */
+export const noGrowth: Growth = { channels: new Map(), pairs: new Map(), beside: new Map() }
+
+/** A port, placed: its face, and its position along the face as a fraction. */
+export interface PlacedPort {
+  readonly face: number
+  readonly at: number
+}
+
+/** The placed boxes, and what the routes need to know about the layering. */
+export interface Placement {
   readonly nodes: ReadonlyArray<LogicalBox>
-  readonly routes: ReadonlyArray<ReadonlyArray<LogicalPoint>>
-  // The size of each route's corner at each point, 0 at its ends.
-  readonly radii: ReadonlyArray<ReadonlyArray<number>>
-  readonly adornments: ReadonlyArray<ReadonlyArray<PlacedAdornment>>
-  // The end of the last rank band. Reversed directions mirror against it.
+  /** The source and target port of each edge. */
+  readonly ports: ReadonlyArray<readonly [PlacedPort, PlacedPort]>
+  /**
+   * How far each edge runs straight out of each of its ports, as
+   * `[source, target]`: the length its flow adornments take there, and the
+   * least its corner past them reaches.
+   */
+  readonly stubs: ReadonlyArray<readonly [number, number]>
+  /**
+   * The waypoints of each edge's route, from its source to its target: the
+   * start and end of each band that the edge's dummies sit in, at the
+   * dummy's position across the flow. Self loops have none.
+   */
+  readonly vias: ReadonlyArray<ReadonlyArray<LogicalPoint>>
+  /** Whether each edge was reversed to break a cycle. */
+  readonly reversed: ReadonlyArray<boolean>
+  /** The rank of each node. */
+  readonly ranks: ReadonlyArray<number>
+  /** The end of the last rank band. Reversed directions mirror against it. */
   readonly rankExtent: number
 }
 
@@ -129,13 +157,38 @@ interface Band {
   readonly end: number
 }
 
-export function solve(
+/**
+ * Places the nodes of a layered graph: ranks them, orders each rank,
+ * positions them across the flow, and stacks each rank into a band along
+ * it, with channels between the bands for the routes to jog in.
+ *
+ * @param nodes - The nodes.
+ * @param edges - The edges, between nodes by index.
+ * @param options - The gaps and the back edge style.
+ * @param growth - What to grow past the gaps, from the routes of the
+ * placement before.
+ * @returns The placement.
+ */
+export function place(
   nodes: ReadonlyArray<SolveNode>,
   edges: ReadonlyArray<SolveEdge>,
   options: SolveOptions,
-): SolveResult {
+  growth: Growth = noGrowth,
+): Placement {
   const nodeCount = nodes.length
   const { rankGap, nodeGap, edgeGap } = options
+  // How far a route keeps from a node, which is where a route that leaves
+  // a node sideways turns.
+  const clearance = (nodeGap + edgeGap) / 2
+  // How far past its port a route with a stub turns at the earliest: it
+  // runs straight through the end of the stub and an edge gap on.
+  const past = (stub: number): number => (stub > 0 ? stub + edgeGap : 0)
+  // How far a route runs straight out of a port with a stub of `stub` and
+  // corners that reach `corner` at least, so that the corner past the stub
+  // has its room: the gap the turn keeps past the run covers a corner up
+  // to the gap.
+  const straightFor = (stub: number, corner: number): number => stub + Math.max(corner - edgeGap, 0)
+  const straightOut = (end: End): number => straightFor(end.stub, end.corner)
 
   // Self loops never enter the layered graph. They route around their node.
   const flow: Array<number> = []
@@ -266,41 +319,93 @@ export function solve(
   const graph: LayeredGraph = { rankCount, ranks, dummy, segments, up, down }
   const layers = order(graph)
 
-  // Self loops reserve room on the order faces they wrap around: one
-  // `edgeGap` per loop at the node, on each order face a loop visits.
-  const loopsBefore: Array<number> = []
-  const loopsAfter: Array<number> = []
-  for (const list of loops) {
-    let before = 0
-    let after = 0
+  // The routes that run beside each node, on each of its order faces, and
+  // the room they need there: each takes an edge gap, and the stub out of
+  // a port on the face, with the corner after it, reaches past the
+  // clearance where it is longer. Self loops wrap around their node on the
+  // order faces they visit. The edges that leave a node sideways join
+  // once a first positioning says which side each wrap goes around.
+  interface Beside {
+    readonly count: number
+    readonly reach: number
+  }
+  const beside: Array<[before: Beside, after: Beside]> = nodes.map(() => [
+    { count: 0, reach: 0 },
+    { count: 0, reach: 0 },
+  ])
+  const runBeside = (node: number, side: number, out: number): void => {
+    const pair = beside[node] as [Beside, Beside]
+    const slot = side === ORDER_END ? 1 : 0
+    const { count, reach } = pair[slot]
+    pair[slot] = { count: count + 1, reach: Math.max(reach, out) }
+  }
+  const stubOf = (edge: SolveEdge, end: number, face: number): number =>
+    packOf(edge.adornments, end, face, end === 0, options.mirror)
+  for (const [node, list] of loops.entries()) {
     for (const edgeIndex of list) {
       const edge = edges[edgeIndex] as SolveEdge
-      const visited = facesBetween(
-        edge.sourcePort.face >= 0 ? edge.sourcePort.face : ORDER_END,
-        edge.targetPort.face >= 0 ? edge.targetPort.face : ORDER_END,
-      )
-      if (visited.includes(ORDER_START)) {
-        before = list.length
-      }
-      if (visited.includes(ORDER_END)) {
-        after = list.length
+      const sourceFace = edge.sourcePort.face >= 0 ? edge.sourcePort.face : ORDER_END
+      const targetFace = edge.targetPort.face >= 0 ? edge.targetPort.face : ORDER_END
+      for (const face of facesBetween(sourceFace, targetFace)) {
+        if (!isRankFace(face)) {
+          const stub = Math.max(
+            face === sourceFace ? stubOf(edge, 0, face) : 0,
+            face === targetFace ? stubOf(edge, 1, face) : 0,
+          )
+          runBeside(node, face, past(straightFor(stub, edge.minRadius)))
+        }
       }
     }
-    loopsBefore.push(before)
-    loopsAfter.push(after)
+  }
+  // The edges that leave a node sideways run beside it in columns, outside
+  // its loops, an edge gap apart from the inside out: each at least as far
+  // out as its stub and the corner after it reach. The column of each end,
+  // as how far past the clearance it runs, by edge and end.
+  const columns = new Map<number, number>()
+  const loopRoom = ({ count, reach }: Beside): number =>
+    count * edgeGap + Math.max(reach - clearance, 0)
+  const roomBeside: Array<[before: number, after: number]> = beside.map(([before, after]) => [
+    loopRoom(before),
+    loopRoom(after),
+  ])
+
+  // The room the routes of the placement before needed between two nodes
+  // of a rank, split between the two.
+  const placeIn = new Map<number, number>()
+  for (const layer of layers) {
+    for (const [k, element] of layer.entries()) {
+      placeIn.set(element, k)
+    }
+  }
+  const pairBefore: Array<number> = nodes.map(() => 0)
+  const pairAfter: Array<number> = nodes.map(() => 0)
+  for (const [key, extra] of growth.pairs) {
+    const a = Math.floor(key / nodeCount)
+    const b = key % nodeCount
+    if (a >= nodeCount || b >= nodeCount || ranks[a] !== ranks[b]) {
+      continue
+    }
+    const [left, right] = (placeIn.get(a) ?? 0) < (placeIn.get(b) ?? 0) ? [a, b] : [b, a]
+    pairAfter[left] = (pairAfter[left] ?? 0) + extra / 2
+    pairBefore[right] = (pairBefore[right] ?? 0) + extra / 2
+  }
+  for (const [node, extra] of growth.beside) {
+    if (node < nodeCount) {
+      pairBefore[node] = (pairBefore[node] ?? 0) + extra
+      pairAfter[node] = (pairAfter[node] ?? 0) + extra
+    }
   }
 
   // The order-axis extent of each element. Nodes reserve room beside them
-  // for self loops and for their columns.
-  const makeExtents = (columns: Columns | undefined): Array<Extent> =>
+  // for the routes that run there.
+  const makeExtents = (): Array<Extent> =>
     ranks.map((_, element) => {
       if (element < nodeCount) {
         const node = nodes[element] as SolveNode
-        const before = (loopsBefore[element] as number) * edgeGap + (columns?.before[element] ?? 0)
-        const after = (loopsAfter[element] as number) * edgeGap + (columns?.after[element] ?? 0)
+        const [before, after] = roomBeside[element] as [number, number]
         return {
-          before: node.oSize / 2 + node.oStart + before,
-          after: node.oSize / 2 + node.oEnd + after,
+          before: node.oSize / 2 + node.oStart + before + (pairBefore[element] as number),
+          after: node.oSize / 2 + node.oEnd + after + (pairAfter[element] as number),
           gap: nodeGap / 2,
         }
       }
@@ -314,13 +419,14 @@ export function solve(
       return { before, after, gap: edgeGap / 2 }
     })
 
-  let extents = makeExtents(undefined)
+  let extents = makeExtents()
   let anchors = position(graph, layers, extents)
 
   // The ends of each chain: the node, its port face and position, the
-  // direction the edge leaves it in (1 downstream from the upper end, -1
-  // upstream from the lower end), and the order-axis position of the next
-  // element along the edge, which orders ports that share a face.
+  // length its flow adornments take straight out of the port, the least
+  // size of its corners, the direction the edge leaves it in (1 downstream
+  // from the upper end, -1 upstream from the lower end), and the order-axis
+  // position of the next element along the edge.
   const makeEnds = (): Array<[upper: End, lower: End]> =>
     flowEdges.map((edge, j) => {
       const chain = chains[j] as Array<number>
@@ -353,19 +459,12 @@ export function solve(
       ]
     })
 
-  // A node's box across the flow only. Ports on rank faces and the points
-  // where edges leave their node's band depend on nothing else.
-  const orderBox = (node: number): LogicalBox => {
-    const { oSize } = nodes[node] as SolveNode
-    return { o: (anchors[node] as number) - oSize / 2, r: 0, oSize, rSize: 0 }
-  }
-
-  // Every edge that leaves a node through an order face, or around it from
-  // the face pointing away, gets a column of its own
-  // beside the node. A wrap (an end on the face pointing away) goes around
-  // the node on the side of the next element along its edge, decided once
-  // from a first positioning. The columns then reserve room, and positioning
-  // runs again.
+  // An edge that leaves a node through an order face, or around it from
+  // the face pointing away, runs beside the node. A wrap (an end on the
+  // face pointing away) goes around the node on the side of the next
+  // element along its edge, decided once from a first positioning. The
+  // edges beside a node reserve room there, an edge gap each, and
+  // positioning runs again.
   const wrapSides: Array<[upper: number, lower: number]> = flowEdges.map(() => [-1, -1])
   const sideOf = (end: End): number =>
     isRankFace(end.face)
@@ -373,13 +472,72 @@ export function solve(
       : end.face
   // Columns on one side of a node run from the inside out in the order of
   // where their edges head next, as crossing reduction ordered the elements
-  // they continue through. The port orders follow it.
+  // they continue through.
   const columnOrder = (a: End, b: End): number => {
     const outward = (end: End) => (sideOf(end) === ORDER_END ? end.toward : -end.toward)
     return coincident(a.toward, b.toward) ? a.j - b.j : outward(a) - outward(b)
   }
-  // On a rank face, wraps sit at the end nearest the side they go around,
-  // and their turns nest: the port nearest the side takes the inner column.
+  {
+    const ends = makeEnds()
+    const stacks = new Map<number, Array<End>>()
+    for (const pair of ends) {
+      for (const end of pair) {
+        if (isWrap(end)) {
+          const center = anchors[end.node] as number
+          const starts = end.toward < center && !coincident(end.toward, center)
+          ;(wrapSides[end.j] as [number, number])[end.direction > 0 ? 0 : 1] = starts
+            ? ORDER_START
+            : ORDER_END
+        }
+        if (!isRankFace(end.face) || isWrap(end)) {
+          const key = 2 * end.node + (sideOf(end) === ORDER_END ? 1 : 0)
+          const stack = stacks.get(key) ?? []
+          stack.push(end)
+          stacks.set(key, stack)
+        }
+      }
+    }
+    // Edges from auto ports on an order face that head upstream run above
+    // their ports and edges heading downstream below, so with only such
+    // ports on the face the two groups share columns. Wraps run the whole
+    // length of the node and take columns of their own, as does every
+    // edge beside a fixed port, which can sit anywhere on the face.
+    for (const [key, members] of stacks) {
+      const node = Math.floor(key / 2)
+      const slot = key % 2
+      const sorted = members.toSorted(columnOrder)
+      const shared = sorted.every((end) => !isWrap(end) && !Number.isFinite(end.at))
+      const base = (roomBeside[node] as [number, number])[slot] as number
+      let outer = base
+      for (const stack of shared
+        ? [sorted.filter((end) => end.direction < 0), sorted.filter((end) => end.direction > 0)]
+        : [sorted]) {
+        let offset = base - edgeGap
+        for (const end of stack) {
+          // A wrap's stub runs along the flow, so it turns at the clearance.
+          const reach = isWrap(end) ? 0 : past(straightOut(end))
+          offset = Math.max(offset + edgeGap, reach - clearance)
+          columns.set(columnKey(end), offset)
+        }
+        outer = Math.max(outer, offset + edgeGap)
+      }
+      ;(roomBeside[node] as [number, number])[slot] = outer
+    }
+    if (stacks.size > 0) {
+      extents = makeExtents()
+      anchors = position(graph, layers, extents)
+    }
+  }
+
+  // A node's box across the flow only. Ports on rank faces depend on
+  // nothing else.
+  const orderBox = (node: number): LogicalBox => {
+    const { oSize } = nodes[node] as SolveNode
+    return { o: (anchors[node] as number) - oSize / 2, r: 0, oSize, rSize: 0 }
+  }
+  // Ports on one face go in the order their edges head. On a rank face,
+  // wraps sit at the end nearest the side they go around, and their turns
+  // nest: the port nearest the side goes around first.
   const rankOrder = (a: End, b: End): number => {
     const rankA = wrapRank(a, sideOf)
     const rankB = wrapRank(b, sideOf)
@@ -393,7 +551,7 @@ export function solve(
   }
   // On an order face, edges heading upstream take the upper ports and edges
   // heading downstream the lower ones. In each group the port nearest the
-  // group's band edge takes the inner column, so the stubs never cross.
+  // group's band edge goes out first, so the stubs never cross.
   const sideOrder = (a: End, b: End): number => {
     if (a.direction !== b.direction) {
       return a.direction - b.direction
@@ -401,144 +559,40 @@ export function solve(
     return a.direction < 0 ? columnOrder(a, b) : columnOrder(b, a)
   }
 
-  {
-    const ends = makeEnds()
-    for (const pair of ends) {
-      for (const end of pair) {
-        if (isWrap(end)) {
-          const center = anchors[end.node] as number
-          const before = end.toward < center && !coincident(end.toward, center)
-          ;(wrapSides[end.j] as [number, number])[end.direction > 0 ? 0 : 1] = before
-            ? ORDER_START
-            : ORDER_END
-        }
-      }
-    }
-    const columns = assignColumns(ends, sideOf, columnOrder, loopsBefore, loopsAfter, {
-      nodeCount,
-      nodeGap,
-      edgeGap,
-    })
-    if (columns.used) {
-      extents = makeExtents(columns)
-      anchors = position(graph, layers, extents)
-    }
-  }
-
-  // Where an edge leaves its node's band across the flow: at its port on the
-  // face toward the edge, otherwise at its column.
-  const exitOf = (end: End, box: LogicalBox, along: number | undefined, cols: Columns): number => {
+  // Where an edge attaches to its node across the flow: at its port on the
+  // face toward the edge, or at its column beside the node, out from the
+  // face it leaves through, or the side it wraps around.
+  const attachOf = (end: End, rankAlong: ReadonlyMap<End, number>): number => {
     if (end.face === towardFace(end)) {
-      return along as number
+      return rankAlong.get(end) as number
     }
-    const offset = (cols.offsets[end.j] as [number, number])[end.direction > 0 ? 0 : 1]
-    return sideOf(end) === ORDER_END ? box.o + box.oSize + offset : box.o - offset
+    const center = anchors[end.node] as number
+    const half = (nodes[end.node] as SolveNode).oSize / 2
+    const out = half + clearance + (columns.get(columnKey(end)) ?? 0)
+    return sideOf(end) === ORDER_END ? center + out : center - out
   }
 
-  // The rank neighbors of each element, for the room beside a node.
-  const neighbors = (): [before: Map<number, number>, after: Map<number, number>] => {
-    const before = new Map<number, number>()
-    const after = new Map<number, number>()
-    for (const layer of layers) {
-      for (let i = 1; i < layer.length; i++) {
-        before.set(layer[i] as number, layer[i - 1] as number)
-        after.set(layer[i - 1] as number, layer[i] as number)
-      }
-    }
-    return [before, after]
-  }
-  const [neighborBefore, neighborAfter] = neighbors()
-
-  // Moves columns out to where their edges continue, so an edge that runs
-  // on past its node's column takes no extra turn beside the node. A column
-  // moves only outward, only as far as the room before the node's rank
-  // neighbor allows (the clearance an edge passing there would need), and
-  // never past the column outside it.
-  const extendColumns = (
-    ends: ReadonlyArray<[End, End]>,
-    rankAlong: ReadonlyMap<End, number>,
-    cols: Columns,
-  ): Columns => {
-    const offsets = cols.offsets.map(([upper, lower]): [number, number] => [upper, lower])
-    const offsetOf = (end: End) => (offsets[end.j] as [number, number])[end.direction > 0 ? 0 : 1]
-
-    // Where the edge crosses into the channel beyond its node's band: at the
-    // next element, or at the other end's exit for an edge between adjacent
-    // ranks.
-    const next = (end: End): number => {
-      const chain = chains[end.j] as Array<number>
-      if (chain.length > 2) {
-        return end.toward
-      }
-      const other = (ends[end.j] as [End, End])[end.direction > 0 ? 1 : 0]
-      return exitOf(other, orderBox(other.node), rankAlong.get(other), cols)
-    }
-
-    for (const { node, side, ends: stack } of cols.stacks) {
-      const box = orderBox(node)
-      const after = side === ORDER_END
-      const neighbor = (after ? neighborAfter : neighborBefore).get(node)
-      let limit = Number.POSITIVE_INFINITY
-      if (neighbor !== undefined) {
-        const extent = extents[neighbor] as Extent
-        const clearance = (after ? extent.before : extent.after) + extent.gap + edgeGap / 2
-        const x = anchors[neighbor] as number
-        limit = after ? x - clearance - (box.o + box.oSize) : box.o - (x + clearance)
-      }
-      for (let k = stack.length - 1; k >= 0; k--) {
-        const end = stack[k] as End
-        const offset = offsetOf(end)
-        const x = next(end)
-        const desired = after ? x - (box.o + box.oSize) : box.o - x
-        if (
-          desired > offset &&
-          !coincident(desired, offset) &&
-          (desired <= limit || coincident(desired, limit))
-        ) {
-          ;(offsets[end.j] as [number, number])[end.direction > 0 ? 0 : 1] = desired
-        }
-        limit = offsetOf(end) - edgeGap
-      }
-    }
-    return { ...cols, offsets }
-  }
-
-  // Resolves the ports on rank faces, the columns, and where each edge
-  // leaves its upper node's band and enters its lower node's band. Columns
-  // extend only once straightening has settled where edges continue.
-  const resolveOrthogonal = (ends: ReadonlyArray<[End, End]>, extend: boolean) => {
-    const rankAlong = placePorts(ends, orderBox, true, edgeGap, rankOrder, isWrap)
-    const assigned = assignColumns(ends, sideOf, columnOrder, loopsBefore, loopsAfter, {
-      nodeCount,
-      nodeGap,
-      edgeGap,
-    })
-    const cols = extend ? extendColumns(ends, rankAlong, assigned) : assigned
-    const attach = ends.map(
-      ([upper, lower]) =>
-        [
-          exitOf(upper, orderBox(upper.node), rankAlong.get(upper), cols),
-          exitOf(lower, orderBox(lower.node), rankAlong.get(lower), cols),
-        ] as const,
-    )
-    return { rankAlong, cols, attach }
-  }
-
-  // Straighten toward the actual ports, so that a run aligns with the port
+  // Straighten toward the attachments, so that a run aligns with the port
   // its edge leaves or enters through and needs one jog. The jog sits by
   // the end that fans out: below a node with several edges leaving it,
   // above a node with several edges entering it.
   {
-    const { attach } = resolveOrthogonal(makeEnds(), false)
+    const ends = makeEnds()
+    const rankAlong = placePorts(ends, orderBox, true, edgeGap, rankOrder, isWrap)
     straighten(
       layers,
       anchors,
       extents,
       chains.map((chain, j) => {
-        const [upper, lower] = attach[j] as readonly [number, number]
+        const [upper, lower] = ends[j] as [End, End]
         const fansOut = (down[chain[0] as number] as Array<number>).length > 1
         const fansIn = (up[chain[chain.length - 1] as number] as Array<number>).length > 1
-        return { chain, upper, lower, preferUpper: fansIn && !fansOut }
+        return {
+          chain,
+          upper: attachOf(upper, rankAlong),
+          lower: attachOf(lower, rankAlong),
+          preferUpper: fansIn && !fansOut,
+        }
       }),
     )
   }
@@ -548,8 +602,7 @@ export function solve(
   // Ports on rank faces depend only on positions across the flow, so they
   // resolve before the rank bands do.
   const ends = makeEnds()
-  const resolved = resolveOrthogonal(ends, true)
-  const rankAlong = resolved.rankAlong
+  const rankAlong = placePorts(ends, orderBox, true, edgeGap, rankOrder, isWrap)
 
   // Rank bands. Each band is as thick as the outer size of its largest
   // element, and its elements stack inside it.
@@ -589,174 +642,83 @@ export function solve(
       ? (thicknesses[ranks[node] as number] as number) - (placement.start + placement.size)
       : placement.start
   }
-  // The room a dummy's band leaves free on its downstream side (`direction`
-  // 1) or upstream side (-1) for the corners beside it: what its
-  // adornments leave, or half the band without them.
-  const freeRoom = (element: number, direction: 1 | -1): number => {
-    const thickness = thicknesses[ranks[element] as number] as number
-    const placement = placements.get(element)
-    if (placement === undefined) {
-      return thickness / 2
-    }
-    return direction > 0 ? thickness - (placement.start + placement.size) : placement.start
-  }
 
-  // The order-axis position of each chain at every rank boundary, the lane
-  // of each jog between two ranks, and the lane of each wrap's turn. Channel
-  // `k` lies after rank `k`, so channel -1 is before the first rank; the
-  // arrays below hold channel `k` at index `k + 1`. A lane keeps room from
-  // each side of its channel for the corner there, and a lane where a
-  // route's first or last segment ends keeps room for its port's stub too.
-  const crossings: Array<Array<number>> = []
-  const jogLanes: Array<Array<number>> = []
-  const wrapLanes: Array<[upper: number, lower: number]> = flowEdges.map(() => [-1, -1])
-  interface Placed {
-    readonly jog: Jog
-    readonly near: number
-    readonly far: number
-    readonly assign: (lane: number) => void
-  }
-  const channelJogs = new Map<number, Array<Placed>>()
+  // The least size of each channel: room past each face for the straight
+  // run out of every port on it, which the route turns an edge gap past,
+  // and room beside each face a wrap turns past, with the clearance its
+  // turn keeps from the node. Channel `k` lies after rank `k`, so channel
+  // -1 is before the first rank.
   const minSizes = new Map<number, number>()
-  const addJog = (channel: number, placed: Placed): void => {
-    let list = channelJogs.get(channel)
-    if (list === undefined) {
-      list = []
-      channelJogs.set(channel, list)
-    }
-    list.push(placed)
+  const need = (channel: number, size: number): void => {
+    minSizes.set(channel, Math.max(minSizes.get(channel) ?? 0, size))
   }
-
   for (const [j, chain] of chains.entries()) {
     const [upperEnd, lowerEnd] = ends[j] as [End, End]
-    const [upper, lower] = resolved.attach[j] as readonly [number, number]
-    const xs = [upper]
+    const xs = [attachOf(upperEnd, rankAlong)]
     for (let i = 1; i + 1 < chain.length; i++) {
       xs.push(anchors[chain[i] as number] as number)
     }
-    xs.push(lower)
-    crossings.push(xs)
-    const lanes = xs.slice(1).map(() => -1)
-    jogLanes.push(lanes)
-
-    // The room a straight end's stub needs from the side of its channel.
-    const upperStub = upperEnd.face === RANK_END ? upperEnd.stub - faceInset(upperEnd.node, 1) : 0
-    const lowerStub =
-      lowerEnd.face === RANK_START ? lowerEnd.stub - faceInset(lowerEnd.node, -1) : 0
-    const corner = upperEnd.corner
-    const last = xs.length - 2
-    const jogs = xs.slice(1).map((end, i) => !coincident(xs[i] as number, end))
-    // An edge that never turns and carries nothing else along its line
-    // needs no room for its stubs: they fit on its one straight run.
-    const alone =
-      !jogs.includes(true) &&
-      upperEnd.face === RANK_END &&
-      lowerEnd.face === RANK_START &&
-      (coincident(upperEnd.stub, 0) || coincident(lowerEnd.stub, 0)) &&
-      chain.every((element) => (dummyItems[element] ?? []).length === 0)
-
-    // The room a corner at the lane of jog `i` has beyond its channel,
-    // through the dummy toward the upper end (`toward` -1) or the lower end
-    // (1). A dummy that carries nothing and that the route runs straight on
-    // through gives its whole band and the least room of the channel after
-    // it, less any stub there. Otherwise the corner keeps to its side of the
-    // band.
-    const roomBeyond = (i: number, toward: 1 | -1): number => {
-      const element = chain[toward > 0 ? i + 1 : i] as number
-      const onward = toward > 0 ? i + 1 : i - 1
-      if ((dummyItems[element] ?? []).length > 0 || jogs[onward] === true) {
-        return freeRoom(element, toward > 0 ? -1 : 1)
-      }
-      const endStub = onward === 0 ? upperStub : onward === last ? lowerStub : 0
-      return (thicknesses[ranks[element] as number] as number) + Math.max(rankGap / 2 - endStub, 0)
+    xs.push(attachOf(lowerEnd, rankAlong))
+    const upperRank = ranks[upperEnd.node] as number
+    const lowerRank = ranks[lowerEnd.node] as number
+    if (upperEnd.face === RANK_END) {
+      need(upperRank, past(straightOut(upperEnd)) - faceInset(upperEnd.node, 1))
     }
-
-    for (let i = 0; i + 1 < xs.length; i++) {
-      const start = xs[i] as number
-      const end = xs[i + 1] as number
-      const channel = ranks[chain[i] as number] as number
-      if (jogs[i] === true) {
-        addJog(channel, {
-          jog: { start, end },
-          near: i === 0 ? upperStub + corner : corner - roomBeyond(i, -1),
-          far: i === last ? lowerStub + corner : corner - roomBeyond(i, 1),
-          assign: (lane) => {
-            lanes[i] = lane
-          },
-        })
-      } else if (!alone && (i === 0 || i === last)) {
-        // A straight end keeps its stub inside its own channel, clear of
-        // whatever else the line carries.
-        const need = Math.max(i === 0 ? upperStub : 0, i === last ? lowerStub : 0)
-        minSizes.set(channel, Math.max(minSizes.get(channel) ?? 0, need))
-      }
+    if (lowerEnd.face === RANK_START) {
+      need(lowerRank - 1, past(straightOut(lowerEnd)) - faceInset(lowerEnd.node, -1))
     }
-
-    // A wrap turns in the channel beside its port's face, from the port to
-    // its column. Both of its connections lead to the node: to the far side
-    // of the channel above an upper end, to the near side of the channel
-    // below a lower end.
-    for (const end of [upperEnd, lowerEnd]) {
-      if (!isWrap(end)) {
-        continue
+    if (isWrap(upperEnd)) {
+      need(upperRank - 1, past(straightOut(upperEnd)) - faceInset(upperEnd.node, -1) + clearance)
+    }
+    if (isWrap(lowerEnd)) {
+      need(lowerRank, past(straightOut(lowerEnd)) - faceInset(lowerEnd.node, 1) + clearance)
+    }
+  }
+  // A self loop's stub out of a rank face turns in the channel past it.
+  for (const [node, list] of loops.entries()) {
+    for (const edgeIndex of list) {
+      const edge = edges[edgeIndex] as SolveEdge
+      for (const [end, port] of [edge.sourcePort, edge.targetPort].entries()) {
+        const face = port.face >= 0 ? port.face : ORDER_END
+        const out = straightFor(stubOf(edge, end, face), edge.minRadius)
+        if (face === RANK_START) {
+          need((ranks[node] as number) - 1, past(out) - faceInset(node, -1))
+        } else if (face === RANK_END) {
+          need(ranks[node] as number, past(out) - faceInset(node, 1))
+        }
       }
-      const slot = end.direction > 0 ? 0 : 1
-      const side = end.direction > 0 ? FAR : NEAR
-      const nodeRank = ranks[end.node] as number
-      const need = end.stub + end.corner - faceInset(end.node, end.direction > 0 ? -1 : 1)
-      addJog(end.direction > 0 ? nodeRank - 1 : nodeRank, {
-        jog: {
-          start: rankAlong.get(end) as number,
-          end: (resolved.attach[j] as readonly [number, number])[slot],
-          startSide: side,
-          endSide: side,
-        },
-        near: end.direction > 0 ? 0 : need,
-        far: end.direction > 0 ? need : 0,
-        assign: (lane) => {
-          ;(wrapLanes[j] as [number, number])[slot] = lane
-        },
-      })
     }
   }
 
-  // Each channel grows to fit its lanes, `edgeGap` apart and from its
-  // bands, and is at least half a rank gap. The channels before the first
-  // band and after the last one only hold the turns of wraps, and take no
-  // room without them.
-  const channelLayouts: Array<ChannelLayout> = []
+  // Each channel is at least half a rank gap, and at least the clearance
+  // the routes keep from the nodes of the rank before it, so that a stub
+  // into the channel after it stays clear of them; and at least what its
+  // stubs and corners need, and what the routes of the placement before
+  // needed. The channels before the first band and after the last one take
+  // no room unless a wrap turns there or the routes needed it.
+  const channelSizes: Array<number> = []
   for (let channel = -1; channel < rankCount; channel++) {
-    const list = channelJogs.get(channel) ?? []
-    const assigned = assignLanes(list.map(({ jog }) => jog))
-    const near = Array.from({ length: assigned.count }, () => 0)
-    const far = Array.from({ length: assigned.count }, () => 0)
-    for (const [k, placed] of list.entries()) {
-      const lane = assigned.lanes[k] as number
-      placed.assign(lane)
-      near[lane] = Math.max(near[lane] as number, placed.near)
-      far[lane] = Math.max(far[lane] as number, placed.far)
-    }
     const outer = channel === -1 || channel === rankCount - 1
-    const base =
-      outer && assigned.count === 0 ? 0 : Math.max(rankGap / 2, (assigned.count + 1) * edgeGap)
-    channelLayouts.push(
-      layoutChannel(near, far, Math.max(base, minSizes.get(channel) ?? 0), edgeGap),
+    const base = outer ? 0 : Math.max(rankGap / 2, clearance)
+    channelSizes.push(
+      Math.max(base, minSizes.get(channel) ?? 0) + (growth.channels.get(channel) ?? 0),
     )
   }
 
   // The bands and channels alternate along the flow.
   const items: Array<{ basis: number }> = []
   for (let channel = -1; channel < rankCount; channel++) {
-    items.push({ basis: (channelLayouts[channel + 1] as ChannelLayout).size })
+    items.push({ basis: channelSizes[channel + 1] as number })
     if (channel + 1 < rankCount) {
       items.push({ basis: thicknesses[channel + 1] as number })
     }
   }
   const track = Track.sequence(items, { gap: 0 })
   const bands: Array<Band> = []
-  const channels: Array<Band> = []
   for (const [k, interval] of track.intervals.entries()) {
-    ;(k % 2 === 0 ? channels : bands).push({ start: interval.start, end: interval.end })
+    if (k % 2 === 1) {
+      bands.push({ start: interval.start, end: interval.end })
+    }
   }
   const rankExtent = track.end
 
@@ -780,260 +742,230 @@ export function solve(
     edgeGap,
     sideOrder,
   )
-  // Each node's shape in its box, resolved once.
-  const shapes = new Map<number, SolveShape | undefined>()
-  const shapeOf = (node: number): SolveShape | undefined => {
-    if (!shapes.has(node)) {
-      shapes.set(node, (nodes[node] as SolveNode).shape?.(nodeBoxes[node] as LogicalBox))
+  const portOf = (end: End): PlacedPort => {
+    if (Number.isFinite(end.at)) {
+      return { face: end.face, at: end.at }
     }
-    return shapes.get(node)
-  }
-  const portPoint = (end: End): LogicalPoint =>
-    facePoint(
-      nodeBoxes[end.node] as LogicalBox,
-      end.face,
-      (rankAlong.get(end) ?? orderAlong.get(end)) as number,
-      shapeOf(end.node),
-    )
-
-  // The lane of channel `channel` at `lane`, along the rank axis.
-  const laneR = (channel: number, lane: number): number =>
-    (channels[channel + 1] as Band).start +
-    ((channelLayouts[channel + 1] as ChannelLayout).lanes[lane] as number)
-
-  // The path from a port to the edge of its node's band, on the side its
-  // edge travels toward: straight out of a face toward the edge, across to
-  // the column from an order face, and around through a turn in the channel
-  // beside the face from a wrap.
-  const endPath = (end: End): Array<LogicalPoint> => {
-    const nodeBand = band(end.node)
-    const bandEdge = end.direction > 0 ? nodeBand.end : nodeBand.start
-    const port = portPoint(end)
-    const [o, r] = port
-    const slot = end.direction > 0 ? 0 : 1
-    const exit = (resolved.attach[end.j] as readonly [number, number])[slot]
-    if (end.face === towardFace(end)) {
-      return [port, [o, bandEdge]]
-    }
-    if (!isRankFace(end.face)) {
-      return [port, [exit, r], [exit, bandEdge]]
-    }
-    const nodeRank = ranks[end.node] as number
-    const turn = laneR(
-      end.direction > 0 ? nodeRank - 1 : nodeRank,
-      (wrapLanes[end.j] as [number, number])[slot],
-    )
-    return [port, [o, turn], [exit, turn], [exit, bandEdge]]
+    const box = nodeBoxes[end.node] as LogicalBox
+    const along = (rankAlong.get(end) ?? orderAlong.get(end)) as number
+    return { face: end.face, at: (along - faceStart(box, end.face)) / faceLength(box, end.face) }
   }
 
-  const routes: Array<ReadonlyArray<LogicalPoint>> = edges.map(() => [])
-
+  // The waypoints of each edge: the start and end of the band of each of
+  // its dummies that carries flow adornments, at the dummy's position, so
+  // the route runs straight through the room the band keeps for them. The
+  // other dummies steer nothing that the nodes around them do not: the
+  // route is free there, and the routes beside it move it apart.
+  const ports: Array<readonly [PlacedPort, PlacedPort]> = edges.map(() => [auto, auto])
+  const stubs: Array<readonly [number, number]> = edges.map(() => [0, 0])
+  const vias: Array<Array<LogicalPoint>> = edges.map(() => [])
+  const edgeReversed: Array<boolean> = edges.map(() => false)
   for (const [j, chain] of chains.entries()) {
-    const [upperEnd, lowerEnd] = ends[j] as [End, End]
-
-    const middle: Array<LogicalPoint> = []
-    for (let i = 0; i + 1 < chain.length; i++) {
-      const lane = (jogLanes[j] as Array<number>)[i] as number
-      if (lane >= 0) {
-        const xs = crossings[j] as Array<number>
-        const r = laneR(ranks[chain[i] as number] as number, lane)
-        middle.push([xs[i] as number, r], [xs[i + 1] as number, r])
-      }
-      if (i + 2 < chain.length) {
-        const element = chain[i + 1] as number
-        const x = anchors[element] as number
-        const elementBand = band(element)
-        middle.push([x, elementBand.start], [x, elementBand.end])
-      }
-    }
-
-    const points = simplify([...endPath(upperEnd), ...middle, ...endPath(lowerEnd).toReversed()])
-    routes[flow[j] as number] = reversed[j] ? points.toReversed() : points
-  }
-
-  for (const [node, list] of loops.entries()) {
-    const box = nodeBoxes[node] as LogicalBox
-    for (const [k, edgeIndex] of list.entries()) {
-      routes[edgeIndex] = selfLoop(
-        box,
-        shapeOf(node),
-        edges[edgeIndex] as SolveEdge,
-        k,
-        list.length,
-        edgeGap,
-      )
-    }
-  }
-
-  // Adornments. Flow adornments line up on their runs, and the stretches
-  // they cover, gaps included, become walls that corners keep clear of.
-  // Corners then take their size, and absolute adornments find their place
-  // on the route as drawn.
-  const cumulative = routes.map((route) => lengths(route))
-  const placed: Array<Array<PlacedAdornment>> = edges.map((edge) =>
-    edge.adornments.map(() => unplaced),
-  )
-  const walls: Array<Array<readonly [number, number]>> = edges.map(() => [])
-
-  // Lines up the adornments of a run along `axis` at `line` across it. The
-  // route heads along it by `sign`, and `place` gives where each layer
-  // starts from its length.
-  const placeRun = (
-    edgeIndex: number,
-    items: ReadonlyArray<RunItem>,
-    axis: Axis,
-    sign: Sign,
-    line: number,
-    place: (total: number) => number,
-  ): void => {
-    const route = routes[edgeIndex] as ReadonlyArray<LogicalPoint>
-    const along = cumulative[edgeIndex] as ReadonlyArray<number>
-    for (const [item, center] of packRun(items, sign, place)) {
-      const { size, start, end, lo, hi, direction } = item.measured
-      const across = line + (lo + hi) / 2
-      const distance = distanceAlong(route, along, axis === 0 ? [center, line] : [line, center])
-      const [before, after] = sign > 0 ? [start, end] : [end, start]
-      ;(placed[edgeIndex] as Array<PlacedAdornment>)[item.index] = {
-        center: axis === 0 ? [center, across] : [across, center],
-        direction,
-        along: [distance - size / 2, distance + size / 2],
-      }
-      ;(walls[edgeIndex] as Array<readonly [number, number]>).push([
-        distance - size / 2 - before,
-        distance + size / 2 + after,
-      ])
-    }
-  }
-
-  // A stub packs its adornments against its port. A run through a rank
-  // centers them in the room its dummy took in the band.
-  for (const [j, chain] of chains.entries()) {
-    const edgeIndex = flow[j] as number
-    const isReversed = reversed[j] as boolean
-    const [upperItems, lowerItems] = stubItems[j] as readonly [
-      ReadonlyArray<RunItem>,
-      ReadonlyArray<RunItem>,
-    ]
-    for (const [end, items] of [
-      [ends[j]?.[0], upperItems],
-      [ends[j]?.[1], lowerItems],
-    ] as const) {
-      if (end === undefined || items.length === 0) {
-        continue
-      }
-      const [axis, away] = faceNormal(end.face)
-      const port = portPoint(end)
-      const source = end.direction > 0 !== isReversed
-      placeRun(
-        edgeIndex,
-        items,
-        axis,
-        source ? away : (-away as Sign),
-        port[1 - axis] as number,
-        (total) => (away > 0 ? port[axis] : port[axis] - total),
-      )
-    }
+    const list: Array<LogicalPoint> = []
     for (let i = 1; i + 1 < chain.length; i++) {
       const element = chain[i] as number
-      const placement = placements.get(element)
-      if (placement === undefined) {
+      if ((dummyItems[element] ?? []).length === 0) {
         continue
       }
-      const start = band(element).start + placement.start
-      placeRun(
-        edgeIndex,
-        dummyItems[element] ?? [],
-        1,
-        isReversed ? -1 : 1,
-        anchors[element] as number,
-        (total) => start + (placement.size - total) / 2,
-      )
+      const x = anchors[element] as number
+      const { start, end } = band(element)
+      list.push([x, start], [x, end])
     }
+    const isReversed = reversed[j] as boolean
+    const [upperEnd, lowerEnd] = ends[j] as [End, End]
+    const index = flow[j] as number
+    const [source, target] = isReversed ? [lowerEnd, upperEnd] : [upperEnd, lowerEnd]
+    ports[index] = [portOf(source), portOf(target)]
+    stubs[index] = [straightOut(source), straightOut(target)]
+    vias[index] = isReversed ? list.toReversed() : list
+    edgeReversed[index] = isReversed
   }
 
-  // A self loop has no runs of its own size. Its flow adornments line up on
-  // the segment where their position along the loop falls, around the mean
-  // of those positions, and inside the segment where they fit.
+  // A self loop leaves and enters the order-end face unless told otherwise,
+  // and the loops on one face of a node spread out from its center, each
+  // farther than the one before, so they nest.
   for (const list of loops) {
-    for (const edgeIndex of list) {
-      const edge = edges[edgeIndex] as SolveEdge
-      const route = routes[edgeIndex] as ReadonlyArray<LogicalPoint>
-      const along = cumulative[edgeIndex] as ReadonlyArray<number>
-      const total = along[along.length - 1] as number
-      const bySegment = new Map<number, Array<number>>()
-      for (const [index, adornment] of edge.adornments.entries()) {
-        if (!adornment.flow) {
-          continue
-        }
-        let segment = 0
-        while (
-          segment + 2 < route.length &&
-          (along[segment + 1] as number) < adornment.at * total
-        ) {
-          segment++
-        }
-        const indices = bySegment.get(segment) ?? []
-        indices.push(index)
-        bySegment.set(segment, indices)
-      }
-      for (const [segment, indices] of bySegment) {
-        const a = route[segment] as LogicalPoint
-        const b = route[segment + 1] as LogicalPoint
-        const axis: Axis = coincident(a[0], b[0]) ? 1 : 0
-        const sign: Sign = b[axis] >= a[axis] ? 1 : -1
-        let mean = 0
-        const items = indices.map((index): RunItem => {
-          const adornment = edge.adornments[index] as SolveAdornment
-          mean += a[axis] + sign * (adornment.at * total - (along[segment] as number))
-          return {
-            index,
-            at: adornment.at,
-            layer: adornment.layer,
-            measured: measure(adornment, axis, sign, options.mirror),
-          }
-        })
-        mean /= indices.length
-        const from = Math.min(a[axis], b[axis])
-        const to = Math.max(a[axis], b[axis])
-        placeRun(edgeIndex, items, axis, sign, a[1 - axis] as number, (length) =>
-          clamp(mean - length / 2, from, Math.max(from, to - length)),
-        )
-      }
+    for (const [k, index] of list.entries()) {
+      const edge = edges[index] as SolveEdge
+      const sourceFace = edge.sourcePort.face >= 0 ? edge.sourcePort.face : ORDER_END
+      const targetFace = edge.targetPort.face >= 0 ? edge.targetPort.face : ORDER_END
+      const fraction = sourceFace === targetFace ? (k + 1) / (list.length + 1) : 0
+      const at = (port: SolvePort, sign: number) =>
+        Number.isFinite(port.at) ? port.at : 0.5 + (sign * fraction) / 2
+      ports[index] = [
+        { face: sourceFace, at: at(edge.sourcePort, -1) },
+        { face: targetFace, at: at(edge.targetPort, 1) },
+      ]
+      stubs[index] = [
+        straightFor(packOf(edge.adornments, 0, sourceFace, true, options.mirror), edge.minRadius),
+        straightFor(packOf(edge.adornments, 1, targetFace, false, options.mirror), edge.minRadius),
+      ]
     }
   }
 
-  const radii = routes.map((route, edgeIndex) =>
-    resolveRadii(
-      route,
-      cumulative[edgeIndex] as ReadonlyArray<number>,
-      (edges[edgeIndex] as SolveEdge).radius,
-      walls[edgeIndex] as ReadonlyArray<readonly [number, number]>,
-    ),
-  )
-
-  for (const [edgeIndex, edge] of edges.entries()) {
-    for (const [index, adornment] of edge.adornments.entries()) {
-      if (adornment.flow) {
-        continue
-      }
-      const drawn = pointOnDrawn(
-        routes[edgeIndex] as ReadonlyArray<LogicalPoint>,
-        cumulative[edgeIndex] as ReadonlyArray<number>,
-        radii[edgeIndex] as ReadonlyArray<number>,
-        adornment.at,
-      )
-      ;(placed[edgeIndex] as Array<PlacedAdornment>)[index] = placeAbsolute(
-        adornment,
-        drawn,
-        options.mirror,
-      )
-    }
+  return {
+    nodes: nodeBoxes,
+    ports,
+    stubs,
+    vias,
+    reversed: edgeReversed,
+    ranks: nodeRanks,
+    rankExtent,
   }
-
-  return { nodes: nodeBoxes, routes, radii, adornments: placed, rankExtent }
 }
 
-const unplaced: PlacedAdornment = { center: [0, 0], direction: undefined, along: [0, 0] }
+const auto: PlacedPort = { face: -1, at: Number.POSITIVE_INFINITY }
+
+// The length the flow adornments at an end of an edge take straight out
+// of a port on `face`.
+function packOf(
+  adornments: ReadonlyArray<SolveAdornment>,
+  end: number,
+  face: number,
+  source: boolean,
+  mirror: boolean,
+): number {
+  const [axis, away] = faceNormal(face)
+  const sign = source ? away : (-away as Sign)
+  return runLength(
+    adornments.flatMap(
+      (adornment, index): Array<RunItem> =>
+        adornment.flow && coincident(adornment.at, end)
+          ? [
+              {
+                index,
+                at: adornment.at,
+                layer: adornment.layer,
+                measured: measure(adornment, axis, sign, mirror),
+              },
+            ]
+          : [],
+    ),
+  )
+}
+
+function faceStart(box: LogicalBox, face: number): number {
+  return isRankFace(face) ? box.o : box.r
+}
+
+function faceLength(box: LogicalBox, face: number): number {
+  return isRankFace(face) ? box.oSize : box.rSize
+}
+
+// Positions for `count` ports on a face: `gap` apart around the center when
+// they fit, otherwise evenly spread over the face.
+function spread(count: number, start: number, length: number, gap: number): Array<number> {
+  const center = start + length / 2
+  const span = (count - 1) * gap
+  const fits = span <= length || coincident(span, length)
+  const positions: Array<number> = []
+  for (let i = 0; i < count; i++) {
+    positions.push(
+      fits ? center + (i - (count - 1) / 2) * gap : start + ((i + 1) * length) / (count + 1),
+    )
+  }
+  return positions
+}
+
+// Orders ports that share a face by where their edges head, then by edge
+// order.
+function byToward(a: End, b: End): number {
+  return coincident(a.toward, b.toward) ? a.j - b.j : a.toward - b.toward
+}
+
+// Sorts wraps to the end of a rank face nearest the side they go around: -1
+// for the order-start side, 1 for the order-end side, 0 for other ports.
+function wrapRank(end: End, sideOf: (end: End) => number): number {
+  if (!isWrap(end)) {
+    return 0
+  }
+  return sideOf(end) === ORDER_START ? -1 : 1
+}
+
+// The position along its face of each port on rank faces (`rankFaces`) or on
+// order faces. Fixed positions resolve directly. Auto positions on a shared
+// face spread around its center in the order `compare` gives. Ports that
+// `aside` picks spread on past the others, so the others stay centered,
+// when that still fits on the face. On a face with fixed ports, the spread
+// counts them too: each fixed port claims the free slot nearest it, and the
+// auto ports take the rest, so no auto port lands on a fixed one.
+function placePorts(
+  ends: ReadonlyArray<readonly [End, End]>,
+  boxOf: (node: number) => LogicalBox,
+  rankFaces: boolean,
+  gap: number,
+  compare: (a: End, b: End) => number,
+  aside: (end: End) => boolean = () => false,
+): Map<End, number> {
+  const along = new Map<End, number>()
+  const groups = new Map<string, { auto: Array<End>; fixed: Array<number> }>()
+  for (const pair of ends) {
+    for (const end of pair) {
+      if (isRankFace(end.face) !== rankFaces) {
+        continue
+      }
+      const key = `${end.node}:${end.face}`
+      let group = groups.get(key)
+      if (group === undefined) {
+        group = { auto: [], fixed: [] }
+        groups.set(key, group)
+      }
+      if (Number.isFinite(end.at)) {
+        const box = boxOf(end.node)
+        const position = faceStart(box, end.face) + end.at * faceLength(box, end.face)
+        along.set(end, position)
+        group.fixed.push(position)
+      } else {
+        group.auto.push(end)
+      }
+    }
+  }
+  for (const { auto: free, fixed } of groups.values()) {
+    const first = free[0]
+    if (first === undefined) {
+      continue
+    }
+    free.sort(compare)
+    const box = boxOf(first.node)
+    const start = faceStart(box, first.face)
+    const length = faceLength(box, first.face)
+    let positions = spread(free.length + fixed.length, start, length, gap)
+
+    if (fixed.length > 0) {
+      for (const position of fixed.toSorted((a, b) => a - b)) {
+        let nearest = 0
+        for (let i = 1; i < positions.length; i++) {
+          const distance = Math.abs((positions[i] as number) - position)
+          if (distance < Math.abs((positions[nearest] as number) - position)) {
+            nearest = i
+          }
+        }
+        positions.splice(nearest, 1)
+      }
+    } else {
+      const core = free.flatMap((end, i) => (aside(end) ? [] : [i]))
+      if (core.length > 0 && core.length < free.length) {
+        const low = positions[core[0] as number] as number
+        const high = positions[core[core.length - 1] as number] as number
+        const shift = start + length / 2 - (low + high) / 2
+        const shifted = positions.map((position) => position + shift)
+        const from = shifted[0] as number
+        const to = shifted[shifted.length - 1] as number
+        if (
+          (from >= start || coincident(from, start)) &&
+          (to <= start + length || coincident(to, start + length))
+        ) {
+          positions = shifted
+        }
+      }
+    }
+
+    for (const [i, end] of free.entries()) {
+      along.set(end, positions[i] as number)
+    }
+  }
+  return along
+}
 
 // The axis a face's outward normal runs along, and its sign.
 function faceNormal(face: number): readonly [Axis, Sign] {
@@ -1047,47 +979,6 @@ function faceNormal(face: number): readonly [Axis, Sign] {
     default:
       return [0, 1]
   }
-}
-
-interface ChannelLayout {
-  // The size of the channel along the flow.
-  readonly size: number
-  // The position of each lane from the near side of the channel.
-  readonly lanes: ReadonlyArray<number>
-}
-
-// Lays out the lanes of a channel. Lanes sit `gap` apart and from both
-// sides, and lane `k` sits at least `near[k]` from the near side and
-// `far[k]` from the far side. The channel takes the least size that fits
-// them, and at least `base`. Within that size the lanes spread evenly, then
-// move as little as the bounds require, which keeps them `gap` apart.
-function layoutChannel(
-  near: ReadonlyArray<number>,
-  far: ReadonlyArray<number>,
-  base: number,
-  gap: number,
-): ChannelLayout {
-  const count = near.length
-  // The least distance of each lane from the near side, and from the far one.
-  const fromNear: Array<number> = []
-  for (let k = 0; k < count; k++) {
-    fromNear.push(Math.max((k === 0 ? 0 : (fromNear[k - 1] as number)) + gap, near[k] as number))
-  }
-  const fromFar: Array<number> = Array.from({ length: count }, () => 0)
-  for (let k = count - 1; k >= 0; k--) {
-    fromFar[k] = Math.max(
-      (k === count - 1 ? 0 : (fromFar[k + 1] as number)) + gap,
-      far[k] as number,
-    )
-  }
-  let size = base
-  for (let k = 0; k < count; k++) {
-    size = Math.max(size, (fromNear[k] as number) + (fromFar[k] as number))
-  }
-  const lanes = fromNear.map((low, k) =>
-    Math.min(Math.max(((k + 1) * size) / (count + 1), low), size - (fromFar[k] as number)),
-  )
-  return { size, lanes }
 }
 
 function finite(value: number | undefined): number {
@@ -1312,101 +1203,6 @@ function isRankFace(face: number): boolean {
   return face === RANK_START || face === RANK_END
 }
 
-function faceStart(box: LogicalBox, face: number): number {
-  return isRankFace(face) ? box.o : box.r
-}
-
-function faceLength(box: LogicalBox, face: number): number {
-  return isRankFace(face) ? box.oSize : box.rSize
-}
-
-// The port at `along` on `face`: where the line through it across the face
-// first meets the node's shape, coming in from the face. Without a shape,
-// or where the line misses it, the port sits on the face. A shape whose
-// rounded corners grew it past the box can only bring the port in, never
-// out past the face.
-function facePoint(
-  box: LogicalBox,
-  face: number,
-  along: number,
-  shape: SolveShape | undefined,
-): LogicalPoint {
-  const rank = isRankFace(face)
-  // The axis the line runs along, and the one it holds at `along`.
-  const axis = rank ? 1 : 0
-  const held = rank ? 0 : 1
-  const fromStart = face === RANK_START || face === ORDER_START
-  const edge =
-    face === RANK_START
-      ? box.r
-      : face === RANK_END
-        ? box.r + box.rSize
-        : face === ORDER_START
-          ? box.o
-          : box.o + box.oSize
-  let hit: number | undefined
-  const meet = (value: number): void => {
-    if (hit === undefined || (fromStart ? value < hit : value > hit)) {
-      hit = value
-    }
-  }
-  for (const corners of shape?.outlines ?? []) {
-    const arcs = cornerArcs(corners, (shape as SolveShape).radius)
-    for (const [i, corner] of corners.entries()) {
-      const next = (i + 1) % corners.length
-      // The side from this corner to the next, between their arcs. An end
-      // on the line meets it. Otherwise the side meets it where its ends
-      // lie on either side.
-      const a = arcs[i]?.end ?? corner
-      const b = arcs[next]?.start ?? (corners[next] as LogicalPoint)
-      const aOn = coincident(a[held], along)
-      const bOn = coincident(b[held], along)
-      if (aOn) {
-        meet(a[axis])
-      }
-      if (bOn) {
-        meet(b[axis])
-      }
-      if (!aOn && !bOn && a[held] < along !== b[held] < along) {
-        meet(a[axis] + ((along - a[held]) * (b[axis] - a[axis])) / (b[held] - a[held]))
-      }
-      // The arc that rounds this corner meets the line where its circle
-      // does, on the corner's side of its tangent points. A line that
-      // grazes the circle touches it.
-      const arc = arcs[i]
-      if (arc !== undefined) {
-        const offset = along - arc.center[held]
-        const squared = arc.radius * arc.radius - offset * offset
-        if (squared >= 0 || coincident(Math.abs(offset), arc.radius)) {
-          const root = Math.sqrt(Math.max(squared, 0))
-          for (const value of [arc.center[axis] - root, arc.center[axis] + root]) {
-            if (onArc(arc, axis === 0 ? [value, along] : [along, value])) {
-              meet(value)
-            }
-          }
-        }
-      }
-    }
-  }
-  const depth = hit === undefined ? edge : fromStart ? Math.max(hit, edge) : Math.min(hit, edge)
-  return rank ? [along, depth] : [depth, along]
-}
-
-// Positions for `count` ports on a face: `gap` apart around the center when
-// they fit, otherwise evenly spread over the face.
-function spread(count: number, start: number, length: number, gap: number): Array<number> {
-  const center = start + length / 2
-  const span = (count - 1) * gap
-  const fits = span <= length || coincident(span, length)
-  const positions: Array<number> = []
-  for (let i = 0; i < count; i++) {
-    positions.push(
-      fits ? center + (i - (count - 1) / 2) * gap : start + ((i + 1) * length) / (count + 1),
-    )
-  }
-  return positions
-}
-
 // One end of an edge's chain: the node, its port face and position, its
 // stub (the length its flow adornments take straight out of the port), the
 // least size of the edge's corners, the direction the edge leaves it in (1
@@ -1423,6 +1219,11 @@ interface End {
   readonly toward: number
 }
 
+// The key of an end's column, by its edge and which end it is.
+function columnKey(end: End): number {
+  return 2 * end.j + (end.direction > 0 ? 0 : 1)
+}
+
 // The face of an end's node that points along its edge.
 function towardFace(end: End): number {
   return end.direction > 0 ? RANK_END : RANK_START
@@ -1432,286 +1233,4 @@ function towardFace(end: End): number {
 // edge wraps around the node.
 function isWrap(end: End): boolean {
   return isRankFace(end.face) && end.face !== towardFace(end)
-}
-
-// Orders ports that share a face by where their edges head, then by edge
-// order.
-function byToward(a: End, b: End): number {
-  return coincident(a.toward, b.toward) ? a.j - b.j : a.toward - b.toward
-}
-
-// Sorts wraps to the end of a rank face nearest the side they go around: -1
-// for the order-start side, 1 for the order-end side, 0 for other ports.
-function wrapRank(end: End, sideOf: (end: End) => number): number {
-  if (!isWrap(end)) {
-    return 0
-  }
-  return sideOf(end) === ORDER_START ? -1 : 1
-}
-
-// The position along its face of each port on rank faces (`rankFaces`) or on
-// order faces. Fixed positions resolve directly. Auto positions on a shared
-// face spread around its center in the order `compare` gives. Ports that
-// `aside` picks spread on past the others, so the others stay centered,
-// when that still fits on the face. On a face with fixed ports, the spread
-// counts them too: each fixed port claims the free slot nearest it, and the
-// auto ports take the rest, so no auto port lands on a fixed one.
-function placePorts(
-  ends: ReadonlyArray<readonly [End, End]>,
-  boxOf: (node: number) => LogicalBox,
-  rankFaces: boolean,
-  gap: number,
-  compare: (a: End, b: End) => number,
-  aside: (end: End) => boolean = () => false,
-): Map<End, number> {
-  const along = new Map<End, number>()
-  const groups = new Map<string, { auto: Array<End>; fixed: Array<number> }>()
-  for (const pair of ends) {
-    for (const end of pair) {
-      if (isRankFace(end.face) !== rankFaces) {
-        continue
-      }
-      const key = `${end.node}:${end.face}`
-      let group = groups.get(key)
-      if (group === undefined) {
-        group = { auto: [], fixed: [] }
-        groups.set(key, group)
-      }
-      if (Number.isFinite(end.at)) {
-        const box = boxOf(end.node)
-        const position = faceStart(box, end.face) + end.at * faceLength(box, end.face)
-        along.set(end, position)
-        group.fixed.push(position)
-      } else {
-        group.auto.push(end)
-      }
-    }
-  }
-  for (const { auto, fixed } of groups.values()) {
-    const first = auto[0]
-    if (first === undefined) {
-      continue
-    }
-    auto.sort(compare)
-    const box = boxOf(first.node)
-    const start = faceStart(box, first.face)
-    const length = faceLength(box, first.face)
-    let positions = spread(auto.length + fixed.length, start, length, gap)
-
-    if (fixed.length > 0) {
-      for (const position of fixed.toSorted((a, b) => a - b)) {
-        let nearest = 0
-        for (let i = 1; i < positions.length; i++) {
-          const distance = Math.abs((positions[i] as number) - position)
-          if (distance < Math.abs((positions[nearest] as number) - position)) {
-            nearest = i
-          }
-        }
-        positions.splice(nearest, 1)
-      }
-    } else {
-      const core = auto.flatMap((end, i) => (aside(end) ? [] : [i]))
-      if (core.length > 0 && core.length < auto.length) {
-        const low = positions[core[0] as number] as number
-        const high = positions[core[core.length - 1] as number] as number
-        const shift = start + length / 2 - (low + high) / 2
-        const shifted = positions.map((position) => position + shift)
-        const from = shifted[0] as number
-        const to = shifted[shifted.length - 1] as number
-        if (
-          (from >= start || coincident(from, start)) &&
-          (to <= start + length || coincident(to, start + length))
-        ) {
-          positions = shifted
-        }
-      }
-    }
-
-    for (const [i, end] of auto.entries()) {
-      along.set(end, positions[i] as number)
-    }
-  }
-  return along
-}
-
-interface Columns {
-  // The room the columns take beside each node, before and after it across
-  // the flow.
-  readonly before: ReadonlyArray<number>
-  readonly after: ReadonlyArray<number>
-  // The distance from its node's face of each end's column, per edge, for
-  // the upper and lower end. Ends without a column hold `NaN`.
-  readonly offsets: ReadonlyArray<readonly [number, number]>
-  // The columns on each side of each node that stack outward, each from the
-  // inside out. Columns in different stacks never share a run.
-  readonly stacks: ReadonlyArray<{
-    readonly node: number
-    readonly side: number
-    readonly ends: ReadonlyArray<End>
-  }>
-  // Whether any node has a column.
-  readonly used: boolean
-}
-
-// Assigns the columns beside each node, the runs of orthogonal routes that
-// leave the node through an order face or wrap around it. On each side,
-// `compare` orders them from the inside out. Edges from ports on the order
-// face that head upstream run above their ports and edges heading
-// downstream below, so with only auto ports on the face (which keep the
-// upstream group above the downstream one) the two groups share columns.
-// Wraps run the whole length of the node and take columns of their own, as
-// does every edge beside a fixed port, which can sit anywhere on the face.
-// The first column sits half of `nodeGap` plus half of `edgeGap` out from
-// the face, outside any self loops, and the columns sit `edgeGap` apart. A
-// column moves farther out to keep its port's stub straight, and room for
-// the corner after it.
-function assignColumns(
-  ends: ReadonlyArray<readonly [End, End]>,
-  sideOf: (end: End) => number,
-  compare: (a: End, b: End) => number,
-  loopsBefore: ReadonlyArray<number>,
-  loopsAfter: ReadonlyArray<number>,
-  sizes: { readonly nodeCount: number; readonly nodeGap: number; readonly edgeGap: number },
-): Columns {
-  const before = Array.from({ length: sizes.nodeCount }, () => 0)
-  const after = Array.from({ length: sizes.nodeCount }, () => 0)
-  const offsets = ends.map((): [number, number] => [Number.NaN, Number.NaN])
-
-  const groups = new Map<string, { node: number; side: number; members: Array<End> }>()
-  for (const pair of ends) {
-    for (const end of pair) {
-      if (isRankFace(end.face) && !isWrap(end)) {
-        continue
-      }
-      const side = sideOf(end)
-      const key = `${end.node}:${side}`
-      let group = groups.get(key)
-      if (group === undefined) {
-        group = { node: end.node, side, members: [] }
-        groups.set(key, group)
-      }
-      group.members.push(end)
-    }
-  }
-
-  let used = false
-  const stacks: Array<{ node: number; side: number; ends: Array<End> }> = []
-  for (const { node, side, members } of groups.values()) {
-    const sorted = members.toSorted(compare)
-    const shared = sorted.every((end) => !isWrap(end) && !Number.isFinite(end.at))
-    const loopCount = (side === ORDER_END ? loopsAfter : loopsBefore)[node] as number
-    const base = (sizes.nodeGap + sizes.edgeGap) / 2 + loopCount * sizes.edgeGap
-    let outer = base - sizes.edgeGap
-    for (const stack of shared
-      ? [sorted.filter((end) => end.direction < 0), sorted.filter((end) => end.direction > 0)]
-      : [sorted]) {
-      let offset = base - sizes.edgeGap
-      for (const end of stack) {
-        offset = Math.max(offset + sizes.edgeGap, isWrap(end) ? 0 : end.stub + end.corner)
-        ;(offsets[end.j] as [number, number])[end.direction > 0 ? 0 : 1] = offset
-      }
-      outer = Math.max(outer, offset)
-    }
-    ;(side === ORDER_END ? after : before)[node] = outer + sizes.edgeGap - base
-    if (shared) {
-      stacks.push(
-        { node, side, ends: sorted.filter((end) => end.direction < 0) },
-        { node, side, ends: sorted.filter((end) => end.direction > 0) },
-      )
-    } else {
-      stacks.push({ node, side, ends: sorted })
-    }
-    used = true
-  }
-
-  return { before, after, offsets, stacks, used }
-}
-
-function selfLoop(
-  box: LogicalBox,
-  shape: SolveShape | undefined,
-  edge: SolveEdge,
-  k: number,
-  count: number,
-  edgeGap: number,
-): Array<LogicalPoint> {
-  const inflate = (k + 1) * edgeGap
-  const fraction = (k + 1) / (count + 1)
-  const sourceFace = edge.sourcePort.face >= 0 ? edge.sourcePort.face : ORDER_END
-  const targetFace = edge.targetPort.face >= 0 ? edge.targetPort.face : ORDER_END
-  const sameFace = sourceFace === targetFace
-
-  const portAlong = (port: SolvePort, face: number, sign: -1 | 1): number => {
-    const start = faceStart(box, face)
-    const length = faceLength(box, face)
-    if (Number.isFinite(port.at)) {
-      return start + port.at * length
-    }
-    return start + length / 2 + (sameFace ? (sign * fraction * length) / 2 : 0)
-  }
-
-  const source = facePoint(box, sourceFace, portAlong(edge.sourcePort, sourceFace, -1), shape)
-  const target = facePoint(box, targetFace, portAlong(edge.targetPort, targetFace, 1), shape)
-
-  const o0 = box.o - inflate
-  const o1 = box.o + box.oSize + inflate
-  const r0 = box.r - inflate
-  const r1 = box.r + box.rSize + inflate
-
-  const stubFor = ([o, r]: LogicalPoint, face: number): LogicalPoint => {
-    switch (face) {
-      case RANK_START:
-        return [o, r0]
-      case RANK_END:
-        return [o, r1]
-      case ORDER_END:
-        return [o1, r]
-      default:
-        return [o0, r]
-    }
-  }
-  const corners: ReadonlyArray<LogicalPoint> = [
-    [o1, r0],
-    [o1, r1],
-    [o0, r1],
-    [o0, r0],
-  ]
-
-  const points: Array<LogicalPoint> = [source, stubFor(source, sourceFace)]
-  for (let face = sourceFace; face !== targetFace; face = (face + 1) % 4) {
-    points.push(corners[face] as LogicalPoint)
-  }
-  points.push(stubFor(target, targetFace), target)
-
-  return simplify(points)
-}
-
-// Drops repeated points and the middle point of axis-aligned runs. Both
-// checks use `coincident`, as they decide whether two computed coordinates
-// are the same. A route always keeps both of its ends, even when they
-// coincide (a zero rank gap can put touching ports at one point).
-function simplify(points: ReadonlyArray<LogicalPoint>): Array<LogicalPoint> {
-  const result: Array<LogicalPoint> = []
-  for (const point of points) {
-    const last = result[result.length - 1]
-    if (last !== undefined && coincident(last[0], point[0]) && coincident(last[1], point[1])) {
-      continue
-    }
-    const previous = result[result.length - 2]
-    if (
-      previous !== undefined &&
-      last !== undefined &&
-      ((coincident(previous[0], last[0]) && coincident(last[0], point[0])) ||
-        (coincident(previous[1], last[1]) && coincident(last[1], point[1])))
-    ) {
-      result[result.length - 1] = point
-      continue
-    }
-    result.push(point)
-  }
-  const end = points[points.length - 1]
-  if (result.length === 1 && end !== undefined) {
-    result.push(end)
-  }
-  return result
 }

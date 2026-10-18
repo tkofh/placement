@@ -279,8 +279,8 @@ function portsAt(
     const at = (end: number) =>
       (edge.ends[end] as ProblemEdge['ends'][number]).at ?? positions.get(endId(i, end)) ?? 0.5
     return [
-      portOf(problem.boxes[edge.source] as Rect.Rect, source, at(0)),
-      portOf(problem.boxes[edge.target] as Rect.Rect, target, at(1)),
+      portOf(problem, edge.source, source, at(0)),
+      portOf(problem, edge.target, target, at(1)),
     ]
   })
 }

@@ -1,7 +1,8 @@
 import { coincident } from 'curvy/number'
 import { before, overlaps } from '../../utils/tolerance.ts'
 import type { Obstacle } from '../graph/graph.ts'
-import { type XY, hi, lo, other, pointOn, positiveLength, segmentBox, sideAxis } from '../orient.ts'
+import { type XY, hi, lo, other, pointOn, positiveLength, sideAxis } from '../orient.ts'
+import { routeOf } from './route.ts'
 
 // Straightened ports. Auto ports spread out along their sides before the
 // routes are nudged, so a route can leave its port only to jog a hair
@@ -52,6 +53,9 @@ export function straightenPorts(
   options: StraightenOptions,
 ): Array<Array<XY>> {
   const result = routes.map((route) => [...route])
+  // The routes as they stand, for their segment boxes: a port that slides
+  // reads the routes slid before it, so a slid route is taken anew.
+  const boxed = result.map((points) => routeOf(points))
   const spacing = positiveLength(options.gap)
   const width = (route: number) => positiveLength(options.thickness[route])
   for (const [route, pair] of ends.entries()) {
@@ -123,14 +127,15 @@ export function straightenPorts(
           stop(box, 0)
         }
       }
-      for (const [k, other] of result.entries()) {
+      for (const [k, other] of boxed.entries()) {
         const keep = spacing + (width(route) + width(k)) / 2
-        for (let s = 0; s + 1 < other.length; s++) {
+        const boxes = other.boxes()
+        for (const [s, box] of boxes.entries()) {
           // The route's own leg, jog, and the stretch past them slide with it.
-          if (k === route && (end === 0 ? s <= 2 : s >= other.length - 4)) {
+          if (k === route && (end === 0 ? s <= 2 : s >= boxes.length - 3)) {
             continue
           }
-          stop(segmentBox(other[s] as XY, other[s + 1] as XY), keep, true)
+          stop(box, keep, true)
         }
       }
       if (!(slide > 0) || coincident(slide, 0)) {
@@ -150,6 +155,7 @@ export function straightenPorts(
         points[first] = shift(port)
         points[second] = shift(near)
       }
+      boxed[route] = routeOf([...points])
     }
   }
   return result

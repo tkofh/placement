@@ -1,5 +1,5 @@
 import { clamp, coincident } from 'curvy/number'
-import { atMost, before, overlaps, touches, within } from '../../utils/tolerance.ts'
+import { atMost, before, inside, overlaps, touches, within } from '../../utils/tolerance.ts'
 import { type DirectedEdge, preferredOrder } from '../graph/acyclic.ts'
 import type { Obstacle } from '../graph/graph.ts'
 import { type Axis, type XY, hi, lo, other, positiveLength, turnOf } from '../orient.ts'
@@ -45,6 +45,10 @@ export interface RouteConstraints {
   // Points the route must still pass through. The segments through them do
   // not move.
   readonly anchors?: ReadonlyArray<XY> | undefined
+  // The anchors the route runs straight through, along the segment they
+  // sit on: the segments beside that one keep the gap from them, so the
+  // route never turns at one.
+  readonly straight?: ReadonlyArray<XY> | undefined
   // Rects that only this route's segments may not move into.
   readonly avoid?: ReadonlyArray<Obstacle> | undefined
   // Where each jog wants to sit along the run it shifts, from 0 at the end
@@ -106,6 +110,13 @@ interface Segment {
   // For a jog that parts from a bundle, which way along its run is later:
   // where it wants to be is as far as it may go that way.
   readonly late?: number | undefined
+  // The least and most the segment may move to, where the segments on
+  // either side of it pass through anchors: it never moves past one, so
+  // the route still passes through them, and it keeps the gap from one
+  // the route runs straight through. `bounds` are the anchors themselves,
+  // which hold even where the channel leaves no room for the gap.
+  readonly held?: readonly [low: number | undefined, high: number | undefined] | undefined
+  readonly bounds?: readonly [low: number | undefined, high: number | undefined] | undefined
 }
 
 // A jog where a route parts from its bundle: which end of its run is far
@@ -241,8 +252,8 @@ export function nudgeRoutes(
     // anything.
     for (let round = 0; round < ROUNDS; round++) {
       const bundles = { ids, couples, groups, packed }
-      const movedX = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 0, held, report)
-      const movedY = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 1, held, report)
+      const movedX = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 0, held, report, spacing)
+      const movedY = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 1, held, report, spacing)
       if (!movedX && !movedY) {
         break
       }
@@ -407,51 +418,45 @@ function bundlesOf(
   return { ids, couples, groups, lanes, losses, leaves }
 }
 
+/** Where the routes that leave one merge run together, and where they part. */
+export interface Bundled {
+  /**
+   * The segments of each route that still run alongside another route of
+   * its merge, turning the same ways, by index.
+   */
+  readonly coupled: Array<Set<number>>
+  /**
+   * The corners of each route where it goes on alone from a group that
+   * goes on without it, which turn as tight as the merge allows, by index.
+   */
+  readonly parting: Array<Set<number>>
+}
+
 /**
- * The segments of routes that leave one merge and still run alongside
- * another of them, turning the same ways.
+ * Where the routes that leave one merge run together and where they part,
+ * once the nudge has placed them.
  *
  * @param routes - The routes, as points with no repeats and no points in
  * the middle of a straight run.
  * @param merges - The merges each route's start and end lead into, as ids
  * shared by the routes of each merge, or `-1` for an end that does not
  * merge.
- * @returns The indices of each route's coupled segments.
+ * @returns The coupled segments and parting corners of each route.
  */
-export function coupledSegments(
+export function bundled(
   routes: ReadonlyArray<ReadonlyArray<XY>>,
   merges: ReadonlyArray<readonly [number, number]>,
-): Array<Set<number>> {
+): Bundled {
   const paths = routes.map(simplify)
-  const { ids, couples } = bundlesOf(paths, (route) => merges[route] ?? [])
-  const result = paths.map(() => new Set<number>())
+  const { ids, couples, leaves } = bundlesOf(paths, (route) => merges[route] ?? [])
+  const coupled = paths.map(() => new Set<number>())
   // Both orders of each pair are in, so the first segment of each covers
   // every coupled segment.
   for (const key of couples) {
     const segment = Math.floor(key / ids.size)
-    result[Math.floor(segment / ids.stride)]?.add(segment % ids.stride)
+    coupled[Math.floor(segment / ids.stride)]?.add(segment % ids.stride)
   }
-  return result
-}
-
-/**
- * The corners where routes that leave one merge go on alone from a group
- * that goes on without them, which turn as tight as the merge allows.
- *
- * @param routes - The routes, as points with no repeats and no points in
- * the middle of a straight run.
- * @param merges - The merges each route's start and end lead into, as ids
- * shared by the routes of each merge, or `-1` for an end that does not
- * merge.
- * @returns The indices of each route's parting corners.
- */
-export function partingCorners(
-  routes: ReadonlyArray<ReadonlyArray<XY>>,
-  merges: ReadonlyArray<readonly [number, number]>,
-): Array<Set<number>> {
-  const paths = routes.map(simplify)
-  const { leaves } = bundlesOf(paths, (route) => merges[route] ?? [])
-  return paths.map((path, route) => {
+  const parting = paths.map((path, route) => {
     const corners = new Set<number>()
     for (const { start, k } of leaves[route] ?? []) {
       // The corner between the last segment shared and the next.
@@ -462,7 +467,21 @@ export function partingCorners(
     }
     return corners
   })
+  return { coupled, parting }
 }
+
+/**
+ * The corners where routes that leave one merge go on alone from a group
+ * that goes on without them (see `bundled`).
+ *
+ * @param routes - The routes, as `bundled` takes them.
+ * @param merges - The merges of each route's ends, as `bundled` takes them.
+ * @returns The indices of each route's parting corners.
+ */
+export const partingCorners = (
+  routes: ReadonlyArray<ReadonlyArray<XY>>,
+  merges: ReadonlyArray<readonly [number, number]>,
+): Array<Set<number>> => bundled(routes, merges).parting
 
 // Coupled segments want to sit together, as one bundle, each the merge gap
 // from the next in their current order: against a member that is not a
@@ -835,11 +854,12 @@ function nudgeAxis(
   axis: Axis,
   constraints: ReadonlyArray<RouteConstraints | undefined>,
   report: (found: Crowded) => void,
+  keep: number,
 ): boolean {
-  let collected = collect(paths, axis, constraints, splits)
+  let collected = collect(paths, axis, constraints, splits, keep)
   let segments = cohere(collected, ids, couples, gapOf)
   if (leap(paths, obstacles, segments, axis, constraints)) {
-    collected = collect(paths, axis, constraints, splits)
+    collected = collect(paths, axis, constraints, splits, keep)
     segments = cohere(collected, ids, couples, gapOf)
   }
   if (segments.length === 0) {
@@ -865,7 +885,6 @@ function nudgeAxis(
       }
     }
   }
-
   // Lines of overlapping segments, each ordered by the sides of its pairs.
   const group = segments.map((_, i) => i)
   const find = (i: number): number => {
@@ -897,7 +916,19 @@ function nudgeAxis(
   for (const [a, b] of pairs) {
     const sa = segments[a] as Segment
     const sb = segments[b] as Segment
-    const first = goesFirst(paths, sa, sb, axis) ? [a, b] : [b, a]
+    let first = goesFirst(paths, sa, sb, axis) ? [a, b] : [b, a]
+    // A segment that stays put on the line of a wall leaves no room on
+    // that side, so the one that moves goes on the other.
+    if (sa.fixed !== sb.fixed) {
+      const [held, free, h, f] = sa.fixed ? [sa, sb, a, b] : [sb, sa, b, a]
+      const own = constraints[free.route]?.avoid ?? []
+      const [low, high] = walls(own.length === 0 ? obstacles : [...obstacles, ...own], free, axis)
+      if (low !== undefined && atMost(held.at, low)) {
+        first = [h, f]
+      } else if (high !== undefined && atMost(high, held.at)) {
+        first = [f, h]
+      }
+    }
     const root = find(a)
     const list = preferences.get(root) ?? []
     list.push({ source: first[0] as number, target: first[1] as number })
@@ -1044,21 +1075,33 @@ function nudgeAxis(
     }
 
     // The segment past each end of a route stays on its side of the port, so
-    // the route still leaves and enters it straight out from its side.
+    // the route still leaves and enters it straight out from its side, and
+    // a segment stays short of the anchors on the segments beside it.
     for (const [s, segment] of segments.entries()) {
       const path = paths[segment.route] as Array<Point>
       const ends = [
         ...(segment.index === 1 ? [path[0] as Point] : []),
         ...(segment.index === path.length - 3 ? [path[path.length - 1] as Point] : []),
       ]
-      for (const end of segment.fixed ? [] : ends) {
-        const port = end[axis]
-        if (port !== segment.at) {
-          variables.push({ desired: port, fixed: true })
+      const bounds: Array<readonly [at: number, below: boolean]> = segment.fixed
+        ? []
+        : ends.map((end) => [end[axis], end[axis] < segment.at] as const)
+      if (!segment.fixed && segment.held !== undefined) {
+        const [floor, ceiling] = segment.held
+        if (floor !== undefined) {
+          bounds.push([floor, true])
+        }
+        if (ceiling !== undefined) {
+          bounds.push([ceiling, false])
+        }
+      }
+      for (const [bound, below] of bounds) {
+        if (bound !== segment.at) {
+          variables.push({ desired: bound, fixed: true })
           wallOf.push(-1)
           const wall = variables.length - 1
           separations.push(
-            port < segment.at ? { left: wall, right: s, gap: 0 } : { left: s, right: wall, gap: 0 },
+            below ? { left: wall, right: s, gap: 0 } : { left: s, right: wall, gap: 0 },
           )
         }
       }
@@ -1146,7 +1189,14 @@ function nudgeAxis(
 
   let anyMoved = false
   for (const [s, segment] of segments.entries()) {
-    const moved = positions[s] as number
+    // Where a crowded channel left the solve no room, the anchors on the
+    // segments beside this one still hold: the route passes through them.
+    const [floor, ceiling] = segment.bounds ?? [undefined, undefined]
+    const moved = clamp(
+      positions[s] as number,
+      floor ?? Number.NEGATIVE_INFINITY,
+      ceiling ?? Number.POSITIVE_INFINITY,
+    )
     // A move within rounding is no move, so the rounds can end.
     if (segment.fixed || coincident(moved, segment.at)) {
       continue
@@ -1165,6 +1215,7 @@ function collect(
   axis: Axis,
   constraints: ReadonlyArray<RouteConstraints | undefined>,
   splits: ReadonlyArray<ReadonlyMap<number, Split>> = [],
+  keep = 0,
 ): Array<Segment> {
   const along = other(axis)
   const segments: Array<Segment> = []
@@ -1177,10 +1228,20 @@ function collect(
       const a = (path[index] as Point)[along]
       const b = (path[index + 1] as Point)[along]
       const at = (path[index] as Point)[axis]
-      const anchored = (constraints[route]?.anchors ?? []).some(
-        (point) =>
-          coincident(point[axis], at) && within(point[along], Math.min(a, b), Math.max(a, b)),
-      )
+      const anchors = constraints[route]?.anchors ?? []
+      const straight = constraints[route]?.straight ?? []
+      // A segment through an anchor stays. One that ends on an anchor the
+      // route runs straight through moves: the segment on the other side of
+      // the anchor runs through it, and this one keeps the gap from it.
+      const anchored = anchors.some((point) => {
+        if (!coincident(point[axis], at)) {
+          return false
+        }
+        const [low, high] = [Math.min(a, b), Math.max(a, b)]
+        return straight.some((p) => p[0] === point[0] && p[1] === point[1])
+          ? inside(point[along], low, high)
+          : within(point[along], low, high)
+      })
       const fixed =
         index === 0 ||
         index === last ||
@@ -1190,13 +1251,45 @@ function collect(
       // A jog between turns that go opposite ways wants its spot along the
       // run it shifts, between where the segments on either side of it
       // start and end: the middle, unless the route says otherwise. Other
-      // segments want to stay put.
+      // segments want to stay put. A segment never moves past an anchor on
+      // the segments on either side of it, which would take the anchor off
+      // the route.
       let desired = at
       let run: readonly [number, number] | undefined
       let late: number | undefined
+      let held: Segment['held']
+      let bounds: Segment['bounds']
       if (!fixed) {
         const previous = (path[index - 1] as Point)[axis]
         const after = (path[index + 2] as Point)[axis]
+        let low: number | undefined
+        let high: number | undefined
+        let floor: number | undefined
+        let ceiling: number | undefined
+        for (const [far, line] of [
+          [previous, a],
+          [after, b],
+        ] as const) {
+          for (const point of anchors) {
+            if (
+              coincident(point[along], line) &&
+              within(point[axis], Math.min(at, far), Math.max(at, far))
+            ) {
+              const margin = straight.some((p) => p[0] === point[0] && p[1] === point[1]) ? keep : 0
+              if (far > at) {
+                high = Math.min(high ?? Number.POSITIVE_INFINITY, point[axis] - margin)
+                ceiling = Math.min(ceiling ?? Number.POSITIVE_INFINITY, point[axis])
+              } else {
+                low = Math.max(low ?? Number.NEGATIVE_INFINITY, point[axis] + margin)
+                floor = Math.max(floor ?? Number.NEGATIVE_INFINITY, point[axis])
+              }
+            }
+          }
+        }
+        if (low !== undefined || high !== undefined) {
+          held = [low, high]
+          bounds = [floor, ceiling]
+        }
         if ((previous - at) * (after - at) < 0) {
           const split = splits[route]?.get(index)
           if (split === undefined) {
@@ -1223,12 +1316,21 @@ function collect(
           }
           run = [Math.min(previous, after), Math.max(previous, after)]
         }
+        if (held !== undefined) {
+          const [floor, ceiling] = held
+          desired = clamp(desired, floor ?? desired, ceiling ?? desired)
+          if (run !== undefined) {
+            run = [Math.max(run[0], floor ?? run[0]), Math.min(run[1], ceiling ?? run[1])]
+          }
+        }
       }
       segments.push({
         route,
         index,
         run,
         late,
+        held,
+        bounds,
         at,
         desired,
         low: Math.min(a, b),
@@ -1266,7 +1368,14 @@ function leap(
       continue
     }
     const own = constraints[jog.route]?.avoid ?? []
-    const [low, high] = walls(own.length === 0 ? obstacles : [...obstacles, ...own], jog, axis)
+    const [lowWall, highWall] = walls(
+      own.length === 0 ? obstacles : [...obstacles, ...own],
+      jog,
+      axis,
+    )
+    const [floor, ceiling] = jog.held ?? [undefined, undefined]
+    const low = floor === undefined ? lowWall : Math.max(lowWall ?? floor, floor)
+    const high = ceiling === undefined ? highWall : Math.min(highWall ?? ceiling, ceiling)
     const step = jog.desired > jog.at ? 1 : -1
     // A jog that shares its line with another route keeps to its side of
     // it, the side it parts toward, so it leaps only that way.

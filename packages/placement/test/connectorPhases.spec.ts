@@ -10,6 +10,7 @@ import {
   partingSide,
 } from '../src/internal/connector/nudge.ts'
 import { straightenPorts } from '../src/internal/connector/ports.ts'
+import { type Route, routeOf } from '../src/internal/connector/route.ts'
 import { type SlantedRoute, slantJogs } from '../src/internal/connector/slants.ts'
 import type { Obstacle } from '../src/internal/graph/graph.ts'
 import { shortestPath } from '../src/internal/graph/search.ts'
@@ -210,6 +211,7 @@ describe('placeSeparated', () => {
 })
 
 const route = (...points: Array<XY>) => points
+const routed = (...points: Array<XY>) => routeOf(points)
 
 describe('nudge', () => {
   test('routes that share nothing are unchanged', () => {
@@ -901,14 +903,14 @@ describe('cornerRadii', () => {
   // outermost first.
   const nest = (count: number, spacing: number) =>
     Array.from({ length: count }, (_, k) =>
-      route([0, k * spacing], [30 - k * spacing, k * spacing], [30 - k * spacing, 40]),
+      routed([0, k * spacing], [30 - k * spacing, k * spacing], [30 - k * spacing, 40]),
     )
 
   test('a corner takes its share of each leg', () => {
-    expect(cornerRadii([route([0, 0], [30, 0], [30, 40], [100, 40])], [25])).toEqual([
+    expect(cornerRadii([routed([0, 0], [30, 0], [30, 40], [100, 40])], [25])).toEqual([
       [0, 20, 20, 0],
     ])
-    expect(cornerRadii([route([0, 0], [30, 0], [30, 40])], [-1])).toEqual([[0, 0, 0]])
+    expect(cornerRadii([routed([0, 0], [30, 0], [30, 40])], [-1])).toEqual([[0, 0, 0]])
   })
 
   test.each([
@@ -942,8 +944,8 @@ describe('cornerRadii', () => {
   test('an inner corner that short legs hold small holds the outer one too', () => {
     // The inner route's last leg is 4 long, so its corner reaches 4 at most,
     // and the outer corner, 4 farther out, reaches 8 about the same center.
-    const outer = route([0, 0], [30, 0], [30, 40])
-    const inner = route([0, 4], [26, 4], [26, 8])
+    const outer = routed([0, 0], [30, 0], [30, 40])
+    const inner = routed([0, 4], [26, 4], [26, 8])
     expect(cornerRadii([outer, inner], [16, 16])).toEqual([
       [0, 8, 0],
       [0, 4, 0],
@@ -951,8 +953,8 @@ describe('cornerRadii', () => {
   })
 
   test('uneven offsets shrink the inner corner by the larger', () => {
-    const outer = route([0, 0], [30, 0], [30, 40])
-    const inner = route([0, 8], [26, 8], [26, 40])
+    const outer = routed([0, 0], [30, 0], [30, 40])
+    const inner = routed([0, 8], [26, 8], [26, 40])
     expect(cornerRadii([outer, inner], [10, 10])).toEqual([
       [0, 10, 0],
       [0, 2, 0],
@@ -967,9 +969,9 @@ describe('cornerRadii', () => {
   })
 
   test('corners that turn differently, or fan out, keep their size', () => {
-    const right = route([0, 0], [30, 0], [30, 40])
-    const left = route([0, 4], [26, 4], [26, -40])
-    const fanned = route([0, -4], [26, -4], [26, 40])
+    const right = routed([0, 0], [30, 0], [30, 40])
+    const left = routed([0, 4], [26, 4], [26, -40])
+    const fanned = routed([0, -4], [26, -4], [26, 40])
     expect(cornerRadii([right, left], [10, 10]).map((list) => list[1])).toEqual([10, 10])
     expect(cornerRadii([right, fanned], [10, 10]).map((list) => list[1])).toEqual([10, 10])
   })
@@ -977,8 +979,8 @@ describe('cornerRadii', () => {
     // The outer corner's jog is 6 long, so it reaches 3, less than the 4 the
     // inner corner sits inside it: the inner one takes the 1 it sits past
     // the center rather than jumping back to its radius.
-    const outer = route([0, 0], [30, 0], [30, 6], [60, 6])
-    const inner = route([0, 4], [26, 4], [26, 40])
+    const outer = routed([0, 0], [30, 0], [30, 6], [60, 6])
+    const inner = routed([0, 4], [26, 4], [26, 40])
     expect(cornerRadii([outer, inner], [10, 10]).map((list) => list[1])).toEqual([3, 1])
   })
 
@@ -1010,7 +1012,7 @@ describe('cornerRadii', () => {
     // size of 4 draws an arc of radius 4 / tan(pi / 8), and the inner corner
     // takes that less the 4 it sits inside, where upright it would take 0.
     const routes = nest(2, 4)
-    const shaped = [route([0, 0], [26, 0], [40, 14]), routes[1] as Array<XY>]
+    const shaped = [routed([0, 0], [26, 0], [40, 14]), routes[1] as Route]
     const fixed = [new Map([[1, 4]]), new Map<number, number>()]
     const sizes = cornerRadii(routes, [10, 10], [], { fixed, shaped })
     expect(sizes[1]?.[1]).toBeCloseTo(4 / Math.tan(Math.PI / 8) - 4, 9)
@@ -1038,8 +1040,8 @@ describe('cornerRadii', () => {
   test('an outer corner that shrinks around a small inner one still insets it', () => {
     // The inner corner's short leg holds it to 3, and the outer one shrinks
     // to wrap it about one center.
-    const outer = route([0, 0], [30, 0], [30, 40])
-    const inner = route([0, 4], [26, 4], [26, 7])
+    const outer = routed([0, 0], [30, 0], [30, 40])
+    const inner = routed([0, 4], [26, 4], [26, 7])
     const sizes = cornerRadii([outer, inner], [10, 10])
     expect(sizes.map((list) => list[1])).toEqual([7, 3])
     expect(cornerInsets([outer, inner], sizes).map((list) => list[1])).toEqual([0, 4])
@@ -1114,12 +1116,12 @@ describe('straightenPorts', () => {
 // The S's span along the legs, and whether the route as drawn comes into a
 // box.
 function spanOf(slanted: SlantedRoute | undefined): number {
-  const [, a, b] = slanted?.points ?? []
+  const [, a, b] = slanted?.route.points ?? []
   return (b?.[0] as number) - (a?.[0] as number) + 2 * (slanted?.radii[1] as number)
 }
 
 function enters(slanted: SlantedRoute | undefined, box: Obstacle): boolean {
-  const points = slanted?.points ?? []
+  const points = slanted?.route.points ?? []
   const cumulative = lengths(points)
   return Array.from({ length: 401 }, (_, k) => k / 400).some((t) => {
     const [x, y] = pointOnDrawn(points, cumulative, slanted?.radii ?? [], t).point
@@ -1141,7 +1143,7 @@ describe('slantJogs', () => {
     } = {},
   ) =>
     slantJogs(
-      [zed, ...(options.others ?? [])],
+      [zed, ...(options.others ?? [])].map(routeOf),
       [sizes, ...(options.others ?? []).map((other) => other.map(() => 0))],
       [8, ...(options.others ?? []).map(() => 0)],
       options.slant ?? 1,
@@ -1154,7 +1156,7 @@ describe('slantJogs', () => {
     // The S spans 16, what the two full corners would, and each corner
     // turns atan(4 / 3) and reaches 5.
     const slanted = slant()
-    expect(slanted?.points).toEqual([
+    expect(slanted?.route.points).toEqual([
       [0, 0],
       [27, 0],
       [33, 8],
@@ -1168,7 +1170,7 @@ describe('slantJogs', () => {
 
   test('a larger slant stretches the S', () => {
     // The span is 2 * 2 * 8 - 8.
-    const [, a, b] = slant({ slant: 2 })?.points ?? []
+    const [, a, b] = slant({ slant: 2 })?.route.points ?? []
     expect((b?.[0] as number) - (a?.[0] as number)).toBeCloseTo(32 / 3, 9)
   })
 
@@ -1181,12 +1183,12 @@ describe('slantJogs', () => {
       { obstacles: [{ left: 20, right: 28, top: -4, bottom: 4 }] },
     ],
   ])('%s keeps the jog upright', (_, options) => {
-    expect(slant(options)?.points).toEqual(zed)
+    expect(slant(options)?.route.points).toEqual(zed)
     expect(slant(options)?.radii).toEqual(sizes)
   })
 
   test('an exempt jog stays as it is', () => {
-    expect(slant({ exempt: true })?.points).toEqual(zed)
+    expect(slant({ exempt: true })?.route.points).toEqual(zed)
     expect(slant({ exempt: true })?.radii).toEqual(sizes)
   })
 
@@ -1223,7 +1225,7 @@ describe('slantJogs', () => {
     // 10 past the jog: the S, half 8 wide, ends short of it, though not by
     // the gap.
     const slanted = slantJogs(
-      [zed, route([40, -10], [40, 20])],
+      [zed, route([40, -10], [40, 20])].map(routeOf),
       [sizes, [0, 0]],
       [8, 0],
       1,
@@ -1232,7 +1234,7 @@ describe('slantJogs', () => {
       [],
       { gap: 8 },
     )[0]
-    expect(slanted?.points).toEqual(route([0, 0], [27, 0], [33, 8], [60, 8]))
+    expect(slanted?.route.points).toEqual(route([0, 0], [27, 0], [33, 8], [60, 8]))
   })
 
   test('a route that shares a merge keeps only the merge gap from the S', () => {
@@ -1240,11 +1242,11 @@ describe('slantJogs', () => {
     // and the merge gap leaves the S whole.
     const partner = route([0, -5], [40, -5])
     const strokes = (merges: Array<readonly [number, number]>) =>
-      slantJogs([zed, partner], [sizes, [0, 0]], [8, 0], 1, [[]], [], [], {
+      slantJogs([zed, partner].map(routeOf), [sizes, [0, 0]], [8, 0], 1, [[]], [], [], {
         gap: 8,
         mergeGap: 4,
         merges,
-      })[0]?.points
+      })[0]?.route.points
     expect(
       strokes([
         [0, -1],
@@ -1261,7 +1263,7 @@ describe('slantJogs', () => {
 
   test('the drawn route passes through the middle of the S', () => {
     const slanted = slant()
-    const points = slanted?.points ?? []
+    const points = slanted?.route.points ?? []
     const drawn = pointOnDrawn(points, lengths(points), slanted?.radii ?? [], 0.5)
     expect(drawn.point[0]).toBeCloseTo(30, 9)
     expect(drawn.point[1]).toBeCloseTo(4, 9)

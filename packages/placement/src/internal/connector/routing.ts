@@ -61,6 +61,10 @@ export function routeAll(
     const edge = edges[i] as ProblemEdge
     const [source, target] = ports[i] as readonly [Port, Port]
     const [start, end] = pinOfEnd[i] as [number, number]
+    // Ports that touch, where two rects meet, make a route of no length.
+    if (nodes[start] === nodes[end] && edge.viaPins.length === 0) {
+      return { nodes: Int32Array.of(nodes[start] as number), cost: 0, start: 0, end: 0 }
+    }
     return shortestPath(
       graph,
       [{ node: nodes[start] as number, headings: [headingOf(source.side, 1)] }],
@@ -69,6 +73,8 @@ export function routeAll(
         ...edge.costs,
         avoid: edge.avoid,
         via: edge.viaPins.map((pin) => nodes[pin] as number),
+        viaArrivals: edge.viaArrivals,
+        viaLeavings: edge.viaLeavings,
         crossingCost: crossingCost,
         ...(through === undefined ? {} : { through }),
       },

@@ -1,7 +1,8 @@
 import { coincident } from 'curvy/number'
 import { before } from '../../utils/tolerance.ts'
-import { lengths, resolveRadii } from '../adornments.ts'
-import { type XY, headingOf, positiveLength } from '../orient.ts'
+import { resolveRadii } from '../adornments.ts'
+import { type XY, positiveLength } from '../orient.ts'
+import type { Route } from './route.ts'
 
 // The sizes of the corners of orthogonal routes. Each corner reaches at most
 // its route's radius, never into a wall (a stretch that flow adornments
@@ -45,7 +46,7 @@ export interface CornerOptions {
    * size, bounds its inner one by the arc it draws, and an inner corner that
    * moved leaves its nest.
    */
-  readonly shaped?: ReadonlyArray<ReadonlyArray<XY>> | undefined
+  readonly shaped?: ReadonlyArray<Route> | undefined
   /** How thick each route draws. */
   readonly thickness?: ReadonlyArray<number> | undefined
   /**
@@ -82,16 +83,15 @@ interface Link {
 const key = (corner: Corner) => `${corner.route}:${corner.index}`
 
 // Whether a corner sits off its orthogonal route in the routes as drawn.
-const moved = (shaped: ReadonlyArray<ReadonlyArray<XY>> | undefined, corner: Corner): boolean => {
-  const point = shaped?.[corner.route]?.[corner.index]
+const moved = (shaped: ReadonlyArray<Route> | undefined, corner: Corner): boolean => {
+  const point = shaped?.[corner.route]?.points[corner.index]
   return point !== undefined && (point[0] !== corner.x || point[1] !== corner.y)
 }
 
 /**
  * Sizes the corners of routes.
  *
- * @param routes - The orthogonal routes, as points with no repeats and no
- * points in the middle of a straight run.
+ * @param routes - The orthogonal routes.
  * @param radii - The radius of each route.
  * @param walls - The stretches of each route that its flow adornments
  * take, as lengths along it.
@@ -100,15 +100,15 @@ const moved = (shaped: ReadonlyArray<ReadonlyArray<XY>> | undefined, corner: Cor
  * ends.
  */
 export function cornerRadii(
-  routes: ReadonlyArray<ReadonlyArray<XY>>,
+  routes: ReadonlyArray<Route>,
   radii: ReadonlyArray<number>,
   walls: ReadonlyArray<ReadonlyArray<readonly [number, number]>> = [],
   options: CornerOptions = {},
 ): Array<Array<number>> {
   const { fixed = [], shaped, thickness = [], exits = [], turning = [] } = options
   const limits = routes.map((_, r) => positiveLength(radii[r]))
-  const sizes = routes.map((points, r) => {
-    const list = resolveRadii(points, lengths(points), limits[r] as number, walls[r] ?? [])
+  const sizes = routes.map((route, r) => {
+    const list = resolveRadii(route.points, route.cumulative, limits[r] as number, walls[r] ?? [])
     for (const [index, size] of fixed[r] ?? []) {
       list[index] = size
     }
@@ -134,7 +134,8 @@ export function cornerRadii(
     }
     if (moved(shaped, outer)) {
       const size = (sizes[outer.route] as Array<number>)[outer.index] as number
-      const half = halfTurnTan(shaped?.[outer.route] as ReadonlyArray<XY>, outer.index)
+      const drawn = (shaped as ReadonlyArray<Route>)[outer.route] as Route
+      const half = halfTurnTan(drawn.points, outer.index)
       links.push({ ...link, arc: half > 0 ? size / half : Number.POSITIVE_INFINITY })
     } else if (!isFixed(outer)) {
       links.push({ ...link, arc: undefined })
@@ -219,11 +220,11 @@ export function cornerRadii(
  * one that does not nest or that its nest left alone.
  */
 export function cornerInsets(
-  routes: ReadonlyArray<ReadonlyArray<XY>>,
+  routes: ReadonlyArray<Route>,
   sizes: ReadonlyArray<ReadonlyArray<number>>,
-  shaped?: ReadonlyArray<ReadonlyArray<XY>>,
+  shaped?: ReadonlyArray<Route>,
 ): Array<Array<number>> {
-  const insets = routes.map((points) => points.map(() => 0))
+  const insets = routes.map(({ points }) => points.map(() => 0))
   const tight = nestLinks(routes).filter(({ outer, inner, by }) => {
     const outerSize = sizes[outer.route]?.[outer.index] ?? 0
     const innerSize = sizes[inner.route]?.[inner.index] ?? 0
@@ -263,19 +264,32 @@ function halfTurnTan(points: ReadonlyArray<XY>, index: number): number {
   return Math.tan(theta / 2)
 }
 
+// The nests of each set of routes, kept for the next pass over it: one set
+// has its corners sized twice and inset once, and the routes never change.
+const nests = new WeakMap<ReadonlyArray<Route>, ReadonlyArray<Link>>()
+
 // Each corner's nearest inner corner among the others that turn the same
 // way, by the larger of how far it sits back and over.
-function nestLinks(routes: ReadonlyArray<ReadonlyArray<XY>>): Array<Link> {
+function nestLinks(routes: ReadonlyArray<Route>): ReadonlyArray<Link> {
+  let links = nests.get(routes)
+  if (links === undefined) {
+    links = findNests(routes)
+    nests.set(routes, links)
+  }
+  return links
+}
+
+function findNests(routes: ReadonlyArray<Route>): Array<Link> {
   // The right-angled corners, grouped by the turn they make.
   const turns = new Map<string, Array<Corner>>()
-  for (const [route, points] of routes.entries()) {
+  for (const [route, { points, headings }] of routes.entries()) {
     for (let index = 1; index + 1 < points.length; index++) {
       const from = points[index - 1] as XY
       const point = points[index] as XY
       const to = points[index + 1] as XY
       const [x, y] = point
-      const [ax, ay] = headingOf(from, point)
-      const [bx, by] = headingOf(point, to)
+      const [ax, ay] = headings[index - 1] as XY
+      const [bx, by] = headings[index] as XY
       const corner = { route, index, x, y, ax, ay, bx, by, from, to }
       const right =
         Math.abs(corner.ax) + Math.abs(corner.ay) === 1 &&

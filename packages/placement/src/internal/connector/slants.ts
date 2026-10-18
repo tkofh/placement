@@ -1,16 +1,8 @@
 import { coincident, minMax } from 'curvy/number'
 import { before, inside, overlaps } from '../../utils/tolerance.ts'
 import type { Obstacle } from '../graph/graph.ts'
-import {
-  type Axis,
-  type XY,
-  headingOf,
-  hi,
-  lo,
-  other,
-  positiveLength,
-  segmentBox,
-} from '../orient.ts'
+import { type Axis, type XY, hi, lo, other, positiveLength } from '../orient.ts'
+import { type Route, routeOf } from './route.ts'
 
 // Slanted jogs. A jog is the segment between two corners that turn opposite
 // ways, the rise of a Z. When it is shorter than its two corners need, the
@@ -49,8 +41,8 @@ import {
 
 /** A route with its short jogs slanted. */
 export interface SlantedRoute {
-  /** The points, with each slanted jog's two corners moved apart. */
-  readonly points: ReadonlyArray<XY>
+  /** The route, with each slanted jog's two corners moved apart. */
+  readonly route: Route
   /** How far the corner at each point reaches along its legs. */
   readonly radii: ReadonlyArray<number>
   /**
@@ -139,8 +131,7 @@ interface Slant {
 /**
  * Slants the short jogs of routes.
  *
- * @param routes - The routes, as points with no repeats and no points in the
- * middle of a straight run.
+ * @param routes - The routes.
  * @param sizes - The size of each route's corners (see `cornerRadii`).
  * @param radii - The reach of each route's corners at a right angle.
  * @param slant - How far apart a jog's corners slide, as a multiple of what
@@ -155,7 +146,7 @@ interface Slant {
  * @returns Each route with its short jogs slanted.
  */
 export function slantJogs(
-  routes: ReadonlyArray<ReadonlyArray<XY>>,
+  routes: ReadonlyArray<Route>,
   sizes: ReadonlyArray<ReadonlyArray<number>>,
   radii: ReadonlyArray<number>,
   slant: number,
@@ -173,30 +164,26 @@ export function slantJogs(
   }
   // Everything a slant keeps clear of: each route's segments, by route, and
   // the obstacles, as boxes.
-  const boxes = routes.map((points) =>
-    points.slice(1).map((b, i) => segmentBox(points[i] as XY, b)),
-  )
+  const boxes = routes.map((route) => route.boxes())
 
-  return routes.map((points, route) => {
+  return routes.map((current, route) => {
+    const { points } = current
     const size = sizes[route] as ReadonlyArray<number>
     const reach = radii[route] ?? 0
-    const identity: SlantedRoute = { points, radii: size, remap: (distance) => distance }
+    const identity: SlantedRoute = { route: current, radii: size, remap: (distance) => distance }
     if (!(slant > 0) || !(reach > 0) || points.length < 4) {
       return identity
     }
+    const { headings, cumulative } = current
     const count = points.length
-    const cumulative = [0]
-    for (let i = 1; i < count; i++) {
-      cumulative.push((cumulative[i - 1] as number) + length(points[i - 1] as XY, points[i] as XY))
-    }
 
     // The short jogs: segments between inner corners that turn opposite
     // ways, too short for both corners at full reach.
     const short = new Map<number, number>()
     for (let i = 1; i + 2 < count; i++) {
       const d = length(points[i] as XY, points[i + 1] as XY)
-      const same = headingOf(points[i - 1] as XY, points[i] as XY)
-      const next = headingOf(points[i + 1] as XY, points[i + 2] as XY)
+      const same = headings[i - 1] as XY
+      const next = headings[i + 1] as XY
       if (
         !(exempt[route]?.has(i) ?? false) &&
         same[0] === next[0] &&
@@ -215,7 +202,7 @@ export function slantJogs(
       const p = points[i] as XY
       const q = points[i + 1] as XY
       const d = length(p, q)
-      const u = headingOf(points[i - 1] as XY, p)
+      const u = headings[i - 1] as XY
       // The axis along the legs, and the one across them.
       const along: Axis = u[0] !== 0 ? 0 : 1
       const across = other(along)
@@ -339,7 +326,7 @@ export function slantJogs(
     for (const { index, w, reach: corner } of slants) {
       const p = points[index] as XY
       const q = points[index + 1] as XY
-      const u = headingOf(points[index - 1] as XY, p)
+      const u = headings[index - 1] as XY
       moved[index] = [p[0] - (u[0] * w) / 2, p[1] - (u[1] * w) / 2]
       moved[index + 1] = [q[0] + (u[0] * w) / 2, q[1] + (u[1] * w) / 2]
       resized[index] = corner
@@ -348,7 +335,7 @@ export function slantJogs(
       cuts.push([(cumulative[index + 1] as number) + w / 2, w + d - Math.hypot(w, d)])
     }
     return {
-      points: moved,
+      route: routeOf(moved),
       radii: resized,
       remap: (distance) => {
         let shift = 0

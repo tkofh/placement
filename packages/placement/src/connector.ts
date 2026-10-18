@@ -6,6 +6,7 @@ import { solve } from './internal/connector/pipeline.ts'
 import { normalize } from './internal/connector/problem.ts'
 import { positiveLength } from './internal/orient.ts'
 import type * as Point from './point.ts'
+import type { Polygon } from './polygon.ts'
 import type * as Rect from './rect.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/connector')
@@ -489,15 +490,38 @@ export const setMergeGap: {
 } = dual(2, (self: Connector, mergeGap: number) => new Connector({ ...self.toJSON(), mergeGap }))
 
 /**
+ * A point a route passes through, in the `via` option of an edge, and the
+ * ways it arrives there and leaves, if it holds them. A route that holds
+ * a way through a point may still turn there, but the corner keeps the
+ * gap from the point where the routes beside it leave room, so the run
+ * on the held side of the point is at least that long.
+ */
+export interface ConnectorWaypoint extends Point.PointLike {
+  /**
+   * The direction the route heads as it arrives at the point, as a vector
+   * of any length: `{ x: 0, y: 1 }` for a route that comes down onto it.
+   * Omitted, or without a direction, the route may arrive any way.
+   */
+  readonly arriving?: Point.PointLike | undefined
+  /**
+   * The direction the route heads as it leaves the point, as a vector of
+   * any length. Omitted, or without a direction, the route may leave any
+   * way.
+   */
+  readonly leaving?: Point.PointLike | undefined
+}
+
+/**
  * The route constraints of one edge, in the `edges` option of `apply`.
  */
 export interface ConnectorEdgeOptions {
   /**
-   * Points the route passes through, in order. A point inside a rect, or
-   * inside its clearance off the lines out of its ports, cannot be reached,
-   * and leaves the edge without a route.
+   * Points the route passes through, in order, each the ways it holds (see
+   * `ConnectorWaypoint`). A point inside a rect, or inside its clearance
+   * off the lines out of its ports, cannot be reached, and leaves the edge
+   * without a route.
    */
-  readonly via?: ReadonlyArray<Point.PointLike> | undefined
+  readonly via?: ReadonlyArray<ConnectorWaypoint> | undefined
   /**
    * Rects whose interior the route stays out of. Other edges may still
    * cross them. The route may run along their sides.
@@ -516,9 +540,20 @@ export interface ConnectorEdgeOptions {
 /**
  * The options of `apply`.
  */
-export interface ConnectorApplyOptions {
+export interface ConnectorApplyOptions<K extends string = string> {
   /** The route constraints of each edge, in the order of the edges. */
   readonly edges?: ReadonlyArray<ConnectorEdgeOptions | undefined> | undefined
+  /**
+   * The shape of each rect, keyed by id, as a `Polygon` (see
+   * `placement/polygon`) that fills its rect. A rect without one is its
+   * rect, with sharp corners. A port sits where the line out of it meets
+   * the shape first, coming in from its side of the rect, so edges meet a
+   * diamond (`Polygon.make({ phase: 0.5 })`) on its slopes and at its tips
+   * rather than on its bounding box, and meet a rounded rect on its curve
+   * near a corner. Where the line misses the shape, the port stays on the
+   * rect. Routes still keep clear of the rects.
+   */
+  readonly shapes?: Readonly<Partial<Record<K, Polygon>>> | undefined
 }
 
 /**
@@ -815,7 +850,7 @@ export function apply<const K extends string>(
   rects: Readonly<Record<K, Rect.Rect>>,
   edges: ReadonlyArray<Edge<NoInfer<K>>>,
   connector: Connector,
-  options: ConnectorApplyOptions = {},
+  options: ConnectorApplyOptions<NoInfer<K>> = {},
 ): ConnectorLayout<K> {
   return solve(normalize(rects, edges, connector, options)) as ConnectorLayout<K>
 }

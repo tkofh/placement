@@ -4,13 +4,13 @@ import type { ConnectorLayout, ConnectorNote, ConnectorRoute } from '../../conne
 import * as Interval from '../../interval.ts'
 import * as Point from '../../point.ts'
 import * as Rect from '../../rect.ts'
-import { type PlacedAdornment, type SolveAdornment, lengths } from '../adornments.ts'
-import { type XY, segmentBox } from '../orient.ts'
+import type { PlacedAdornment, SolveAdornment } from '../adornments.ts'
+import type { XY } from '../orient.ts'
 import { placeAdornments, placeFlow } from './adornments.ts'
 import { cornerInsets, cornerRadii } from './corners.ts'
 import { type Locks, emptyLocks, shiftLocks } from './locks.ts'
 import { addWhisk, planMerges, stepped } from './merge.ts'
-import { type RouteConstraints, coupledSegments, nudgeRoutes, partingCorners } from './nudge.ts'
+import { type RouteConstraints, bundled, nudgeRoutes } from './nudge.ts'
 import { type SlidingEnd, straightenPorts } from './ports.ts'
 import {
   type EdgeEnd,
@@ -20,6 +20,7 @@ import {
   endId,
   packAt,
 } from './problem.ts'
+import { type Route, routeOf } from './route.ts'
 import { routeAll } from './routing.ts'
 import { chooseSides } from './sides.ts'
 import { slantJogs } from './slants.ts'
@@ -131,6 +132,9 @@ export function solve(problem: Problem): ConnectorLayout {
       const edge = edges[i] as ProblemEdge
       return {
         anchors: edge.via,
+        straight: edge.via.filter(
+          (_, k) => edge.viaArrivals[k] !== undefined || edge.viaLeavings[k] !== undefined,
+        ),
         avoid: edge.avoid,
         jogAt: edge.jogAt,
         merges: [mergeOf.get(endId(i, 0)) ?? -1, mergeOf.get(endId(i, 1)) ?? -1],
@@ -180,8 +184,7 @@ export function solve(problem: Problem): ConnectorLayout {
   const mergesOf = found.map(
     (i) => [mergeOf.get(endId(i, 0)) ?? -1, mergeOf.get(endId(i, 1)) ?? -1] as const,
   )
-  const parting = partingCorners(straight, mergesOf)
-  const coupled = coupledSegments(straight, mergesOf)
+  const { coupled, parting } = bundled(straight, mergesOf)
   const dressed = straight.map((route, k) => {
     const i = found[k] as number
     let locks = emptyLocks()
@@ -213,27 +216,20 @@ export function solve(problem: Problem): ConnectorLayout {
     }
     return { points, locks }
   })
-  const nudged = dressed.map(({ points }) => points)
+  // The routes as nudged, which the passes from here on read and never
+  // change: each pass that moves points makes new routes.
+  const nudged = dressed.map(({ points }) => routeOf(points))
   const locks = dressed.map(({ locks: held }) => held)
 
   // Flow adornments wall off corners, and absolute ones land on the route
   // as drawn, with its corners sized.
   const adornments = found.map((i) => (edges[i] as ProblemEdge).adornments)
-  const cumulative = nudged.map((route) => lengths(route))
-  // The segments of every route, as boxes, that the flow adornments between
-  // the ports of other routes look for clear stretches among.
-  // Each takes the width of its stroke.
-  const segments = nudged.map((route, k) => {
-    const half = edgeOf(k).thickness / 2
-    return route.slice(1).map((b, i) => segmentBox(route[i] as XY, b, half))
-  })
   const flows = nudged.map((route, k) => {
     const between = (adornments[k] as ReadonlyArray<SolveAdornment>).some(
       (adornment) => adornment.flow && !coincident(adornment.at, 0) && !coincident(adornment.at, 1),
     )
     return placeFlow(
       route,
-      cumulative[k] as Array<number>,
       adornments[k] as ReadonlyArray<SolveAdornment>,
       {
         radius: edgeOf(k).radius,
@@ -243,7 +239,11 @@ export function solve(problem: Problem): ConnectorLayout {
         spaceOuter: settings.justifyAdornmentsSpaceOuter,
         clear: settings.gap,
       },
-      between ? segments.flatMap((list, other) => (other === k ? [] : list)) : [],
+      // The strokes of every other route, which the flow adornments between
+      // the ports look for clear stretches among.
+      between
+        ? nudged.flatMap((other, j) => (j === k ? [] : other.boxes(edgeOf(j).thickness / 2)))
+        : [],
     )
   })
   // The steps keep the corners they were given, and nest with nothing.
@@ -273,11 +273,11 @@ export function solve(problem: Problem): ConnectorLayout {
   // its size, and so do the corners at the far ends of its legs, which the
   // slant made room beside; the corners nested inside a slanted one grow
   // with its arc.
-  const shaped = slanted.map(({ points }) => points)
+  const shaped = slanted.map(({ route }) => route)
   const settled = cornerRadii(nudged, radii, walls, {
-    fixed: slanted.map(({ points, radii: slantedSizes }, k) => {
+    fixed: slanted.map(({ route: { points }, radii: slantedSizes }, k) => {
       const kept = new Map((locks[k] as Locks).cornerSize)
-      const orthogonal = nudged[k] as ReadonlyArray<XY>
+      const orthogonal = (nudged[k] as Route).points
       const moved = (index: number) => {
         const [x, y] = points[index] as XY
         const [x0, y0] = orthogonal[index] as XY
@@ -329,13 +329,12 @@ export function solve(problem: Problem): ConnectorLayout {
 
   const result: Array<ConnectorRoute | undefined> = edges.map(() => undefined)
   for (const [k, i] of found.entries()) {
-    const { points: route, remap } = slanted[k] as (typeof slanted)[number]
+    const { route, remap } = slanted[k] as (typeof slanted)[number]
     const routeRadii = settled[k] as Array<number>
     const flow = (flows[k] as { placed: ReadonlyArray<PlacedAdornment | undefined> }).placed
     const list = adornments[k] as ReadonlyArray<SolveAdornment>
     const landed = placeAdornments(
       route,
-      lengths(route),
       routeRadii,
       list,
       flow.map((adornment) =>
@@ -348,10 +347,13 @@ export function solve(problem: Problem): ConnectorLayout {
             },
       ),
     )
+    // A route of no length, between ports that touch, keeps both its ends.
+    const points = route.points.map(([x, y]) => Point.make(x, y))
+    const single = points.length === 1
     result[i] = {
-      points: route.map(([x, y]) => Point.make(x, y)),
-      radii: routeRadii,
-      insets: insets[k] as Array<number>,
+      points: single ? [points[0] as Point.Point, points[0] as Point.Point] : points,
+      radii: single ? [0, 0] : routeRadii,
+      insets: single ? [0, 0] : (insets[k] as Array<number>),
       adornments: landed.map((adornment, a) => placementOf(adornment, list[a] as SolveAdornment)),
       merged: [leaders.get(endId(i, 0)) ?? -1, leaders.get(endId(i, 1)) ?? -1],
     }

@@ -77,7 +77,7 @@ export function chooseSides(problem: Problem): Sides {
     ] as const
     return ends.map(([owner, side, at, outward]) =>
       (side === undefined ? [0, 1, 2, 3] : [side]).map((s): Candidate => {
-        const port = portOf(boxes[owner] as Rect.Rect, s, at ?? 0.5)
+        const port = portOf(problem, owner, s, at ?? 0.5)
         pins.push(pinOf(port, owner))
         return { side: s, pin: pins.length - 1, outward }
       }),
@@ -138,6 +138,8 @@ export function chooseSides(problem: Problem): Sides {
         ...edge.costs,
         avoid: edge.avoid,
         via: edge.viaPins.map((pin) => nodes[pin] as number),
+        viaArrivals: edge.viaArrivals,
+        viaLeavings: edge.viaLeavings,
         crossingCost: crossingCost,
         ...(through === undefined ? {} : { through }),
         ...pullAlong(k),

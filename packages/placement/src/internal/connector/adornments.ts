@@ -17,6 +17,7 @@ import {
 } from '../adornments.ts'
 import type { Obstacle } from '../graph/graph.ts'
 import { type XY, hi, lo, other, pointOn } from '../orient.ts'
+import type { Route } from './route.ts'
 
 // The adornments of a routed edge. A connector routes around rects that are
 // already placed, so unlike the hierarchy it sizes no runs. Each straight
@@ -66,21 +67,19 @@ export interface PlacedFlow {
 /**
  * Places the flow adornments of a route.
  *
- * @param points - The route, as points with no repeats and no points in the
- * middle of a straight run.
- * @param cumulative - The length along the route at each point.
+ * @param route - The route.
  * @param adornments - The edge's adornments.
  * @param layout - How runs lay out their adornments.
  * @param others - The segments of the other routes, as boxes.
  * @returns Where each flow adornment landed, and the walls they make.
  */
 export function placeFlow(
-  points: ReadonlyArray<XY>,
-  cumulative: ReadonlyArray<number>,
+  route: Route,
   adornments: ReadonlyArray<SolveAdornment>,
   layout: RunLayout,
   others: ReadonlyArray<Obstacle> = [],
 ): PlacedFlow {
+  const { points, cumulative } = route
   const placed: Array<PlacedAdornment | undefined> = adornments.map(() => undefined)
   const walls: Array<readonly [number, number]> = []
   const overflow: Array<readonly [number, number]> = []
@@ -104,7 +103,7 @@ export function placeFlow(
       axis,
       sign,
       // A slanted run, the step of a merged lane, takes no adornments.
-      slanted: !coincident(a[0], b[0]) && !coincident(a[1], b[1]),
+      slanted: route.isSlanted(index),
       start: cumulative[index] as number,
       end: cumulative[index + 1] as number,
       padStart: index > 0 ? layout.radius : 0,
@@ -142,15 +141,7 @@ export function placeFlow(
 
   // The segments of this route, as boxes, for the runs that are not next to
   // them.
-  const own = runs.map(({ a }, index): Obstacle => {
-    const b = points[index + 1] as XY
-    return {
-      left: Math.min(a[0], b[0]),
-      right: Math.max(a[0], b[0]),
-      top: Math.min(a[1], b[1]),
-      bottom: Math.max(a[1], b[1]),
-    }
-  })
+  const own = route.boxes()
 
   // Where a run's middle adornments may go, as distances from its start:
   // past its packs, the gap from them, and the room for its corners, in the
@@ -456,16 +447,14 @@ function trackItems(group: ReadonlyArray<RunItem>, sign: Sign): Array<Track.Sequ
 /**
  * Places the absolute adornments of a route on the route as drawn.
  *
- * @param points - The route.
- * @param cumulative - The length along the route at each point.
+ * @param route - The route as drawn.
  * @param radii - The size of the corner at each point.
  * @param adornments - The edge's adornments.
  * @param flow - Where the flow adornments landed (see `placeFlow`).
  * @returns Where every adornment landed.
  */
 export function placeAdornments(
-  points: ReadonlyArray<XY>,
-  cumulative: ReadonlyArray<number>,
+  route: Route,
   radii: ReadonlyArray<number>,
   adornments: ReadonlyArray<SolveAdornment>,
   flow: ReadonlyArray<PlacedAdornment | undefined>,
@@ -473,6 +462,10 @@ export function placeAdornments(
   return adornments.map(
     (adornment, index) =>
       flow[index] ??
-      placeAbsolute(adornment, pointOnDrawn(points, cumulative, radii, adornment.at), false),
+      placeAbsolute(
+        adornment,
+        pointOnDrawn(route.points, route.cumulative, radii, adornment.at),
+        false,
+      ),
   )
 }

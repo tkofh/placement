@@ -51,6 +51,11 @@ export interface SearchOptions {
   readonly counterclockwiseCost?: number
   // The nodes the path passes through, in order.
   readonly via?: ReadonlyArray<number>
+  // The way the path heads as it arrives at each node of `via`, and as it
+  // leaves, as vectors of any length, or `undefined` for any. Any, by
+  // default.
+  readonly viaArrivals?: ReadonlyArray<PointLike | undefined>
+  readonly viaLeavings?: ReadonlyArray<PointLike | undefined>
   // Rects whose interior the path may not cross. It may run along their
   // edges.
   readonly avoid?: ReadonlyArray<Obstacle>
@@ -108,6 +113,10 @@ export function shortestPath(
   const starts = endpoints(from)
   const ends = endpoints(to)
   const via = options.via ?? []
+  const ways = (list: ReadonlyArray<PointLike | undefined>) =>
+    list.map((heading) => (heading === undefined ? undefined : headings([heading])))
+  const viaArrivals = ways(options.viaArrivals ?? [])
+  const viaLeavings = ways(options.viaLeavings ?? [])
   if (
     starts.length === 0 ||
     ends.length === 0 ||
@@ -116,6 +125,10 @@ export function shortestPath(
   ) {
     return undefined
   }
+  // Whether a path heading along (dx, dy) arrives at the waypoint of `leg`
+  // the way it holds, if it holds one.
+  const alongVia = (leg: number, dx: number, dy: number, length: number) =>
+    matches(viaArrivals[leg], dx, dy, length)
   const bendCost = positiveLength(options.bendCost)
   const clockwiseCost = bendCost + positiveLength(options.clockwiseCost)
   const counterclockwiseCost = bendCost + positiveLength(options.counterclockwiseCost)
@@ -290,9 +303,17 @@ export function shortestPath(
     const la = lengthOf(ax, ay)
 
     if (leg < lastLeg && node === via[leg]) {
+      // A path that arrives at a waypoint any way but the one it holds
+      // ends there.
+      if (la > 0 && !alongVia(leg, ax, ay, la)) {
+        continue
+      }
       relax(passed(leg, node) * edgeCount + e, total, turns, state)
       continue
     }
+    // Off a waypoint that holds the way the path leaves it, the path heads
+    // that way.
+    const leaving = leg > 0 && via[leg - 1] === node ? viaLeavings[leg - 1] : undefined
     if (leg === lastLeg) {
       const end = arrival(node, ax, ay, la)
       if (end !== -1) {
@@ -315,6 +336,9 @@ export function shortestPath(
       const bx = dxOf(f)
       const by = dyOf(f)
       const lb = lengthOf(bx, by)
+      if (leaving !== undefined && !matches(leaving, bx, by, lb)) {
+        continue
+      }
       let turn = 0
       let turned = 0
       if (la > 0 && lb > 0) {

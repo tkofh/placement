@@ -23,7 +23,9 @@ diagrams.
   props, and passes other attributes through to it. `r` and `smoothing`
   round its corners to the sizes the layout solves, which shrink where the
   route is crowded, and `minR` sets the least radius the layout keeps room
-  for. Its slot receives the route's `points` and corner `radii`.
+  for. The inner corners of routes that turn together draw as their
+  outermost corner moved in, so smoothed corners keep one center. Its slot
+  receives the route's `points` and corner `radii`.
 - `HierarchyAdornment` children decorate an edge. `at` places one along it
   (`'start'`, `'end'`, `'center'`, or a ratio), and `position="flow"` (the
   default) keeps it on a straight run that the layout makes long enough,

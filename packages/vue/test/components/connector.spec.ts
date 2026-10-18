@@ -210,7 +210,7 @@ describe('routing', () => {
     expect(routes(root)).toEqual(solved.edges.map(pointsOf))
     // The second route passes through its waypoint, on a run or at a
     // corner.
-    const points = routes(root)[1] ?? []
+    const points = (routes(root)[1] ?? []) as Array<[number, number]>
     const through = points.some(([x, y], i) => {
       const next = points[i + 1]
       if (next === undefined) {

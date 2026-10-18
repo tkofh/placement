@@ -168,7 +168,9 @@ describe('solving', () => {
   })
 
   test('r and smoothing round the route', async () => {
-    const { root } = await mountLayout({ rankGap: 20 }, () => [
+    // A side port needs room beside its node to turn in, which the gaps
+    // give it.
+    const { root } = await mountLayout({ rankGap: 20, nodeGap: 10, edgeGap: 4 }, () => [
       edge({ from: 'a', to: 'b', fromPort: 'right', r: 6, smoothing: 0.6 }),
       node('a', 40, 20),
       node('b', 40, 20),
@@ -180,7 +182,7 @@ describe('solving', () => {
         Frame.make({ id: 'b', width: 40, height: 20 }),
       ],
       [Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.right, radius: 1.6 * 6 })],
-      Hierarchy.make({ rankGap: 20 }),
+      Hierarchy.make({ rankGap: 20, nodeGap: 10, edgeGap: 4 }),
     )
     const { points, radii } = solved.edges[0]!
 

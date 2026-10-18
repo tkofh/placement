@@ -1,25 +1,29 @@
+import { coincident } from 'curvy/number'
 import { Pipeable } from 'curvy/utils'
 import type { Adornment, AdornmentPlacement } from './adornment.ts'
-import type { Edge } from './edge.ts'
+import * as Connector from './connector.ts'
+import * as Edge from './edge.ts'
 import type { Frame } from './frame.ts'
-import { type SolveAdornment, frameSize, resolveAdornment } from './internal/adornments.ts'
+import { type SolveAdornment, resolveAdornment } from './internal/adornments.ts'
 import {
+  type Growth,
   type LogicalBox,
   type LogicalPoint,
   ORDER_END,
   ORDER_START,
+  type PlacedPort,
+  type Placement,
   RANK_END,
   RANK_START,
   type SolveEdge,
   type SolveNode,
   type SolvePort,
-  type SolveShape,
-  solve,
+  noGrowth,
+  place,
 } from './internal/hierarchy/layout.ts'
-import { fitLoops, resolveFractions, resolveRadius } from './internal/polygon.ts'
 import * as Interval from './interval.ts'
 import * as Point from './point.ts'
-import { type Polygon, isPolygon } from './polygon.ts'
+import type { Polygon } from './polygon.ts'
 import * as Rect from './rect.ts'
 import { auto } from './utils/arguments.ts'
 
@@ -81,15 +85,19 @@ export interface HierarchyInput {
   readonly backEdges?: HierarchyBackEdges
   /**
    * The space between adjacent ranks of nodes, along the flow. Flow
-   * adornments on an edge add their own size on top. Defaults to `0`.
+   * adornments on an edge add their own size on top, and so do the routes
+   * that jog between the ranks where they need more. Defaults to `0`.
    */
   readonly rankGap?: number
-  /** The space between adjacent nodes in a rank, across the flow. Defaults to `0`. */
+  /**
+   * The space between adjacent nodes in a rank, across the flow. Routes
+   * that run between two nodes add what they need. Defaults to `0`.
+   */
   readonly nodeGap?: number
   /**
-   * The space between adjacent edges, between an edge and a node (half of
-   * it, plus half of `nodeGap`), between ports that share a side, and
-   * between nested self loops. Defaults to `0`.
+   * The space between the strokes of adjacent edges, between an edge and a
+   * node (half of it, plus half of `nodeGap`), and between the edges that
+   * leave a node sideways. Defaults to `0`.
    */
   readonly edgeGap?: number
   /**
@@ -216,16 +224,20 @@ export const isHierarchy = (value: unknown): value is Hierarchy => {
 }
 
 /**
- * The solved geometry of one edge.
+ * The solved geometry of one edge, as `Connector.apply` routes it (see
+ * `ConnectorRoute` in `placement/connector`).
  *
  * - `points`: the polyline from the source port to the target port, with
  *   at least two points. Every segment runs along an axis, and every inner
- *   point is a right-angled corner.
+ *   point is a right-angled corner. An edge the connector found no route
+ *   for, which a note of the layout reports, has no points.
  * - `radii`: how far the corner at each point reaches along its two legs,
  *   one per point, `0` at both ends. Each is at most the edge's `radius`,
  *   and the corners on a segment never reach past each other or into a
  *   flow adornment. A renderer that rounds corners draws circular corners
  *   of these radii, or any corner that reaches no farther.
+ * - `insets`: how far inside the outermost corner of its nest each corner
+ *   sits, for the corners of routes that turn together, one per point.
  * - `adornments`: where each adornment landed, in the edge's adornment
  *   order.
  */
@@ -234,6 +246,8 @@ export interface HierarchyRoute {
   readonly points: ReadonlyArray<Point.Point>
   /** The size of the corner at each point, `0` at both ends. */
   readonly radii: ReadonlyArray<number>
+  /** How far inside its nest's outermost corner each corner sits. */
+  readonly insets: ReadonlyArray<number>
   /** Where each adornment landed, in the edge's adornment order. */
   readonly adornments: ReadonlyArray<AdornmentPlacement>
 }
@@ -248,6 +262,10 @@ export interface HierarchyRoute {
  * - `edges`: one route per edge, in input order.
  * - `bounds`: the rect enclosing every node, adornment (as turned), and
  *   route point. Its origin is always `(0, 0)`.
+ * - `notes`: what the routes gave up after the layout grew for them as far
+ *   as it does, as `Connector.apply` reports it (see `ConnectorNote` in
+ *   `placement/connector`): a channel still too narrow for its routes, an
+ *   adornment longer than every run, or an edge with no route.
  */
 export interface HierarchyLayout<K extends string> {
   /** One rect per frame, keyed by frame `id`. */
@@ -256,6 +274,8 @@ export interface HierarchyLayout<K extends string> {
   readonly edges: ReadonlyArray<HierarchyRoute>
   /** The rect enclosing the whole drawing, with its origin at `(0, 0)`. */
   readonly bounds: Rect.Rect
+  /** What the routes gave up. */
+  readonly notes: ReadonlyArray<Connector.ConnectorNote<K>>
 }
 
 /**
@@ -289,6 +309,10 @@ export interface HierarchyApplyOptions<K extends string> {
   readonly shapes?: Readonly<Partial<Record<K, Polygon>>> | undefined
 }
 
+// How many times the layout places the nodes and routes the edges at most:
+// once, and then once more each time the routes needed more room.
+const ROUNDS = 3
+
 /**
  * Lays out a directed graph in ranks and returns the rects of its nodes, the
  * routes of its edges, and the bounds of the drawing.
@@ -304,19 +328,23 @@ export interface HierarchyApplyOptions<K extends string> {
  * 4. It positions nodes across the flow by Brandes-Köpf, which keeps long
  *    edges straight.
  * 5. It stacks each rank's nodes inside the rank's thickness with the
- *    frames' `align` and `stretch`, and routes edges through their ports.
+ *    frames' `align` and `stretch`.
+ * 6. It routes the edges with `Connector.apply` (see `placement/connector`)
+ *    around the placed nodes, through the slots between nodes that step 3
+ *    ordered each long edge through, from and to the faces of the nodes
+ *    that the flow and the edges' ports give. Where the routes needed more
+ *    room than the gaps gave, between two ranks or between two nodes of a
+ *    rank, the layout grows that room and places and routes again, up to
+ *    two more times.
  *
  * Routes are orthogonal: every segment runs along or across the flow. An
  * edge that shifts across the flow does so on a jog between two ranks, and
- * jogs that share the space between two ranks get their own lanes, ordered
- * to avoid crossings. That space grows to fit its lanes, `edgeGap` apart,
- * to keep room for corners of each edge's `minRadius`, and to keep the
- * flow adornments at each end of an edge on a straight run. An
- * edge that leaves a node through a side across the flow, or around the
- * node from the side facing away, runs in a column of its own beside the
- * node, and step 4 reserves room for the columns. An edge that goes around
- * its node turns in a lane before or after the rank, which adds space
- * before the first rank or after the last one when needed.
+ * jogs that share the space between two ranks sit `edgeGap` apart, in an
+ * order that avoids crossings. That space grows to fit them, and to keep
+ * room for corners of each edge's `minRadius` and for the flow adornments
+ * at each end of an edge on a straight run. An edge that leaves a node
+ * through a side across the flow, or around the node from the side facing
+ * away, runs beside the node, and step 4 reserves room beside it.
  *
  * Nodes are `Frame`s with an `id`, and edges reference them by it. The
  * types check both. The literal ids of `frames` form the allowed ids, so a
@@ -325,16 +353,16 @@ export interface HierarchyApplyOptions<K extends string> {
  * known only at runtime widen to `string`, and the runtime checks still
  * apply.
  *
- * Edges carry adornments (see `placement/adornment`). A flow adornment sits
- * on the straight run nearest its `at`: a stub, the run out of a port,
- * which packs it against the port, or the run through a rank between the
- * two nodes, which centers it there. Each run grows to fit its flow
- * adornments, layer by layer, and lanes and columns keep clear of them. An
+ * Edges carry adornments (see `placement/adornment`). A flow adornment at
+ * an end of an edge packs against the port there, and the others sit on
+ * the straight run nearest their `at` with room for them: an adornment in
+ * the middle of a long edge takes room in the rank between the nodes. An
  * absolute adornment sits at `at` of the way along the route as drawn, with
  * corners of the solved `radii`, and takes no room.
  *
  * Ports sit on each node's rect, or on its shape when `options.shapes`
- * gives it one.
+ * gives it one. Auto ports that share a side spread along it in the order
+ * their routes part.
  *
  * Frame sizes resolve as usual. Offsets across the flow add clearance.
  * Offsets along the flow add clearance within the rank, and auto
@@ -354,7 +382,7 @@ export interface HierarchyApplyOptions<K extends string> {
  * @param edges - The edge specs, referencing frames by `id`.
  * @param hierarchy - The layout specification.
  * @param options - The per-node options, keyed by frame `id`.
- * @returns The node rects, edge routes, and bounds.
+ * @returns The node rects, edge routes, bounds, and notes.
  * @throws `RangeError` when a frame has no `id`, when two frames share an
  * `id`, or when an edge references an `id` that no frame has.
  * @example
@@ -372,10 +400,11 @@ export interface HierarchyApplyOptions<K extends string> {
  */
 export function apply<const T extends ReadonlyArray<Frame<string>>>(
   frames: T,
-  edges: ReadonlyArray<Edge<NoInfer<T[number]['id']>>>,
+  edges: ReadonlyArray<Edge.Edge<NoInfer<T[number]['id']>>>,
   hierarchy: Hierarchy,
   options: HierarchyApplyOptions<NoInfer<T[number]['id']>> = {},
 ): HierarchyLayout<T[number]['id']> {
+  type K = T[number]['id']
   const index = new Map<string, number>()
   for (const [i, frame] of frames.entries()) {
     const id: unknown = frame.id
@@ -391,12 +420,11 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
   const vertical = hierarchy.isVertical
   const reverse = hierarchy.isReverse
 
-  const shapes: Partial<Record<string, Polygon>> = options.shapes ?? {}
   const solveNodes: Array<SolveNode> = frames.map((frame) => {
     const [rLeading, rTrailing] = vertical
       ? [frame.offsetTop, frame.offsetBottom]
       : [frame.offsetLeft, frame.offsetRight]
-    const place = auto(frame.align, hierarchy.alignItems)
+    const placeAt = auto(frame.align, hierarchy.alignItems)
     return {
       oSize: vertical ? frame.width : frame.height,
       rSize: vertical ? frame.height : frame.width,
@@ -406,12 +434,8 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
       oEnd: finite(vertical ? frame.offsetRight : frame.offsetBottom),
       rStart: reverse ? rTrailing : rLeading,
       rEnd: reverse ? rLeading : rTrailing,
-      place: reverse ? 1 - place : place,
+      place: reverse ? 1 - placeAt : placeAt,
       stretch: auto(frame.stretch, hierarchy.stretchItems),
-      shape: resolveShape(
-        Object.hasOwn(shapes, frame.id as string) ? shapes[frame.id as string] : undefined,
-        hierarchy,
-      ),
     }
   })
 
@@ -429,66 +453,123 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
       minLength: Number.isFinite(edge.minLength) ? Math.max(Math.ceil(edge.minLength), 1) : 1,
       sourcePort: resolvePort(edge.sourceSide, edge.sourceAt, hierarchy.direction),
       targetPort: resolvePort(edge.targetSide, edge.targetAt, hierarchy.direction),
-      radius,
       minRadius: Math.min(finite(Math.max(edge.minRadius, 0)), radius),
       adornments: edge.adornments.map((adornment) => resolveEdgeAdornment(adornment, hierarchy)),
     }
   })
 
-  const layoutNodes = Object.create(null) as Record<T[number]['id'], Rect.Rect>
+  const layoutNodes = Object.create(null) as Record<K, Rect.Rect>
 
   if (frames.length === 0) {
-    return { nodes: layoutNodes, edges: [], bounds: Rect.make() }
+    return { nodes: layoutNodes, edges: [], bounds: Rect.make(), notes: [] }
   }
 
-  const result = solve(solveNodes, solveEdges, {
+  const solveOptions = {
     rankGap: hierarchy.rankGap,
     nodeGap: hierarchy.nodeGap,
     edgeGap: hierarchy.edgeGap,
     backEdges: hierarchy.backEdges,
     mirror: mirrors[hierarchy.direction],
+  }
+  // The routes keep a clearance from the nodes that an edge and a node
+  // keep apart by: half of each gap. Jogs sit in the middle of the room
+  // between their legs, and stay upright, so every segment runs along an
+  // axis.
+  const spec = Connector.make({
+    clearance: (hierarchy.nodeGap + hierarchy.edgeGap) / 2,
+    gap: hierarchy.edgeGap,
+    jogAt: 0.5,
+    jogSlant: 0,
+    merge: Connector.merge.none,
+    alignAdornments: hierarchy.alignAdornments,
   })
-  const extent = result.rankExtent
+  const sides = faceSides[hierarchy.direction]
+  const ids = frames.map((frame) => frame.id as string)
 
-  const toRect = (box: LogicalBox): [number, number, number, number] => {
-    const r = reverse ? extent - (box.r + box.rSize) : box.r
-    return vertical ? [box.o, r, box.oSize, box.rSize] : [r, box.o, box.rSize, box.oSize]
-  }
-  const toPoint = ([o, r]: LogicalPoint): [number, number] => {
-    const rank = reverse ? extent - r : r
-    return vertical ? [o, rank] : [rank, o]
-  }
-
-  // A logical direction, as a physical one.
-  const toDirection = ([o, r]: LogicalPoint): [number, number] => {
-    const rank = reverse ? -r : r
-    return vertical ? [o, rank] : [rank, o]
-  }
-
-  const nodeRects = result.nodes.map(toRect)
-  const routePoints = result.routes.map((points) => points.map(toPoint))
-  // Each adornment's upright rect, the physical direction it faces, and
-  // the half extents of its turned box.
-  const adornmentShapes = result.adornments.map((placed, i) =>
-    placed.map((adornment, k) => {
-      const { frame } = (edges[i] as Edge<string>).adornments[k] as Adornment
-      const width = frameSize(frame.width, frame.minWidth, frame.maxWidth)
-      const height = frameSize(frame.height, frame.minHeight, frame.maxHeight)
-      const [x, y] = toPoint(adornment.center)
-      const direction =
-        adornment.direction === undefined ? undefined : toDirection(adornment.direction)
-      const [dx, dy] = direction ?? [1, 0]
-      return {
-        rect: [x - width / 2, y - height / 2, width, height] as [number, number, number, number],
-        angle: direction === undefined ? 0 : Math.atan2(dy, dx),
-        halfX: (Math.abs(dx) * width + Math.abs(dy) * height) / 2,
-        halfY: (Math.abs(dy) * width + Math.abs(dx) * height) / 2,
-        center: [x, y] as const,
-        along: adornment.along,
+  // Place, route, and grow what the routes needed, until they need nothing
+  // more or the rounds run out.
+  let growth: Growth = noGrowth
+  let placement: Placement
+  let routed: Connector.ConnectorLayout<string>
+  for (let round = 0; ; round++) {
+    placement = place(solveNodes, solveEdges, solveOptions, growth)
+    const extent = placement.rankExtent
+    const toRect = (box: LogicalBox): Rect.Rect => {
+      const r = reverse ? extent - (box.r + box.rSize) : box.r
+      return vertical
+        ? Rect.make(box.o, r, box.oSize, box.rSize)
+        : Rect.make(r, box.o, box.rSize, box.oSize)
+    }
+    const toPoint = ([o, r]: LogicalPoint): Point.PointLike => {
+      const along = reverse ? extent - r : r
+      return vertical ? { x: o, y: along } : { x: along, y: o }
+    }
+    const rects = Object.create(null) as Record<string, Rect.Rect>
+    for (const [i, id] of ids.entries()) {
+      rects[id] = toRect(placement.nodes[i] as LogicalBox)
+    }
+    // The ports as placed, on the physical sides of their faces. Each route
+    // runs straight out of its port as far as the flow adornments packed
+    // there reach, then through the slots its dummies sit in, across the
+    // flow there, and in to its other port the same way.
+    const physical = ({ face, at }: PlacedPort): [side: number, at: number] => [
+      sides[face] as number,
+      reverse && (face === ORDER_START || face === ORDER_END) ? 1 - at : at,
+    ]
+    // The way a route heads through the slots of its dummies: with the
+    // flow, or against it on an edge reversed to break a cycle.
+    const flow: Point.PointLike = vertical
+      ? { x: 0, y: reverse ? -1 : 1 }
+      : { x: reverse ? -1 : 1, y: 0 }
+    const routes: Array<Edge.Edge<string>> = []
+    const constraints: Array<Connector.ConnectorEdgeOptions> = []
+    for (const [i, edge] of edges.entries()) {
+      const [source, target] = placement.ports[i] as readonly [PlacedPort, PlacedPort]
+      const [sourceSide, sourceAt] = physical(source)
+      const [targetSide, targetAt] = physical(target)
+      routes.push(
+        edge.pipe(
+          Edge.setSourcePort(sourceSide, sourceAt),
+          Edge.setTargetPort(targetSide, targetAt),
+        ),
+      )
+      const [sourceStub, targetStub] = placement.stubs[i] as readonly [number, number]
+      const via: Array<Connector.ConnectorWaypoint> = []
+      if (sourceStub > 0) {
+        via.push(stubEnd(rects[edge.source] as Rect.Rect, sourceSide, sourceAt, sourceStub, 1))
       }
-    }),
-  )
+      const arriving = placement.reversed[i] ? { x: -flow.x, y: -flow.y } : flow
+      for (const point of placement.vias[i] ?? []) {
+        via.push({ ...toPoint(point), arriving })
+      }
+      if (targetStub > 0) {
+        via.push(stubEnd(rects[edge.target] as Rect.Rect, targetSide, targetAt, targetStub, -1))
+      }
+      constraints.push({ via })
+    }
+    routed = Connector.apply(rects, routes, spec, {
+      edges: constraints,
+      shapes: options.shapes as Readonly<Partial<Record<string, Polygon>>> | undefined,
+    })
+    if (round + 1 === ROUNDS) {
+      break
+    }
+    const grown = grow(routed.notes, placement, growth, index, solveEdges, frames.length, vertical)
+    if (grown === undefined) {
+      break
+    }
+    growth = grown
+  }
+  const extent = placement.rankExtent
+  const nodeRects = placement.nodes.map((box) => {
+    const r = reverse ? extent - (box.r + box.rSize) : box.r
+    return vertical
+      ? Rect.make(box.o, r, box.oSize, box.rSize)
+      : Rect.make(r, box.o, box.rSize, box.oSize)
+  })
 
+  // The bounds hold every node, every adornment as turned, and every route
+  // point.
   let minX = Number.POSITIVE_INFINITY
   let minY = Number.POSITIVE_INFINITY
   let maxX = Number.NEGATIVE_INFINITY
@@ -499,39 +580,180 @@ export function apply<const T extends ReadonlyArray<Frame<string>>>(
     maxX = Math.max(maxX, x1)
     maxY = Math.max(maxY, y1)
   }
-  for (const [x, y, w, h] of nodeRects) {
-    include(x, y, x + w, y + h)
+  for (const rect of nodeRects) {
+    include(rect.left, rect.top, rect.right, rect.bottom)
   }
-  for (const { center, halfX, halfY } of adornmentShapes.flat()) {
-    include(center[0] - halfX, center[1] - halfY, center[0] + halfX, center[1] + halfY)
-  }
-  for (const [x, y] of routePoints.flat()) {
-    include(x, y, x, y)
+  for (const route of routed.edges) {
+    for (const { rect, angle } of route?.adornments ?? []) {
+      const [halfX, halfY] = turnedHalves(rect, angle)
+      include(
+        rect.centerX - halfX,
+        rect.centerY - halfY,
+        rect.centerX + halfX,
+        rect.centerY + halfY,
+      )
+    }
+    for (const { x, y } of route?.points ?? []) {
+      include(x, y, x, y)
+    }
   }
 
-  const rect = ([x, y, w, h]: [number, number, number, number]): Rect.Rect =>
-    Rect.make(x - minX, y - minY, w, h)
-  const point = ([x, y]: [number, number]): Point.Point => Point.make(x - minX, y - minY)
+  const rect = (r: Rect.Rect): Rect.Rect => Rect.make(r.x - minX, r.y - minY, r.width, r.height)
+  const point = (p: Point.Point): Point.Point => Point.make(p.x - minX, p.y - minY)
 
   for (const [i, frame] of frames.entries()) {
-    layoutNodes[frame.id as T[number]['id']] = rect(
-      nodeRects[i] as [number, number, number, number],
-    )
+    layoutNodes[frame.id as K] = rect(nodeRects[i] as Rect.Rect)
   }
 
   return {
     nodes: layoutNodes,
-    edges: routePoints.map((points, i) => ({
-      points: points.map(point),
-      radii: result.radii[i] as ReadonlyArray<number>,
-      adornments: (adornmentShapes[i] ?? []).map((shape) => ({
-        rect: rect(shape.rect),
-        angle: shape.angle,
-        along: Interval.make(shape.along[0], shape.along[1] - shape.along[0]),
-      })),
-    })),
+    edges: routed.edges.map((route, i): HierarchyRoute => {
+      if (route === undefined) {
+        return {
+          points: [],
+          radii: [],
+          insets: [],
+          adornments: (edges[i] as Edge.Edge<string>).adornments.map(() => ({
+            rect: Rect.make(),
+            angle: 0,
+            along: Interval.make(0, 0),
+          })),
+        }
+      }
+      return {
+        points: route.points.map(point),
+        radii: route.radii,
+        insets: route.insets,
+        adornments: route.adornments.map((placed) => ({
+          rect: rect(placed.rect),
+          angle: placed.angle,
+          along: placed.along,
+        })),
+      }
+    }),
     bounds: Rect.make(0, 0, maxX - minX, maxY - minY),
+    notes: routed.notes as ReadonlyArray<Connector.ConnectorNote<K>>,
   }
+}
+
+// What a placement grows for the routes' notes, or `undefined` when the
+// notes ask for nothing a placement can give. A channel too narrow for its
+// routes along the flow grows by what the routes need: the channel between
+// the ranks of the nodes on either side, or, with a node on one side only
+// or none (the routes crowd between their own ports), the channel past the
+// upper node of each crowded edge. Room too narrow across the flow,
+// between nodes of one rank, grows between each two of those nodes.
+function grow(
+  notes: ReadonlyArray<Connector.ConnectorNote<string>>,
+  placement: Placement,
+  growth: Growth,
+  index: ReadonlyMap<string, number>,
+  edges: ReadonlyArray<SolveEdge>,
+  nodeCount: number,
+  vertical: boolean,
+): Growth | undefined {
+  const channels = new Map(growth.channels)
+  const pairs = new Map(growth.pairs)
+  const beside = new Map(growth.beside)
+  const flowAxis = vertical ? 1 : 0
+  let changed = false
+  // Each place grows by the most any note needs there this round.
+  const bump = (
+    map: Map<number, number>,
+    was: ReadonlyMap<number, number>,
+    key: number,
+    need: number,
+  ): void => {
+    if (need > 0 && Number.isFinite(need)) {
+      map.set(key, Math.max(map.get(key) ?? 0, (was.get(key) ?? 0) + need))
+      changed = true
+    }
+  }
+  const rankOf = (node: number) => placement.ranks[node] as number
+  for (const note of notes) {
+    if (note.kind !== Connector.note.crowded) {
+      continue
+    }
+    const rects = note.rects.flatMap((id) => {
+      const node = index.get(id)
+      return node === undefined ? [] : [node]
+    })
+    const ranks = [...new Set(rects.map(rankOf))].toSorted((a, b) => a - b)
+    if (note.axis === flowAxis) {
+      if (ranks.length === 2) {
+        bump(channels, growth.channels, ranks[0] as number, note.need)
+      } else {
+        // The crowded edges jog past the node, in the channel on the side
+        // their other end lies, or past their upper node.
+        const rank = ranks[0]
+        for (const edge of note.edges) {
+          const { source, target } = edges[edge] as SolveEdge
+          const low = Math.min(rankOf(source), rankOf(target))
+          const high = Math.max(rankOf(source), rankOf(target))
+          if (low === high) {
+            continue
+          }
+          if (rank === undefined || low === rank) {
+            bump(channels, growth.channels, low, note.need)
+          } else if (high === rank) {
+            bump(channels, growth.channels, rank - 1, note.need)
+          }
+        }
+      }
+    } else if (ranks.length === 1 && rects.length >= 2) {
+      const sorted = [...new Set(rects)].toSorted((a, b) => a - b)
+      for (let k = 1; k < sorted.length; k++) {
+        const key = (sorted[k - 1] as number) * nodeCount + (sorted[k] as number)
+        bump(pairs, growth.pairs, key, note.need)
+      }
+    } else {
+      // Crowded beside nodes of different ranks, or beside one node against
+      // something that is no node: the room on both sides of each grows.
+      for (const node of new Set(rects)) {
+        bump(beside, growth.beside, node, note.need)
+      }
+    }
+  }
+  return changed ? { channels, pairs, beside } : undefined
+}
+
+// The point `stub` straight out from a port `at` of the way along a side
+// of a rect, which the route runs straight between the port and: it
+// reaches the point heading out of the side at its source (`sign` 1), and
+// leaves it heading into the side at its target (-1), so that it turns
+// past the adornments packed at the port.
+function stubEnd(
+  rect: Rect.Rect,
+  side: number,
+  at: number,
+  stub: number,
+  sign: number,
+): Connector.ConnectorWaypoint {
+  const [x, y, outward]: [number, number, Point.PointLike] =
+    side === Edge.side.top
+      ? [rect.left + at * rect.width, rect.top - stub, { x: 0, y: -1 }]
+      : side === Edge.side.right
+        ? [rect.right + stub, rect.top + at * rect.height, { x: 1, y: 0 }]
+        : side === Edge.side.bottom
+          ? [rect.left + at * rect.width, rect.bottom + stub, { x: 0, y: 1 }]
+          : [rect.left - stub, rect.top + at * rect.height, { x: -1, y: 0 }]
+  return sign > 0
+    ? { x, y, arriving: outward }
+    : { x, y, leaving: { x: -outward.x, y: -outward.y } }
+}
+
+// The half extents of an adornment's upright rect turned by `angle` about
+// its center. Routes run along the axes, so the angle is a quarter turn,
+// and the near-zero cosine or sine it gives is zero.
+function turnedHalves(rect: Rect.Rect, angle: number): [number, number] {
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  const dx = coincident(c, 0) ? 0 : c
+  const dy = coincident(s, 0) ? 0 : s
+  return [
+    (Math.abs(dx) * rect.width + Math.abs(dy) * rect.height) / 2,
+    (Math.abs(dy) * rect.width + Math.abs(dx) * rect.height) / 2,
+  ]
 }
 
 function finite(value: number): number {
@@ -547,7 +769,8 @@ const mirrors: Record<HierarchyDirection, boolean> = {
   [direction.left]: false,
 }
 
-// Resolves an adornment into logical terms (see `resolveAdornment`).
+// Resolves an adornment into logical terms (see `resolveAdornment`), for
+// the room it takes in the placement.
 function resolveEdgeAdornment(adornment: Adornment, hierarchy: Hierarchy): SolveAdornment {
   return resolveAdornment(
     adornment,
@@ -557,48 +780,6 @@ function resolveEdgeAdornment(adornment: Adornment, hierarchy: Hierarchy): Solve
   )
 }
 
-// Places a node's polygon in its box. The polygon fills the node's
-// physical rect, so it is placed there and its corners map to logical
-// coordinates, mirroring the rank axis in the reversed directions. A
-// polygon that is the sharp rect is no shape at all.
-function resolveShape(
-  polygon: Polygon | undefined,
-  hierarchy: Hierarchy,
-): ((box: LogicalBox) => SolveShape) | undefined {
-  if (!isPolygon(polygon)) {
-    return undefined
-  }
-  const fractions = resolveFractions(polygon)
-  const radius = resolveRadius(polygon.radius)
-  const isRect =
-    fractions.length === 1 &&
-    fractions[0]?.length === 4 &&
-    fractions[0].every(([x, y], i) => x === RECT_X[i] && y === RECT_Y[i])
-  if (isRect && radius === 0) {
-    return undefined
-  }
-  const vertical = hierarchy.isVertical
-  const reverse = hierarchy.isReverse
-  return (box) => {
-    const [width, height] = vertical ? [box.oSize, box.rSize] : [box.rSize, box.oSize]
-    const fitted = fitLoops(fractions, 0, 0, width, height, radius)
-    return {
-      outlines: fitted.loops.map((loop) =>
-        loop.map(([x, y]): LogicalPoint => {
-          const [o, r] = vertical ? [x, y] : [y, x]
-          const extent = vertical ? height : width
-          return [box.o + o, box.r + (reverse ? extent - r : r)]
-        }),
-      ),
-      radius: fitted.radius,
-    }
-  }
-}
-
-// The corners of the rect polygon, in fractions, from its top left.
-const RECT_X = [0, 1, 1, 0]
-const RECT_Y = [0, 0, 1, 1]
-
 // The logical face of each physical side (top, right, bottom, left), per
 // flow direction.
 const portFaces: Record<HierarchyDirection, ReadonlyArray<number>> = {
@@ -606,6 +787,15 @@ const portFaces: Record<HierarchyDirection, ReadonlyArray<number>> = {
   [direction.up]: [RANK_END, ORDER_END, RANK_START, ORDER_START],
   [direction.right]: [ORDER_START, RANK_END, ORDER_END, RANK_START],
   [direction.left]: [ORDER_START, RANK_START, ORDER_END, RANK_END],
+}
+
+// The physical side of each logical face (rank start, order end, rank end,
+// order start), per flow direction: the inverse of `portFaces`.
+const faceSides: Record<HierarchyDirection, ReadonlyArray<number>> = {
+  [direction.down]: [Edge.side.top, Edge.side.right, Edge.side.bottom, Edge.side.left],
+  [direction.up]: [Edge.side.bottom, Edge.side.right, Edge.side.top, Edge.side.left],
+  [direction.right]: [Edge.side.left, Edge.side.bottom, Edge.side.right, Edge.side.top],
+  [direction.left]: [Edge.side.right, Edge.side.bottom, Edge.side.left, Edge.side.top],
 }
 
 // Maps a physical port side to a logical face, and its position along the

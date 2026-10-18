@@ -1,4 +1,3 @@
-import type * as Rect from '../../rect.ts'
 import { atMost, before, overlaps } from '../../utils/tolerance.ts'
 import type { Obstacle } from '../graph/graph.ts'
 import {
@@ -156,7 +155,7 @@ export function planMerges(
   given: ReadonlyArray<readonly [Port, Port]>,
   merges: ReadonlyArray<Merge>,
 ): MergePlan {
-  const { edges, boxes, obstacles, settings, mergeGap } = problem
+  const { edges, obstacles, settings, mergeGap } = problem
   const ports = given.map(([source, target]): [Port, Port] => [source, target])
   const zones: Array<Obstacle> = []
   const whisks = new Map<number, Whisk>()
@@ -164,7 +163,7 @@ export function planMerges(
   const cramped: Array<Cramped> = []
   for (const { ends, at } of merges) {
     const { rect, side } = ends[0] as SharedEnd
-    const port = portOf(boxes[rect] as Rect.Rect, side, at)
+    const port = portOf(problem, rect, side, at)
     const [ox, oy] = outward(side)
     const [ax, ay] = along(side)
     // The axis along the side, and the one out of it.

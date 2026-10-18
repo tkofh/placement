@@ -13,14 +13,19 @@ cycles, ranks nodes by network simplex, reduces crossings by barycenter
 sweeps, and assigns coordinates by Brandes-Köpf with an edge-straightening
 pass. It is deterministic, and ties follow input order.
 
-Routes are orthogonal: every segment runs along or across the flow. An
-edge that shifts across the flow does so on a jog between two ranks. Jogs
-that share the space between two ranks get their own lanes, ordered to avoid
-crossings, and that space grows to fit them. An edge that leaves through a
-node's side, or around it from the side facing away, runs in a column of
-its own beside the node, and the layout reserves room for it. A column
-moves out to where its edge continues when nothing in the rank is in the
-way, so the edge turns as few times as it can.
+The layout places the nodes and `Connector.apply` (see
+`placement/connector`) routes the edges around them, so the two layouts
+draw edges the same way. Routes are orthogonal: every segment runs along
+or across the flow. An edge that shifts across the flow does so on a jog
+between two ranks, in the middle of the gap, and jogs that share the gap
+sit `edgeGap` apart, in the order that avoids crossings. An edge that
+leaves through a node's side, or around it from the side facing away,
+runs in a column of its own beside the node, and the layout reserves room
+for it. Where the routes still find a channel between two ranks, or the
+room between two nodes of a rank, too narrow for their gaps, the layout
+grows it by what they need and places and routes again, up to two more
+times, and the layout's `notes` report what the routes gave up after
+that, as `Connector.apply` reports it.
 
 Back edges (the edges reversed to break cycles) run straight back against
 the flow by default. With `backEdges: Hierarchy.backEdges.loop`, they leave
@@ -31,25 +36,31 @@ Edges carry a `weight`, a `minLength`, ports (`sourceSide`/`sourceAt`,
 `targetSide`/`targetAt`, each auto when omitted), corner sizes, and
 adornments. A route reports how far each of its corners reaches
 (`radii`): up to the edge's `radius`, shrinking where a leg is short or an
-adornment sits close. The layout keeps room for corners of the edge's
-`minRadius` along the flow and out of each port.
+adornment sits close, and how far inside the outermost corner of its nest
+each corner sits (`insets`) where routes turn together. The layout keeps
+room for corners of the edge's `minRadius` along the flow and out of each
+port.
 
 An `Adornment` is a `Frame` that decorates an edge, such as a label or an
 arrowhead, placed at `at` along it and turned to face along the line or
-kept upright. A `flow` adornment (the default) sits on the straight run
-nearest `at`, never on a corner: the stub out of either port, which packs
-it against the node, or the run through a rank between the nodes. The run
-grows to fit its flow adornments, and the ones in the same `layer` line up
-one after another like flex items, with their margins as gaps. An
-`absolute` adornment sits at `at` of the way along the route as drawn, with
-its rounded corners, and takes no room. Each route reports where its
+kept upright. A `flow` adornment (the default) sits on a straight run,
+never on a corner: at `at` `0` or `1` it packs against the port, and the
+route runs straight out of the port as far as the adornments there take
+and an edge gap more; otherwise it sits on the run nearest `at` with room
+for it, and a rank between the nodes grows to hold the adornments of the
+edges through it. Adornments in the same `layer` line up one after
+another like flex items, with their margins as gaps. An `absolute`
+adornment sits at `at` of the way along the route as drawn, with its
+rounded corners, and takes no room. Each route reports where its
 adornments landed and the stretch of the route each covers.
 
 Ports sit on each node's rect by default. `apply`'s fourth argument takes
 `shapes`, a `Polygon` per frame id, so that ports sit on a node's shape
 instead: edges meet a diamond (`Polygon.make({ phase: 0.5 })`) at its tips
 and on its slopes, and a rounded rect on its curve. Shapes only move ports.
-The layout still spaces nodes by their rects.
+The layout still spaces nodes by their rects. A side port needs a
+`nodeGap` or an `edgeGap` to leave room beside its node for the route to
+turn in.
 
 Nodes stack within their rank by the frames' `align` and `stretch`.
 `Hierarchy.make` configures the flow `direction`, the `backEdges` style,

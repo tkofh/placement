@@ -185,6 +185,81 @@ export function onArc(arc: CornerArc, point: XY): boolean {
   return reach >= arc.limit || coincident(reach, arc.limit)
 }
 
+/**
+ * Where a port on a side of a rect sits on the rect's shape: the line
+ * through the port across the side first meets the outline there, coming
+ * in from the side. Without a hit the port stays on the side. A shape whose
+ * rounded corners grew it past the rect can only bring the port in, never
+ * out past the side.
+ *
+ * @param outlines - The closed outlines of the shape, in the rect's space.
+ * @param radius - The radius of the arcs that round every corner.
+ * @param side - The side: `0` top, `1` right, `2` bottom, `3` left.
+ * @param along - The port's coordinate along the side: x on the top and
+ * bottom, y on the left and right.
+ * @param edge - The side's coordinate across it: the rect's top, right,
+ * bottom, or left.
+ * @returns The port's coordinate across the side.
+ */
+export function portDepth(
+  outlines: ReadonlyArray<ReadonlyArray<XY>>,
+  radius: number,
+  side: number,
+  along: number,
+  edge: number,
+): number {
+  // The axis the line runs along, and the one it holds at `along`. The
+  // top and left sides sit at the start of the axis across them.
+  const axis = side % 2 === 0 ? 1 : 0
+  const held = axis === 0 ? 1 : 0
+  const fromStart = side === 0 || side === 3
+  let hit: number | undefined
+  const meet = (value: number): void => {
+    if (hit === undefined || (fromStart ? value < hit : value > hit)) {
+      hit = value
+    }
+  }
+  for (const corners of outlines) {
+    const arcs = cornerArcs(corners, radius)
+    for (const [i, corner] of corners.entries()) {
+      const next = (i + 1) % corners.length
+      // The side from this corner to the next, between their arcs. An end
+      // on the line meets it. Otherwise the side meets it where its ends
+      // lie on either side.
+      const a = arcs[i]?.end ?? corner
+      const b = arcs[next]?.start ?? (corners[next] as XY)
+      const aOn = coincident(a[held], along)
+      const bOn = coincident(b[held], along)
+      if (aOn) {
+        meet(a[axis])
+      }
+      if (bOn) {
+        meet(b[axis])
+      }
+      if (!aOn && !bOn && a[held] < along !== b[held] < along) {
+        meet(a[axis] + ((along - a[held]) * (b[axis] - a[axis])) / (b[held] - a[held]))
+      }
+      // The arc that rounds this corner meets the line where its circle
+      // does, on the corner's side of its tangent points. A line that
+      // grazes the circle touches it.
+      const arc = arcs[i]
+      if (arc !== undefined) {
+        const offset = along - arc.center[held]
+        const squared = arc.radius * arc.radius - offset * offset
+        if (squared >= 0 || coincident(Math.abs(offset), arc.radius)) {
+          const root = Math.sqrt(Math.max(squared, 0))
+          for (const value of [arc.center[axis] - root, arc.center[axis] + root]) {
+            if (onArc(arc, axis === 0 ? [value, along] : [along, value])) {
+              meet(value)
+            }
+          }
+        }
+      }
+    }
+  }
+  return hit === undefined ? edge : fromStart ? Math.max(hit, edge) : Math.min(hit, edge)
+}
+
 const AXES: ReadonlyArray<XY> = [
   [1, 0],
   [-1, 0],

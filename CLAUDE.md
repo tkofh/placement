@@ -37,20 +37,24 @@ positioning). `Box.apply` solves it against a parent rect, and every
 non-finite input acts as unset. `Hierarchy` is a layered graph layout spec.
 `Hierarchy.apply` solves `Frame`s with ids plus `Edge` specs (which
 reference frame ids and carry `Adornment`s), with optional `Polygon` node
-shapes that ports sit on, through the phases in
-`internal/hierarchy/`: acyclic (`internal/graph/acyclic.ts`), rank
-(network simplex), order, position (Brandes-Köpf), and layout (bands,
-ports, routes). `lanes.ts` orders the jogs
-and U-turns of orthogonal routes, and `internal/adornments.ts` (shared with
-the connector) packs adornments onto straight runs and sizes corners. `Polygon` is a regular or star polygon that fills a rect, and
+shapes that ports sit on. `internal/hierarchy/layout.ts` places the nodes
+through the phases in `internal/hierarchy/`: acyclic
+(`internal/graph/acyclic.ts`), rank (network simplex), order, position
+(Brandes-Köpf), and `place` (bands, channels, ports, the straight runs out
+of ports, and the waypoints through the slots that ordering reserved).
+`hierarchy.ts` then routes the edges with `Connector.apply`, reads its
+`notes`, grows the channels and the room between nodes they name
+(`Growth`), and places again, up to three rounds. `internal/adornments.ts`
+(shared with the connector) measures adornments and sizes corners. `Polygon` is a regular or star polygon that fills a rect, and
 `Polygon.apply` places it, growing a rounded one so that its rounded
 outline fills the rect (`internal/polygon.ts`, shared with the hierarchy
 ports). `Connector` is a routing spec, and `Connector.apply` routes `Edge`s
 between rects that are already placed, keyed by id, around the others, and
 reports in `notes` what the routes gave up and what would have fit them.
 `apply` is `solve(normalize(...))`: `internal/connector/problem.ts` turns
-the inputs into a `Problem` (rects grown into obstacles, edges with their
-ends, costs, and resolved adornments), and `internal/connector/pipeline.ts`
+the inputs into a `Problem` (rects grown into obstacles, the shapes their
+ports sit on, edges with their ends, waypoints with the ways a route
+arrives and leaves, costs, and resolved adornments), and `internal/connector/pipeline.ts`
 runs the phases, each a function of the problem and the phases before it:
 `sides.ts` picks the sides of auto ends by a trial search, `spread.ts`
 spreads auto ports along shared sides and groups the ends that merge,
@@ -61,7 +65,9 @@ VPSC) and keeps other routes out of merged bundles, `ports.ts` slides auto
 ports to straighten short jogs, `adornments.ts` places adornments on the
 routes, `corners.ts` sizes corners, nesting those of routes that turn
 together about one center, and `slants.ts` turns jogs too short for their
-corners into S curves. `locks.ts` carries what a pass decided to the
+corners into S curves. `route.ts` is the polyline those passes read, with
+its lengths, headings, and segment boxes worked out once. `locks.ts`
+carries what a pass decided to the
 passes after it (upright jogs, set corner sizes, parting corners), so the
 order of `solve` is the order in which decisions yield. The phases build
 on `internal/graph/` (not yet public): `graph.ts` stores graphs of points

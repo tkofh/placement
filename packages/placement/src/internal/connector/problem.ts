@@ -2,6 +2,7 @@ import { clamp, coincident } from 'curvy/number'
 import type { ConnectorApplyOptions, ConnectorEdgeOptions } from '../../connector.ts'
 import type { Edge } from '../../edge.ts'
 import type * as Point from '../../point.ts'
+import * as Polygon from '../../polygon.ts'
 import type * as Rect from '../../rect.ts'
 import { atMost, overlaps } from '../../utils/tolerance.ts'
 import { type Axis, type SolveAdornment, resolveAdornment } from '../adornments.ts'
@@ -19,12 +20,20 @@ import {
   positiveLength,
   sideAxis,
 } from '../orient.ts'
+import {
+  type XY as OutlinePoint,
+  fitLoops,
+  portDepth,
+  resolveFractions,
+  resolveRadius,
+} from '../polygon.ts'
 import { packLength } from './adornments.ts'
 
 // The normalized form of a routing problem: the rects by index, grown into
 // obstacles, the edges with their ends, costs, constraints, and resolved
-// adornments, and the pins every visibility graph of the problem needs.
-// Every phase of the pipeline reads from it and none writes to it.
+// adornments, the shapes their ports sit on, and the pins every visibility
+// graph of the problem needs. Every phase of the pipeline reads from it and
+// none writes to it.
 
 /** The settings of a spec, as `Connector` holds them. */
 export interface Settings {
@@ -123,6 +132,10 @@ export interface ProblemEdge {
   readonly via: ReadonlyArray<XY>
   /** The pin of each of its waypoints, among the problem's extra pins. */
   readonly viaPins: ReadonlyArray<number>
+  /** The way the route arrives at each waypoint, or `undefined` for any. */
+  readonly viaArrivals: ReadonlyArray<Point.PointLike | undefined>
+  /** The way the route leaves each waypoint, or `undefined` for any. */
+  readonly viaLeavings: ReadonlyArray<Point.PointLike | undefined>
   /** The rects its route stays out of. */
   readonly avoid: ReadonlyArray<Obstacle>
   readonly costs: Costs
@@ -130,11 +143,19 @@ export interface ProblemEdge {
   readonly jogAt: number
 }
 
+/** A rect's shape, placed in it: the outlines its ports sit on, and the radius of their corners. */
+export interface Shape {
+  readonly outlines: ReadonlyArray<ReadonlyArray<OutlinePoint>>
+  readonly radius: number
+}
+
 /** A routing problem, normalized. */
 export interface Problem {
   readonly settings: Settings
   /** The id of each rect, by index. */
   readonly ids: ReadonlyArray<string>
+  /** The shape of each rect, by index, or `undefined` for the rect itself. */
+  readonly shapes: ReadonlyArray<Shape | undefined>
   /** The space between merged lanes: `mergeGap`, or `gap` when unset. */
   readonly mergeGap: number
   /** The cost of each corner, resolved. */
@@ -182,10 +203,15 @@ export function normalize(
     }
   }
   const obstacles = grow(boxes, settings.clearance)
+  const given = options.shapes ?? {}
+  const shapes = ids.map((id, i) =>
+    shapeOf(Object.hasOwn(given, id) ? given[id] : undefined, boxes[i] as Rect.Rect),
+  )
   const edgeOptions = edges.map((_, i) => options.edges?.[i])
 
-  // The extra pins that every graph needs: waypoints, and the corners of
-  // avoided rects, so that lines run around them.
+  // The extra pins that every graph needs: waypoints, with lines every
+  // way (the search holds a route to the ways a waypoint holds), and the
+  // corners of avoided rects, so that lines run around them.
   const extraPins: Array<Pin> = []
   for (const option of edgeOptions) {
     for (const point of option?.via ?? []) {
@@ -221,7 +247,8 @@ export function normalize(
       // A loop never merges with itself.
       key: merging && !loop ? endKey(edge, end) : undefined,
     })
-    const via = (option?.via ?? []).map((p): XY => [p.x, p.y])
+    const waypoints = option?.via ?? []
+    const via = waypoints.map((p): XY => [p.x, p.y])
     return {
       source: index.get(edge.source) as number,
       target: index.get(edge.target) as number,
@@ -236,7 +263,9 @@ export function normalize(
         resolveAdornment(adornment, true, false, settings.alignAdornments),
       ),
       via,
-      viaPins: via.map(([x, y]) => extraPins.findIndex((p) => p.x === x && p.y === y)),
+      viaPins: waypoints.map((p) => extraPins.findIndex((pin) => pin.x === p.x && pin.y === p.y)),
+      viaArrivals: waypoints.map((p) => wayOf(p.arriving)),
+      viaLeavings: waypoints.map((p) => wayOf(p.leaving)),
       avoid: option?.avoid ?? [],
       costs: {
         bendCost,
@@ -253,6 +282,7 @@ export function normalize(
   return {
     settings,
     ids,
+    shapes,
     mergeGap: Number.isFinite(settings.mergeGap) ? settings.mergeGap : settings.gap,
     bendCost,
     crossingCost: CROSSING_SHARE * bendCost,
@@ -309,20 +339,88 @@ export const headingOf = (side: number, scale: number): Point.PointLike => {
 }
 
 /**
- * A port on a side of a rect, `at` of the way from its top or left end.
+ * A port on a side of a rect, `at` of the way from its top or left end, on
+ * the rect's shape where it has one: where the line out of the port, across
+ * the side, meets the shape first, coming in from the side.
  *
- * @param rect - The rect.
+ * @param problem - The problem.
+ * @param rect - The rect index.
  * @param side - The side.
  * @param at - The position along the side, from `0` to `1`.
  * @returns The port.
  */
-export function portOf(rect: Rect.Rect, side: number, at: number): Port {
-  const sAxis = sideAxis(side)
-  const nAxis = normalAxis(side)
-  const on = lo(rect, sAxis) + (sAxis === 0 ? rect.width : rect.height) * at
-  const [x, y] = pointOn(sAxis, on, outwardSign(side) > 0 ? hi(rect, nAxis) : lo(rect, nAxis))
+export function portOf(problem: Problem, rect: number, side: number, at: number): Port {
+  const box = problem.boxes[rect] as Rect.Rect
+  const on = alongSide(box, side, at)
+  const [x, y] = pointOn(sideAxis(side), on, depthOf(problem, rect, side, on))
   return { side, x, y }
 }
+
+/**
+ * The coordinate along a side of a rect `at` of the way from its top or
+ * left end.
+ *
+ * @param box - The rect.
+ * @param side - The side.
+ * @param at - The position along the side, from `0` to `1`.
+ * @returns The coordinate along the side: x on the top and bottom, y on
+ * the left and right.
+ */
+export function alongSide(box: Rect.Rect, side: number, at: number): number {
+  const sAxis = sideAxis(side)
+  return lo(box, sAxis) + (sAxis === 0 ? box.width : box.height) * at
+}
+
+/**
+ * The coordinate across a side of a rect where a port at `on` along it
+ * sits: on the side, or on the rect's shape where it has one.
+ *
+ * @param problem - The problem.
+ * @param rect - The rect index.
+ * @param side - The side.
+ * @param on - The port's coordinate along the side.
+ * @returns The port's coordinate across the side.
+ */
+export function depthOf(problem: Problem, rect: number, side: number, on: number): number {
+  const box = problem.boxes[rect] as Rect.Rect
+  const nAxis = normalAxis(side)
+  const edge = outwardSign(side) > 0 ? hi(box, nAxis) : lo(box, nAxis)
+  const shape = problem.shapes[rect]
+  return shape === undefined ? edge : portDepth(shape.outlines, shape.radius, side, on, edge)
+}
+
+// A polygon placed in its rect, for ports to sit on. A polygon that is the
+// sharp rect is no shape at all.
+function shapeOf(polygon: Polygon.Polygon | undefined, box: Rect.Rect): Shape | undefined {
+  if (!Polygon.isPolygon(polygon)) {
+    return undefined
+  }
+  const fractions = resolveFractions(polygon)
+  const radius = resolveRadius(polygon.radius)
+  const isRect =
+    fractions.length === 1 &&
+    fractions[0]?.length === 4 &&
+    fractions[0].every(([x, y], i) => x === RECT_X[i] && y === RECT_Y[i])
+  if (isRect && radius === 0) {
+    return undefined
+  }
+  const fitted = fitLoops(fractions, box.x, box.y, box.width, box.height, radius)
+  return { outlines: fitted.loops, radius: fitted.radius }
+}
+
+// The corners of the rect polygon, in fractions, from its top left.
+const RECT_X = [0, 1, 1, 0]
+const RECT_Y = [0, 0, 1, 1]
+
+// The way a waypoint holds, with a vector of no length or no direction as
+// none.
+const wayOf = (heading: Point.PointLike | undefined): Point.PointLike | undefined =>
+  heading !== undefined &&
+  Number.isFinite(heading.x) &&
+  Number.isFinite(heading.y) &&
+  (heading.x !== 0 || heading.y !== 0)
+    ? { x: heading.x, y: heading.y }
+    : undefined
 
 /**
  * The pin of a port, which leaves its side outward and passes through its
