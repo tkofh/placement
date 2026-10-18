@@ -1078,6 +1078,27 @@ describe('merging', () => {
     expect(apart.edges[1]?.merged).toEqual([-1, -1])
   })
 
+  test('the pull reaches only within the span of the route’s own rects', () => {
+    // u's route leaves the bottom of s and runs west below it. With no
+    // bend cost, t's route would leave with it and dip below s to ride
+    // along for a quarter of the length, were the pull not kept within the
+    // span of s and t: it stays above s's bottom, and merges with nothing.
+    const rects = {
+      s: Rect.make(200, 100, 40, 40),
+      t: Rect.make(0, 0, 40, 40),
+      u: Rect.make(-200, 180, 40, 40),
+    }
+    const edges = [
+      Edge.make({ source: 's', target: 't' }),
+      Edge.make({ source: 's', target: 'u', sourceSide: Edge.side.bottom }),
+    ]
+    const spec = Connector.make({ clearance: 10, gap: 4, bendCost: 0, merge: 1 })
+    const layout = Connector.apply(rects, edges, spec)
+    expect(layout.edges[0]?.points.every((point) => point.y <= 140)).toBe(true)
+    expect(layout.edges[0]?.points).toHaveLength(3)
+    expect(layout.edges[0]?.merged).toEqual([-1, -1])
+  })
+
   test('ends on one side with the same adornments share a port and one arrowhead', () => {
     const layout = Connector.apply(rects, [into('a'), into('b')], merging(Connector.merge.side))
     // The lanes, 4 apart, jog onto the line out of the port right behind

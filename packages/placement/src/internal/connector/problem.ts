@@ -59,7 +59,7 @@ export interface Settings {
 // costs up to this share of it.
 const CROSSING_SHARE = 0.4
 const TURN_SHARE = 1
-const MERGE_PULL = 0.1
+const MERGE_PULL = 0.75
 const TIGHT_SHARE = 2
 
 /** The turn encodings of `placement/connector`. */

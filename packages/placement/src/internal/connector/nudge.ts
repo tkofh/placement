@@ -37,9 +37,11 @@ import { type Separation, type Variable, placeSeparated } from '../separation.ts
 // turning the same ways, and a coupled jog sits beside the rest of its
 // bundle rather than at `jogAt`, so the bundle turns together. A jog where a
 // route parts from its bundle goes as far from the merge as its corners
-// leave room for, so the bundle stays together as long as it can. Where a
-// channel is too narrow for the full gap, the gaps of the segments that
-// crowd it shrink until they fit, down to none.
+// leave room for, so the bundle stays together as long as it can, though
+// it leaves the flow adornments between the route's ports a stretch of
+// their own past it where its run has the room. Where a channel is too
+// narrow for the full gap, the gaps of the segments that crowd it shrink
+// until they fit, down to none, but no segment ever moves into a rect.
 
 export type { XY }
 
@@ -70,6 +72,11 @@ export interface RouteConstraints {
   // of at the far end of its run.
   readonly corner?: number | undefined
   readonly packs?: readonly [source: number, target: number] | undefined
+  // The length the flow adornments between the route's ports take on a
+  // run. A jog that parts from a bundle leaves them that much past it,
+  // between its corner and the pack or corner beyond, where its run has
+  // the room, so they get a stretch of their own, clear of the bundle.
+  readonly flows?: number | undefined
   // How far a short jog's corners slide apart into an S, as a multiple of
   // what keeps the shape continuous (see `slants.ts`), which a parting jog
   // that slants keeps room for.
@@ -597,6 +604,7 @@ function keepOut(
   packed: (a: Segment, b: Segment) => number,
   order: Array<number>,
   positions: ArrayLike<number>,
+  ranges: ReadonlyArray<readonly [number, number]>,
 ): boolean {
   const tight: Array<Array<number>> = []
   for (const bundle of bundles) {
@@ -637,8 +645,20 @@ function keepOut(
       }
       const mean =
         alongside.reduce((sum, m) => sum + (positions[m] as number), 0) / alongside.length
-      const low =
+      // It goes past the side with fewer of the bundle's segments, or else
+      // the nearer to where it wants to be, as long as its walls leave room
+      // past the bundle there; with no room on either side, it stays, and
+      // the crowding is reported.
+      const [floor, ceiling] = ranges[s] as readonly [number, number]
+      const placed = alongside.map((m) => positions[m] as number)
+      const belowOpen = !Number.isFinite(floor) || before(floor, Math.min(...placed))
+      const aboveOpen = !Number.isFinite(ceiling) || before(Math.max(...placed), ceiling)
+      if (!belowOpen && !aboveOpen) {
+        continue
+      }
+      const wanted =
         earlier.length !== later.length ? earlier.length < later.length : segment.desired <= mean
+      const low = wanted ? belowOpen : !aboveOpen
       const places = alongside.map((m) => order.indexOf(m))
       order.splice(place, 1)
       const edge = low ? Math.min(...places) : Math.max(...places)
@@ -1258,7 +1278,7 @@ function nudgeAxis(
   // bundle that sit packed goes past the bundle, and the solve runs again.
   const bundles = groups.flatMap((group) => bundlesIn(segments, ids, group))
   for (let round = 0; round < KEEP_OUT_ROUNDS; round++) {
-    if (!keepOut(segments, bundles, packed, order, positions)) {
+    if (!keepOut(segments, bundles, packed, order, positions, ranges)) {
       break
     }
     place = placeOf(order)
@@ -1268,12 +1288,15 @@ function nudgeAxis(
   let anyMoved = false
   for (const [s, segment] of segments.entries()) {
     // Where a crowded channel left the solve no room, the anchors on the
-    // segments beside this one still hold: the route passes through them.
+    // segments beside this one still hold, and so do its walls: the route
+    // passes through its anchors and never into a rect.
     const [floor, ceiling] = segment.bounds ?? [undefined, undefined]
+    const [low, high] = ranges[s] as readonly [number, number]
+    const walled = low <= high
     const moved = clamp(
       positions[s] as number,
-      floor ?? Number.NEGATIVE_INFINITY,
-      ceiling ?? Number.POSITIVE_INFINITY,
+      Math.max(floor ?? Number.NEGATIVE_INFINITY, walled ? low : Number.NEGATIVE_INFINITY),
+      Math.min(ceiling ?? Number.POSITIVE_INFINITY, walled ? high : Number.POSITIVE_INFINITY),
     )
     // A move within rounding is no move, so the rounds can end.
     if (segment.fixed || coincident(moved, segment.at)) {
@@ -1376,7 +1399,10 @@ function collect(
             // As far from the merge as leaves room for the corner past it,
             // or for the S of a short jog that slants, and for the
             // adornments at the port when that is next, but never short of
-            // the middle.
+            // the middle. Where the run has the room, it also leaves a
+            // stretch for the flow adornments between the ports, between
+            // its corner and the pack or corner beyond, so they sit clear
+            // of the bundle.
             const [near, far] = split.far === 1 ? [previous, after] : [after, previous]
             const next = split.far === 1 ? index + 2 === path.length - 1 : index === 1
             const pack = next ? (constraints[route]?.packs?.[split.far] ?? 0) : 0
@@ -1388,7 +1414,11 @@ function collect(
                 ? slant * corner - ((slant - 1) * d) / 2
                 : 0
             const room = Math.max(corner, spread) + Math.max(pack, 0)
-            const keep = Math.min(Number.isFinite(room) ? room : 0, Math.abs(far - near) / 2)
+            const half = Math.abs(far - near) / 2
+            const flows = Math.max(constraints[route]?.flows ?? 0, 0)
+            const roomy = room + flows + (next ? 0 : corner)
+            const wanted = flows > 0 && atMost(roomy, half) ? roomy : room
+            const keep = Math.min(Number.isFinite(wanted) ? wanted : 0, half)
             desired = far - Math.sign(far - near) * keep
             late = Math.sign(far - near)
           }

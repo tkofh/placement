@@ -732,7 +732,16 @@ describe('tier 1 and 3: what a layout prefers, and says when it cannot', () => {
       ),
     }
     const moved = Connector.apply(movedRects, edges, Connector.make(variant.input), movedOptions)
-    expect(moved.notes, label).toEqual(layout.notes)
+    // Notes name what they name exactly, with lengths that are close.
+    expect(moved.notes.length, label).toBe(layout.notes.length)
+    for (const [k, note] of layout.notes.entries()) {
+      const { need, ...named } = note as { need?: number }
+      const { need: otherNeed, ...otherNamed } = moved.notes[k] as { need?: number }
+      expect(otherNamed, `${label}: note ${k}`).toEqual(named)
+      if (need !== undefined) {
+        expect(otherNeed, `${label}: note ${k}`).toBeCloseTo(need, 9)
+      }
+    }
     for (const [i, route] of layout.edges.entries()) {
       const other = moved.edges[i]
       const where = `${label}: edge ${i}`

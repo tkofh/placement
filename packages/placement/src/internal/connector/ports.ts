@@ -9,8 +9,9 @@ import { routeOf } from './route.ts'
 // across right away, a kink too short for its corners. Where the port can
 // slide along its side to the line past the jog, the route runs straight
 // instead: the port stays clear of the side's ends by the gap, and its leg
-// keeps clear of the rects and, by the gap, of the routes alongside it. A
-// route across the leg crosses it wherever it slides.
+// keeps clear of the rects and, by the gap, of the routes alongside it (the
+// merge gap, for those that share a merge with it). A route across the leg
+// crosses it wherever it slides.
 
 /** An end of a route whose port may slide along its side. */
 export interface SlidingEnd {
@@ -26,12 +27,29 @@ export interface SlidingEnd {
 export interface StraightenOptions {
   /** The space between the strokes of routes. */
   readonly gap: number
-  /** How far each route's corners reach. A jog shorter than two of them slides away. */
+  /**
+   * How far each route's corners reach. A jog shorter than its two corners
+   * need slides away.
+   */
   readonly reach: ReadonlyArray<number>
   /** How thick each route draws. */
   readonly thickness: ReadonlyArray<number>
   /** The points each route must pass through. */
   readonly anchors: ReadonlyArray<ReadonlyArray<XY>>
+  /**
+   * The length the adornments at each route's ends pack into at the port,
+   * as `[source, target]`. The corner at the port end of a jog has no more
+   * of the port's leg than the pack leaves it, so it needs less of the jog.
+   */
+  readonly packs?: ReadonlyArray<readonly [number, number]> | undefined
+  /**
+   * The merges each route's start and end lead into, as ids shared by the
+   * routes of each merge, or `-1`. A leg keeps the merge gap, not the gap,
+   * from the routes that share a merge with it.
+   */
+  readonly merges?: ReadonlyArray<readonly [number, number]> | undefined
+  /** The space between the strokes of routes that share a merge. */
+  readonly mergeGap?: number | undefined
 }
 
 /**
@@ -57,6 +75,11 @@ export function straightenPorts(
   // reads the routes slid before it, so a slid route is taken anew.
   const boxed = result.map((points) => routeOf(points))
   const spacing = positiveLength(options.gap)
+  const tight = Math.min(positiveLength(options.mergeGap ?? options.gap), spacing)
+  const partners = (a: number, b: number) => {
+    const [p, q] = [options.merges?.[a], options.merges?.[b]]
+    return p !== undefined && q !== undefined && p.some((id) => id >= 0 && q.includes(id))
+  }
   const width = (route: number) => positiveLength(options.thickness[route])
   for (const [route, pair] of ends.entries()) {
     for (const [end, sliding] of pair.entries()) {
@@ -72,8 +95,13 @@ export function straightenPorts(
       const along = sideAxis(sliding.side)
       const across = other(along)
       const jog = far[along] - near[along]
-      const reach = options.reach[route] ?? 0
-      const short = Math.max(2 * (Number.isFinite(reach) ? reach : 0), spacing)
+      const reach = positiveLength(options.reach[route])
+      // The jog is short when it is shorter than its two corners need: the
+      // far one its reach, and the one at the port end no more of the leg
+      // out of the port than the pack there leaves it.
+      const pack = positiveLength(options.packs?.[route]?.[end])
+      const leg = Math.abs(near[across] - port[across])
+      const short = Math.max(reach + Math.min(reach, Math.max(leg - pack, 0)), spacing)
       const z =
         near[along] === port[along] &&
         far[across] === near[across] &&
@@ -128,7 +156,8 @@ export function straightenPorts(
         }
       }
       for (const [k, other] of boxed.entries()) {
-        const keep = spacing + (width(route) + width(k)) / 2
+        const keep =
+          (k !== route && partners(route, k) ? tight : spacing) + (width(route) + width(k)) / 2
         const boxes = other.boxes()
         for (const [s, box] of boxes.entries()) {
           // The route's own leg, jog, and the stretch past them slide with it.

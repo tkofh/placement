@@ -294,19 +294,38 @@ export function distanceAlong(
   return best
 }
 
+/** What settles first where a leg is too short for both its corners. */
+export interface RadiiPriority {
+  /**
+   * The size each corner turns at the least, one per point. A corner
+   * wanted further past its floor than the one at the other end of a leg
+   * too short for both, as a corner grown for a nest is, takes from it.
+   */
+  readonly floors: ReadonlyArray<number>
+  /** The corners, by point index, that give way to no other. */
+  readonly held?: ((index: number) => boolean) | undefined
+}
+
 // The size of each corner of an orthogonal route: how far it reaches along
 // each of its legs, `0` at the two ends. Each corner takes up to `radius`
 // (one for every corner, or one per point), but never past a wall (a
 // stretch of the route that flow adornments occupy, as lengths along it)
 // or the route's ends, and two corners on one leg share its length. Shared
 // legs settle shortest first: a corner limited elsewhere keeps its size and
-// the other takes the rest, otherwise both take half. A last pass gives
-// each corner whatever its legs still have room for.
+// the other takes the rest, otherwise both take half, unless one of the
+// two is wanted further past its floor than the other, as a corner grown
+// for a nest is (`priority`): then it takes from the other, by no more than
+// the leg has spare past its floor and the other's want, so that a nest
+// holds together where its leg falls a little short and lets go slowly
+// where it falls far short, down to the two at their floors on a leg that
+// holds no more than those. A held corner gives way to no other. A last
+// pass gives each corner whatever its legs still have room for.
 export function resolveRadii(
   points: ReadonlyArray<LogicalPoint>,
   cumulative: ReadonlyArray<number>,
   radius: number | ReadonlyArray<number>,
   walls: ReadonlyArray<readonly [number, number]>,
+  priority?: RadiiPriority,
 ): Array<number> {
   const count = points.length
   const radii: Array<number> = points.map(() => 0)
@@ -318,6 +337,8 @@ export function resolveRadii(
     return radii
   }
   const at = (i: number) => cumulative[i] as number
+  const floor = (i: number) => priority?.floors[i] ?? wanted(i)
+  const held = (i: number) => priority?.held?.(i) ?? false
 
   // For each leg between points i and i + 1: the room its first and last
   // point may take from it, and whether its two corners share it.
@@ -359,6 +380,20 @@ export function resolveRadii(
     .toSorted((a, b) => (legs[a] as Leg).length - (legs[b] as Leg).length || a - b)
   for (const i of shared) {
     const { length } = legs[i] as Leg
+    if (atMost((radii[i] as number) + (radii[i + 1] as number), length)) {
+      continue
+    }
+    // The corner wanted further past its floor takes from the other, by
+    // no more than the leg has spare past its floor and the other's want.
+    const growth = (k: number) => (radii[k] as number) - floor(k)
+    const [grown, other] = before(growth(i), growth(i + 1)) ? [i + 1, i] : [i, i + 1]
+    if (!held(other) && before(growth(other), growth(grown))) {
+      const spare = length - floor(grown) - (radii[other] as number)
+      const shortfall = (radii[grown] as number) + (radii[other] as number) - length
+      if (spare > 0) {
+        radii[other] = Math.max((radii[other] as number) - Math.min(shortfall, spare), 0)
+      }
+    }
     const a = radii[i] as number
     const b = radii[i + 1] as number
     if (atMost(a + b, length)) {

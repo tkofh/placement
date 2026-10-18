@@ -188,9 +188,10 @@ function grownRadius(turn: Turn, r: number, smoothing: number, reach: number): n
   return reach > full && !coincident(reach, full) ? reach / ((1 + smoothing) * turn.halfTan) : r
 }
 
-// A corner of a nest, `outset` outside its innermost corner: that corner,
-// fitted to the room less the outset, moved out by the outset. Its radius
-// grows by the outset, so the nest keeps one center, and its smoothing
+// A corner of a nest, `outset` larger than its innermost corner: that
+// corner, fitted to the room less the outset, moved out by the outset. Its
+// radius grows by the outset, so the nest keeps one center (or comes as
+// near to it as a corner its leg holds short can), and its smoothing
 // shrinks to keep its reach within the room.
 function nested(turn: Turn, r: number, smoothing: number, room: number, outset: number) {
   const reach = Math.max(room - outset, 0)
@@ -220,20 +221,21 @@ function nested(turn: Turn, r: number, smoothing: number, room: number, outset: 
  * gentle turns of a connector's slanted jog and the outer corners of its
  * nests have, grows to fill it.
  *
- * `nests`, one per point, sets how far outside the innermost corner of its
- * nest each corner sits, for the corners of routes that turn together.
- * Such a corner is drawn as that innermost corner, fitted to its room less
- * the outset, moved out by the outset: its radius grows by the outset, so
- * the nest keeps one center, and its smoothing shrinks to keep its reach
- * within its room.
+ * `nests`, one per point, sets how much larger than the innermost corner
+ * of its nest each corner is, for the corners of routes that turn
+ * together: how far outside it the corner sits, where the nest keeps one
+ * center. Such a corner is drawn as that innermost corner, fitted to its
+ * room less the outset, moved out by the outset: its radius grows by the
+ * outset, so the nest keeps one center, and its smoothing shrinks to keep
+ * its reach within its room.
  *
  * @param points - The polyline.
  * @param r - The corner radius. `0` keeps every corner sharp.
  * @param smoothing - From `0` (circular fillets) to `1` (fully smoothed).
  * @param closed - Whether the last point joins back to the first.
  * @param rooms - How far each corner reaches along its legs, per point.
- * @param nests - How far outside the innermost corner of its nest each
- * corner sits, per point.
+ * @param nests - How much larger than the innermost corner of its nest
+ * each corner is, per point.
  * @returns The rounded path, or `undefined` for fewer than two distinct points.
  */
 export function roundPolyline(

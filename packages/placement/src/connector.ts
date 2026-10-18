@@ -585,12 +585,14 @@ export interface ConnectorApplyOptions<K extends string = string> {
  *   corners draws circular corners that reach these lengths, or any corner
  *   that reaches no farther, though a slanted jog drawn with smaller
  *   corners shows a straight between them.
- * - `outsets`: for each corner that a nest grew, how far outside the
- *   innermost corner of the nest it sits, one per point, and `0` for the
- *   others. A renderer that draws corners other than circles keeps the
- *   nest about one center by drawing each such corner as the innermost
- *   one moved out by its outset: what the innermost corner's radius is at
- *   its size less the outset, plus the outset.
+ * - `outsets`: for each corner that a nest grew, how much larger it is
+ *   than the innermost corner of the nest, one per point, and `0` for the
+ *   others: how far outside that corner it sits, where the nest keeps one
+ *   center, and less where a leg holds it short of that. A renderer that
+ *   draws corners other than circles keeps the nest about one center by
+ *   drawing each such corner as the innermost one moved out by its
+ *   outset: what the innermost corner's radius is at its size less the
+ *   outset, plus the outset.
  * - `adornments`: where each adornment landed, in the edge's adornment
  *   order (see `AdornmentPlacement` in `placement/adornment`).
  */
@@ -600,8 +602,8 @@ export interface ConnectorRoute {
   /** The size of the corner at each point, `0` at both ends. */
   readonly radii: ReadonlyArray<number>
   /**
-   * How far outside the innermost corner of its nest the corner at each
-   * point sits, `0` for one that does not nest.
+   * How much larger than the innermost corner of its nest the corner at
+   * each point is, `0` for one that does not nest.
    */
   readonly outsets: ReadonlyArray<number>
   /** Where each adornment landed, in the edge's adornment order. */
@@ -735,11 +737,14 @@ export interface ConnectorLayout<K extends string = string> {
  * with the shortfall until it is as long as the radius or the pack,
  * whichever is longer. An end comes in on a side with room where that
  * costs less than the way around. With
- * `merge` on, a route's length costs a tenth less where it runs along
- * the route of an edge whose end at one of its rects could merge with
- * its own, so ends come in on one side to merge there where that costs
- * little. Passages narrower than the gap pull nothing, since they hold
- * one route. An
+ * `merge` on, a route's length costs a quarter of itself where it runs
+ * along the route of an edge whose end at one of its rects could merge
+ * with its own, so that routes group up where a long run together pays
+ * for the bend and length it takes them to meet, and ends come in on one
+ * side to merge there. The pull reaches only within the span of the
+ * route's own two rects, so no route goes out of its way to join another,
+ * and passages narrower than the gap pull nothing, since they hold one
+ * route. An
  * auto position is the middle of the side, and the auto ports that share a
  * side spread out evenly, in the order their routes take: routed from the
  * middle of the side, where two of them part, the one that parts toward an
@@ -772,7 +777,9 @@ export interface ConnectorLayout<K extends string = string> {
  * whose port leaves it among the lanes steps out past them once it clears
  * its rect. A route parts from its
  * bundle as far from the merge as its run allows, short of room for the
- * corner past it (and the adornments at its port, when that comes next).
+ * corner past it (and the adornments at its port, when that comes next),
+ * and, where the run has the room, for the flow adornments between its
+ * ports, so that they sit on a stretch of their own past the bundle.
  * A route that goes on alone there, from a group of which at least two go
  * on together, keeps its parting jog upright. The whisk is as long as the
  * outermost lane's step needs past the
@@ -786,7 +793,11 @@ export interface ConnectorLayout<K extends string = string> {
  * Each route's corners report their `radii`: the edge's `radius` at least,
  * except where a leg is too short for it, and the corners of routes that
  * turn together grown outward from the innermost by how far they sit
- * outside one another, so that they nest about one center.
+ * outside one another, so that they nest about one center. Where a leg is
+ * too short for a corner grown this way and the corner at its other end,
+ * that corner gives way, by no more than the leg has spare past the two
+ * radii, so that a nest holds together where its leg falls a little short
+ * and lets go slowly where it falls far short.
  *
  * Edges carry adornments (see `placement/adornment`), which `apply` places
  * on the routes it finds but makes no room for, so adornments on routes
@@ -822,10 +833,12 @@ export interface ConnectorLayout<K extends string = string> {
  * the rects. A jog in a bundle, or where a route leaves a group, stays
  * upright. A short jog right past an auto port that does not merge comes
  * out instead where it can: the port slides along its side, short of its
- * ends by the gap and of the other routes by the gap, and the route runs
- * straight. A jog up to half the short length slides away whole, and a
- * longer one less, down to none at the short length, so ports move
- * smoothly; what is left slants.
+ * ends by the gap and of the other routes by the gap (the merge gap, for
+ * those that share a merge with it), and the route runs straight. A jog is short when it is shorter than its two corners need,
+ * and the corner at the port has no more of the leg out of it than the
+ * adornments packed there leave. A jog up to half the short length slides
+ * away whole, and a longer one less, down to none at the short length, so
+ * ports move smoothly; what is left slants.
  *
  * The edge's `weight` and `minLength` have no effect.
  *

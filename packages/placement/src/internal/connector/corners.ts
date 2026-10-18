@@ -21,9 +21,14 @@ import type { Route } from './route.ts'
 // `t` equal, which nudging gives routes that share a bend, the two share a
 // center. A nest reaches less than both routes' radii together, and the
 // growth tapers off past the outer route's radius, down to none at that
-// reach, so that no corner jumps as routes drift apart. Where a leg holds
-// an outer corner short of its grown size, the two corners drift apart
-// through the turn; an inner corner never shrinks for the one outside it.
+// reach, so that no corner jumps as routes drift apart. Where a leg is too
+// short for an outer corner's grown size and the corner at its other end,
+// that corner gives way, by no more than the leg has spare past the outer
+// corner's radius and its own want (see `resolveRadii`): the nest holds
+// together where its leg falls a little short, and lets go slowly where it
+// falls far short, the two corners drifting apart through the turn. An
+// inner corner never shrinks for the one outside it, and gives way to no
+// other corner either, or the nests would chase each other.
 //
 // Once the routes take their final shape, an outer corner that turns less
 // than a right angle, as at a slanted jog, draws an arc of radius its size
@@ -93,7 +98,8 @@ export function cornerRadii(
 ): Array<Array<number>> {
   const { fixed = [], shaped } = options
   const limits = routes.map((_, r) => positiveLength(radii[r]))
-  const isFixed = (corner: Corner) => fixed[corner.route]?.has(corner.index) ?? false
+  const fixedAt = (route: number, index: number) => fixed[route]?.has(index) ?? false
+  const isFixed = (corner: Corner) => fixedAt(corner.route, corner.index)
   // Every corner wants its radius, and a fixed one its size.
   const floors = routes.map((route, r) => {
     const list = route.points.map(() => limits[r] as number)
@@ -102,7 +108,12 @@ export function cornerRadii(
     }
     return list
   })
-  // The corners at the sizes they want, as far as their legs allow.
+  // The corners that others nest around (filled in below) give way to no
+  // other, or the nests would chase each other; nor do fixed ones.
+  const inners = routes.map(() => new Set<number>())
+  // The corners at the sizes they want, as far as their legs allow, with a
+  // corner grown past its radius taking from the one at the other end of a
+  // leg too short for both.
   const settle = (targets: ReadonlyArray<ReadonlyArray<number>>) =>
     routes.map((route, r) => {
       const list = resolveRadii(
@@ -110,6 +121,10 @@ export function cornerRadii(
         route.cumulative,
         targets[r] as ReadonlyArray<number>,
         walls[r] ?? [],
+        {
+          floors: floors[r] as ReadonlyArray<number>,
+          held: (index) => fixedAt(r, index) || (inners[r]?.has(index) ?? false),
+        },
       )
       for (const [index, size] of fixed[r] ?? []) {
         list[index] = size
@@ -118,17 +133,15 @@ export function cornerRadii(
     })
   let sizes = settle(floors)
 
-  // The nests: pairs of routes with radii whose offset is within both radii
-  // together. An outer corner that moved grows the inner one to its arc
+  // The nests. An outer corner that moved grows the inner one to its arc
   // instead of growing itself; an inner corner that moved, or a fixed
   // outer one, nests with nothing, and a fixed inner one only has corners
   // grow around it.
   const links: Array<Link & { readonly arc: number | undefined; readonly grow: number }> = []
-  for (const link of nestLinks(routes)) {
+  for (const link of nestsWithin(routes, limits)) {
     const { outer, inner, by } = link
-    const [outerLimit, innerLimit] = [limits[outer.route] as number, limits[inner.route] as number]
-    const reach = outerLimit + innerLimit
-    if (!(outerLimit > 0) || !(innerLimit > 0) || !before(by, reach) || moved(shaped, inner)) {
+    const reach = (limits[outer.route] as number) + (limits[inner.route] as number)
+    if (moved(shaped, inner)) {
       continue
     }
     if (moved(shaped, outer)) {
@@ -147,6 +160,9 @@ export function cornerRadii(
   }
   if (links.length === 0) {
     return sizes
+  }
+  for (const { inner } of links) {
+    inners[inner.route]?.add(inner.index)
   }
 
   // Grow the corners until every nest settles, from the innermost out,
@@ -178,35 +194,41 @@ export function cornerRadii(
 }
 
 /**
- * How far outside the innermost corner of its nest each corner sits, for
- * the corners that a nest sized: those exactly the size of the corner
- * inside them plus how far they sit outside it, where both keep their
- * right angle. A renderer that draws them as that innermost corner moved
- * out keeps the nest about one center.
+ * How much larger than the innermost corner of its nest each corner is,
+ * for the corners of nests whose members keep their right angle: how far
+ * outside that corner it sits, where the nest keeps one center, and less
+ * where a leg holds it short of its grown size. A renderer that draws such
+ * a corner as the innermost one moved out by its outset keeps the nest
+ * about one center, and as near to it as a held corner's size allows.
  *
  * @param routes - The orthogonal routes, as given to `cornerRadii`.
+ * @param radii - The radius of each route, as given to `cornerRadii`.
  * @param sizes - Their corner sizes, from `cornerRadii`.
  * @param shaped - The routes as drawn, where corners that moved nest with
  * nothing.
  * @returns The outset of the corner at each point of each route, `0` for
- * one that does not nest or that is the innermost of its nest.
+ * one that does not nest, that is the innermost of its nest, or that is no
+ * larger than it.
  */
 export function cornerOutsets(
   routes: ReadonlyArray<Route>,
+  radii: ReadonlyArray<number>,
   sizes: ReadonlyArray<ReadonlyArray<number>>,
   shaped?: ReadonlyArray<Route>,
 ): Array<Array<number>> {
   const outsets = routes.map(({ points }) => points.map(() => 0))
-  const tight = nestLinks(routes).filter(({ outer, inner, by }) => {
-    const outerSize = sizes[outer.route]?.[outer.index] ?? 0
-    const innerSize = sizes[inner.route]?.[inner.index] ?? 0
-    return !moved(shaped, outer) && !moved(shaped, inner) && coincident(outerSize, innerSize + by)
-  })
+  const limits = routes.map((_, r) => positiveLength(radii[r]))
+  const upright = nestsWithin(routes, limits).filter(
+    ({ outer, inner }) => !moved(shaped, outer) && !moved(shaped, inner),
+  )
   // Inner corners first, by settling one more ring of each nest per pass.
-  for (let pass = 0; pass <= tight.length; pass++) {
+  for (let pass = 0; pass <= upright.length; pass++) {
     let changed = false
-    for (const { outer, inner, by } of tight) {
-      const outset = ((outsets[inner.route] as Array<number>)[inner.index] as number) + by
+    for (const { outer, inner } of upright) {
+      const outerSize = sizes[outer.route]?.[outer.index] ?? 0
+      const innerSize = sizes[inner.route]?.[inner.index] ?? 0
+      const inside = (outsets[inner.route] as Array<number>)[inner.index] as number
+      const outset = Math.max(inside + outerSize - innerSize, 0)
       const list = outsets[outer.route] as Array<number>
       if (!coincident(list[outer.index] as number, outset)) {
         list[outer.index] = outset
@@ -234,6 +256,18 @@ function halfTurnTan(points: ReadonlyArray<XY>, index: number): number {
 // The nests of each set of routes, kept for the next pass over it: one set
 // has its corners sized twice and outset once, and the routes never change.
 const nests = new WeakMap<ReadonlyArray<Route>, ReadonlyArray<Link>>()
+
+// The nests that size corners: pairs of routes with radii whose offset is
+// within both radii together.
+function nestsWithin(
+  routes: ReadonlyArray<Route>,
+  limits: ReadonlyArray<number>,
+): ReadonlyArray<Link> {
+  return nestLinks(routes).filter(({ outer, inner, by }) => {
+    const [outerLimit, innerLimit] = [limits[outer.route] as number, limits[inner.route] as number]
+    return outerLimit > 0 && innerLimit > 0 && before(by, outerLimit + innerLimit)
+  })
+}
 
 // Each corner's nearest inner corner among the others that turn the same
 // way, by the larger of how far it sits back and over.

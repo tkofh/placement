@@ -43,9 +43,9 @@ export interface EdgeAdornmentInput {
 }
 
 /**
- * An edge's solved route: its polyline, its corner sizes, how far outside
- * the innermost corner of its nest each corner sits (`0` or left out for
- * none), its adornments, and whether it draws each one. An end that merges
+ * An edge's solved route: its polyline, its corner sizes, how much larger
+ * than the innermost corner of its nest each corner is (`0` or left out
+ * for none), its adornments, and whether it draws each one. An end that merges
  * with other edges' ends leaves the adornments they share there to one of
  * them. Adornments draw when `drawn` leaves them out.
  */

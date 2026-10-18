@@ -238,9 +238,10 @@ export const isHierarchy = (value: unknown): value is Hierarchy => {
  *   turn together grow outward from the innermost, so that they nest about
  *   one center. A renderer that rounds corners draws circular corners of
  *   these radii, or any corner that reaches no farther.
- * - `outsets`: how far outside the innermost corner of its nest each
- *   corner sits, for the corners of routes that turn together, one per
- *   point.
+ * - `outsets`: how much larger than the innermost corner of its nest each
+ *   corner is, for the corners of routes that turn together, one per
+ *   point: how far outside that corner it sits, where the nest keeps one
+ *   center, and less where a leg holds it short of that.
  * - `adornments`: where each adornment landed, in the edge's adornment
  *   order.
  */
@@ -249,7 +250,7 @@ export interface HierarchyRoute {
   readonly points: ReadonlyArray<Point.Point>
   /** The size of the corner at each point, `0` at both ends. */
   readonly radii: ReadonlyArray<number>
-  /** How far outside its nest's innermost corner each corner sits. */
+  /** How much larger than its nest's innermost corner each corner is. */
   readonly outsets: ReadonlyArray<number>
   /** Where each adornment landed, in the edge's adornment order. */
   readonly adornments: ReadonlyArray<AdornmentPlacement>

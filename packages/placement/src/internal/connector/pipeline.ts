@@ -6,7 +6,7 @@ import * as Point from '../../point.ts'
 import * as Rect from '../../rect.ts'
 import type { PlacedAdornment, SolveAdornment } from '../adornments.ts'
 import type { XY } from '../orient.ts'
-import { placeAdornments, placeFlow } from './adornments.ts'
+import { betweenLength, placeAdornments, placeFlow } from './adornments.ts'
 import { cornerOutsets, cornerRadii } from './corners.ts'
 import { type Locks, emptyLocks, shiftLocks } from './locks.ts'
 import { addWhisk, planMerges, stepped } from './merge.ts'
@@ -124,11 +124,24 @@ export function solve(problem: Problem): ConnectorLayout {
   }
   const found = routes.flatMap((route, i) => (route === undefined ? [] : [i]))
   const edgeOf = (k: number) => edges[found[k] as number] as ProblemEdge
+  // The length the flow adornments between an edge's ports take on a run,
+  // and the gap that keeps them off a pack.
+  const flowsOf = (edge: ProblemEdge) => {
+    const between = betweenLength(edge.adornments, settings.adornmentGap)
+    return between > 0 ? between + settings.adornmentGap : 0
+  }
+  // The length the adornments at each end pack into at its port.
+  const packs = found.map(
+    (i) =>
+      [0, 1].map((end) =>
+        packAt(problem, i, end, ((ports[i] as [Port, Port])[end] as Port).side),
+      ) as [number, number],
+  )
   const { routes: nudgedRoutes, crowded } = nudgeRoutes(
     found.map((i) => routes[i] as Array<XY>),
     blocks,
     settings.gap,
-    found.map((i): RouteConstraints => {
+    found.map((i, k): RouteConstraints => {
       const edge = edges[i] as ProblemEdge
       return {
         anchors: edge.via,
@@ -141,12 +154,14 @@ export function solve(problem: Problem): ConnectorLayout {
         thickness: edge.thickness,
         corner: edge.radius,
         slant: settings.jogSlant,
-        packs: [0, 1].map((end) =>
-          packAt(problem, i, end, ((ports[i] as [Port, Port])[end] as Port).side),
-        ) as [number, number],
+        packs: packs[k] as [number, number],
+        flows: flowsOf(edge),
       }
     }),
     mergeGap,
+  )
+  const mergesOf = found.map(
+    (i) => [mergeOf.get(endId(i, 0)) ?? -1, mergeOf.get(endId(i, 1)) ?? -1] as const,
   )
   // Auto ports that do not merge slide along their sides to take out the
   // short jogs right past them.
@@ -172,6 +187,9 @@ export function solve(problem: Problem): ConnectorLayout {
       reach: found.map((i) => (edges[i] as ProblemEdge).radius),
       thickness: found.map((i) => (edges[i] as ProblemEdge).thickness),
       anchors: found.map((i) => (edges[i] as ProblemEdge).via),
+      packs,
+      merges: mergesOf,
+      mergeGap,
     },
   )
 
@@ -181,9 +199,6 @@ export function solve(problem: Problem): ConnectorLayout {
   // stays upright. A jog in a bundle turns with it, so it stays upright
   // too. The locks carry these decisions to the passes that size corners
   // and slant jogs.
-  const mergesOf = found.map(
-    (i) => [mergeOf.get(endId(i, 0)) ?? -1, mergeOf.get(endId(i, 1)) ?? -1] as const,
-  )
   const { coupled, parting } = bundled(straight, mergesOf)
   const dressed = straight.map((route, k) => {
     const i = found[k] as number
@@ -287,7 +302,7 @@ export function solve(problem: Problem): ConnectorLayout {
     }),
     shaped,
   })
-  const outsets = cornerOutsets(nudged, settled, shaped)
+  const outsets = cornerOutsets(nudged, radii, settled, shaped)
 
   // What the routes gave up, and what would have fit them.
   const notes: Array<ConnectorNote> = []

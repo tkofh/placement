@@ -37,8 +37,8 @@ Edges carry a `weight`, a `minLength`, ports (`sourceSide`/`sourceAt`,
 adornments. A route reports how far each of its corners reaches
 (`radii`): the edge's `radius` at least, more where routes turn together
 and nest about one center, and less only where a run across the flow is
-short or an adornment sits close, and how far outside the innermost
-corner of its nest each corner sits (`outsets`). The layout keeps room for
+short or an adornment sits close, and how much larger than the innermost
+corner of its nest each corner is (`outsets`). The layout keeps room for
 corners of the edge's `radius` along the flow and out of each port.
 
 An `Adornment` is a `Frame` that decorates an edge, such as a label or an

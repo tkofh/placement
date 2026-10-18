@@ -57,7 +57,9 @@ ports sit on, edges with their ends, waypoints with the ways a route
 arrives and leaves, costs, and resolved adornments), and `internal/connector/pipeline.ts`
 runs the phases, each a function of the problem and the phases before it:
 `sides.ts` picks the sides of auto ends by a trial search (a side with no
-room in front of its port for the end's adornments and corner costs more),
+room in front of its port for the end's adornments and corner costs more,
+and routes that could merge pull each other along within the span of
+their own rects),
 `spread.ts`
 spreads auto ports along shared sides and groups the ends that merge,
 `merge.ts` plans the lanes and whisks of merges, `routing.ts` finds the
