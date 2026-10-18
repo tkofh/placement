@@ -29,6 +29,7 @@ import type { Obstacle } from './internal/graph/graph.ts'
 import {
   type Endpoint,
   type Path,
+  markAlong,
   markThrough,
   searchAll,
   shortestPath,
@@ -202,6 +203,17 @@ export interface ConnectorInput {
    * Negative and non-finite values, the default, act as `gap`.
    */
   readonly mergeGap?: number | undefined
+  /**
+   * How strongly routes that merge, or could, keep together, from `0` to
+   * `1`: the share of its length that a stretch of a route costs less where
+   * a partner's route runs along it. Partners are the routes of one merge,
+   * and, while sides are chosen, routes whose ends at one rect could merge,
+   * so they come in on one side to merge there. A route takes a detour of
+   * up to this share of the length it runs along its partners. Values
+   * outside clamp, and non-finite values act as `0`. Has no effect with
+   * `merge` off. Defaults to `0.1`.
+   */
+  readonly mergePull?: number | undefined
 }
 
 /**
@@ -242,6 +254,8 @@ class Connector extends Pipeable {
   readonly merge: ConnectorMerge
   /** The space between the strokes of merged lanes, `NaN` for `gap`. */
   readonly mergeGap: number
+  /** The share of its length a stretch costs less along a merge partner. */
+  readonly mergePull: number
 
   constructor(input: ConnectorInput) {
     super()
@@ -263,10 +277,12 @@ class Connector extends Pipeable {
       input.mergeGap !== undefined && Number.isFinite(input.mergeGap) && input.mergeGap >= 0
         ? input.mergeGap
         : Number.NaN
+    this.mergePull =
+      input.mergePull === undefined ? 0.1 : Math.min(Math.max(ratio(input.mergePull, 0), 0), 1)
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
-    return `Connector [clearance ${this.clearance} gap ${this.gap} bend ${this.bendCost} turn ${this.turnCost} crossing ${this.crossingCost} align ${this.alignAdornments} justify ${this.justifyAdornments} jog ${this.jogAt} slant ${this.jogSlant} merge ${this.merge} merge gap ${this.mergeGap}]`
+    return `Connector [clearance ${this.clearance} gap ${this.gap} bend ${this.bendCost} turn ${this.turnCost} crossing ${this.crossingCost} align ${this.alignAdornments} justify ${this.justifyAdornments} jog ${this.jogAt} slant ${this.jogSlant} merge ${this.merge} merge gap ${this.mergeGap} pull ${this.mergePull}]`
   }
 
   /**
@@ -290,6 +306,7 @@ class Connector extends Pipeable {
       jogSlant: this.jogSlant,
       merge: this.merge,
       mergeGap: this.mergeGap,
+      mergePull: this.mergePull,
     }
   }
 }
@@ -556,6 +573,23 @@ export const setMergeGap: {
 } = dual(2, (self: Connector, mergeGap: number) => new Connector({ ...self.toJSON(), mergeGap }))
 
 /**
+ * Sets how strongly routes that merge, or could, keep together. The
+ * data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The spec to update.
+ * @param mergePull - The new share, from `0` to `1`.
+ * @returns A new spec with the merge pull replaced.
+ * @example
+ * ```ts
+ * Connector.make().pipe(Connector.setMergePull(0.5)).mergePull // 0.5
+ * ```
+ */
+export const setMergePull: {
+  (self: Connector, mergePull: number): Connector
+  (mergePull: number): (self: Connector) => Connector
+} = dual(2, (self: Connector, mergePull: number) => new Connector({ ...self.toJSON(), mergePull }))
+
+/**
  * The route constraints of one edge, in the `edges` option of `apply`.
  */
 export interface ConnectorEdgeOptions {
@@ -708,7 +742,12 @@ interface Port {
  * Ports come from each edge's sides and positions. A port sits on its side
  * of its rect, at its `sourceAt` or `targetAt` along the side, and the route
  * leaves it straight out from the side. An auto side (an omitted or
- * non-finite one) is the side of the cheapest route among all four. An
+ * non-finite one) is the side of the cheapest route among all four. With
+ * `merge` on, a route's length costs `mergePull` less where it runs along
+ * the route of an edge whose end at one of its rects could merge with
+ * its own, so ends come in on one side to merge there where that costs
+ * little. Passages narrower than the gap pull nothing, since they hold
+ * one route. An
  * auto position is the middle of the side, and the auto ports that share a
  * side spread out evenly, in the order their routes take: routed from the
  * middle of the side, where two of them part, the one that parts toward an
@@ -866,6 +905,13 @@ export function apply<const K extends string>(
     avoid: option?.avoid ?? [],
   })
 
+  // The ends that may merge, by the adornments at them. A loop never
+  // merges with itself.
+  const merging = connector.merge !== merge.none
+  const keys = edges.map((edge) =>
+    [0, 1].map((end) => (merging && edge.source !== edge.target ? endKey(edge, end) : undefined)),
+  )
+  const pull = merging ? connector.mergePull : 0
   // The sides of each edge's two ports. Auto sides take the side of the
   // cheapest route over all four, on a graph with a port at the middle of
   // every candidate side.
@@ -909,16 +955,62 @@ export function apply<const K extends string>(
         headings: [{ x: outward * heading.x, y: outward * heading.y }],
       }
     }
-    const { paths } = searchAll(graph, routed.length, connector.crossingCost, (k, through) => {
-      const i = routed[k] as number
-      const [starts, ends] = candidates[k] as [Array<Candidate>, Array<Candidate>]
-      return shortestPath(graph, starts.map(endpoint), ends.map(endpoint), {
-        ...costs(edgeOptions[i]),
-        via: viaNodes(edgeOptions[i], nodes, extraPins),
-        crossingCost: connector.crossingCost,
-        ...(through === undefined ? {} : { through }),
-      })
-    })
+    // The routes whose ends at one rect could merge pull each other along,
+    // so that they come in on one side.
+    const keyAt = (i: number, end: number) => (keys[i] as Array<string | undefined>)[end]
+    const rectAt = (i: number, end: number) =>
+      end === 0 ? (edges[i] as Edge<K>).source : (edges[i] as Edge<K>).target
+    const partners = routed.map((i) =>
+      routed.flatMap((j) =>
+        [0, 1].flatMap((end) =>
+          [0, 1].flatMap((far): Array<Partner> => {
+            const key = keyAt(i, end)
+            const meets = j !== i && key !== undefined && rectAt(i, end) === rectAt(j, far)
+            return meets && key === keyAt(j, far) ? [{ edge: j, back: end !== far }] : []
+          }),
+        ),
+      ),
+    )
+    const pathOf: Array<Path | undefined> = edges.map(() => undefined)
+    // The search options that pull route `k` along its partners' latest
+    // paths, each the way it runs or back. A passage narrower than the gap
+    // holds one route, so it pulls none.
+    const along = (k: number) => {
+      const list = partners[k] as Array<Partner>
+      if (pull === 0 || list.length === 0) {
+        return {}
+      }
+      const { xs, ys, sources, targets } = graph
+      const roomy = (e: number) => {
+        const [a, b] = [sources[e] as number, targets[e] as number]
+        const [x1, y1, x2, y2] = [xs[a], ys[a], xs[b], ys[b]] as [number, number, number, number]
+        return passage(obstacles, x1, y1, x2, y2) >= connector.gap
+      }
+      const marks = new Uint8Array(targets.length)
+      for (const { edge, back } of list) {
+        markAlong(graph, marks, pathOf[edge], back, roomy)
+      }
+      return { partnerDiscount: pull, partners: marks }
+    }
+    const { paths } = searchAll(
+      graph,
+      routed.length,
+      connector.crossingCost,
+      (k, through) => {
+        const i = routed[k] as number
+        const [starts, ends] = candidates[k] as [Array<Candidate>, Array<Candidate>]
+        const path = shortestPath(graph, starts.map(endpoint), ends.map(endpoint), {
+          ...costs(edgeOptions[i]),
+          via: viaNodes(edgeOptions[i], nodes, extraPins),
+          crossingCost: connector.crossingCost,
+          ...(through === undefined ? {} : { through }),
+          ...along(k),
+        })
+        pathOf[i] = path
+        return path
+      },
+      (k) => pull > 0 && (partners[k] as Array<Partner>).length > 0,
+    )
     for (const [k, i] of routed.entries()) {
       const [starts, ends] = candidates[k] as [Array<Candidate>, Array<Candidate>]
       const path = paths[k]
@@ -963,6 +1055,7 @@ export function apply<const K extends string>(
     const { graph, pins: nodes } = visibilityGraph(blocks, pins)
     // The pin each end leaves from or arrives at, which trades swap.
     const pinOfEnd = edges.map((_, i) => [extraPins.length + 2 * i, extraPins.length + 2 * i + 1])
+    const paths: Array<Path | undefined> = edges.map(() => undefined)
     const search = (i: number, through: ArrayLike<number> | undefined) => {
       const [source, target] = ports[i] as [Port, Port]
       const [start, end] = pinOfEnd[i] as [number, number]
@@ -983,7 +1076,6 @@ export function apply<const K extends string>(
     const found = searchAll(graph, which.length, connector.crossingCost, (k, through) =>
       search(which[k] as number, through),
     )
-    const paths: Array<Path | undefined> = edges.map(() => undefined)
     for (const [k, i] of which.entries()) {
       paths[i] = found.paths[k]
     }
@@ -1073,12 +1165,6 @@ export function apply<const K extends string>(
     return packLength(resolved[edge] ?? [], end, axis, heading > 0 ? 1 : -1, connector.adornmentGap)
   }
 
-  // The ends that may merge, by the adornments at them. A loop never
-  // merges with itself.
-  const merging = connector.merge !== merge.none
-  const keys = edges.map((edge) =>
-    [0, 1].map((end) => (merging && edge.source !== edge.target ? endKey(edge, end) : undefined)),
-  )
   const keyOf = (end: SharedEnd) => (keys[end.edge] as Array<string | undefined>)[end.end]
 
   // Ends pinned to one spot on a side, with the same adornments there.
@@ -1684,6 +1770,46 @@ const pinOf = (port: Port, owner: number): Pin => ({
 interface EdgeEnd {
   readonly edge: number
   readonly end: number
+}
+
+// How wide the passage is that a horizontal or vertical stretch from
+// (x1, y1) to (x2, y2) runs along: the distance between the nearest
+// obstacles on either side of it, among those beside it, or `Infinity`
+// without one on each side.
+function passage(
+  obstacles: ReadonlyArray<Obstacle>,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): number {
+  const vertical = x1 === x2
+  const at = vertical ? x1 : y1
+  const [from, to] = vertical
+    ? [Math.min(y1, y2), Math.max(y1, y2)]
+    : [Math.min(x1, x2), Math.max(x1, x2)]
+  let low = Number.NEGATIVE_INFINITY
+  let high = Number.POSITIVE_INFINITY
+  for (const o of obstacles) {
+    const [near, far, start, stop] = vertical
+      ? [o.left, o.right, o.top, o.bottom]
+      : [o.top, o.bottom, o.left, o.right]
+    if (!(start < to && stop > from) || coincident(start, to) || coincident(stop, from)) {
+      continue
+    }
+    if (far < at || coincident(far, at)) {
+      low = Math.max(low, far)
+    } else if (near > at || coincident(near, at)) {
+      high = Math.min(high, near)
+    }
+  }
+  return high - low
+}
+
+// An edge whose route another pulls along, the way it runs or back.
+interface Partner {
+  readonly edge: number
+  readonly back: boolean
 }
 
 interface SharedEnd {

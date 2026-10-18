@@ -50,7 +50,7 @@ between rects that are already placed, keyed by id, around the others. It
 builds on `internal/graph/` (not yet public): `graph.ts` stores graphs of
 points in flat arrays, `visibility.ts` builds the orthogonal visibility
 graph of obstacles and pins, and `search.ts` finds the cheapest path for
-length, turns, and crossings (A\*) between sets of endpoints, and routes
+length, turns, and crossings (A\*), for less along partner paths, between sets of endpoints, and routes
 several paths among one another, `crossings.ts` counts the crossings
 between two paths, shared runs included; `acyclic.ts` breaks
 cycles and orders pairwise preferences for both routers. Then

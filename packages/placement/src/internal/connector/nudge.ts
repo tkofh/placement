@@ -31,14 +31,9 @@ import { type Separation, type Variable, placeSeparated } from '../separation.ts
 // turning the same ways, and a coupled jog sits beside the rest of its
 // bundle rather than at `jogAt`, so the bundle turns together. A jog where a
 // route parts from its bundle goes as far from the merge as its corners
-// leave room for, so the bundle stays together as long as it can. A bundle
-// reads as one line, so other routes keep out of it: a segment that comes
-// out between two of its segments that sit packed goes past them, and the
-// solve runs again, and the end of a route that starts among a merge's
-// lanes, which hold still as it does, steps out past them once it clears
-// the obstacles around its port. Where a channel is too narrow for the full
-// gap, the gaps of the segments that crowd it shrink until they fit, down
-// to none.
+// leave room for, so the bundle stays together as long as it can. Where a
+// channel is too narrow for the full gap, the gaps of the segments that
+// crowd it shrink until they fit, down to none.
 
 export type XY = readonly [number, number]
 
@@ -138,54 +133,65 @@ export function nudge(
     return Number.isFinite(value) && value > 0 ? value : 0
   })
   const mergesOf = (route: number) => constraints[route]?.merges ?? []
-  // The ends of other routes step out from between the lanes of a merge,
-  // which hold still like they do, and the steps stay put.
-  const steps = stepOut(paths, bundlesOf(paths, mergesOf).lanes, obstacles, {
-    thickness,
-    spacing,
-    tight,
-  })
-  const held = paths.map((_, route): RouteConstraints | undefined => {
-    const given = constraints[route]
-    const points = steps[route] ?? []
-    return points.length === 0
-      ? given
-      : { ...given, anchors: [...(given?.anchors ?? []), ...points] }
-  })
-  // The passes move points but never add or drop them, so the couples found
-  // on the routes as found hold throughout. A jog where a route parts from
-  // its bundle wants the far end of its run from the merge, so the bundle
-  // stays together as long as it can.
-  const { couples, groups, losses, leaves } = bundlesOf(paths, mergesOf)
-  const splits = new Map<string, Split>()
-  for (const [list, leaving] of [
-    [losses, false],
-    [leaves, true],
-  ] as const) {
-    for (const [route, entries] of list.entries()) {
-      const count = (paths[route] as Array<Point>).length - 1
-      for (const { start, k } of entries) {
-        const index = start ? k : count - 1 - k
-        if (index > 0 && index < count - 1) {
-          splits.set(`${route}:${index}`, { far: start ? 1 : 0, leaving })
+  const steps: Array<Array<XY>> = paths.map(() => [])
+  // The ends of other routes step out from among the lanes of a merge,
+  // which hold still like they do, and the steps stay put: those among the
+  // lanes as found, then, once more, those the passes leave among them.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const stepped = stepOut(paths, bundlesOf(paths, mergesOf).lanes, obstacles, {
+      thickness,
+      spacing,
+      tight,
+    })
+    if (attempt > 0 && stepped.every((points) => points.length === 0)) {
+      break
+    }
+    for (const [route, points] of stepped.entries()) {
+      ;(steps[route] as Array<XY>).push(...points)
+    }
+    const held = paths.map((_, route): RouteConstraints | undefined => {
+      const given = constraints[route]
+      const points = steps[route] ?? []
+      return points.length === 0
+        ? given
+        : { ...given, anchors: [...(given?.anchors ?? []), ...points] }
+    })
+    // The passes move points but never add or drop them, so the couples
+    // found before them hold throughout. A jog where a route parts from its
+    // bundle wants the far end of its run from the merge, so the bundle
+    // stays together as long as it can.
+    const { couples, groups, losses, leaves } = bundlesOf(paths, mergesOf)
+    const splits = new Map<string, Split>()
+    for (const [list, leaving] of [
+      [losses, false],
+      [leaves, true],
+    ] as const) {
+      for (const [route, entries] of list.entries()) {
+        const count = (paths[route] as Array<Point>).length - 1
+        for (const { start, k } of entries) {
+          const index = start ? k : count - 1 - k
+          if (index > 0 && index < count - 1) {
+            splits.set(`${route}:${index}`, { far: start ? 1 : 0, leaving })
+          }
         }
       }
     }
-  }
-  const packed = (a: Segment, b: Segment) =>
-    tight + ((thickness[a.route] as number) + (thickness[b.route] as number)) / 2
-  const gapOf = (a: Segment, b: Segment) =>
-    couples.has(`${a.route}:${a.index}:${b.route}:${b.index}`)
-      ? packed(a, b)
-      : spacing + ((thickness[a.route] as number) + (thickness[b.route] as number)) / 2
-  // Moving one axis changes the extents of the other's segments, which can
-  // make them overlap, so the passes repeat until neither moves anything.
-  for (let round = 0; round < ROUNDS; round++) {
-    const bundles = { couples, groups, packed }
-    const movedX = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 0, held)
-    const movedY = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 1, held)
-    if (!movedX && !movedY) {
-      break
+    const packed = (a: Segment, b: Segment) =>
+      tight + ((thickness[a.route] as number) + (thickness[b.route] as number)) / 2
+    const gapOf = (a: Segment, b: Segment) =>
+      couples.has(`${a.route}:${a.index}:${b.route}:${b.index}`)
+        ? packed(a, b)
+        : spacing + ((thickness[a.route] as number) + (thickness[b.route] as number)) / 2
+    // Moving one axis changes the extents of the other's segments, which
+    // can make them overlap, so the passes repeat until neither moves
+    // anything.
+    for (let round = 0; round < ROUNDS; round++) {
+      const bundles = { couples, groups, packed }
+      const movedX = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 0, held)
+      const movedY = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 1, held)
+      if (!movedX && !movedY) {
+        break
+      }
     }
   }
   return paths.map(simplify)

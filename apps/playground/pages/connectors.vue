@@ -14,6 +14,7 @@
       :jog-slant="slant"
       :merge="merge"
       :merge-gap="mergeGap === 'gap' ? undefined : `${mergeGap}px`"
+      :merge-pull="mergePull"
     >
       <!-- the pool is a flex row, and each worker's box is a node -->
       <GraphicGroup left="520px" top="478px" width="456px" height="138px">
@@ -154,6 +155,14 @@
     >
       lanes {{ g }}
     </button>
+    <button
+      v-for="p in MERGE_PULLS"
+      :key="p"
+      :class="{ on: p === mergePull }"
+      @click="mergePull = p"
+    >
+      pull {{ p }}
+    </button>
     <span />
     <button @click="reset">reset</button>
     <button @click="copy">{{ copied ? 'copied' : 'copy state' }}</button>
@@ -173,6 +182,7 @@ const JOGS = ['start', 'center', 'end'] as const
 const SLANTS = [0, 1, 2] as const
 const MERGES = ['none', 'side', 'near'] as const
 const MERGE_GAPS = ['gap', 4] as const
+const MERGE_PULLS = [0, 0.1] as const
 
 const corners = ref(true)
 const gap = ref<number>(8)
@@ -184,6 +194,7 @@ const jogAt = ref<(typeof JOGS)[number]>('center')
 const slant = ref<number>(2)
 const merge = ref<(typeof MERGES)[number]>('side')
 const mergeGap = ref<(typeof MERGE_GAPS)[number]>(4)
+const mergePull = ref<number>(0.1)
 
 const CLIENT = 'color(display-p3 0.14 0.34 0.26)'
 const SERVICE = 'color(display-p3 0.16 0.22 0.4)'
@@ -295,6 +306,7 @@ async function copy() {
     slant: slant.value,
     merge: merge.value,
     mergeGap: mergeGap.value,
+    mergePull: mergePull.value,
     nodes: nodes.value.map(({ id, x, y }) => ({ id, x, y })),
   }
   await navigator.clipboard.writeText(JSON.stringify(state))

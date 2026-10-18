@@ -23,6 +23,10 @@ import type { Graph, Obstacle } from './graph.ts'
 // straight on the other way crosses them, at a cost each. The estimate
 // leaves crossings out, so it stays a lower bound.
 //
+// A path may also run along its partners' paths for less: their half-edges
+// cost a share less of their length, and the estimate takes that share off
+// every length, so it stays a lower bound.
+//
 // Costs are float sums, so comparing them uses `coincident`. A path replaces
 // another only when it is cheaper beyond rounding, or as cheap with fewer
 // turns, and the queue pops equal costs in the order they were pushed, so
@@ -56,6 +60,11 @@ export interface SearchOptions {
   // horizontally and `2 * node + 1` vertically, on a graph whose edges are
   // all horizontal or vertical.
   readonly through?: ArrayLike<number>
+  // The share of its length that a half-edge costs less where `partners`
+  // marks it, from `0` to `1`. Defaults to `0`.
+  readonly partnerDiscount?: number
+  // The half-edges that partner paths run along, each marked nonzero.
+  readonly partners?: ArrayLike<number>
 }
 
 export interface Path {
@@ -112,6 +121,15 @@ export function shortestPath(
   const counterclockwiseCost = bendCost + finiteCost(options.counterclockwiseCost)
   const crossingCost = graph.orthogonal ? finiteCost(options.crossingCost) : 0
   const through = crossingCost > 0 ? options.through : undefined
+  const discount = Math.min(finiteCost(options.partnerDiscount), 1)
+  const partners = discount > 0 ? options.partners : undefined
+  // What a unit of length costs at least.
+  const least = graph.minWeight * (partners === undefined ? 1 : 1 - discount)
+  // What half-edge `e` costs along its length.
+  const lengthCost = (e: number, length: number) =>
+    length *
+    weightOf(e) *
+    (partners !== undefined && (partners[e] as number) !== 0 ? 1 - discount : 1)
   const avoid = (options.avoid ?? []).filter(
     (r) =>
       Number.isFinite(r.left) &&
@@ -193,7 +211,7 @@ export function shortestPath(
     if (leg < lastLeg) {
       const at = via[leg] as number
       return (
-        graph.minWeight * (distance(node, at) + (rest[leg] as number)) +
+        least * (distance(node, at) + (rest[leg] as number)) +
         (turning ? turnCost * turnsTo(node, at, hx, hy) : 0)
       )
     }
@@ -201,7 +219,7 @@ export function shortestPath(
     for (const end of ends) {
       best = Math.min(
         best,
-        graph.minWeight * distance(node, end.node) +
+        least * distance(node, end.node) +
           (turning ? turnCost * turnsTo(node, end.node, hx, hy) : 0),
       )
     }
@@ -251,7 +269,7 @@ export function shortestPath(
       const dy = dyOf(e)
       const length = lengthOf(dx, dy)
       if (open(e) && matches(start.headings, dx, dy, length)) {
-        relax(leg * edgeCount + e, length * weightOf(e), 0, -1)
+        relax(leg * edgeCount + e, lengthCost(e, length), 0, -1)
       }
     }
   }
@@ -311,7 +329,7 @@ export function shortestPath(
           turn = crossingCost * (through[2 * node + (ay === 0 ? 1 : 0)] ?? 0)
         }
       }
-      relax(leg * edgeCount + f, total + lb * weightOf(f) + turn, turns + turned, state)
+      relax(leg * edgeCount + f, total + lengthCost(f, lb) + turn, turns + turned, state)
     }
   }
   return undefined
@@ -320,16 +338,18 @@ export function shortestPath(
 /**
  * Finds the paths of several routes on one graph, each among the others so
  * that it crosses as few of them as it can afford: first among the paths
- * found before it, then once more, for each path that crosses another,
- * among all the others' latest paths.
+ * found before it, then once more, for each path that crosses another, or
+ * that `again` asks for, among all the others' latest paths.
  *
  * @param graph - The graph the paths run on, with horizontal and vertical
  * edges.
  * @param count - How many routes there are.
- * @param crossingCost - The cost of each crossing. With none, each route's
- * path is found once, on its own.
+ * @param crossingCost - The cost of each crossing. With none, crossings
+ * leave the paths as they are.
  * @param find - Finds route `k`'s path, given how many other paths run
  * straight on through each node (see `SearchOptions.through`).
+ * @param again - Whether route `k`'s path is found once more anyway, such
+ * as when it depends on the others' paths. None are by default.
  * @returns Each route's path, or `undefined` where it has none, and how
  * many of them run straight on through each node, or `undefined` with no
  * crossing cost.
@@ -339,29 +359,64 @@ export function searchAll(
   count: number,
   crossingCost: number,
   find: (k: number, through: ArrayLike<number> | undefined) => Path | undefined,
+  again: (k: number) => boolean = () => false,
 ): { paths: Array<Path | undefined>; through: Int32Array | undefined } {
+  const crossing = crossingCost > 0 && graph.orthogonal
+  const through = crossing ? new Int32Array(2 * graph.xs.length) : undefined
   const paths: Array<Path | undefined> = []
-  if (!(crossingCost > 0) || !graph.orthogonal) {
-    for (let k = 0; k < count; k++) {
-      paths.push(find(k, undefined))
-    }
-    return { paths, through: undefined }
-  }
-  const through = new Int32Array(2 * graph.xs.length)
   for (let k = 0; k < count; k++) {
     const path = find(k, through)
-    markThrough(graph, through, path, 1)
+    if (through !== undefined) {
+      markThrough(graph, through, path, 1)
+    }
     paths.push(path)
   }
   // A path that crosses none of the others keeps its place.
   for (let k = 0; k < count; k++) {
+    if (through === undefined) {
+      if (again(k)) {
+        paths[k] = find(k, undefined)
+      }
+      continue
+    }
     markThrough(graph, through, paths[k], -1)
-    if (crossesThrough(graph, through, paths[k])) {
+    if (again(k) || crossesThrough(graph, through, paths[k])) {
       paths[k] = find(k, through)
     }
     markThrough(graph, through, paths[k], 1)
   }
   return { paths, through }
+}
+
+/**
+ * Marks the half-edges a path runs along, or their twins, which run back
+ * the other way (see `SearchOptions.partners`).
+ *
+ * @param graph - The graph the path runs on.
+ * @param marks - The marks, by half-edge, which this sets to `1`.
+ * @param path - The path, or `undefined` for none.
+ * @param back - Whether to mark the twins.
+ * @param keep - Whether to mark each half-edge, all by default.
+ */
+export function markAlong(
+  graph: Graph,
+  marks: Uint8Array,
+  path: Path | undefined,
+  back: boolean,
+  keep: (e: number) => boolean = () => true,
+): void {
+  const { offsets, targets } = graph
+  const nodes = path?.nodes ?? []
+  for (let k = 1; k < nodes.length; k++) {
+    const [from, to] = back
+      ? [nodes[k] as number, nodes[k - 1] as number]
+      : [nodes[k - 1] as number, nodes[k] as number]
+    for (let e = offsets[from] as number; e < (offsets[from + 1] as number); e++) {
+      if (targets[e] === to && keep(e)) {
+        marks[e] = 1
+      }
+    }
+  }
 }
 
 /**

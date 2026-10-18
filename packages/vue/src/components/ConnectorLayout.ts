@@ -99,6 +99,13 @@ export interface ConnectorLayoutProps extends RectProps {
    * width of the layout's parent.
    */
   mergeGap?: LengthPercentageInput
+  /**
+   * How strongly lines that merge, or could, keep together, from `0` to
+   * `1`: the share of its length a stretch of a line costs less where a
+   * partner's line runs along it, so lines whose ends at one node could
+   * merge come in on one side and merge there. `0.1` by default.
+   */
+  mergePull?: number
   debug?: boolean
 }
 
@@ -139,6 +146,7 @@ export const ConnectorLayout = defineComponent(
         jogSlant: props.jogSlant,
         merge: Connector.merge[props.merge ?? 'none'],
         mergeGap: mergeGap.value,
+        mergePull: props.mergePull,
       })
     })
 
@@ -165,6 +173,7 @@ export const ConnectorLayout = defineComponent(
       'jogSlant',
       'merge',
       'mergeGap',
+      'mergePull',
       'debug',
     ],
     inheritAttrs: false,

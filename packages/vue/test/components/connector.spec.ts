@@ -387,6 +387,45 @@ describe('adornments', () => {
     expect(routes(root)).toEqual(core.edges.map(pointsOf))
   })
 
+  test.each([0, 0.1, undefined])('a merge pull of %s reaches the core', async (pull) => {
+    // From b, the top and the left of t cost the same; pulled along a's
+    // line, b comes in on the left.
+    const pulled = {
+      a: Rect.make(0, 120, 40, 40),
+      b: Rect.make(60, 0, 40, 40),
+      t: Rect.make(140, 120, 40, 40),
+    }
+    const pairs = [
+      ['a', 't'],
+      ['b', 't'],
+    ] as const
+    const { root } = await mountLayout(
+      {
+        clearance: 10,
+        gap: 4,
+        bendCost: 20,
+        merge: 'side',
+        ...(pull === undefined ? {} : { mergePull: pull }),
+      },
+      () => [
+        ...pairs.map(([from, to]) => edge({ from, to })),
+        ...(['a', 'b', 't'] as const).map((id) => node(id, pulled[id])),
+      ],
+    )
+    const core = Connector.apply(
+      pulled,
+      pairs.map(([source, target]) => Edge.make({ source, target })),
+      Connector.make({
+        clearance: 10,
+        gap: 4,
+        bendCost: 20,
+        merge: Connector.merge.side,
+        mergePull: pull ?? 0.1,
+      }),
+    )
+    expect(routes(root)).toEqual(core.edges.map(pointsOf))
+  })
+
   test('the merge gap reaches the core', async () => {
     const merged = { a: rects.a, d: Rect.make(20, 120, 60, 30), b: Rect.make(220, 70, 60, 30) }
     const arrow = () => [adornment({ at: 'end', width: 8, height: 6 }, 'arrow')]

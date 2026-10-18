@@ -54,6 +54,7 @@ describe('make', () => {
     jogSlant: 1,
     merge: 0,
     mergeGap: Number.NaN,
+    mergePull: 0.1,
   }
 
   test('lengths and costs default to zero, but for crossings, and adornments to the middle', () => {
@@ -118,6 +119,15 @@ describe('make', () => {
     expect(Connector.make({ mergeGap: value }).mergeGap).toBe(expected)
   })
 
+  test.each([
+    [0.5, 0.5],
+    [2, 1],
+    [-1, 0],
+    [Number.NaN, 0],
+  ])('merge pull %f reads as %f', (value, expected) => {
+    expect(Connector.make({ mergePull: value }).mergePull).toBe(expected)
+  })
+
   test('setMergeGap, data-first and data-last', () => {
     const base = Connector.make()
     expect(Connector.setMergeGap(base, 2).mergeGap).toBe(2)
@@ -157,6 +167,7 @@ describe('setters', () => {
     ['setAdornmentGap', Connector.setAdornmentGap, 'adornmentGap'],
     ['setJogAt', Connector.setJogAt, 'jogAt'],
     ['setJogSlant', Connector.setJogSlant, 'jogSlant'],
+    ['setMergePull', Connector.setMergePull, 'mergePull'],
   ] as const)('%s, data-first and data-last', (_, set, key) => {
     const base = Connector.make()
     expect(set(base, 0.75)[key]).toBe(0.75)
@@ -938,6 +949,47 @@ describe('merging', () => {
       ...input,
     })
   const merging = (value: number) => spec.pipe(Connector.setMerge(value))
+
+  test.each([
+    [
+      0,
+      [
+        [100, 20],
+        [160, 20],
+        [160, 120],
+      ],
+      -1,
+    ],
+    [
+      0.1,
+      [
+        [80, 40],
+        [80, 140],
+        [140, 140],
+      ],
+      0,
+    ],
+  ])('with a merge pull of %f, a route that could merge takes %j', (mergePull, points, merged) => {
+    // From b, the top and the left of t cost the same. Pulled along a's
+    // route, b comes in on the left too, and merges with it.
+    const rects = {
+      a: Rect.make(0, 120, 40, 40),
+      b: Rect.make(60, 0, 40, 40),
+      t: Rect.make(140, 120, 40, 40),
+    }
+    const edges = [Edge.make({ source: 'a', target: 't' }), Edge.make({ source: 'b', target: 't' })]
+    const pulled = Connector.make({ clearance: 10, gap: 4, bendCost: 20, merge: 1, mergePull })
+    const layout = Connector.apply(rects, edges, pulled)
+    expect(pointsOf(layout, 1)).toEqual(points)
+    expect(layout.edges[1]?.merged).toEqual([-1, merged])
+    // With merging off, nothing pulls.
+    const apart = Connector.apply(rects, edges, pulled.pipe(Connector.setMerge(0)))
+    expect(pointsOf(apart, 1)).toEqual([
+      [100, 20],
+      [160, 20],
+      [160, 120],
+    ])
+  })
 
   test('ends on one side with the same adornments share a port and one arrowhead', () => {
     const layout = Connector.apply(rects, [into('a'), into('b')], merging(Connector.merge.side))

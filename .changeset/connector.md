@@ -59,7 +59,10 @@ their jogs sit beside one another rather than at `jogAt`, so they turn
 together as one bundle with nested corners. Other routes never run inside
 a bundle: they go past it, and a route whose port leaves it among the lanes
 steps out past them once it clears its rect. A route parts from its bundle
-as far from the merge as its corners leave room for. Where a route goes
+as far from the merge as its corners leave room for. The spec's
+`mergePull` (0.1 by default) pulls routes whose ends at one rect could
+merge along each other's routes while sides are chosen, so they come in
+on one side and merge. Where a route goes
 on alone from a group that goes on without it, it turns as tight as the
 merge gap allows; a pair that parts leaves no group, and turns as usual.
 A short jog right past an auto port slides the port along its side to

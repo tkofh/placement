@@ -9,6 +9,7 @@ import {
 import {
   type Endpoint,
   type SearchOptions,
+  markAlong,
   markThrough,
   searchAll,
   shortestPath,
@@ -885,6 +886,59 @@ describe('crossings', () => {
   ] as const)('paths that %s cross %i times', (_, p, q, expected, graph) => {
     expect(crossingsBetween(graph, p, q)).toBe(expected)
     expect(crossingsBetween(graph, q, p)).toBe(expected)
+  })
+})
+
+describe('partners', () => {
+  // 0 1 2
+  // 3 4 5
+  // 6 7 8
+  const square = grid(3, 3)
+  const partner = { nodes: Int32Array.of(0, 3, 4, 5, 2), cost: 0, start: 0, end: 0 }
+
+  test.each([
+    [0.4, [0, 1, 2]],
+    [0.6, [0, 3, 4, 5, 2]],
+  ])('a partner discount of %f takes the path %j', (partnerDiscount, expected) => {
+    // Along the partner, the detour is twice as long.
+    const partners = new Uint8Array(square.targets.length)
+    markAlong(square, partners, partner, false)
+    const path = shortestPath(square, 0, 2, { partnerDiscount, partners })
+    expect(Array.from(path?.nodes ?? [])).toEqual(expected)
+  })
+
+  test('a partner that runs the other way pulls back along it', () => {
+    const forward = new Uint8Array(square.targets.length)
+    markAlong(square, forward, partner, false)
+    const back = new Uint8Array(square.targets.length)
+    markAlong(square, back, { ...partner, nodes: partner.nodes.toReversed() }, true)
+    expect(back).toEqual(forward)
+    // Four half-edges, none of them back the other way.
+    expect(forward.reduce((sum, mark) => sum + mark, 0)).toBe(4)
+    expect(shortestPath(square, 2, 0, { partnerDiscount: 0.6, partners: forward })?.nodes).toEqual(
+      Int32Array.of(2, 1, 0),
+    )
+  })
+
+  test('marking can leave half-edges out', () => {
+    const marks = new Uint8Array(square.targets.length)
+    markAlong(square, marks, partner, false, (e) => square.sources[e] !== 4)
+    expect(marks.reduce((sum, mark) => sum + mark, 0)).toBe(3)
+  })
+
+  test('searchAll finds the paths it is asked to again', () => {
+    const calls: Array<number> = []
+    searchAll(
+      square,
+      3,
+      0,
+      (k) => {
+        calls.push(k)
+        return undefined
+      },
+      (k) => k !== 1,
+    )
+    expect(calls).toEqual([0, 1, 2, 0, 2])
   })
 })
 
