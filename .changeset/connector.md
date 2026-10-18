@@ -56,7 +56,10 @@ sides that leave them where they want to be, and where the orders that
 pairs of routes ask for conflict, the pairs that must cross anyway give
 way first, so the lanes of a merge peel off in order. A route whose
 waypoints hold a run on the line of another route's port leg, which
-nudging can move neither of, goes around it instead. A jog, the rise of a Z-shaped route, sits at the
+nudging can move neither of, goes around it instead, and so does a route
+that runs along or beside such a leg where nudging could not move it the
+gap off, in a strip between the leg and a rect's clearance too narrow for
+it: it crosses the other route, or goes around, rather than lie on it. A jog, the rise of a Z-shaped route, sits at the
 spec's `jogAt` of the run it shifts (the middle by default, or per edge),
 and passes routes that run alongside all of it, since that adds no
 crossing. A jog too short for its two corners slants into an S (two arcs
@@ -92,7 +95,10 @@ pull each other along while sides are chosen: a stretch along a partner's
 route costs a quarter of its length, within the span of the route's own
 two rects, so that routes group up where a long run together pays for the
 bend and length it takes them to meet, and never go out of their way to
-join one. Where a route goes on alone from a group that goes on without
+join one. The search finds every route on its own first, without the
+pull, and then with it, so that each is drawn toward where its partners
+would go by themselves and no route's choice settles a tie for the next
+and holds it there. Where a route goes on alone from a group that goes on without
 it, its parting jog stays upright.
 A short jog right past an auto port slides the port along its side to
 straighten the route where it can (short for what its two corners need,

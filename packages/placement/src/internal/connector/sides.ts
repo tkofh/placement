@@ -26,9 +26,19 @@ import {
 // routes group up where a long run together pays for the bend and length
 // it takes them to meet, and the routes of a merge come in on one side.
 // The pull reaches only within the span of a route's own two rects, so no
-// route goes out of its way to join another. The search also yields a
-// trial route, from the middle of each side, for every edge with an auto
-// position, which orders the ports that share a side.
+// route goes out of its way to join another. The first round of the search
+// finds every route on its own, without the pull, so that the pull then
+// draws each route toward where its partners would go by themselves: were
+// the first route pulled by nothing and the next pulled by it alone, the
+// first route's choice would settle a tie for the next, and the two would
+// then hold each other there against the rest. Two rounds with the pull
+// let the group settle. The search also yields a trial route, from the
+// middle of each side, for every edge with an auto position, which orders
+// the ports that share a side.
+
+// How many rounds of the search pull the routes along their partners, after
+// the first, which pulls none.
+const PULL_ROUNDS = 2
 
 /** The sides every end takes, and the trial routes found choosing them. */
 export interface Sides {
@@ -157,7 +167,7 @@ export function chooseSides(problem: Problem): Sides {
     graph,
     routed.length,
     crossingCost,
-    (k, through) => {
+    (k, through, round) => {
       const i = routed[k] as number
       const edge = edges[i] as ProblemEdge
       const [starts, ends] = candidates[k] as [Array<Candidate>, Array<Candidate>]
@@ -169,12 +179,13 @@ export function chooseSides(problem: Problem): Sides {
         viaLeavings: edge.viaLeavings,
         crossingCost: crossingCost,
         ...(through === undefined ? {} : { through }),
-        ...pullAlong(k),
+        ...(round === 0 ? {} : pullAlong(k)),
       })
       pathOf[i] = path
       return path
     },
     (k) => pull > 0 && (partners[k] as Array<Partner>).length > 0,
+    PULL_ROUNDS,
   )
   for (const [k, i] of routed.entries()) {
     const [starts, ends] = candidates[k] as [Array<Candidate>, Array<Candidate>]

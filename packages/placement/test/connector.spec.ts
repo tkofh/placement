@@ -1099,6 +1099,40 @@ describe('merging', () => {
     expect(layout.edges[0]?.merged).toEqual([-1, -1])
   })
 
+  test('the first round of the side search pulls nothing, so a tie never settles the group', () => {
+    // Three routes leave the hub for the workers below it, to the left. On
+    // its own, the route to the far worker prefers the hub's left side, one
+    // bend against two; the route to the middle worker costs the same from
+    // the left, through the slot beside the store, as from the bottom; and
+    // the route to the near worker wants the bottom. Were the first route
+    // pulled by nothing and the second by it alone, the far route's choice
+    // would settle the middle route's tie for the left, and the two would
+    // hold each other there. Found alone first, the middle route takes the
+    // bottom for its fewer turns, and the long run down from the bottom
+    // then draws the far route too: all three leave the bottom together.
+    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 8 }), at: 1, orient: 1 })
+    const rects = {
+      hub: Rect.make(800, 240, 136, 40),
+      store: Rect.make(645, 329, 120, 40),
+      far: Rect.make(557, 540, 112, 36),
+      mid: Rect.make(692, 540, 112, 36),
+      near: Rect.make(827, 540, 112, 36),
+    }
+    const edges = (['far', 'mid', 'near'] as const).map((target) =>
+      Edge.make({ source: 'hub', target, radius: 16, adornments: [head] }),
+    )
+    const layout = Connector.apply(
+      rects,
+      edges,
+      Connector.make({ clearance: 16, gap: 8, merge: 1 }),
+    )
+    for (const route of layout.edges) {
+      expect(route?.points[0]).toEqual(Point.make(868, 280))
+      expect(route?.merged).toEqual([0, -1])
+    }
+    expect(layout.notes).toEqual([])
+  })
+
   test('ends on one side with the same adornments share a port and one arrowhead', () => {
     const layout = Connector.apply(rects, [into('a'), into('b')], merging(Connector.merge.side))
     // The lanes, 4 apart, jog onto the line out of the port right behind
@@ -1513,5 +1547,53 @@ describe('held runs', () => {
       [85, 426],
       [85, 440],
     ])
+  })
+
+  test('a route crosses a port leg rather than lie on it where a wall leaves no room beside', () => {
+    // The route from e runs west, then down the leg into m, which passes
+    // half a pixel from b's clearance. The route from b to e, above, would
+    // run up that leg's line and leave it for the side its neighbors come
+    // from, the strip between the leg and b's clearance, where it could
+    // never be moved the gap off the leg. It crosses e's route twice
+    // instead, and reports no narrow channel.
+    const rects = {
+      e: Rect.make(798, 238, 136, 40),
+      m: Rect.make(557, 540, 112, 36),
+      b: Rect.make(476.5, 267, 120, 40),
+    }
+    const layout = Connector.apply(
+      rects,
+      [
+        Edge.make({
+          source: 'e',
+          target: 'm',
+          sourceSide: 3,
+          sourceAt: 0.5,
+          targetSide: 0,
+          targetAt: 0.5,
+        }),
+        Edge.make({
+          source: 'b',
+          target: 'e',
+          sourceSide: 1,
+          sourceAt: 0.5,
+          targetSide: 3,
+          targetAt: 0.3,
+        }),
+      ],
+      Connector.make({ clearance: 16, gap: 8, bendCost: 40 }),
+    )
+    expect(pointsOf(layout, 0)).toEqual([
+      [798, 258],
+      [613, 258],
+      [613, 540],
+    ])
+    expect(pointsOf(layout, 1)).toEqual([
+      [596.5, 287],
+      [697.25, 287],
+      [697.25, 250],
+      [798, 250],
+    ])
+    expect(layout.notes).toEqual([])
   })
 })

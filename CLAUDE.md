@@ -59,12 +59,13 @@ runs the phases, each a function of the problem and the phases before it:
 `sides.ts` picks the sides of auto ends by a trial search (a side with no
 room in front of its port for the end's adornments and corner costs more,
 and routes that could merge pull each other along within the span of
-their own rects),
+their own rects, in rounds after a first one without the pull),
 `spread.ts`
 spreads auto ports along shared sides and groups the ends that merge,
 `merge.ts` plans the lanes and whisks of merges, `routing.ts` finds the
 routes (a run that waypoints hold goes around the port legs of other
-routes) and trades ends that cross, `nudge.ts` moves overlapping segments
+routes, and so does a run along or beside one where a wall leaves nudging
+no room to move it off) and trades ends that cross, `nudge.ts` moves overlapping segments
 apart (with `internal/separation.ts`, a 1D separation-constraint solver,
 VPSC) and keeps other routes out of merged bundles, `ports.ts` slides auto
 ports to straighten short jogs, `adornments.ts` places adornments on the

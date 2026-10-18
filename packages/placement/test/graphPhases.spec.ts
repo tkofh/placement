@@ -987,6 +987,30 @@ describe('partners', () => {
     )
     expect(calls).toEqual([0, 1, 2, 0, 2])
   })
+
+  test('searchAll runs as many rounds as asked, and says which', () => {
+    const calls: Array<[number, number]> = []
+    searchAll(
+      square,
+      3,
+      0,
+      (k, _, round) => {
+        calls.push([k, round])
+        return undefined
+      },
+      (k) => k !== 1,
+      2,
+    )
+    expect(calls).toEqual([
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [0, 1],
+      [2, 1],
+      [0, 2],
+      [2, 2],
+    ])
+  })
 })
 
 describe('routes on random scenes', () => {

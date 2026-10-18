@@ -712,7 +712,14 @@ export interface ConnectorLayout<K extends string = string> {
  *    runs straight across. Routes pass through their `via` points and stay
  *    out of their `avoid` rects. Each route sees the routes found before
  *    it, and each one that still crosses another is found once more among
- *    all the others.
+ *    all the others. A route whose waypoints hold a run on the line of
+ *    another route's port leg, which nudging can move neither of, goes
+ *    around it instead, and so does a route that runs along or beside such
+ *    a leg where nudging could not move it the gap off: in the strip
+ *    between the leg and a rect's clearance too narrow for the gap and
+ *    the two strokes, or on the leg's line bound for that strip, the side
+ *    its neighbors come from. It crosses the other route, or goes around,
+ *    rather than lie on it.
  * 3. It nudges routes that run alongside each other apart, their strokes
  *    `gap` apart (see the edges' `thickness`), ordered so that routes that
  *    share a path cross only where they must. Where two must cross
@@ -744,7 +751,10 @@ export interface ConnectorLayout<K extends string = string> {
  * side to merge there. The pull reaches only within the span of the
  * route's own two rects, so no route goes out of its way to join another,
  * and passages narrower than the gap pull nothing, since they hold one
- * route. An
+ * route. The search finds every route on its own first, without the pull,
+ * and then twice more with it, so that each route is drawn toward where
+ * its partners would go by themselves, and no route's choice settles a
+ * tie for the next and holds it there. An
  * auto position is the middle of the side, and the auto ports that share a
  * side spread out evenly, in the order their routes take: routed from the
  * middle of the side, where two of them part, the one that parts toward an

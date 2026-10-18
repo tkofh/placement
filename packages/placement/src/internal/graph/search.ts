@@ -416,8 +416,9 @@ export function shortestPath(
 /**
  * Finds the paths of several routes on one graph, each among the others so
  * that it crosses as few of them as it can afford: first among the paths
- * found before it, then once more, for each path that crosses another, or
- * that `again` asks for, among all the others' latest paths.
+ * found before it, then once more in each later round, for each path that
+ * crosses another, or that `again` asks for, among all the others' latest
+ * paths.
  *
  * @param graph - The graph the paths run on, with horizontal and vertical
  * edges.
@@ -425,9 +426,13 @@ export function shortestPath(
  * @param crossingCost - The cost of each crossing. With none, crossings
  * leave the paths as they are.
  * @param find - Finds route `k`'s path, given how many other paths run
- * straight on through each node (see `SearchOptions.through`).
- * @param again - Whether route `k`'s path is found once more anyway, such
- * as when it depends on the others' paths. None are by default.
+ * straight on through each node (see `SearchOptions.through`) and the
+ * round: `0` the first, among the paths found before it, and `1` on among
+ * all the others.
+ * @param again - Whether route `k`'s path is found once more in each later
+ * round anyway, such as when it depends on the others' paths. None are by
+ * default.
+ * @param rounds - How many rounds follow the first. One by default.
  * @returns Each route's path, or `undefined` where it has none, and how
  * many of them run straight on through each node, or `undefined` with no
  * crossing cost.
@@ -436,32 +441,35 @@ export function searchAll(
   graph: Graph,
   count: number,
   crossingCost: number,
-  find: (k: number, through: ArrayLike<number> | undefined) => Path | undefined,
+  find: (k: number, through: ArrayLike<number> | undefined, round: number) => Path | undefined,
   again: (k: number) => boolean = () => false,
+  rounds = 1,
 ): { paths: Array<Path | undefined>; through: Int32Array | undefined } {
   const crossing = crossingCost > 0 && graph.orthogonal
   const through = crossing ? new Int32Array(2 * graph.xs.length) : undefined
   const paths: Array<Path | undefined> = []
   for (let k = 0; k < count; k++) {
-    const path = find(k, through)
+    const path = find(k, through, 0)
     if (through !== undefined) {
       markThrough(graph, through, path, 1)
     }
     paths.push(path)
   }
   // A path that crosses none of the others keeps its place.
-  for (let k = 0; k < count; k++) {
-    if (through === undefined) {
-      if (again(k)) {
-        paths[k] = find(k, undefined)
+  for (let round = 1; round <= rounds; round++) {
+    for (let k = 0; k < count; k++) {
+      if (through === undefined) {
+        if (again(k)) {
+          paths[k] = find(k, undefined, round)
+        }
+        continue
       }
-      continue
+      markThrough(graph, through, paths[k], -1)
+      if (again(k) || crossesThrough(graph, through, paths[k])) {
+        paths[k] = find(k, through, round)
+      }
+      markThrough(graph, through, paths[k], 1)
     }
-    markThrough(graph, through, paths[k], -1)
-    if (again(k) || crossesThrough(graph, through, paths[k])) {
-      paths[k] = find(k, through)
-    }
-    markThrough(graph, through, paths[k], 1)
   }
   return { paths, through }
 }
