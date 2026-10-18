@@ -1,8 +1,7 @@
 import { clamp } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
-import type * as AspectRatio from './aspectRatio.ts'
+import * as AspectRatio from './aspectRatio.ts'
 import { type RawAspectRatio, toRawRatio } from './internal/aspectRatio.ts'
-import { heightOf, valueOf, widthOf } from './internal/ratio.ts'
 import * as Rect from './rect.ts'
 import { normalizeTRBL } from './utils/arguments.ts'
 
@@ -71,14 +70,14 @@ export interface BoxInput {
    */
   readonly height?: number | undefined
   /**
-   * The width-to-height ratio, as a number (`width / height`) or an
-   * `AspectRatio` (from `placement/aspectRatio`). It derives the dimension
-   * that no explicit size or pair of insets determines. An `AspectRatio`
-   * derives it with one rounding (see `AspectRatio.heightFor`). Ratios whose
-   * value is non-positive or non-finite act as unset. It is unset when
+   * The width-to-height ratio, as a number (`width / height`) or a
+   * `[width, height]` pair such as `[16, 9]` (see `placement/aspectRatio`).
+   * It derives the dimension that no explicit size or pair of insets
+   * determines. A pair derives it with one rounding. Ratios whose value is
+   * non-positive or non-finite act as unset. It is unset when
    * omitted.
    */
-  readonly aspectRatio?: AspectRatio.AspectRatioInput | undefined
+  readonly aspectRatio?: AspectRatio.AspectRatio | undefined
   /**
    * The lower bound on the resolved width. Negative values clamp to `0`.
    * The default is `0`. Non-finite values act as unset.
@@ -189,13 +188,13 @@ class Box extends Pipeable {
   }
 
   /**
-   * The raw width-to-height ratio as one number, or `NaN` when unset. An
-   * `AspectRatio` input reads as its `value`, and `toJSON` keeps the pair.
+   * The raw width-to-height ratio as one number, or `NaN` when unset. A
+   * pair reads as `width / height`, and `toJSON` keeps the pair.
    * Non-positive and non-finite ratios act as unset in `apply`.
    */
   get aspectRatio(): number {
     const raw = this[Raw].aspectRatio
-    return raw === undefined ? Number.NaN : valueOf(raw)
+    return raw === undefined ? Number.NaN : AspectRatio.toNumber(raw)
   }
 
   /**
@@ -242,12 +241,10 @@ class Box extends Pipeable {
 
   /**
    * Returns the box's raw inputs. Unset fields come back as `undefined`,
-   * never as a sentinel. An `AspectRatio` comes back as itself (or as its
-   * numerator when its denominator is `1`). `JSON.stringify` drops unset
-   * fields, writes non-finite values as `null`, and writes an `AspectRatio`
-   * as its `{ numerator, denominator }` record. `make` reads `null` back as
-   * unset and the record back as a ratio, so a JSON round trip keeps every
-   * meaning.
+   * never as a sentinel. A ratio pair comes back as a copy (or as its width
+   * when its height is `1`). `JSON.stringify` drops unset fields and writes
+   * non-finite values as `null`. `make` reads `null` back as unset, so a
+   * JSON round trip keeps every meaning.
    *
    * @returns The raw input record, of the shape `make` accepts.
    */
@@ -356,9 +353,9 @@ export const apply: {
   const rawRatio = self[Raw].aspectRatio
   if (rawRatio !== undefined && Number.isFinite(ratio) && ratio > 0) {
     if (Number.isNaN(width) && !Number.isNaN(height)) {
-      width = clamp(widthOf(rawRatio, height), minWidth, maxWidth)
+      width = clamp(AspectRatio.widthFor(rawRatio, height), minWidth, maxWidth)
     } else if (Number.isNaN(height) && !Number.isNaN(width)) {
-      height = clamp(heightOf(rawRatio, width), minHeight, maxHeight)
+      height = clamp(AspectRatio.heightFor(rawRatio, width), minHeight, maxHeight)
     }
   }
 
@@ -589,16 +586,15 @@ export const setHeight: {
  * it.
  *
  * @param self - The box to update.
- * @param aspectRatio - The new ratio, as `width / height` or an `AspectRatio`.
+ * @param aspectRatio - The new ratio, as `width / height` or a `[width, height]` pair.
  * @returns A new box with the ratio replaced.
  */
 export const setAspectRatio: {
-  (self: Box, aspectRatio: AspectRatio.AspectRatioInput): Box
-  (aspectRatio: AspectRatio.AspectRatioInput): (self: Box) => Box
+  (self: Box, aspectRatio: AspectRatio.AspectRatio): Box
+  (aspectRatio: AspectRatio.AspectRatio): (self: Box) => Box
 } = dual(
   2,
-  (self: Box, aspectRatio: AspectRatio.AspectRatioInput) =>
-    new Box({ ...self.toJSON(), aspectRatio }),
+  (self: Box, aspectRatio: AspectRatio.AspectRatio) => new Box({ ...self.toJSON(), aspectRatio }),
 )
 
 /**

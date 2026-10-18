@@ -78,14 +78,13 @@ export interface FrameInput<K extends string | undefined = string | undefined> {
    */
   readonly height?: number | undefined
   /**
-   * The width-to-height ratio, as a number (`width / height`) or an
-   * `AspectRatio` (from `placement/aspectRatio`). The frame uses it to
-   * derive whichever of `width` and `height` is unset. An `AspectRatio`
-   * derives it with one rounding (see `AspectRatio.heightFor`). Ratios
-   * whose value is non-positive or `NaN` act as unset. If you omit it, the
+   * The width-to-height ratio, as a number (`width / height`) or a
+   * `[width, height]` pair such as `[16, 9]` (see `placement/aspectRatio`).
+   * The frame uses it to derive whichever of `width` and `height` is
+   * unset. A pair derives it with one rounding. Ratios whose value is non-positive or `NaN` act as unset. If you omit it, the
    * ratio is unset.
    */
-  readonly aspectRatio?: AspectRatio.AspectRatioInput | undefined
+  readonly aspectRatio?: AspectRatio.AspectRatio | undefined
   /**
    * The lower bound on the resolved width. Negative values clamp to `0`.
    * Defaults to `0`.
@@ -341,9 +340,8 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
   /**
    * Returns the raw inputs of the frame, including its `id`. Unset sizing
    * fields come back as `undefined`, never as their resolved values.
-   * An `AspectRatio` comes back as itself, written as a
-   * `{ numerator, denominator }` record, unless its denominator is `1`, when
-   * it comes back as its numerator.
+   * A ratio pair comes back as a copy, or as its width when its height is
+   * `1`.
    * `JSON.stringify` drops the unset fields (and an unset `id`) and writes
    * infinite values (`align`/`stretch` inherit, auto offsets) as `null`. The `make` factory reads `null` back as the default
    * of the field. A JSON round trip therefore keeps inheritance but turns
@@ -695,26 +693,20 @@ export const setHeight: {
  * data-last form omits `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param aspectRatio - The new ratio, as `width / height` or an `AspectRatio`.
+ * @param aspectRatio - The new ratio, as `width / height` or a `[width, height]` pair.
  * @returns A new frame with the ratio replaced.
  * @example
  * ```ts
  * Frame.setAspectRatio(Frame.make({ width: 100 }), 4).height // 25
- * Frame.setAspectRatio(Frame.make({ height: 7 }), AspectRatio.make(16, 9)).width
- * // 12.444444444444445
+ * Frame.setAspectRatio(Frame.make({ height: 7 }), [16, 9]).width // 12.444444444444445
  * ```
  */
 export const setAspectRatio: {
-  <K extends string | undefined>(
-    self: Frame<K>,
-    aspectRatio: AspectRatio.AspectRatioInput,
-  ): Frame<K>
-  (
-    aspectRatio: AspectRatio.AspectRatioInput,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, aspectRatio: AspectRatio.AspectRatio): Frame<K>
+  (aspectRatio: AspectRatio.AspectRatio): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, aspectRatio: AspectRatio.AspectRatioInput) =>
+  <K extends string | undefined>(self: Frame<K>, aspectRatio: AspectRatio.AspectRatio) =>
     new Frame({ ...self.toJSON(), aspectRatio }),
 )
 

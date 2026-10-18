@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import * as AspectRatio from '../src/aspectRatio.ts'
+import type * as AspectRatio from '../src/aspectRatio.ts'
 import * as Dimensions from '../src/dimensions.ts'
 
 describe('make', () => {
@@ -477,7 +477,7 @@ describe('serialization', () => {
 })
 
 describe('aspect ratio pairs', () => {
-  const r169 = AspectRatio.make(16, 9)
+  const r169: AspectRatio.AspectRatio = [16, 9]
 
   test.each([
     {
@@ -523,7 +523,7 @@ describe('aspect ratio pairs', () => {
   test('a ratio over 1 behaves as its number', () => {
     const self = Dimensions.make(100, 7)
     for (const ratio of [16 / 9, 0.3, 30]) {
-      const pair = AspectRatio.make(ratio)
+      const pair: AspectRatio.AspectRatio = [ratio, 1]
       expect(Dimensions.contain(self, pair)).toEqual(Dimensions.contain(self, ratio))
       expect(Dimensions.cover(self, pair)).toEqual(Dimensions.cover(self, ratio))
       expect(Dimensions.setAspectRatio(self, pair)).toEqual(Dimensions.setAspectRatio(self, ratio))

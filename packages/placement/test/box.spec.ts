@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import * as AspectRatio from '../src/aspectRatio.ts'
+import type * as AspectRatio from '../src/aspectRatio.ts'
 import * as Box from '../src/box.ts'
 import * as Rect from '../src/rect.ts'
 
@@ -333,7 +333,7 @@ describe('box through a Proxy', () => {
 })
 
 describe('aspect ratio pairs', () => {
-  const r169 = AspectRatio.make(16, 9)
+  const r169: AspectRatio.AspectRatio = [16, 9]
 
   test('a pair derives the width with one rounding', () => {
     const box = Box.make({ height: 7, aspectRatio: r169 })
@@ -349,17 +349,18 @@ describe('aspect ratio pairs', () => {
 
   test('a ratio over 1 behaves as its number', () => {
     for (const input of [{ height: 7 }, { width: 7 }, { top: 0, bottom: 0 }]) {
-      expect(
-        Box.apply(Box.make({ ...input, aspectRatio: AspectRatio.make(16 / 9) }), parent),
-      ).toEqual(Box.apply(Box.make({ ...input, aspectRatio: 16 / 9 }), parent))
+      expect(Box.apply(Box.make({ ...input, aspectRatio: [16 / 9, 1] }), parent)).toEqual(
+        Box.apply(Box.make({ ...input, aspectRatio: 16 / 9 }), parent),
+      )
     }
   })
 
-  test('the getter reads the value and toJSON keeps the pair', () => {
+  test('the getter reads the value and toJSON keeps a copy of the pair', () => {
     const box = Box.make({ aspectRatio: r169 })
     expect(box.aspectRatio).toBe(16 / 9)
-    expect(box.toJSON().aspectRatio).toBe(r169)
-    expect(Box.make({ aspectRatio: AspectRatio.make(2) }).toJSON().aspectRatio).toBe(2)
+    expect(box.toJSON().aspectRatio).toEqual(r169)
+    expect(box.toJSON().aspectRatio).not.toBe(r169)
+    expect(Box.make({ aspectRatio: [2, 1] }).toJSON().aspectRatio).toBe(2)
   })
 
   test('a JSON round trip keeps the pair', () => {
@@ -376,7 +377,7 @@ describe('aspect ratio pairs', () => {
   })
 
   test('a degenerate pair acts as unset', () => {
-    const box = Box.make({ height: 10, aspectRatio: AspectRatio.make(1, 0) })
+    const box = Box.make({ height: 10, aspectRatio: [1, 0] })
     expect(Box.apply(box, parent).width).toBe(400)
   })
 })

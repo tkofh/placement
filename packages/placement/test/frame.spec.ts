@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import * as AspectRatio from '../src/aspectRatio.ts'
+import type * as AspectRatio from '../src/aspectRatio.ts'
 import * as Flexbox from '../src/flexbox.ts'
 import * as Frame from '../src/frame.ts'
 import * as Rect from '../src/rect.ts'
@@ -431,7 +431,7 @@ describe('frame through a Proxy', () => {
 })
 
 describe('aspect ratio pairs', () => {
-  const r169 = AspectRatio.make(16, 9)
+  const r169: AspectRatio.AspectRatio = [16, 9]
 
   test.each([
     ['height set', { height: 7, aspectRatio: r169 }, 112 / 9, 7],
@@ -446,15 +446,16 @@ describe('aspect ratio pairs', () => {
 
   test('a ratio over 1 behaves as its number', () => {
     for (const input of [{ height: 7 }, { width: 7 }, { minHeight: 3 }, {}]) {
-      expect(Frame.make({ ...input, aspectRatio: AspectRatio.make(16 / 9) }).toJSON()).toEqual(
+      expect(Frame.make({ ...input, aspectRatio: [16 / 9, 1] }).toJSON()).toEqual(
         Frame.make({ ...input, aspectRatio: 16 / 9 }).toJSON(),
       )
     }
   })
 
-  test('toJSON keeps the pair and a JSON round trip restores it', () => {
+  test('toJSON keeps a copy of the pair and a JSON round trip restores it', () => {
     const frame = Frame.make({ height: 7, aspectRatio: r169 })
-    expect(frame.toJSON().aspectRatio).toBe(r169)
+    expect(frame.toJSON().aspectRatio).toEqual(r169)
+    expect(frame.toJSON().aspectRatio).not.toBe(r169)
     const revived = Frame.make(JSON.parse(JSON.stringify(frame)))
     expect(revived.toJSON().aspectRatio).toEqual(r169)
     expect(revived.width).toBe(112 / 9)

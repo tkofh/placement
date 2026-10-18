@@ -19,7 +19,7 @@ export function useAspectRatio(
 
 /**
  * Parses a ratio prop for a core ratio field. Unlike `useAspectRatio`, it
- * keeps a `16 / 9` prop as a numerator over a denominator, so the core
+ * keeps a `16 / 9` prop as a `[16, 9]` pair, so the core
  * derives extents from it with one rounding (see `placement/aspectRatio`).
  *
  * @param aspectRatio - The prop value.
@@ -29,6 +29,6 @@ export function useAspectRatio(
 export function useAspectRatioInput(
   aspectRatio: MaybeRefOrGetter<AspectRatioInput>,
   fallback: MaybeRefOrGetter<number> = 1,
-): ComputedRef<AspectRatio.AspectRatioInput> {
+): ComputedRef<AspectRatio.AspectRatio> {
   return computed(() => toAspectRatio(toValue(aspectRatio), toValue(fallback)))
 }
