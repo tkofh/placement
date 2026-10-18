@@ -6,6 +6,22 @@ import * as Length from '../length.ts'
 // `Length` that a spec keeps.
 export type RawLength = number | Length.Length | undefined
 
+// Set at construction on `Box` and `Frame`: whether any length field is a
+// percentage. Layouts read it to skip `resolve` without scanning the fields.
+export const HasPercent: unique symbol = Symbol('placement/length/hasPercent')
+
+export const anyPercent = <K extends string>(
+  raw: { readonly [F in K]: RawLength },
+  fields: ReadonlyArray<K>,
+): boolean => {
+  for (const field of fields) {
+    if (Length.isLength(raw[field])) {
+      return true
+    }
+  }
+  return false
+}
+
 // It also reads back what `JSON.stringify` writes: `null` for unset or
 // non-finite numbers, and a `{ value, unit }` record for a `Length`.
 export const toRaw = (input: Length.LengthInput | null | undefined): RawLength => {

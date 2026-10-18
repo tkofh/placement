@@ -1,6 +1,13 @@
 import { Pipeable, dual } from 'curvy/utils'
 import type { DimensionsLike } from './dimensions.ts'
-import { type RawLength, absolute, resolveRaw, toRaw } from './internal/length.ts'
+import {
+  HasPercent,
+  type RawLength,
+  absolute,
+  anyPercent,
+  resolveRaw,
+  toRaw,
+} from './internal/length.ts'
 import * as Length from './length.ts'
 import { type NormalizedSizing, normalizeSizing, normalizeTRBL } from './utils/arguments.ts'
 
@@ -260,6 +267,7 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
   // so that unset-ness and percentages survive setter round trips. It
   // resolves them once at construction.
   readonly [Raw]: RawLengths
+  readonly [HasPercent]: boolean
   readonly [Sizing]: NormalizedSizing
 
   constructor(input: FrameInput<K>) {
@@ -290,6 +298,7 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
     this.stretch = input.stretch ?? Number.POSITIVE_INFINITY
 
     this[Raw] = raw
+    this[HasPercent] = anyPercent(raw, LENGTH_FIELDS)
     this[Sizing] = normalizeSizing(
       raw.aspectRatio ?? 0,
       absolute(raw.width) ?? Number.NaN,
@@ -507,10 +516,11 @@ export const resolve: {
   <K extends string | undefined>(self: Frame<K>, basis: DimensionsLike): Frame<K>
   (basis: DimensionsLike): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(2, <K extends string | undefined>(self: Frame<K>, basis: DimensionsLike): Frame<K> => {
-  const raw = self[Raw]
-  if (!LENGTH_FIELDS.some((field) => Length.isLength(raw[field]))) {
+  if (!self[HasPercent]) {
     return self
   }
+
+  const raw = self[Raw]
 
   const { width, height } = basis
   return new Frame<K>({

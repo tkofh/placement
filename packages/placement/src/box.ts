@@ -1,8 +1,15 @@
 import { clamp } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import type { DimensionsLike } from './dimensions.ts'
-import { type RawLength, absolute, resolveRaw, toRaw } from './internal/length.ts'
-import * as Length from './length.ts'
+import {
+  HasPercent,
+  type RawLength,
+  absolute,
+  anyPercent,
+  resolveRaw,
+  toRaw,
+} from './internal/length.ts'
+import type * as Length from './length.ts'
 import * as Rect from './rect.ts'
 import { normalizeTRBL } from './utils/arguments.ts'
 
@@ -131,6 +138,7 @@ class Box extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
   readonly [Raw]: RawInput
+  readonly [HasPercent]: boolean
 
   constructor(input: BoxInput) {
     super()
@@ -149,6 +157,7 @@ class Box extends Pipeable {
       maxWidth: toRaw(input.maxWidth),
       maxHeight: toRaw(input.maxHeight),
     }
+    this[HasPercent] = anyPercent(this[Raw], LENGTH_FIELDS)
   }
 
   /**
@@ -325,10 +334,11 @@ export const resolve: {
   (self: Box, parent: DimensionsLike): Box
   (parent: DimensionsLike): (self: Box) => Box
 } = dual(2, (self: Box, parent: DimensionsLike): Box => {
-  const raw = self[Raw]
-  if (!LENGTH_FIELDS.some((field) => Length.isLength(raw[field]))) {
+  if (!self[HasPercent]) {
     return self
   }
+
+  const raw = self[Raw]
 
   const { width, height } = parent
   return new Box({

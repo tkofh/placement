@@ -5,6 +5,7 @@ import type { Interval } from '../interval.ts'
 import * as Rect from '../rect.ts'
 import * as Track from '../track.ts'
 import { auto } from '../utils/arguments.ts'
+import { HasPercent } from './length.ts'
 
 /**
  * The main-axis directions, encoded as numbers: `row` is `0`, `rowReverse`
@@ -544,11 +545,12 @@ function resolveFrames(
   const len = frames.length
   for (let i = 0; i < len; i++) {
     const frame = frames[i] as Frame.Frame
-    const next = Frame.resolve(frame, parent)
-    if (next !== frame) {
+    if (frame[HasPercent]) {
       resolved ??= frames.slice(0, i)
+      resolved.push(Frame.resolve(frame, parent))
+    } else {
+      resolved?.push(frame)
     }
-    resolved?.push(next)
   }
   return resolved ?? frames
 }
