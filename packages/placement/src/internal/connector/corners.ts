@@ -1,6 +1,7 @@
 import { coincident } from 'curvy/number'
+import { before } from '../../utils/tolerance.ts'
 import { lengths, resolveRadii } from '../adornments.ts'
-import type { XY } from './nudge.ts'
+import { type XY, headingOf, positiveLength } from '../orient.ts'
 
 // The sizes of the corners of orthogonal routes. Each corner reaches at most
 // its route's radius, never into a wall (a stretch that flow adornments
@@ -78,9 +79,13 @@ interface Link {
   readonly by: number
 }
 
-const before = (a: number, b: number) => a < b && !coincident(a, b)
-
 const key = (corner: Corner) => `${corner.route}:${corner.index}`
+
+// Whether a corner sits off its orthogonal route in the routes as drawn.
+const moved = (shaped: ReadonlyArray<ReadonlyArray<XY>> | undefined, corner: Corner): boolean => {
+  const point = shaped?.[corner.route]?.[corner.index]
+  return point !== undefined && (point[0] !== corner.x || point[1] !== corner.y)
+}
 
 /**
  * Sizes the corners of routes.
@@ -101,10 +106,7 @@ export function cornerRadii(
   options: CornerOptions = {},
 ): Array<Array<number>> {
   const { fixed = [], shaped, thickness = [], exits = [], turning = [] } = options
-  const limits = routes.map((_, r) => {
-    const radius = radii[r] ?? 0
-    return Number.isFinite(radius) && radius > 0 ? radius : 0
-  })
+  const limits = routes.map((_, r) => positiveLength(radii[r]))
   const sizes = routes.map((points, r) => {
     const list = resolveRadii(points, lengths(points), limits[r] as number, walls[r] ?? [])
     for (const [index, size] of fixed[r] ?? []) {
@@ -114,15 +116,10 @@ export function cornerRadii(
   })
   // The least each corner shrinks to in a nest.
   const floors = sizes.map((list, r) => {
-    const value = thickness[r] ?? 0
-    const half = Number.isFinite(value) && value > 0 ? value / 2 : 0
+    const half = positiveLength(thickness[r]) / 2
     return list.map((size) => Math.min(size, half))
   })
   const isFixed = (corner: Corner) => fixed[corner.route]?.has(corner.index) ?? false
-  const moved = (corner: Corner) => {
-    const point = shaped?.[corner.route]?.[corner.index]
-    return point !== undefined && (point[0] !== corner.x || point[1] !== corner.y)
-  }
 
   // The nests: pairs whose offset is within the outer route's radius, that
   // neither leaves. An outer corner that moved bounds its inner one by its
@@ -132,10 +129,10 @@ export function cornerRadii(
     const { outer, inner, by } = link
     // Past both radii, the inner corner's bound is past its own.
     const reach = (limits[outer.route] as number) + (limits[inner.route] as number)
-    if (!before(by, reach) || moved(inner) || isFixed(inner)) {
+    if (!before(by, reach) || moved(shaped, inner) || isFixed(inner)) {
       continue
     }
-    if (moved(outer)) {
+    if (moved(shaped, outer)) {
       const size = (sizes[outer.route] as Array<number>)[outer.index] as number
       const half = halfTurnTan(shaped?.[outer.route] as ReadonlyArray<XY>, outer.index)
       links.push({ ...link, arc: half > 0 ? size / half : Number.POSITIVE_INFINITY })
@@ -148,11 +145,10 @@ export function cornerRadii(
   // from the innermost by their offsets, so a nest that parts together
   // keeps one center.
   const isExit = (corner: Corner) =>
-    (exits[corner.route]?.has(corner.index) ?? false) && !isFixed(corner) && !moved(corner)
+    (exits[corner.route]?.has(corner.index) ?? false) && !isFixed(corner) && !moved(shaped, corner)
   const caps = new Map<string, number>()
   for (const [route, list] of exits.entries()) {
-    const value = turning[route] ?? 0
-    const tightest = Number.isFinite(value) && value > 0 ? value : 0
+    const tightest = positiveLength(turning[route])
     for (const index of list) {
       caps.set(`${route}:${index}`, tightest)
     }
@@ -162,7 +158,7 @@ export function cornerRadii(
     let changed = false
     for (const { outer, inner, by } of outward) {
       const around = (caps.get(key(inner)) ?? 0) + by
-      if (around > (caps.get(key(outer)) ?? 0) && !coincident(around, caps.get(key(outer)) ?? 0)) {
+      if (before(caps.get(key(outer)) ?? 0, around)) {
         caps.set(key(outer), around)
         changed = true
       }
@@ -227,17 +223,13 @@ export function cornerInsets(
   sizes: ReadonlyArray<ReadonlyArray<number>>,
   shaped?: ReadonlyArray<ReadonlyArray<XY>>,
 ): Array<Array<number>> {
-  const moved = (corner: Corner) => {
-    const point = shaped?.[corner.route]?.[corner.index]
-    return point !== undefined && (point[0] !== corner.x || point[1] !== corner.y)
-  }
   const insets = routes.map((points) => points.map(() => 0))
   const tight = nestLinks(routes).filter(({ outer, inner, by }) => {
     const outerSize = sizes[outer.route]?.[outer.index] ?? 0
     const innerSize = sizes[inner.route]?.[inner.index] ?? 0
     return (
-      !moved(outer) &&
-      !moved(inner) &&
+      !moved(shaped, outer) &&
+      !moved(shaped, inner) &&
       before(by, outerSize) &&
       coincident(innerSize, outerSize - by)
     )
@@ -278,21 +270,13 @@ function nestLinks(routes: ReadonlyArray<ReadonlyArray<XY>>): Array<Link> {
   const turns = new Map<string, Array<Corner>>()
   for (const [route, points] of routes.entries()) {
     for (let index = 1; index + 1 < points.length; index++) {
-      const [px, py] = points[index - 1] as XY
-      const [x, y] = points[index] as XY
-      const [nx, ny] = points[index + 1] as XY
-      const corner = {
-        route,
-        index,
-        x,
-        y,
-        ax: Math.sign(x - px),
-        ay: Math.sign(y - py),
-        bx: Math.sign(nx - x),
-        by: Math.sign(ny - y),
-        from: [px, py] as XY,
-        to: [nx, ny] as XY,
-      }
+      const from = points[index - 1] as XY
+      const point = points[index] as XY
+      const to = points[index + 1] as XY
+      const [x, y] = point
+      const [ax, ay] = headingOf(from, point)
+      const [bx, by] = headingOf(point, to)
+      const corner = { route, index, x, y, ax, ay, bx, by, from, to }
       const right =
         Math.abs(corner.ax) + Math.abs(corner.ay) === 1 &&
         Math.abs(corner.bx) + Math.abs(corner.by) === 1 &&

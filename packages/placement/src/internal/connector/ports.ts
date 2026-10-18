@@ -1,6 +1,7 @@
 import { coincident } from 'curvy/number'
+import { before, overlaps } from '../../utils/tolerance.ts'
 import type { Obstacle } from '../graph/graph.ts'
-import type { XY } from './nudge.ts'
+import { type XY, hi, lo, other, pointOn, positiveLength, segmentBox, sideAxis } from '../orient.ts'
 
 // Straightened ports. Auto ports spread out along their sides before the
 // routes are nudged, so a route can leave its port only to jog a hair
@@ -32,10 +33,6 @@ export interface StraightenOptions {
   readonly anchors: ReadonlyArray<ReadonlyArray<XY>>
 }
 
-const before = (a: number, b: number) => a < b && !coincident(a, b)
-
-const coord = (point: XY, axis: number) => (axis === 0 ? point[0] : point[1])
-
 /**
  * Slides auto ports along their sides to take out the short jogs right past
  * them.
@@ -55,11 +52,8 @@ export function straightenPorts(
   options: StraightenOptions,
 ): Array<Array<XY>> {
   const result = routes.map((route) => [...route])
-  const spacing = Number.isFinite(options.gap) && options.gap > 0 ? options.gap : 0
-  const width = (route: number) => {
-    const value = options.thickness[route] ?? 0
-    return Number.isFinite(value) && value > 0 ? value : 0
-  }
+  const spacing = positiveLength(options.gap)
+  const width = (route: number) => positiveLength(options.thickness[route])
   for (const [route, pair] of ends.entries()) {
     for (const [end, sliding] of pair.entries()) {
       const points = result[route] as Array<XY>
@@ -71,16 +65,16 @@ export function straightenPorts(
       const at = (k: number) => points[end === 0 ? k : points.length - 1 - k] as XY
       const [port, near, far, next] = [at(0), at(1), at(2), at(3)]
       // Along the side, and across it.
-      const along = sliding.side % 2 === 0 ? 0 : 1
-      const across = 1 - along
-      const jog = coord(far, along) - coord(near, along)
+      const along = sideAxis(sliding.side)
+      const across = other(along)
+      const jog = far[along] - near[along]
       const reach = options.reach[route] ?? 0
       const short = Math.max(2 * (Number.isFinite(reach) ? reach : 0), spacing)
       const z =
-        coord(near, along) === coord(port, along) &&
-        coord(far, across) === coord(near, across) &&
-        coord(next, along) === coord(far, along) &&
-        (coord(near, across) - coord(port, across)) * (coord(next, across) - coord(far, across)) > 0
+        near[along] === port[along] &&
+        far[across] === near[across] &&
+        next[along] === far[along] &&
+        (near[across] - port[across]) * (next[across] - far[across]) > 0
       if (!z || jog === 0 || !before(Math.abs(jog), short)) {
         continue
       }
@@ -96,28 +90,25 @@ export function straightenPorts(
       const full = short / 2
       let slide = length <= full ? length : (full * (short - length)) / (short - full)
       // The leg, across the side, at its spot along it.
-      const from = coord(port, along)
+      const from = port[along]
       const [legLow, legHigh] = [
-        Math.min(coord(port, across), coord(near, across)),
-        Math.max(coord(port, across), coord(near, across)),
+        Math.min(port[across], near[across]),
+        Math.max(port[across], near[across]),
       ]
       // It stops short of the side's ends by the gap.
-      const [low, high] =
-        along === 0
-          ? [end0(sliding.rect, 0), end1(sliding.rect, 0)]
-          : [end0(sliding.rect, 1), end1(sliding.rect, 1)]
+      const [low, high] = [lo(sliding.rect, along), hi(sliding.rect, along)]
       const margin = Math.min(spacing, (high - low) / 2)
       slide = Math.min(slide, Math.max(sign > 0 ? high - margin - from : from - low - margin, 0))
       // And short of whatever it would come too near: the rects, and the
       // other routes that run alongside it, by the gap. A route that
       // crosses the leg crosses it wherever it slides.
       const stop = (box: Obstacle, keep: number, crossing = false) => {
-        const [a0, a1] = along === 0 ? [box.left, box.right] : [box.top, box.bottom]
+        const [a0, a1] = [lo(box, along), hi(box, along)]
         if (crossing && a1 > a0) {
           return
         }
-        const [c0, c1] = along === 0 ? [box.top, box.bottom] : [box.left, box.right]
-        if (!before(c0 - keep, legHigh) || !before(legLow, c1 + keep)) {
+        const [c0, c1] = [lo(box, across), hi(box, across)]
+        if (!overlaps(c0 - keep, c1 + keep, legLow, legHigh)) {
           return
         }
         const [near0, far0] =
@@ -139,25 +130,13 @@ export function straightenPorts(
           if (k === route && (end === 0 ? s <= 2 : s >= other.length - 4)) {
             continue
           }
-          const a = other[s] as XY
-          const b = other[s + 1] as XY
-          stop(
-            {
-              left: Math.min(a[0], b[0]),
-              right: Math.max(a[0], b[0]),
-              top: Math.min(a[1], b[1]),
-              bottom: Math.max(a[1], b[1]),
-            },
-            keep,
-            true,
-          )
+          stop(segmentBox(other[s] as XY, other[s + 1] as XY), keep, true)
         }
       }
       if (!(slide > 0) || coincident(slide, 0)) {
         continue
       }
-      const shift = (point: XY): XY =>
-        along === 0 ? [point[0] + sign * slide, point[1]] : [point[0], point[1] + sign * slide]
+      const shift = (point: XY): XY => pointOn(along, point[along] + sign * slide, point[across])
       const [first, second] = end === 0 ? [0, 1] : [points.length - 1, points.length - 2]
       if (coincident(slide, length)) {
         // The jog is gone: the port runs straight on past it.
@@ -175,9 +154,6 @@ export function straightenPorts(
   }
   return result
 }
-
-const end0 = (box: Obstacle, axis: number) => (axis === 0 ? box.left : box.top)
-const end1 = (box: Obstacle, axis: number) => (axis === 0 ? box.right : box.bottom)
 
 // Whether a point lies on the polyline through `points`.
 function onPath(point: XY, points: ReadonlyArray<XY>): boolean {

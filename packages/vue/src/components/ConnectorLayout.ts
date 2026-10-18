@@ -29,22 +29,11 @@ export interface ConnectorLayoutProps extends RectProps {
   gap?: LengthPercentageInput
   /**
    * The cost of each corner, as a length: a route takes a detour up to this
-   * long to save a corner.
+   * long to save a corner. It is the scale of every cost: a crossing costs
+   * two fifths of it, and a corner against an edge's preferred `turn` as
+   * much again. Omitted, it is twice the `clearance` and `gap` together.
    */
   bendCost?: LengthPercentageInput
-  /**
-   * The extra cost of each corner against an edge's preferred `turn`, as a
-   * length.
-   */
-  turnCost?: LengthPercentageInput
-  /**
-   * The cost of each crossing, as a length: a route takes a detour up to
-   * this long to cross one line fewer. Ports and merged lanes next to each
-   * other also trade places when their lines would cross. `16px` by
-   * default, and `0` routes each line with no regard for the others,
-   * which is faster.
-   */
-  crossingCost?: LengthPercentageInput
   /**
    * Which side of their edge adornments sit on, as `alignItems` places flex
    * items across the line: `'start'`, `'center'` (default), `'end'`, or a
@@ -99,13 +88,6 @@ export interface ConnectorLayoutProps extends RectProps {
    * width of the layout's parent.
    */
   mergeGap?: LengthPercentageInput
-  /**
-   * How strongly lines that merge, or could, keep together, from `0` to
-   * `1`: the share of its length a stretch of a line costs less where a
-   * partner's line runs along it, so lines whose ends at one node could
-   * merge come in on one side and merge there. `0.1` by default.
-   */
-  mergePull?: number
   debug?: boolean
 }
 
@@ -120,9 +102,7 @@ export const ConnectorLayout = defineComponent(
 
     const clearance = useLengthPercentage(() => props.clearance, 0)
     const gap = useLengthPercentage(() => props.gap, 0)
-    const bendCost = useLengthPercentage(() => props.bendCost, 0)
-    const turnCost = useLengthPercentage(() => props.turnCost, 0)
-    const crossingCost = useLengthPercentage(() => props.crossingCost, 16)
+    const bendCost = useLengthPercentage(() => props.bendCost, Number.NaN)
     const adornmentGap = useLengthPercentage(() => props.adornmentGap, 0)
     const mergeGap = useLengthPercentage(() => props.mergeGap, Number.NaN)
     const justify = useJustifyContent(() => props.justifyAdornments, keywordResults.center)
@@ -135,8 +115,6 @@ export const ConnectorLayout = defineComponent(
         clearance: clearance.value,
         gap: gap.value,
         bendCost: bendCost.value,
-        turnCost: turnCost.value,
-        crossingCost: crossingCost.value,
         alignAdornments: resolveRatio(props.alignAdornments, 0.5),
         justifyAdornments: justify.value.justifyContent,
         justifyAdornmentsSpace: justify.value.justifyContentSpace,
@@ -146,7 +124,6 @@ export const ConnectorLayout = defineComponent(
         jogSlant: props.jogSlant,
         merge: Connector.merge[props.merge ?? 'none'],
         mergeGap: mergeGap.value,
-        mergePull: props.mergePull,
       })
     })
 
@@ -164,8 +141,6 @@ export const ConnectorLayout = defineComponent(
       'clearance',
       'gap',
       'bendCost',
-      'turnCost',
-      'crossingCost',
       'alignAdornments',
       'justifyAdornments',
       'adornmentGap',
@@ -173,7 +148,6 @@ export const ConnectorLayout = defineComponent(
       'jogSlant',
       'merge',
       'mergeGap',
-      'mergePull',
       'debug',
     ],
     inheritAttrs: false,

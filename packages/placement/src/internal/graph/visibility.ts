@@ -1,4 +1,5 @@
 import { coincident } from 'curvy/number'
+import { before } from '../../utils/tolerance.ts'
 import { type Graph, type Obstacle, fromRows } from './graph.ts'
 
 // The orthogonal visibility graph of orthogonal connector routing (Wybrow,
@@ -75,8 +76,6 @@ interface Lines {
   // The line that holds each pin.
   readonly pins: Array<number>
 }
-
-const before = (a: number, b: number) => a < b && !coincident(a, b)
 
 /**
  * Builds the orthogonal visibility graph of a set of obstacles and pins.

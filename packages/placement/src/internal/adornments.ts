@@ -1,6 +1,7 @@
 import { coincident } from 'curvy/number'
 import type { Adornment } from '../adornment.ts'
 import { auto } from '../utils/arguments.ts'
+import { atMost, before, overlaps } from '../utils/tolerance.ts'
 
 // The geometry of edge adornments in logical space: how much of a straight
 // run each one takes, how flow adornments line up on a run, how big each
@@ -201,7 +202,8 @@ export function runLength(items: ReadonlyArray<RunItem>): number {
   return longest
 }
 
-function byLayer(items: ReadonlyArray<RunItem>): Map<number, Array<RunItem>> {
+// The adornments of a run by layer, each layer in the order given.
+export function byLayer(items: ReadonlyArray<RunItem>): Map<number, Array<RunItem>> {
   const layers = new Map<number, Array<RunItem>>()
   for (const item of items) {
     let layer = layers.get(item.layer)
@@ -214,6 +216,11 @@ function byLayer(items: ReadonlyArray<RunItem>): Map<number, Array<RunItem>> {
   return layers
 }
 
+// Orders the adornments of a run by `at`, and those at one position, within
+// tolerance, by index.
+export const byAt = (a: RunItem, b: RunItem): number =>
+  coincident(a.at, b.at) ? a.index - b.index : a.at - b.at
+
 // Lines up the adornments of a run, layer by layer: each layer's adornments
 // follow one another in route order (`sign` turns that into increasing
 // coordinates), starting at the coordinate `place` returns for the layer's
@@ -225,9 +232,7 @@ export function packRun(
 ): Map<RunItem, number> {
   const centers = new Map<RunItem, number>()
   for (const layer of byLayer(items).values()) {
-    const ordered = layer.toSorted((a, b) =>
-      coincident(a.at, b.at) ? a.index - b.index : a.at - b.at,
-    )
+    const ordered = layer.toSorted(byAt)
     if (sign < 0) {
       ordered.reverse()
     }
@@ -281,7 +286,7 @@ export function distanceAlong(
       ao + (bo - ao) * fraction - point[0],
       ar + (br - ar) * fraction - point[1],
     )
-    if (i === 0 || (distance < bestDistance && !coincident(distance, bestDistance))) {
+    if (i === 0 || before(distance, bestDistance)) {
       bestDistance = distance
       best = (cumulative[i] as number) + t
     }
@@ -324,7 +329,7 @@ export function resolveRadii(
     let first = end
     let last = start
     for (const [a, b] of walls) {
-      if (b > start && a < end && !coincident(b, start) && !coincident(a, end)) {
+      if (overlaps(a, b, start, end)) {
         first = Math.min(first, a)
         last = Math.max(last, b)
       }
@@ -351,7 +356,7 @@ export function resolveRadii(
     const { length } = legs[i] as Leg
     const a = radii[i] as number
     const b = radii[i + 1] as number
-    if (a + b <= length || coincident(a + b, length)) {
+    if (atMost(a + b, length)) {
       continue
     }
     if (Math.min(a, b) <= length / 2) {

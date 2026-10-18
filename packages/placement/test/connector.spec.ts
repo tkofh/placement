@@ -10,7 +10,9 @@ import * as Rect from '../src/rect.ts'
 const pointsOf = (layout: Connector.ConnectorLayout, i = 0) =>
   layout.edges[i]?.points.map(({ x, y }) => [x, y])
 
-const spec = Connector.make({ clearance: 10, gap: 4 })
+// Corners cost nothing here, so that the routes show the mechanism each
+// test is about, not the trade between corners and length.
+const spec = Connector.make({ clearance: 10, gap: 4, bendCost: 0 })
 
 // An edge from the right of `a` to the top of `b`, with rounded corners.
 const rightToTop = (from: number, to: number) =>
@@ -42,9 +44,7 @@ describe('make', () => {
   const defaults = {
     clearance: 0,
     gap: 0,
-    bendCost: 0,
-    turnCost: 0,
-    crossingCost: 16,
+    bendCost: Number.NaN,
     alignAdornments: 0.5,
     justifyAdornments: 0.5,
     justifyAdornmentsSpace: 0,
@@ -54,10 +54,9 @@ describe('make', () => {
     jogSlant: 1,
     merge: 0,
     mergeGap: Number.NaN,
-    mergePull: 0.1,
   }
 
-  test('lengths and costs default to zero, but for crossings, and adornments to the middle', () => {
+  test('lengths default to zero, the corner cost to auto, and adornments to the middle', () => {
     expect(Connector.make().toJSON()).toEqual(defaults)
   })
 
@@ -66,8 +65,6 @@ describe('make', () => {
       Connector.make({
         clearance: value,
         gap: value,
-        bendCost: value,
-        turnCost: value,
         adornmentGap: value,
         ...Object.fromEntries(
           [
@@ -86,9 +83,10 @@ describe('make', () => {
     [8, 8],
     [0, 0],
     [-1, 0],
-    [Number.NaN, 0],
-  ])('crossing cost %f reads as %f', (value, expected) => {
-    expect(Connector.make({ crossingCost: value }).crossingCost).toBe(expected)
+    [Number.NaN, Number.NaN],
+    [Number.POSITIVE_INFINITY, Number.NaN],
+  ])('corner cost %f reads as %f', (value, expected) => {
+    expect(Connector.make({ bendCost: value }).bendCost).toBe(expected)
   })
 
   test('a finite adornment alignment stays as given', () => {
@@ -119,15 +117,6 @@ describe('make', () => {
     expect(Connector.make({ mergeGap: value }).mergeGap).toBe(expected)
   })
 
-  test.each([
-    [0.5, 0.5],
-    [2, 1],
-    [-1, 0],
-    [Number.NaN, 0],
-  ])('merge pull %f reads as %f', (value, expected) => {
-    expect(Connector.make({ mergePull: value }).mergePull).toBe(expected)
-  })
-
   test('setMergeGap, data-first and data-last', () => {
     const base = Connector.make()
     expect(Connector.setMergeGap(base, 2).mergeGap).toBe(2)
@@ -154,8 +143,6 @@ describe('setters', () => {
     ['setClearance', Connector.setClearance, 'clearance'],
     ['setGap', Connector.setGap, 'gap'],
     ['setBendCost', Connector.setBendCost, 'bendCost'],
-    ['setTurnCost', Connector.setTurnCost, 'turnCost'],
-    ['setCrossingCost', Connector.setCrossingCost, 'crossingCost'],
     ['setAlignAdornments', Connector.setAlignAdornments, 'alignAdornments'],
     ['setJustifyAdornments', Connector.setJustifyAdornments, 'justifyAdornments'],
     ['setJustifyAdornmentsSpace', Connector.setJustifyAdornmentsSpace, 'justifyAdornmentsSpace'],
@@ -167,7 +154,6 @@ describe('setters', () => {
     ['setAdornmentGap', Connector.setAdornmentGap, 'adornmentGap'],
     ['setJogAt', Connector.setJogAt, 'jogAt'],
     ['setJogSlant', Connector.setJogSlant, 'jogSlant'],
-    ['setMergePull', Connector.setMergePull, 'mergePull'],
   ] as const)('%s, data-first and data-last', (_, set, key) => {
     const base = Connector.make()
     expect(set(base, 0.75)[key]).toBe(0.75)
@@ -193,6 +179,31 @@ describe('apply', () => {
       [100, 50],
     ])
     expect(layout.edges[0]?.radii).toEqual([0, 0, 0, 0])
+  })
+
+  test('the corner cost defaults to twice the clearance and gap, and saves a corner', () => {
+    // At 28 a corner, one corner and 10 more length beat two corners.
+    const rects = { a: Rect.make(0, 0, 40, 20), b: Rect.make(100, 40, 40, 20) }
+    const auto = Connector.make({ clearance: 10, gap: 4 })
+    const layout = Connector.apply(rects, [Edge.make({ source: 'a', target: 'b' })], auto)
+    expect(pointsOf(layout)).toEqual([
+      [40, 10],
+      [120, 10],
+      [120, 40],
+    ])
+    expect(
+      Connector.apply(
+        rects,
+        [Edge.make({ source: 'a', target: 'b' })],
+        auto.pipe(Connector.setBendCost(10)),
+      ),
+    ).toEqual(
+      Connector.apply(
+        rects,
+        [Edge.make({ source: 'a', target: 'b' })],
+        spec.pipe(Connector.setBendCost(10)),
+      ),
+    )
   })
 
   test('the spec moves jogs along their runs, and an edge overrides it', () => {
@@ -335,16 +346,13 @@ describe('apply', () => {
       Edge.make({ source: 'b', target: 'a' }),
       Edge.make({ source: 'c', target: 'a' }),
     ]
-    const routed = (crossingCost: number) =>
-      Connector.apply(
-        rects,
-        edges,
-        Connector.make({ clearance: 10, gap: 4, bendCost: 40, crossingCost }),
-      )
+    // A crossing costs two fifths of a corner: 16 at 40.
+    const routed = (bendCost: number) =>
+      Connector.apply(rects, edges, Connector.make({ clearance: 10, gap: 4, bendCost }))
     const [x, y] = pointsOf(routed(0), 1)?.[0] ?? []
     expect(x).toBe(200)
     expect(y).toBeCloseTo(580 / 3, 12)
-    expect(pointsOf(routed(16), 1)?.[0]).toEqual([240, 180])
+    expect(pointsOf(routed(40), 1)?.[0]).toEqual([240, 180])
   })
 
   test('ends next to each other whose routes cross trade ports', () => {
@@ -361,14 +369,10 @@ describe('apply', () => {
       Edge.make({ source: 'a', target: 'b' }),
       Edge.make({ source: 'b', target: 'a' }),
     ]
-    const routed = (crossingCost: number) =>
-      Connector.apply(
-        rects,
-        edges,
-        Connector.make({ clearance: 10, gap: 4, bendCost: 40, crossingCost }),
-      )
+    const routed = (bendCost: number) =>
+      Connector.apply(rects, edges, Connector.make({ clearance: 10, gap: 4, bendCost }))
     expect(pointsOf(routed(0), 1)?.[0]?.[0]).toBeCloseTo(40 / 3, 12)
-    const traded = routed(16)
+    const traded = routed(40)
     const near = (i: number, expected: Array<[number, number]>) => {
       const points = pointsOf(traded, i) ?? []
       expect(points).toHaveLength(expected.length)
@@ -480,7 +484,8 @@ describe('apply', () => {
       b: Rect.make(140, 40, 20, 20),
     }
     const edge = Edge.make({ source: 'a', target: 'b', sourceSide: 1, targetSide: 3 })
-    const layout = Connector.apply(rects, [edge], Connector.make({ clearance: 10, turnCost: 50 }), {
+    // A corner against the preference costs as much again as a corner.
+    const layout = Connector.apply(rects, [edge], Connector.make({ clearance: 10, bendCost: 50 }), {
       edges: [{ turn: preference }],
     })
     expect(pointsOf(layout)).toEqual([
@@ -950,38 +955,24 @@ describe('merging', () => {
     })
   const merging = (value: number) => spec.pipe(Connector.setMerge(value))
 
-  test.each([
-    [
-      0,
-      [
-        [100, 20],
-        [160, 20],
-        [160, 120],
-      ],
-      -1,
-    ],
-    [
-      0.1,
-      [
-        [80, 40],
-        [80, 140],
-        [140, 140],
-      ],
-      0,
-    ],
-  ])('with a merge pull of %f, a route that could merge takes %j', (mergePull, points, merged) => {
+  test('a route that could merge is pulled along the route it could merge with', () => {
     // From b, the top and the left of t cost the same. Pulled along a's
-    // route, b comes in on the left too, and merges with it.
+    // route, a tenth cheaper, b comes in on the left too, and merges with
+    // it.
     const rects = {
       a: Rect.make(0, 120, 40, 40),
       b: Rect.make(60, 0, 40, 40),
       t: Rect.make(140, 120, 40, 40),
     }
     const edges = [Edge.make({ source: 'a', target: 't' }), Edge.make({ source: 'b', target: 't' })]
-    const pulled = Connector.make({ clearance: 10, gap: 4, bendCost: 20, merge: 1, mergePull })
+    const pulled = Connector.make({ clearance: 10, gap: 4, bendCost: 20, merge: 1 })
     const layout = Connector.apply(rects, edges, pulled)
-    expect(pointsOf(layout, 1)).toEqual(points)
-    expect(layout.edges[1]?.merged).toEqual([-1, merged])
+    expect(pointsOf(layout, 1)).toEqual([
+      [80, 40],
+      [80, 140],
+      [140, 140],
+    ])
+    expect(layout.edges[1]?.merged).toEqual([-1, 0])
     // With merging off, nothing pulls.
     const apart = Connector.apply(rects, edges, pulled.pipe(Connector.setMerge(0)))
     expect(pointsOf(apart, 1)).toEqual([
@@ -989,6 +980,7 @@ describe('merging', () => {
       [160, 20],
       [160, 120],
     ])
+    expect(apart.edges[1]?.merged).toEqual([-1, -1])
   })
 
   test('ends on one side with the same adornments share a port and one arrowhead', () => {
@@ -1230,6 +1222,116 @@ describe('merging', () => {
     expect(pointsAt(layout, 1)?.slice(-2)).toEqual([
       [194, 20],
       [200, 20],
+    ])
+  })
+})
+
+describe('notes', () => {
+  test('an edge without a route is noted', () => {
+    const rects = {
+      a: Rect.make(0, 0, 20, 20),
+      n: Rect.make(100, 0, 60, 40),
+      w: Rect.make(100, 40, 20, 20),
+      e: Rect.make(140, 40, 20, 20),
+      s: Rect.make(100, 60, 60, 40),
+      x: Rect.make(120, 40, 20, 20),
+    }
+    const layout = Connector.apply(
+      rects,
+      [Edge.make({ source: 'a', target: 'n' }), Edge.make({ source: 'a', target: 'x' })],
+      spec,
+    )
+    expect(layout.notes).toEqual([{ kind: Connector.note.unrouted, edge: 1 }])
+  })
+
+  test('a channel too narrow for the gaps is noted, with the rects beside it', () => {
+    // Three routes through a passage 10 wide between `a` and `b`, with
+    // gaps of 6: they need 12.
+    const rects = {
+      n: Rect.make(30, -100, 30, 20),
+      s: Rect.make(30, 100, 30, 20),
+      a: Rect.make(0, 0, 40, 40),
+      b: Rect.make(50, 0, 40, 40),
+    }
+    const edges = Array.from({ length: 3 }, () => Edge.make({ source: 'n', target: 's' }))
+    const layout = Connector.apply(rects, edges, Connector.make({ gap: 6 }))
+    expect(layout.notes).toEqual([
+      { kind: Connector.note.crowded, edges: [0, 1, 2], axis: 0, rects: ['a', 'b'], need: 2 },
+    ])
+    // The routes spread evenly across the passage instead: the x of each
+    // where it passes y 20.
+    const xs = layout.edges.map((route) => {
+      const points = route?.points ?? []
+      const k = points.findIndex((p, i) => {
+        const q = points[i + 1]
+        return (
+          q !== undefined && p.x === q.x && Math.min(p.y, q.y) <= 20 && Math.max(p.y, q.y) >= 20
+        )
+      })
+      return points[k]?.x
+    })
+    expect(xs).toEqual([40, 45, 50])
+  })
+
+  test('a merge without room for its lanes is noted', () => {
+    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+    const rects = {
+      a: Rect.make(0, -40, 40, 20),
+      b: Rect.make(0, 60, 40, 20),
+      t: Rect.make(200, 0, 40, 40),
+      w: Rect.make(180, 0, 8, 40),
+    }
+    const into = (source: 'a' | 'b') =>
+      Edge.make({ source, target: 't', targetSide: Edge.side.left, adornments: [head] })
+    const layout = Connector.apply(
+      rects,
+      [into('a'), into('b')],
+      spec.pipe(Connector.setMerge(Connector.merge.side)),
+    )
+    // The rects 12 apart leave 6 of room in front of the side, half of it
+    // for the lanes, less than the arrowhead's 8: the merge would need 16.
+    // Sharing the port, the two routes then overlap on the line into it,
+    // which is crowded too.
+    expect(layout.notes).toEqual([
+      { kind: Connector.note.crowded, edges: [0, 1], axis: 0, rects: ['t', 'w'], need: 4 },
+      { kind: Connector.note.shared, edges: [0, 1], rect: 't', side: Edge.side.left, need: 10 },
+    ])
+  })
+
+  test('a merge with nothing to fit shares its port without a note', () => {
+    const rects = {
+      a: Rect.make(0, -40, 40, 20),
+      b: Rect.make(0, 60, 40, 20),
+      t: Rect.make(200, 0, 40, 40),
+    }
+    const into = (source: 'a' | 'b') =>
+      Edge.make({ source, target: 't', targetSide: Edge.side.left })
+    const layout = Connector.apply(
+      rects,
+      [into('a'), into('b')],
+      spec.pipe(Connector.setMerge(Connector.merge.side)),
+    )
+    expect(layout.notes).toEqual([])
+  })
+
+  test('a flow adornment longer than every run is noted', () => {
+    const wide = Adornment.make({ frame: Frame.make({ width: 100, height: 10 }), at: 0.5 })
+    const layout = Connector.apply(
+      pair,
+      [
+        Edge.make({ source: 'a', target: 'b', sourceSide: 1, targetSide: 3, adornments: [wide] }),
+        Edge.make({
+          source: 'a',
+          target: 'b',
+          sourceSide: 1,
+          targetSide: 3,
+          adornments: [label(0.5)],
+        }),
+      ],
+      spec,
+    )
+    expect(layout.notes).toEqual([
+      { kind: Connector.note.overflow, edge: 0, adornment: 0, need: 40 },
     ])
   })
 })

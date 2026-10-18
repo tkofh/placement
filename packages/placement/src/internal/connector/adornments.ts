@@ -1,5 +1,6 @@
 import { coincident } from 'curvy/number'
 import * as Track from '../../track.ts'
+import { atMost, before, overlaps } from '../../utils/tolerance.ts'
 import {
   type Axis,
   type Measured,
@@ -7,13 +8,15 @@ import {
   type RunItem,
   type Sign,
   type SolveAdornment,
+  byAt,
+  byLayer,
   measure,
   outerLength,
   placeAbsolute,
   pointOnDrawn,
 } from '../adornments.ts'
 import type { Obstacle } from '../graph/graph.ts'
-import type { XY } from './nudge.ts'
+import { type XY, hi, lo, other, pointOn } from '../orient.ts'
 
 // The adornments of a routed edge. A connector routes around rects that are
 // already placed, so unlike the hierarchy it sizes no runs. Each straight
@@ -53,6 +56,11 @@ export interface PlacedFlow {
   readonly placed: ReadonlyArray<PlacedAdornment | undefined>
   /** The stretches the flow adornments take, as lengths along the route. */
   readonly walls: ReadonlyArray<readonly [number, number]>
+  /**
+   * The flow adornments that no run had room for, by index, and how much
+   * length each one's run is short by.
+   */
+  readonly overflow: ReadonlyArray<readonly [index: number, need: number]>
 }
 
 /**
@@ -75,9 +83,10 @@ export function placeFlow(
 ): PlacedFlow {
   const placed: Array<PlacedAdornment | undefined> = adornments.map(() => undefined)
   const walls: Array<readonly [number, number]> = []
+  const overflow: Array<readonly [number, number]> = []
   const count = points.length
   if (count < 2) {
-    return { placed, walls }
+    return { placed, walls, overflow }
   }
   const total = cumulative[count - 1] as number
   const { gap } = layout
@@ -158,11 +167,11 @@ export function placeFlow(
     return [from + run.padStart, run.end - run.start - to - run.padEnd]
   }
 
-  // The stretches of a run, as distances from its start within `[lo, hi]`,
+  // The stretches of a run, as distances from its start within `[min, max]`,
   // where no other route, nor any part of this one not next to the run,
   // comes within `clear` of the adornment `item`, across the line or along
   // it.
-  const clearOn = (run: Run, item: RunItem, lo: number, hi: number): Array<[number, number]> => {
+  const clearOn = (run: Run, item: RunItem, min: number, max: number): Array<[number, number]> => {
     const { a, axis, sign } = run
     const line = a[1 - axis] as number
     const reach = layout.clear
@@ -173,11 +182,11 @@ export function placeFlow(
     const block = (box: Obstacle) => {
       // A segment that runs alongside has no thickness, so it counts when it
       // reaches into the band, short of its edges.
-      const [near, far] = axis === 0 ? [box.top, box.bottom] : [box.left, box.right]
-      if (!(far > low && near < high) || coincident(far, low) || coincident(near, high)) {
+      const [near, far] = [lo(box, other(axis)), hi(box, other(axis))]
+      if (!overlaps(near, far, low, high)) {
         return
       }
-      const [start, end] = axis === 0 ? [box.left, box.right] : [box.top, box.bottom]
+      const [start, end] = [lo(box, axis), hi(box, axis)]
       const origin = a[axis] as number
       const [p, q] = [sign * (start - origin), sign * (end - origin)]
       blocked.push([Math.min(p, q) - reach, Math.max(p, q) + reach])
@@ -192,18 +201,18 @@ export function placeFlow(
     }
     blocked.sort((x, y) => x[0] - y[0])
     const free: Array<[number, number]> = []
-    let at = lo
+    let at = min
     for (const [from, to] of blocked) {
-      if (from > at && !coincident(from, at)) {
-        free.push([at, Math.min(from, hi)])
+      if (before(at, from)) {
+        free.push([at, Math.min(from, max)])
       }
       at = Math.max(at, to)
-      if (at > hi || coincident(at, hi)) {
+      if (at > max || coincident(at, max)) {
         break
       }
     }
-    if (hi > at && !coincident(hi, at)) {
-      free.push([at, hi])
+    if (before(at, max)) {
+      free.push([at, max])
     }
     return free
   }
@@ -252,14 +261,14 @@ export function placeFlow(
     const straight = runs.filter((run) => !run.slanted)
     for (const run of straight) {
       const item = itemOn(run, index)
-      const [lo, hi] = run.window ?? content(run)
+      const [min, max] = run.window ?? content(run)
       const need = middleLength(run, item)
-      for (const [from, to] of clearOn(run, item, lo, hi)) {
-        if (to - from < need && !coincident(to - from, need)) {
+      for (const [from, to] of clearOn(run, item, min, max)) {
+        if (before(to - from, need)) {
           continue
         }
         const distance = Math.max(run.start + from - position, position - run.start - to, 0)
-        if (clear === undefined || (distance < clear.away && !coincident(distance, clear.away))) {
+        if (clear === undefined || before(distance, clear.away)) {
           clear = { run, window: [from, to], away: distance }
         }
       }
@@ -276,12 +285,13 @@ export function placeFlow(
     })
     const slack = (run: Run, corners: boolean) =>
       run.end - run.start - demand(run, itemOn(run, index), corners)
-    const fits = (corners: boolean) => (run: Run) =>
-      slack(run, corners) > 0 || coincident(slack(run, corners), 0)
+    const fits = (corners: boolean) => (run: Run) => atMost(0, slack(run, corners))
+    const roomy = ranked.find(fits(true)) ?? ranked.find(fits(false))
     const chosen =
-      ranked.find(fits(true)) ??
-      ranked.find(fits(false)) ??
-      straight.reduce((best, run) => (slack(run, false) > slack(best, false) ? run : best))
+      roomy ?? straight.reduce((best, run) => (slack(run, false) > slack(best, false) ? run : best))
+    if (roomy === undefined) {
+      overflow.push([index, -slack(chosen, false)])
+    }
     // Crowded now, the run's adornments no longer keep to a clear stretch.
     chosen.window = undefined
     chosen.middle.push(itemOn(chosen, index))
@@ -303,7 +313,7 @@ export function placeFlow(
         const along = (a[axis] as number) + sign * center
         const across = line + (lo + hi) / 2
         placed[item.index] = {
-          center: axis === 0 ? [along, across] : [across, along],
+          center: pointOn(axis, along, across),
           direction,
           along: [distance - size / 2, distance + size / 2],
         }
@@ -314,7 +324,7 @@ export function placeFlow(
     const layers = byLayer([...run.starts, ...run.middle, ...run.ends])
     for (const layer of layers.values()) {
       const inLayer = (group: ReadonlyArray<RunItem>) =>
-        group.filter((item) => layer.includes(item)).toSorted(inOrder)
+        group.filter((item) => layer.includes(item)).toSorted(byAt)
       const starts = inLayer(run.starts)
       const ends = inLayer(run.ends)
       const between = inLayer(run.middle)
@@ -379,7 +389,7 @@ export function placeFlow(
       )
     }
   }
-  return { placed, walls }
+  return { placed, walls, overflow }
 }
 
 /**
@@ -419,22 +429,6 @@ export function packLength(
     longest = Math.max(longest, extent(layer, gap))
   }
   return longest
-}
-
-const inOrder = (a: RunItem, b: RunItem) =>
-  coincident(a.at, b.at) ? a.index - b.index : a.at - b.at
-
-function byLayer(items: ReadonlyArray<RunItem>): Map<number, Array<RunItem>> {
-  const layers = new Map<number, Array<RunItem>>()
-  for (const item of items) {
-    const layer = layers.get(item.layer)
-    if (layer === undefined) {
-      layers.set(item.layer, [item])
-    } else {
-      layer.push(item)
-    }
-  }
-  return layers
 }
 
 // The length a group takes on a run, margins and the gaps between included.

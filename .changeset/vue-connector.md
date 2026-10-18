@@ -7,8 +7,8 @@ Add `ConnectorLayout`, `ConnectorNode`, `ConnectorEdge`, and
 routes between boxes that are already placed, around the others.
 
 - `ConnectorLayout` takes the spec as props (`clearance`, `gap`,
-  `bendCost`, `turnCost`, `crossingCost`, `alignAdornments`, `justifyAdornments` in the
-  `justifyContent` form, `adornmentGap`, `jogAt`, `jogSlant`, `merge`, `mergeGap`, and `mergePull`)
+  `bendCost`, `alignAdornments`, `justifyAdornments` in the
+  `justifyContent` form, `adornmentGap`, `jogAt`, `jogSlant`, `merge`, and `mergeGap`)
   or a prebuilt `layout`. With `merge="side"` or `"near"`, edges whose ends
   merge draw their shared adornments once. Corners grow to fill the room the layout gives them,
   so a slanted jog draws as a smooth S. It is

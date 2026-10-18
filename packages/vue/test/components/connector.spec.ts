@@ -183,7 +183,7 @@ describe('routing', () => {
   })
 
   test('ports, waypoints, and turns reach the core edge', async () => {
-    const layout = { clearance: 10, turnCost: 200 }
+    const layout = { clearance: 10, bendCost: 200 }
     const { root } = await mountLayout(layout, () => [
       edge({ from: 'a', to: 'c', fromPort: 'bottom 25%', toPort: 'bottom', turn: 'clockwise' }),
       edge({ from: 'a', to: 'b', via: [{ x: 150, y: 250 }] }),
@@ -208,12 +208,26 @@ describe('routing', () => {
     )
 
     expect(routes(root)).toEqual(solved.edges.map(pointsOf))
-    expect(routes(root)[1]).toContainEqual([150, 250])
+    // The second route passes through its waypoint, on a run or at a
+    // corner.
+    const points = routes(root)[1] ?? []
+    const through = points.some(([x, y], i) => {
+      const next = points[i + 1]
+      if (next === undefined) {
+        return false
+      }
+      const [nx, ny] = next
+      return (
+        (x === nx && x === 150 && Math.min(y, ny) <= 250 && Math.max(y, ny) >= 250) ||
+        (y === ny && y === 250 && Math.min(x, nx) <= 150 && Math.max(x, nx) >= 150)
+      )
+    })
+    expect(through).toBe(true)
   })
 
   test('a node without an id is an obstacle', async () => {
     const wall = Rect.make(120, -100, 20, 360)
-    const { root } = await mountLayout({ clearance: 10 }, () => [
+    const { root } = await mountLayout({ clearance: 10, bendCost: 0 }, () => [
       edge({ from: 'a', to: 'c' }),
       node('a', rects.a),
       node('c', rects.c),
@@ -222,7 +236,7 @@ describe('routing', () => {
     const solved = Connector.apply(
       { a: rects.a, c: rects.c, wall },
       [Edge.make({ source: 'a', target: 'c' })],
-      Connector.make({ clearance: 10 }),
+      Connector.make({ clearance: 10, bendCost: 0 }),
     )
 
     expect(routes(root)).toEqual(solved.edges.map(pointsOf))
@@ -231,7 +245,7 @@ describe('routing', () => {
   })
 
   test('jogAt moves jogs along their runs, and an edge overrides the layout', async () => {
-    const { root } = await mountLayout({ clearance: 10, jogAt: 'start' }, () => [
+    const { root } = await mountLayout({ clearance: 10, bendCost: 0, jogAt: 'start' }, () => [
       edge({ from: 'a', to: 'b' }),
       edge({ from: 'a', to: 'b', fromPort: 'bottom', toPort: 'top', jogAt: 'end' }),
       node('a', rects.a),
@@ -243,7 +257,7 @@ describe('routing', () => {
         Edge.make({ source: 'a', target: 'b' }),
         Edge.make({ source: 'a', target: 'b', sourceSide: 2, targetSide: 0 }),
       ],
-      Connector.make({ clearance: 10, jogAt: 0 }),
+      Connector.make({ clearance: 10, bendCost: 0, jogAt: 0 }),
       { edges: [undefined, { jogAt: 1 }] },
     )
 
@@ -354,9 +368,9 @@ describe('adornments', () => {
     }
   })
 
-  test.each([0, 16, undefined])('a crossing cost of %s reaches the core', async (cost) => {
+  test.each([0, 40, undefined])('a bend cost of %s reaches the core', async (cost) => {
     // Ports on the bottom of a trade places when their routes would cross,
-    // with a crossing cost.
+    // with a crossing cost, two fifths of the bend cost.
     const traded = {
       a: Rect.make(0, 0, 40, 40),
       b: Rect.make(140, 100, 40, 40),
@@ -371,8 +385,7 @@ describe('adornments', () => {
       {
         clearance: 10,
         gap: 4,
-        bendCost: 40,
-        ...(cost === undefined ? {} : { crossingCost: cost }),
+        ...(cost === undefined ? {} : { bendCost: cost }),
       },
       () => [
         ...pairs.map(([from, to]) => edge({ from, to })),
@@ -382,12 +395,12 @@ describe('adornments', () => {
     const core = Connector.apply(
       traded,
       pairs.map(([source, target]) => Edge.make({ source, target })),
-      Connector.make({ clearance: 10, gap: 4, bendCost: 40, crossingCost: cost ?? 16 }),
+      Connector.make({ clearance: 10, gap: 4, bendCost: cost }),
     )
     expect(routes(root)).toEqual(core.edges.map(pointsOf))
   })
 
-  test.each([0, 0.1, undefined])('a merge pull of %s reaches the core', async (pull) => {
+  test.each(['side', 'none'] as const)('merging %s reaches the core', async (merge) => {
     // From b, the top and the left of t cost the same; pulled along a's
     // line, b comes in on the left.
     const pulled = {
@@ -404,8 +417,7 @@ describe('adornments', () => {
         clearance: 10,
         gap: 4,
         bendCost: 20,
-        merge: 'side',
-        ...(pull === undefined ? {} : { mergePull: pull }),
+        merge,
       },
       () => [
         ...pairs.map(([from, to]) => edge({ from, to })),
@@ -419,8 +431,7 @@ describe('adornments', () => {
         clearance: 10,
         gap: 4,
         bendCost: 20,
-        merge: Connector.merge.side,
-        mergePull: pull ?? 0.1,
+        merge: Connector.merge[merge],
       }),
     )
     expect(routes(root)).toEqual(core.edges.map(pointsOf))

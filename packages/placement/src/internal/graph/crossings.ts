@@ -1,3 +1,4 @@
+import { turnOf } from '../orient.ts'
 import type { Graph } from './graph.ts'
 
 // Crossings between paths on one graph whose edges are all horizontal or
@@ -94,6 +95,5 @@ function heading(graph: Graph, from: number, to: number): [number, number] {
 // along the run, `0` in line with it, and `1` to the right, with the Y
 // axis down.
 function side(graph: Graph, run: [number, number], node: number, arm: number): number {
-  const [x, y] = heading(graph, node, arm)
-  return Math.sign(run[0] * y - run[1] * x)
+  return turnOf(run, heading(graph, node, arm))
 }

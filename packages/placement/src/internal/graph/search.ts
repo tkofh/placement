@@ -1,5 +1,7 @@
 import { RELATIVE_TOLERANCE, coincident } from 'curvy/number'
 import type { PointLike } from '../../point.ts'
+import { before } from '../../utils/tolerance.ts'
+import { positiveLength } from '../orient.ts'
 import type { Graph, Obstacle } from './graph.ts'
 
 // Shortest paths on a graph of points, for a cost of weighted length plus a
@@ -76,8 +78,6 @@ export interface Path {
   readonly end: number
 }
 
-const before = (a: number, b: number) => a < b && !coincident(a, b)
-
 /**
  * Finds the cheapest path from any of the starts to any of the ends. Among
  * paths of equal cost, the one with fewer turns wins. A path never reverses
@@ -116,12 +116,12 @@ export function shortestPath(
   ) {
     return undefined
   }
-  const bendCost = finiteCost(options.bendCost)
-  const clockwiseCost = bendCost + finiteCost(options.clockwiseCost)
-  const counterclockwiseCost = bendCost + finiteCost(options.counterclockwiseCost)
-  const crossingCost = graph.orthogonal ? finiteCost(options.crossingCost) : 0
+  const bendCost = positiveLength(options.bendCost)
+  const clockwiseCost = bendCost + positiveLength(options.clockwiseCost)
+  const counterclockwiseCost = bendCost + positiveLength(options.counterclockwiseCost)
+  const crossingCost = graph.orthogonal ? positiveLength(options.crossingCost) : 0
   const through = crossingCost > 0 ? options.through : undefined
-  const discount = Math.min(finiteCost(options.partnerDiscount), 1)
+  const discount = Math.min(positiveLength(options.partnerDiscount), 1)
   const partners = discount > 0 ? options.partners : undefined
   // What a unit of length costs at least.
   const least = graph.minWeight * (partners === undefined ? 1 : 1 - discount)
@@ -549,9 +549,6 @@ function firstState(state: number, parent: Int32Array): number {
   }
   return current
 }
-
-const finiteCost = (value: number | undefined) =>
-  value !== undefined && Number.isFinite(value) && value > 0 ? value : 0
 
 // The length of a vector, exact when it is horizontal or vertical.
 const lengthOf = (dx: number, dy: number) =>

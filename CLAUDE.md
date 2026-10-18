@@ -46,24 +46,36 @@ the connector) packs adornments onto straight runs and sizes corners. `Polygon` 
 `Polygon.apply` places it, growing a rounded one so that its rounded
 outline fills the rect (`internal/polygon.ts`, shared with the hierarchy
 ports). `Connector` is a routing spec, and `Connector.apply` routes `Edge`s
-between rects that are already placed, keyed by id, around the others. It
-builds on `internal/graph/` (not yet public): `graph.ts` stores graphs of
-points in flat arrays, `visibility.ts` builds the orthogonal visibility
-graph of obstacles and pins, and `search.ts` finds the cheapest path for
-length, turns, and crossings (A\*), for less along partner paths, between sets of endpoints, and routes
-several paths among one another, `crossings.ts` counts the crossings
-between two paths, shared runs included; `acyclic.ts` breaks
-cycles and orders pairwise preferences for both routers. Then
-`internal/connector/nudge.ts` moves overlapping route segments apart,
-keeps other routes out of the bundles of merged routes, and
-places jogs at `jogAt` of their runs, with `internal/separation.ts`, a 1D separation-constraint
-solver (VPSC), `internal/connector/adornments.ts` places adornments on the
-routes, and `internal/connector/corners.ts` sizes corners, nesting
-those of routes that turn together about one center, and
-`internal/connector/ports.ts` slides auto ports to straighten the short
-jogs right past them, `internal/connector/slants.ts` turns jogs too short
-for their corners into S curves, and `internal/connector/merge.ts` leads
-the lanes of merged ends onto their shared port. `Rect`,
+between rects that are already placed, keyed by id, around the others, and
+reports in `notes` what the routes gave up and what would have fit them.
+`apply` is `solve(normalize(...))`: `internal/connector/problem.ts` turns
+the inputs into a `Problem` (rects grown into obstacles, edges with their
+ends, costs, and resolved adornments), and `internal/connector/pipeline.ts`
+runs the phases, each a function of the problem and the phases before it:
+`sides.ts` picks the sides of auto ends by a trial search, `spread.ts`
+spreads auto ports along shared sides and groups the ends that merge,
+`merge.ts` plans the lanes and whisks of merges, `routing.ts` finds the
+routes and trades ends that cross, `nudge.ts` moves overlapping segments
+apart (with `internal/separation.ts`, a 1D separation-constraint solver,
+VPSC) and keeps other routes out of merged bundles, `ports.ts` slides auto
+ports to straighten short jogs, `adornments.ts` places adornments on the
+routes, `corners.ts` sizes corners, nesting those of routes that turn
+together about one center, and `slants.ts` turns jogs too short for their
+corners into S curves. `locks.ts` carries what a pass decided to the
+passes after it (upright jogs, set corner sizes, parting corners), so the
+order of `solve` is the order in which decisions yield. The phases build
+on `internal/graph/` (not yet public): `graph.ts` stores graphs of points
+in flat arrays, `visibility.ts` builds the orthogonal visibility graph of
+obstacles and pins, `search.ts` finds the cheapest path for length, turns,
+and crossings (A\*), for less along partner paths, between sets of
+endpoints, and routes several paths among one another, `crossings.ts`
+counts the crossings between two paths, shared runs included, and
+`acyclic.ts` breaks cycles and orders pairwise preferences for both
+routers. `internal/orient.ts` is the shared vocabulary of axes, sides, and
+segments (`XY`, `Axis`, `lo`/`hi` of a box on an axis, `segmentBox`,
+`headingOf`, `turnOf`), and `utils/tolerance.ts` holds the tolerant
+ordering predicates (`before`, `atMost`, `within`, `inside`, `overlaps`,
+`touches`) that every discrete geometric decision goes through. `Rect`,
 `Point`, `Dimensions`, and `Offset` are the 2D value types. Type-only cross-module imports can stay flat
 (`import type { Rect } from ...`). Use namespace imports for value usage.
 

@@ -7,14 +7,12 @@
     <ConnectorLayout
       :clearance="`${clearance}px`"
       :gap="`${gap}px`"
-      :bend-cost="`${bendCost}px`"
-      :crossing-cost="`${crossingCost}px`"
+      :bend-cost="bendCost === 'auto' ? undefined : `${bendCost}px`"
       :justify-adornments="justify"
       :jog-at="jogAt"
       :jog-slant="slant"
       :merge="merge"
       :merge-gap="mergeGap === 'gap' ? undefined : `${mergeGap}px`"
-      :merge-pull="mergePull"
     >
       <!-- the pool is a flex row, and each worker's box is a node -->
       <GraphicGroup left="520px" top="478px" width="456px" height="138px">
@@ -123,14 +121,6 @@
     >
       bend cost {{ b }}
     </button>
-    <button
-      v-for="c in CROSSING_COSTS"
-      :key="c"
-      :class="{ on: c === crossingCost }"
-      @click="crossingCost = c"
-    >
-      crossing cost {{ c }}
-    </button>
     <span />
     <button v-for="j in JUSTIFY" :key="j" :class="{ on: j === justify }" @click="justify = j">
       labels {{ j }}
@@ -155,14 +145,6 @@
     >
       lanes {{ g }}
     </button>
-    <button
-      v-for="p in MERGE_PULLS"
-      :key="p"
-      :class="{ on: p === mergePull }"
-      @click="mergePull = p"
-    >
-      pull {{ p }}
-    </button>
     <span />
     <button @click="reset">reset</button>
     <button @click="copy">{{ copied ? 'copied' : 'copy state' }}</button>
@@ -175,26 +157,22 @@
 <script setup lang="ts">
 const GAPS = [4, 8] as const
 const CLEARANCES = [16, 28] as const
-const BEND_COSTS = [0, 40] as const
-const CROSSING_COSTS = [0, 16] as const
+const BEND_COSTS = ['auto', 0, 40] as const
 const JUSTIFY = ['start', 'center', 'end'] as const
 const JOGS = ['start', 'center', 'end'] as const
 const SLANTS = [0, 1, 2] as const
 const MERGES = ['none', 'side', 'near'] as const
 const MERGE_GAPS = ['gap', 4] as const
-const MERGE_PULLS = [0, 0.1] as const
 
 const corners = ref(true)
 const gap = ref<number>(8)
 const clearance = ref<number>(16)
-const bendCost = ref<number>(40)
-const crossingCost = ref<number>(16)
+const bendCost = ref<(typeof BEND_COSTS)[number]>('auto')
 const justify = ref<(typeof JUSTIFY)[number]>('center')
 const jogAt = ref<(typeof JOGS)[number]>('center')
 const slant = ref<number>(2)
 const merge = ref<(typeof MERGES)[number]>('side')
 const mergeGap = ref<(typeof MERGE_GAPS)[number]>(4)
-const mergePull = ref<number>(0.1)
 
 const CLIENT = 'color(display-p3 0.14 0.34 0.26)'
 const SERVICE = 'color(display-p3 0.16 0.22 0.4)'
@@ -300,13 +278,11 @@ async function copy() {
     gap: gap.value,
     clearance: clearance.value,
     bendCost: bendCost.value,
-    crossingCost: crossingCost.value,
     justify: justify.value,
     jogAt: jogAt.value,
     slant: slant.value,
     merge: merge.value,
     mergeGap: mergeGap.value,
-    mergePull: mergePull.value,
     nodes: nodes.value.map(({ id, x, y }) => ({ id, x, y })),
   }
   await navigator.clipboard.writeText(JSON.stringify(state))

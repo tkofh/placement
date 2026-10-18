@@ -1,6 +1,16 @@
-import { coincident } from 'curvy/number'
+import { coincident, minMax } from 'curvy/number'
+import { before, inside, overlaps } from '../../utils/tolerance.ts'
 import type { Obstacle } from '../graph/graph.ts'
-import type { XY } from './nudge.ts'
+import {
+  type Axis,
+  type XY,
+  headingOf,
+  hi,
+  lo,
+  other,
+  positiveLength,
+  segmentBox,
+} from '../orient.ts'
 
 // Slanted jogs. A jog is the segment between two corners that turn opposite
 // ways, the rise of a Z. When it is shorter than its two corners need, the
@@ -79,22 +89,19 @@ interface Box {
   readonly c1: number
 }
 
-const less = (a: number, b: number) => a < b && !coincident(a, b)
-
 // How far an S may reach for a box that touches the upright jog or its
 // legs: short of the box along the leg it touches, and none for one on the
 // jog. `undefined` for a box that touches neither.
 function touches(box: Box, from: number, to: number): number | undefined {
-  const inside = (c: number) => less(box.c0, c) && less(c, box.c1)
-  const [low, high] = from < to ? [from, to] : [to, from]
-  if (less(box.u0, 0) && less(0, box.u1) && less(box.c0, high) && less(low, box.c1)) {
+  const [low, high] = minMax(from, to)
+  if (inside(0, box.u0, box.u1) && overlaps(box.c0, box.c1, low, high)) {
     return 0
   }
   let reach: number | undefined
-  if (less(box.u0, 0) && inside(from)) {
+  if (before(box.u0, 0) && inside(from, box.c0, box.c1)) {
     reach = Math.max(-box.u1, 0)
   }
-  if (less(0, box.u1) && inside(to)) {
+  if (before(0, box.u1) && inside(to, box.c0, box.c1)) {
     reach = Math.min(reach ?? Number.POSITIVE_INFINITY, Math.max(box.u0, 0))
   }
   return reach
@@ -105,7 +112,7 @@ function touches(box: Box, from: number, to: number): number | undefined {
 // and meet halfway, so across it moves one way all along: the stretch of it
 // alongside the box spans across between its two ends there.
 function crosses(box: Box, half: number, d: number, from: number, toward: number): boolean {
-  if (!less(box.u0, half) || !less(-half, box.u1)) {
+  if (!overlaps(box.u0, box.u1, -half, half)) {
     return false
   }
   const u0 = Math.max(box.u0, -half)
@@ -118,7 +125,7 @@ function crosses(box: Box, half: number, d: number, from: number, toward: number
       ? from + toward * (radius - Math.sqrt(Math.max(radius * radius - (u + half) ** 2, 0)))
       : from + toward * (d - radius + Math.sqrt(Math.max(radius * radius - (half - u) ** 2, 0)))
   const [a, b] = [across(u0), across(u1)]
-  return less(box.c0, Math.max(a, b)) && less(Math.min(a, b), box.c1)
+  return overlaps(box.c0, box.c1, Math.min(a, b), Math.max(a, b))
 }
 
 interface Slant {
@@ -157,16 +164,9 @@ export function slantJogs(
   exempt: ReadonlyArray<ReadonlySet<number>> = [],
   strokes: Strokes = {},
 ): Array<SlantedRoute> {
-  const spacing =
-    Number.isFinite(strokes.gap) && (strokes.gap ?? 0) > 0 ? (strokes.gap as number) : 0
-  const width = (route: number) => {
-    const value = strokes.thickness?.[route] ?? 0
-    return Number.isFinite(value) && value > 0 ? value : 0
-  }
-  const tight =
-    Number.isFinite(strokes.mergeGap) && (strokes.mergeGap ?? 0) > 0
-      ? Math.min(strokes.mergeGap as number, spacing)
-      : 0
+  const spacing = positiveLength(strokes.gap)
+  const width = (route: number) => positiveLength(strokes.thickness?.[route])
+  const tight = Math.min(positiveLength(strokes.mergeGap), spacing)
   const partners = (a: number, b: number) => {
     const [p, q] = [strokes.merges?.[a], strokes.merges?.[b]]
     return p !== undefined && q !== undefined && p.some((id) => id >= 0 && q.includes(id))
@@ -174,15 +174,7 @@ export function slantJogs(
   // Everything a slant keeps clear of: each route's segments, by route, and
   // the obstacles, as boxes.
   const boxes = routes.map((points) =>
-    points.slice(1).map((b, i): Obstacle => {
-      const a = points[i] as XY
-      return {
-        left: Math.min(a[0], b[0]),
-        right: Math.max(a[0], b[0]),
-        top: Math.min(a[1], b[1]),
-        bottom: Math.max(a[1], b[1]),
-      }
-    }),
+    points.slice(1).map((b, i) => segmentBox(points[i] as XY, b)),
   )
 
   return routes.map((points, route) => {
@@ -203,14 +195,13 @@ export function slantJogs(
     const short = new Map<number, number>()
     for (let i = 1; i + 2 < count; i++) {
       const d = length(points[i] as XY, points[i + 1] as XY)
-      const same = heading(points, i - 1)
-      const next = heading(points, i + 1)
+      const same = headingOf(points[i - 1] as XY, points[i] as XY)
+      const next = headingOf(points[i + 1] as XY, points[i + 2] as XY)
       if (
         !(exempt[route]?.has(i) ?? false) &&
         same[0] === next[0] &&
         same[1] === next[1] &&
-        d < 2 * reach &&
-        !coincident(d, 2 * reach)
+        before(d, 2 * reach)
       ) {
         short.set(i, d)
       }
@@ -224,11 +215,11 @@ export function slantJogs(
       const p = points[i] as XY
       const q = points[i + 1] as XY
       const d = length(p, q)
-      const u = heading(points, i - 1)
+      const u = headingOf(points[i - 1] as XY, p)
       // The axis along the legs, and the one across them.
-      const along = u[0] !== 0 ? 0 : 1
-      const across = 1 - along
-      const sign = along === 0 ? u[0] : u[1]
+      const along: Axis = u[0] !== 0 ? 0 : 1
+      const across = other(along)
+      const sign = u[along]
 
       // The free length before the jog, back along the first leg, and
       // after it, on along the second. The corner at the leg's other end
@@ -253,12 +244,7 @@ export function slantJogs(
         if (a < (end as number) && b > (to as number)) {
           after = Math.min(after, a - (to as number))
         }
-        if (
-          a < (to as number) &&
-          b > (from as number) &&
-          !coincident(a, to as number) &&
-          !coincident(b, from as number)
-        ) {
+        if (overlaps(a, b, from as number, to as number)) {
           before = 0
         }
       }
@@ -271,23 +257,23 @@ export function slantJogs(
       // the band between the legs at every point, so the widest that clears
       // everything is found by halving, and it moves with the geometry
       // around it.
-      const launch = p[across] as number
-      const finish = q[across] as number
+      const launch = p[across]
+      const finish = q[across]
       const toward = Math.sign(finish - launch)
-      const jogAt = p[along] as number
+      const jogAt = p[along]
       let most = Math.min(before, after)
       const own = width(route)
       const near: Array<Box> = []
       const consider = (box: Obstacle, keep: number) => {
-        const [a0, a1] = along === 0 ? [box.left, box.right] : [box.top, box.bottom]
-        const [c0, c1] = along === 0 ? [box.top, box.bottom] : [box.left, box.right]
+        const [a0, a1] = [lo(box, along), hi(box, along)]
+        const [c0, c1] = [lo(box, across), hi(box, across)]
         const grown: Box = {
           u0: (sign > 0 ? a0 - jogAt : jogAt - a1) - keep,
           u1: (sign > 0 ? a1 - jogAt : jogAt - a0) + keep,
           c0: c0 - keep,
           c1: c1 + keep,
         }
-        if (!less(grown.u0, most) || !less(-most, grown.u1)) {
+        if (!overlaps(grown.u0, grown.u1, -most, most)) {
           return
         }
         // The S starts and ends past anything its legs pass through, such
@@ -307,7 +293,7 @@ export function slantJogs(
           if (other !== route || segment < i - 1 || segment > i + 1) {
             // A route across the legs needs only the S to end short of its
             // stroke; one alongside them keeps the gap.
-            const across = along === 0 ? box.left === box.right : box.top === box.bottom
+            const across = lo(box, along) === hi(box, along)
             consider(box, across ? strokes : keep)
           }
         }
@@ -351,9 +337,9 @@ export function slantJogs(
     const resized = [...size]
     const cuts: Array<readonly [at: number, by: number]> = []
     for (const { index, w, reach: corner } of slants) {
-      const u = heading(points, index - 1)
       const p = points[index] as XY
       const q = points[index + 1] as XY
+      const u = headingOf(points[index - 1] as XY, p)
       moved[index] = [p[0] - (u[0] * w) / 2, p[1] - (u[1] * w) / 2]
       moved[index + 1] = [q[0] + (u[0] * w) / 2, q[1] + (u[1] * w) / 2]
       resized[index] = corner
@@ -379,13 +365,6 @@ export function slantJogs(
 
 const length = (a: XY, b: XY) => Math.hypot(b[0] - a[0], b[1] - a[1])
 
-// The heading of segment `index`, as signs.
-function heading(points: ReadonlyArray<XY>, index: number): XY {
-  const a = points[index] as XY
-  const b = points[index + 1] as XY
-  return [Math.sign(b[0] - a[0]), Math.sign(b[1] - a[1])]
-}
-
 // The corners' distance apart along the legs, `w`, and how far each
 // reaches, for a jog `d` long with `room` free on each side, or `undefined`
 // when the jog stays upright. The S spans `2 * slant * r - (slant - 1) * d`
@@ -394,7 +373,7 @@ function heading(points: ReadonlyArray<XY>, index: number): XY {
 // the corners are the upright ones.
 function fit(d: number, reach: number, slant: number, room: number) {
   const r = Math.min((2 * room + (slant - 1) * d) / (2 * slant), reach)
-  if (!(r > d / 2) || coincident(r, d / 2)) {
+  if (!before(d / 2, r)) {
     return undefined
   }
   const span = 2 * slant * r - (slant - 1) * d
@@ -402,5 +381,5 @@ function fit(d: number, reach: number, slant: number, room: number) {
   const theta = 2 * Math.atan(d / span)
   const corner = d / (2 * Math.sin(theta))
   const w = span - 2 * corner
-  return w > 0 && !coincident(w, 0) ? { w, reach: corner } : undefined
+  return before(0, w) ? { w, reach: corner } : undefined
 }

@@ -7,9 +7,11 @@ already placed, around the other rects. `Connector.apply(rects, edges,
 connector)` takes rects keyed by id (such as the `nodes` that
 `Hierarchy.apply` returns), `Edge`s between them, and a `Connector` spec:
 a `clearance` that routes keep from rects, a `gap` between routes that run
-alongside each other, a `bendCost` per corner, a `turnCost` for corners
-against an edge's preferred turn, and a `crossingCost` (16 by default) per
-route a route runs straight across. Each route is found among the routes
+alongside each other, and a `bendCost` per corner, the one scale of every
+cost: a crossing (a route running straight across another) costs two
+fifths of it, and a corner against an edge's preferred turn as much again.
+Omitted, the bend cost is twice the clearance and gap together, so the
+costs scale with the room the routes keep. Each route is found among the routes
 found before it, and each one that still crosses another is found again
 among all the others; ports and merged lanes next to each other whose
 routes cross trade places when that leaves fewer crossings. Routes are orthogonal, leave and enter
@@ -59,10 +61,9 @@ their jogs sit beside one another rather than at `jogAt`, so they turn
 together as one bundle with nested corners. Other routes never run inside
 a bundle: they go past it, and a route whose port leaves it among the lanes
 steps out past them once it clears its rect. A route parts from its bundle
-as far from the merge as its corners leave room for. The spec's
-`mergePull` (0.1 by default) pulls routes whose ends at one rect could
-merge along each other's routes while sides are chosen, so they come in
-on one side and merge. Where a route goes
+as far from the merge as its corners leave room for. Routes whose ends at one rect could
+merge pull each other along while sides are chosen, so they come in
+on one side and merge (a tenth less along a partner's route). Where a route goes
 on alone from a group that goes on without it, it turns as tight as the
 merge gap allows; a pair that parts leaves no group, and turns as usual.
 A short jog right past an auto port slides the port along its side to
@@ -74,3 +75,9 @@ only ends whose routes come in from the same way, and each route's
 `merged` names the edge that draws the shared adornments.
 `AdornmentPlacement` in `placement/adornment` is the shape that both
 layouts report placed adornments in.
+The layout's `notes` say what the routes gave up, and what would have fit
+them, for a caller or a layout that places the rects to act on: an edge
+with no route, a channel too narrow for the gaps of the routes in it (with
+the rects on either side and how much more room they need between them),
+a merge with no room in front of its side for its lanes, and a flow
+adornment longer than every run of its route.

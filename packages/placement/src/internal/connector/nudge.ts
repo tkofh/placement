@@ -1,6 +1,8 @@
-import { coincident } from 'curvy/number'
+import { clamp, coincident } from 'curvy/number'
+import { atMost, before, overlaps, touches, within } from '../../utils/tolerance.ts'
 import { type DirectedEdge, preferredOrder } from '../graph/acyclic.ts'
 import type { Obstacle } from '../graph/graph.ts'
+import { type Axis, type XY, hi, lo, other, positiveLength, turnOf } from '../orient.ts'
 import { type Separation, type Variable, placeSeparated } from '../separation.ts'
 
 // Nudging, the last step of orthogonal connector routing (Wybrow, Marriott,
@@ -35,7 +37,7 @@ import { type Separation, type Variable, placeSeparated } from '../separation.ts
 // channel is too narrow for the full gap, the gaps of the segments that
 // crowd it shrink until they fit, down to none.
 
-export type XY = readonly [number, number]
+export type { XY }
 
 type Point = [number, number]
 
@@ -64,6 +66,28 @@ export interface RouteConstraints {
   // what keeps the shape continuous (see `slants.ts`), which a parting jog
   // that slants keeps room for.
   readonly slant?: number | undefined
+}
+
+/**
+ * A channel too narrow for the gaps of the routes in it: what sits on
+ * either side, which routes crowd it, and how much more room would fit
+ * them at their gaps.
+ */
+export interface Crowded {
+  /** The axis along which the room is short. */
+  readonly axis: Axis
+  /** The routes whose segments crowd the channel. */
+  readonly routes: ReadonlyArray<number>
+  /** The obstacles on either side of it, among those given to `nudge`. */
+  readonly obstacles: ReadonlyArray<number>
+  /** How much more room the routes need between them. */
+  readonly need: number
+}
+
+/** What `nudgeRoutes` returns: the routes, and the channels that crowd. */
+export interface Nudged {
+  readonly routes: Array<Array<XY>>
+  readonly crowded: ReadonlyArray<Crowded>
 }
 
 interface Segment {
@@ -125,20 +149,50 @@ export function nudge(
   constraints: ReadonlyArray<RouteConstraints | undefined> = [],
   mergeGap = gap,
 ): Array<Array<XY>> {
+  return nudgeRoutes(routes, obstacles, gap, constraints, mergeGap).routes
+}
+
+/**
+ * Moves the overlapping segments of orthogonal routes apart, as `nudge`
+ * does, and reports the channels too narrow for their gaps.
+ *
+ * @param routes - The routes, as `nudge` takes them.
+ * @param obstacles - The rects that segments may not move into.
+ * @param gap - The space between the strokes of overlapping segments.
+ * @param constraints - What each route keeps, by route index.
+ * @param mergeGap - The distance between coupled segments.
+ * @returns The routes with their segments moved, and the crowded channels,
+ * each once, with the most room it was found to need.
+ */
+export function nudgeRoutes(
+  routes: ReadonlyArray<ReadonlyArray<XY>>,
+  obstacles: ReadonlyArray<Obstacle>,
+  gap: number,
+  constraints: ReadonlyArray<RouteConstraints | undefined> = [],
+  mergeGap = gap,
+): Nudged {
   const paths = routes.map(simplify)
-  const spacing = Number.isFinite(gap) && gap > 0 ? gap : 0
-  const tight = Number.isFinite(mergeGap) && mergeGap > 0 ? Math.min(mergeGap, spacing) : 0
-  const thickness = paths.map((_, route) => {
-    const value = constraints[route]?.thickness ?? 0
-    return Number.isFinite(value) && value > 0 ? value : 0
-  })
+  // The crowded channels, each once: the passes and rounds find the same
+  // ones again, and the first finding of each is the fullest.
+  const crowded = new Map<string, Crowded>()
+  const report = (found: Crowded) => {
+    const key = `${found.axis}|${found.routes.join(',')}|${found.obstacles.join(',')}`
+    const known = crowded.get(key)
+    if (known === undefined || known.need < found.need) {
+      crowded.set(key, found)
+    }
+  }
+  const spacing = positiveLength(gap)
+  const tight = Math.min(positiveLength(mergeGap), spacing)
+  const thickness = paths.map((_, route) => positiveLength(constraints[route]?.thickness))
   const mergesOf = (route: number) => constraints[route]?.merges ?? []
   const steps: Array<Array<XY>> = paths.map(() => [])
   // The ends of other routes step out from among the lanes of a merge,
   // which hold still like they do, and the steps stay put: those among the
   // lanes as found, then, once more, those the passes leave among them.
   for (let attempt = 0; attempt < 2; attempt++) {
-    const stepped = stepOut(paths, bundlesOf(paths, mergesOf).lanes, obstacles, {
+    const found = bundlesOf(paths, mergesOf)
+    const stepped = stepOut(paths, found.lanes, found.ids, obstacles, {
       thickness,
       spacing,
       tight,
@@ -160,8 +214,8 @@ export function nudge(
     // found before them hold throughout. A jog where a route parts from its
     // bundle wants the far end of its run from the merge, so the bundle
     // stays together as long as it can.
-    const { couples, groups, losses, leaves } = bundlesOf(paths, mergesOf)
-    const splits = new Map<string, Split>()
+    const { ids, couples, groups, losses, leaves } = bundlesOf(paths, mergesOf)
+    const splits = paths.map(() => new Map<number, Split>())
     for (const [list, leaving] of [
       [losses, false],
       [leaves, true],
@@ -171,7 +225,7 @@ export function nudge(
         for (const { start, k } of entries) {
           const index = start ? k : count - 1 - k
           if (index > 0 && index < count - 1) {
-            splits.set(`${route}:${index}`, { far: start ? 1 : 0, leaving })
+            ;(splits[route] as Map<number, Split>).set(index, { far: start ? 1 : 0, leaving })
           }
         }
       }
@@ -179,35 +233,60 @@ export function nudge(
     const packed = (a: Segment, b: Segment) =>
       tight + ((thickness[a.route] as number) + (thickness[b.route] as number)) / 2
     const gapOf = (a: Segment, b: Segment) =>
-      couples.has(`${a.route}:${a.index}:${b.route}:${b.index}`)
+      couples.has(ids.pair(ids.segment(a.route, a.index), ids.segment(b.route, b.index)))
         ? packed(a, b)
         : spacing + ((thickness[a.route] as number) + (thickness[b.route] as number)) / 2
     // Moving one axis changes the extents of the other's segments, which
     // can make them overlap, so the passes repeat until neither moves
     // anything.
     for (let round = 0; round < ROUNDS; round++) {
-      const bundles = { couples, groups, packed }
-      const movedX = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 0, held)
-      const movedY = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 1, held)
+      const bundles = { ids, couples, groups, packed }
+      const movedX = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 0, held, report)
+      const movedY = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 1, held, report)
       if (!movedX && !movedY) {
         break
       }
     }
   }
-  return paths.map(simplify)
+  return { routes: paths.map(simplify), crowded: [...crowded.values()] }
+}
+
+// The integer ids of segments and of pairs of them, for the paths of one
+// nudge: a segment is `route * stride + index`, for a stride past the
+// longest path, and a pair is `a * size + b`, for the size past every
+// segment id. They hold while no path gains or loses points.
+interface Ids {
+  readonly stride: number
+  readonly size: number
+  readonly segment: (route: number, index: number) => number
+  readonly pair: (a: number, b: number) => number
+}
+
+function idsOf(paths: ReadonlyArray<ReadonlyArray<Point>>): Ids {
+  const stride = Math.max(1, ...paths.map((path) => path.length))
+  const size = paths.length * stride
+  return {
+    stride,
+    size,
+    segment: (route, index) => route * stride + index,
+    pair: (a, b) => a * size + b,
+  }
 }
 
 // How the routes that leave one merge run together.
 interface Bundles {
-  // The segments of routes that still run together, as keys of both orders
-  // of each pair.
-  readonly couples: Set<string>
+  // The ids of the segments and pairs below.
+  readonly ids: Ids
+  // The segments of routes that still run together, as the ids of both
+  // orders of each pair.
+  readonly couples: Set<number>
   // Each merge's lanes, the segments its routes come off it on, which stay
-  // where their pins are, and its couples, as keys of both orders of each
-  // pair alongside each other. Each reads as one line to the other routes.
-  readonly groups: Array<Set<string>>
-  // Each merge's lanes, by route and index.
-  readonly lanes: Array<Set<string>>
+  // where their pins are, and its couples, as the ids of both orders of
+  // each pair alongside each other. Each reads as one line to the other
+  // routes.
+  readonly groups: Array<Set<number>>
+  // Each merge's lanes, as segment ids.
+  readonly lanes: Array<Set<number>>
   // Where each route loses a partner it ran with: the merge end it is
   // walked from, and how many segments from the merge.
   readonly losses: Array<Array<{ readonly start: boolean; readonly k: number }>>
@@ -226,9 +305,10 @@ function bundlesOf(
   paths: ReadonlyArray<ReadonlyArray<Point>>,
   merges: (route: number) => ReadonlyArray<number>,
 ): Bundles {
-  const couples = new Set<string>()
-  const groups: Array<Set<string>> = []
-  const lanes: Array<Set<string>> = []
+  const ids = idsOf(paths)
+  const couples = new Set<number>()
+  const groups: Array<Set<number>> = []
+  const lanes: Array<Set<number>> = []
   const losses: Bundles['losses'] = paths.map(() => [])
   const leaves: Bundles['leaves'] = paths.map(() => [])
   const byMerge = new Map<number, Array<[route: number, start: boolean]>>()
@@ -241,15 +321,25 @@ function bundlesOf(
       }
     }
   }
+  // A couple, as the ids of both orders of the pair.
+  const couple = (set: Set<number>, p: number, ia: number, q: number, ib: number) => {
+    const a = ids.segment(p, ia)
+    const b = ids.segment(q, ib)
+    set.add(ids.pair(a, b)).add(ids.pair(b, a))
+  }
   for (const list of byMerge.values()) {
-    const group = new Set<string>()
+    const group = new Set<number>()
     groups.push(group)
     lanes.push(
-      new Set(list.map(([route, start]) => `${route}:${start ? 0 : paths[route]!.length - 2}`)),
+      new Set(
+        list.map(([route, start]) =>
+          ids.segment(route, start ? 0 : (paths[route] as ReadonlyArray<Point>).length - 2),
+        ),
+      ),
     )
     // How many segments from the merge each pair shares, by their places
     // in the list.
-    const shared = new Map<string, number>()
+    const shared = new Map<number, number>()
     for (const [i, [p, fromStart]] of list.entries()) {
       for (const [j, [q, toStart]] of list.entries()) {
         if (j <= i) {
@@ -265,39 +355,42 @@ function bundlesOf(
           const axis = axisOf(a, ia)
           const da = direction(a, ia, fromStart ? 1 : -1)
           const db = direction(b, ib, toStart ? 1 : -1)
-          const same =
-            axis >= 0 &&
-            axis === axisOf(b, ib) &&
-            Math.sign(da[0]) === Math.sign(db[0]) &&
-            Math.sign(da[1]) === Math.sign(db[1])
-          if (!same) {
+          if (
+            axis === -1 ||
+            axis !== axisOf(b, ib) ||
+            Math.sign(da[0]) !== Math.sign(db[0]) ||
+            Math.sign(da[1]) !== Math.sign(db[1])
+          ) {
             break
           }
-          const along = 1 - axis
-          const [a0, a1] = [coord(a[ia] as Point, along), coord(a[ia + 1] as Point, along)]
-          const [b0, b1] = [coord(b[ib] as Point, along), coord(b[ib + 1] as Point, along)]
-          const from = Math.max(Math.min(a0, a1), Math.min(b0, b1))
-          const to = Math.min(Math.max(a0, a1), Math.max(b0, b1))
-          const overlaps = from < to || coincident(from, to)
+          const along = other(axis)
+          const [a0, a1] = [(a[ia] as Point)[along], (a[ia + 1] as Point)[along]]
+          const [b0, b1] = [(b[ib] as Point)[along], (b[ib + 1] as Point)[along]]
+          const meets = touches(
+            Math.min(a0, a1),
+            Math.max(a0, a1),
+            Math.min(b0, b1),
+            Math.max(b0, b1),
+          )
           if (k === 0) {
-            if (overlaps) {
-              group.add(`${p}:${ia}:${q}:${ib}`).add(`${q}:${ib}:${p}:${ia}`)
+            if (meets) {
+              couple(group, p, ia, q, ib)
             }
             continue
           }
-          if (!overlaps) {
+          if (!meets) {
             break
           }
-          couples.add(`${p}:${ia}:${q}:${ib}`).add(`${q}:${ib}:${p}:${ia}`)
-          group.add(`${p}:${ia}:${q}:${ib}`).add(`${q}:${ib}:${p}:${ia}`)
+          couple(couples, p, ia, q, ib)
+          couple(group, p, ia, q, ib)
           last = k
         }
         ;(losses[p] as Array<{ start: boolean; k: number }>).push({ start: fromStart, k: last + 1 })
         ;(losses[q] as Array<{ start: boolean; k: number }>).push({ start: toStart, k: last + 1 })
-        shared.set(`${i}:${j}`, last).set(`${j}:${i}`, last)
+        shared.set(i * list.length + j, last).set(j * list.length + i, last)
       }
     }
-    const along = (a: number, b: number) => shared.get(`${a}:${b}`) ?? -1
+    const along = (a: number, b: number) => shared.get(a * list.length + b) ?? -1
     for (const [i, [p, start]] of list.entries()) {
       const others = [...list.keys()].filter((j) => j !== i)
       for (const k of new Set(others.map((j) => along(i, j) + 1))) {
@@ -311,7 +404,7 @@ function bundlesOf(
       }
     }
   }
-  return { couples, groups, lanes, losses, leaves }
+  return { ids, couples, groups, lanes, losses, leaves }
 }
 
 /**
@@ -330,11 +423,13 @@ export function coupledSegments(
   merges: ReadonlyArray<readonly [number, number]>,
 ): Array<Set<number>> {
   const paths = routes.map(simplify)
-  const { couples } = bundlesOf(paths, (route) => merges[route] ?? [])
+  const { ids, couples } = bundlesOf(paths, (route) => merges[route] ?? [])
   const result = paths.map(() => new Set<number>())
+  // Both orders of each pair are in, so the first segment of each covers
+  // every coupled segment.
   for (const key of couples) {
-    const [route, index] = key.split(':').map(Number) as [number, number]
-    result[route]?.add(index)
+    const segment = Math.floor(key / ids.size)
+    result[Math.floor(segment / ids.stride)]?.add(segment % ids.stride)
   }
   return result
 }
@@ -377,7 +472,8 @@ export function partingCorners(
 // lengthens the route and drags both legs across what lies between.
 function cohere(
   segments: Array<Segment>,
-  couples: ReadonlySet<string>,
+  ids: Ids,
+  couples: ReadonlySet<number>,
   gapOf: (a: Segment, b: Segment) => number,
   order: (a: number, b: number) => number = (a, b) =>
     (segments[a] as Segment).at - (segments[b] as Segment).at,
@@ -386,7 +482,7 @@ function cohere(
     return segments
   }
   const result = [...segments]
-  for (const members of bundlesIn(segments, couples)) {
+  for (const members of bundlesIn(segments, ids, couples)) {
     members.sort((a, b) => order(a, b) || a - b)
     // Each member's place in the packed bundle, from the first.
     const offsets = [0]
@@ -428,7 +524,8 @@ function cohere(
 // that couples join, by their indices.
 function bundlesIn(
   segments: ReadonlyArray<Segment>,
-  couples: ReadonlySet<string>,
+  ids: Ids,
+  couples: ReadonlySet<number>,
 ): Array<Array<number>> {
   if (couples.size === 0) {
     return []
@@ -442,11 +539,12 @@ function bundlesIn(
     group[i] = root
     return root
   }
-  const index = new Map(segments.map((segment, i) => [`${segment.route}:${segment.index}`, i]))
+  const index = new Map(
+    segments.map((segment, i) => [ids.segment(segment.route, segment.index), i]),
+  )
   for (const key of couples) {
-    const [p, i, q, k] = key.split(':')
-    const a = index.get(`${p}:${i}`)
-    const b = index.get(`${q}:${k}`)
+    const a = index.get(Math.floor(key / ids.size))
+    const b = index.get(key % ids.size)
     if (a !== undefined && b !== undefined) {
       const [ra, rb] = [find(a), find(b)]
       if (ra !== rb) {
@@ -488,7 +586,7 @@ function keepOut(
       const last = run.at(-1) as number
       const apart = (positions[m] as number) - (positions[last] as number)
       const most = packed(segments[last] as Segment, segments[m] as Segment)
-      if (apart < most || coincident(apart, most)) {
+      if (atMost(apart, most)) {
         run.push(m)
       } else {
         tight.push(run)
@@ -504,12 +602,12 @@ function keepOut(
       if (routes.has(segment.route)) {
         continue
       }
-      const alongside = members.filter((m) => overlaps(segment, segments[m] as Segment))
+      const alongside = members.filter((m) => extentsOverlap(segment, segments[m] as Segment))
       const place = order.indexOf(s)
-      const before = alongside.filter((m) => order.indexOf(m) < place)
-      const after = alongside.filter((m) => order.indexOf(m) > place)
-      const inside = before.some((a) =>
-        after.some((b) => overlaps(segments[a] as Segment, segments[b] as Segment)),
+      const earlier = alongside.filter((m) => order.indexOf(m) < place)
+      const later = alongside.filter((m) => order.indexOf(m) > place)
+      const inside = earlier.some((a) =>
+        later.some((b) => extentsOverlap(segments[a] as Segment, segments[b] as Segment)),
       )
       if (!inside) {
         continue
@@ -517,7 +615,7 @@ function keepOut(
       const mean =
         alongside.reduce((sum, m) => sum + (positions[m] as number), 0) / alongside.length
       const low =
-        before.length !== after.length ? before.length < after.length : segment.desired <= mean
+        earlier.length !== later.length ? earlier.length < later.length : segment.desired <= mean
       const places = alongside.map((m) => order.indexOf(m))
       order.splice(place, 1)
       const edge = low ? Math.min(...places) : Math.max(...places)
@@ -544,7 +642,8 @@ function keepOut(
 // still.
 function stepOut(
   paths: Array<Array<Point>>,
-  merges: ReadonlyArray<ReadonlySet<string>>,
+  merges: ReadonlyArray<ReadonlySet<number>>,
+  ids: Ids,
   obstacles: ReadonlyArray<Obstacle>,
   {
     thickness,
@@ -560,7 +659,7 @@ function stepOut(
   const width = (route: number) => thickness[route] ?? 0
   interface Lane {
     readonly route: number
-    readonly axis: number
+    readonly axis: Axis
     readonly at: number
     readonly low: number
     readonly high: number
@@ -569,13 +668,17 @@ function stepOut(
     const members = new Set<number>()
     const lanes: Array<Lane> = []
     for (const key of merge) {
-      const [route, index] = key.split(':').map(Number) as [number, number]
+      const route = Math.floor(key / ids.stride)
+      const index = key % ids.stride
       const path = paths[route] as Array<Point>
       members.add(route)
       const axis = axisOf(path, index)
-      const along = 1 - axis
-      const [a, b] = [coord(path[index] as Point, along), coord(path[index + 1] as Point, along)]
-      const at = coord(path[index] as Point, axis)
+      if (axis === -1) {
+        continue
+      }
+      const along = other(axis)
+      const [a, b] = [(path[index] as Point)[along], (path[index + 1] as Point)[along]]
+      const at = (path[index] as Point)[axis]
       lanes.push({ route, axis, at, low: Math.min(a, b), high: Math.max(a, b) })
     }
     // The lanes that sit packed, next to each other, by the axis they run
@@ -587,10 +690,7 @@ function stepOut(
       for (const lane of parallel) {
         const last = run.at(-1)
         const most = last === undefined ? 0 : tight + (width(last.route) + width(lane.route)) / 2
-        if (
-          last !== undefined &&
-          !(lane.at - last.at < most || coincident(lane.at - last.at, most))
-        ) {
+        if (last !== undefined && !atMost(lane.at - last.at, most)) {
           runs.push(run)
           run = []
         }
@@ -605,26 +705,32 @@ function stepOut(
       for (const end of [0, 1]) {
         const index = end === 0 ? 0 : path.length - 2
         const axis = axisOf(path, index)
-        const along = 1 - axis
+        if (axis === -1) {
+          continue
+        }
+        const along = other(axis)
         const port = (end === 0 ? path[0] : path.at(-1)) as Point
         const corner = (end === 0 ? path[1] : path.at(-2)) as Point
-        const at = coord(port, axis)
-        const [from, to] = [coord(port, along), coord(corner, along)]
+        const at = port[axis]
+        const [from, to] = [port[along], corner[along]]
         const extent = { low: Math.min(from, to), high: Math.max(from, to) }
         const run = runs.find(
           (list) =>
             list.length > 1 &&
             (list[0] as Lane).axis === axis &&
-            between(at, (list[0] as Lane).at, (list.at(-1) as Lane).at) &&
-            list.some((lane) => overlaps(extent, lane)),
+            within(at, (list[0] as Lane).at, (list.at(-1) as Lane).at) &&
+            list.some((lane) => extentsOverlap(extent, lane)),
         )
         if (run === undefined) {
           continue
         }
-        const before = run.filter((lane) => lane.at < at && !coincident(lane.at, at))
-        const after = run.filter((lane) => lane.at > at && !coincident(lane.at, at))
+        const lanesBelow = run.filter((lane) => before(lane.at, at))
+        const lanesAbove = run.filter((lane) => before(at, lane.at))
         const mean = run.reduce((sum, lane) => sum + lane.at, 0) / run.length
-        const lower = before.length !== after.length ? before.length < after.length : at <= mean
+        const lower =
+          lanesBelow.length !== lanesAbove.length
+            ? lanesBelow.length < lanesAbove.length
+            : at <= mean
         const outer = (lower ? run[0] : run.at(-1)) as Lane
         const line =
           outer.at + (lower ? -1 : 1) * (spacing + (width(route) + width(outer.route)) / 2)
@@ -633,25 +739,22 @@ function stepOut(
         const heading = Math.sign(to - from)
         let reach = 0
         for (const o of obstacles) {
-          const [near, far, start, stop] =
-            axis === 0 ? [o.left, o.right, o.top, o.bottom] : [o.top, o.bottom, o.left, o.right]
-          if (between(at, near, far) && between(from, start, stop)) {
-            reach = Math.max(reach, heading * ((heading > 0 ? stop : start) - from))
+          if (within(at, lo(o, axis), hi(o, axis)) && within(from, lo(o, along), hi(o, along))) {
+            reach = Math.max(reach, heading * ((heading > 0 ? hi(o, along) : lo(o, along)) - from))
           }
         }
         const meets = Math.min(
           ...run
-            .filter((lane) => overlaps(extent, lane))
+            .filter((lane) => extentsOverlap(extent, lane))
             .map((lane) => heading * ((heading > 0 ? lane.low : lane.high) - from)),
         )
         const next = (end === 0 ? path[2] : path.at(-3)) as Point
-        const turn = coord(next, axis) - coord(corner, axis)
+        const turn = next[axis] - corner[axis]
         if (
           !(reach > 0) ||
-          reach >= meets ||
-          coincident(reach, meets) ||
+          atMost(meets, reach) ||
           turn === 0 ||
-          Math.sign(coord(next, axis) - line) !== Math.sign(turn)
+          Math.sign(next[axis] - line) !== Math.sign(turn)
         ) {
           continue
         }
@@ -672,14 +775,10 @@ function stepOut(
 }
 
 // Whether two extents along a line overlap by more than a point.
-function overlaps(
+const extentsOverlap = (
   a: { readonly low: number; readonly high: number },
   b: { readonly low: number; readonly high: number },
-): boolean {
-  const from = Math.max(a.low, b.low)
-  const to = Math.min(a.high, b.high)
-  return from < to && !coincident(from, to)
-}
+): boolean => overlaps(a.low, a.high, b.low, b.high)
 
 // Drops repeated points and the points in the middle of a straight run.
 function simplify(route: ReadonlyArray<XY>): Array<Point> {
@@ -705,15 +804,9 @@ function simplify(route: ReadonlyArray<XY>): Array<Point> {
   return result
 }
 
-const coord = (point: Point, axis: number) => (axis === 0 ? point[0] : point[1])
-
-// Whether `x` lies in [low, high], within rounding.
-const between = (x: number, low: number, high: number) =>
-  (x >= low || coincident(x, low)) && (x <= high || coincident(x, high))
-
 // The axis a segment runs across: 0 for a vertical segment, whose x the
 // x pass moves, 1 for a horizontal one, and -1 for a diagonal one.
-function axisOf(route: ReadonlyArray<Point>, index: number): number {
+function axisOf(route: ReadonlyArray<Point>, index: number): Axis | -1 {
   const [x0, y0] = route[index] as Point
   const [x1, y1] = route[index + 1] as Point
   return x0 === x1 ? 0 : y0 === y1 ? 1 : -1
@@ -726,25 +819,28 @@ function nudgeAxis(
   obstacles: ReadonlyArray<Obstacle>,
   gapOf: (a: Segment, b: Segment) => number,
   {
+    ids,
     couples,
     groups,
     packed,
   }: {
-    readonly couples: ReadonlySet<string>
+    readonly ids: Ids
+    readonly couples: ReadonlySet<number>
     // Each merge's lanes and couples, and how far apart their segments
     // pack.
-    readonly groups: ReadonlyArray<ReadonlySet<string>>
+    readonly groups: ReadonlyArray<ReadonlySet<number>>
     readonly packed: (a: Segment, b: Segment) => number
   },
-  splits: ReadonlyMap<string, Split>,
-  axis: number,
+  splits: ReadonlyArray<ReadonlyMap<number, Split>>,
+  axis: Axis,
   constraints: ReadonlyArray<RouteConstraints | undefined>,
+  report: (found: Crowded) => void,
 ): boolean {
   let collected = collect(paths, axis, constraints, splits)
-  let segments = cohere(collected, couples, gapOf)
+  let segments = cohere(collected, ids, couples, gapOf)
   if (leap(paths, obstacles, segments, axis, constraints)) {
     collected = collect(paths, axis, constraints, splits)
-    segments = cohere(collected, couples, gapOf)
+    segments = cohere(collected, ids, couples, gapOf)
   }
   if (segments.length === 0) {
     return false
@@ -764,9 +860,7 @@ function nudgeAxis(
       if (!coincident(sa.at, sb.at)) {
         break
       }
-      const from = Math.max(sa.low, sb.low)
-      const to = Math.min(sa.high, sb.high)
-      if (sa.route !== sb.route && (from < to || coincident(from, to))) {
+      if (sa.route !== sb.route && touches(sa.low, sa.high, sb.low, sb.high)) {
         pairs.push(a < b ? [a, b] : [b, a])
       }
     }
@@ -825,7 +919,7 @@ function nudgeAxis(
   }
   // Bundles pack in the order the routes keep: on one line, the order they
   // part in.
-  segments = cohere(collected, couples, gapOf, (a, b) => {
+  segments = cohere(collected, ids, couples, gapOf, (a, b) => {
     const [sa, sb] = [collected[a] as Segment, collected[b] as Segment]
     return coincident(sa.at, sb.at) ? (rank[a] as number) - (rank[b] as number) : sa.at - sb.at
   })
@@ -848,6 +942,9 @@ function nudgeAxis(
     // The variables: one per segment, then the walls that obstacles put
     // beside the segments that move.
     const variables: Array<Variable> = segments.map((s) => ({ desired: s.desired, fixed: s.fixed }))
+    // The obstacle each wall variable came from, or -1 for a port or a
+    // rect only one route avoids.
+    const wallOf: Array<number> = segments.map(() => -1)
     // Each separation keeps `right` at least `scale * gap` past `left`. The
     // current positions keep every order, so they meet every separation at
     // scale 0.
@@ -863,20 +960,21 @@ function nudgeAxis(
         continue
       }
       const own = constraints[segment.route]?.avoid ?? []
-      const [low, high] = walls(
+      const [low, high, lowFrom, highFrom] = walls(
         own.length === 0 ? obstacles : [...obstacles, ...own],
         segment,
         axis,
       )
       // The stroke keeps off the walls too, where there is room.
-      const thickness = constraints[segment.route]?.thickness ?? 0
-      const half = Number.isFinite(thickness) && thickness > 0 ? thickness / 2 : 0
+      const half = positiveLength(constraints[segment.route]?.thickness) / 2
       if (low !== undefined) {
         variables.push({ desired: low, fixed: true })
+        wallOf.push(lowFrom < obstacles.length ? lowFrom : -1)
         separations.push({ left: variables.length - 1, right: s, gap: half })
       }
       if (high !== undefined) {
         variables.push({ desired: high, fixed: true })
+        wallOf.push(highFrom < obstacles.length ? highFrom : -1)
         separations.push({ left: s, right: variables.length - 1, gap: half })
       }
     }
@@ -932,9 +1030,9 @@ function nudgeAxis(
 
     // The segments of a route on either side of a jog keep their order, so
     // the jog never turns back.
-    const at = new Map(segments.map((segment, s) => [`${segment.route}:${segment.index}`, s]))
+    const at = new Map(segments.map((segment, s) => [ids.segment(segment.route, segment.index), s]))
     for (const [s, segment] of segments.entries()) {
-      const next = at.get(`${segment.route}:${segment.index + 2}`)
+      const next = at.get(ids.segment(segment.route, segment.index + 2))
       if (next !== undefined) {
         const other = segments[next] as Segment
         if (segment.at < other.at) {
@@ -954,9 +1052,10 @@ function nudgeAxis(
         ...(segment.index === path.length - 3 ? [path[path.length - 1] as Point] : []),
       ]
       for (const end of segment.fixed ? [] : ends) {
-        const port = coord(end, axis)
+        const port = end[axis]
         if (port !== segment.at) {
           variables.push({ desired: port, fixed: true })
+          wallOf.push(-1)
           const wall = variables.length - 1
           separations.push(
             port < segment.at ? { left: wall, right: s, gap: 0 } : { left: s, right: wall, gap: 0 },
@@ -990,6 +1089,22 @@ function nudgeAxis(
             pushing += (constraints[constraint] as Separation).gap
           }
         }
+        if (attempt === 0 && chain !== undefined && excess !== undefined) {
+          report({
+            axis,
+            routes: [
+              ...new Set(
+                list.flatMap((v) => (v < segments.length ? [(segments[v] as Segment).route] : [])),
+              ),
+            ].toSorted((a, b) => a - b),
+            obstacles: [
+              ...new Set(
+                list.flatMap((v) => ((wallOf[v] as number) >= 0 ? [wallOf[v] as number] : [])),
+              ),
+            ].toSorted((a, b) => a - b),
+            need: excess,
+          })
+        }
         if (chain !== undefined && excess !== undefined && pushing > 0 && attempt < SHRINK_STEPS) {
           const factor = Math.max(0, 1 - excess / pushing)
           for (const { constraint, along } of chain) {
@@ -1020,7 +1135,7 @@ function nudgeAxis(
   let positions = solve(place)
   // A segment of another route that comes out between two segments of a
   // bundle that sit packed goes past the bundle, and the solve runs again.
-  const bundles = groups.flatMap((group) => bundlesIn(segments, group))
+  const bundles = groups.flatMap((group) => bundlesIn(segments, ids, group))
   for (let round = 0; round < KEEP_OUT_ROUNDS; round++) {
     if (!keepOut(segments, bundles, packed, order, positions)) {
       break
@@ -1038,8 +1153,8 @@ function nudgeAxis(
     }
     anyMoved = true
     const path = paths[segment.route] as Array<Point>
-    ;(path[segment.index] as Point)[axis === 0 ? 0 : 1] = moved
-    ;(path[segment.index + 1] as Point)[axis === 0 ? 0 : 1] = moved
+    ;(path[segment.index] as Point)[axis] = moved
+    ;(path[segment.index + 1] as Point)[axis] = moved
   }
   return anyMoved
 }
@@ -1047,11 +1162,11 @@ function nudgeAxis(
 // The segments that run across `axis`, with where each wants to be.
 function collect(
   paths: ReadonlyArray<ReadonlyArray<Point>>,
-  axis: number,
+  axis: Axis,
   constraints: ReadonlyArray<RouteConstraints | undefined>,
-  splits: ReadonlyMap<string, Split> = new Map(),
+  splits: ReadonlyArray<ReadonlyMap<number, Split>> = [],
 ): Array<Segment> {
-  const along = 1 - axis
+  const along = other(axis)
   const segments: Array<Segment> = []
   for (const [route, path] of paths.entries()) {
     const last = path.length - 2
@@ -1059,14 +1174,13 @@ function collect(
       if (axisOf(path, index) !== axis) {
         continue
       }
-      const a = coord(path[index] as Point, along)
-      const b = coord(path[index + 1] as Point, along)
-      const at = coord(path[index] as Point, axis)
-      const anchored = (constraints[route]?.anchors ?? []).some((point) => {
-        const across = axis === 0 ? point[0] : point[1]
-        const on = axis === 0 ? point[1] : point[0]
-        return coincident(across, at) && between(on, Math.min(a, b), Math.max(a, b))
-      })
+      const a = (path[index] as Point)[along]
+      const b = (path[index + 1] as Point)[along]
+      const at = (path[index] as Point)[axis]
+      const anchored = (constraints[route]?.anchors ?? []).some(
+        (point) =>
+          coincident(point[axis], at) && within(point[along], Math.min(a, b), Math.max(a, b)),
+      )
       const fixed =
         index === 0 ||
         index === last ||
@@ -1081,18 +1195,18 @@ function collect(
       let run: readonly [number, number] | undefined
       let late: number | undefined
       if (!fixed) {
-        const before = coord(path[index - 1] as Point, axis)
-        const after = coord(path[index + 2] as Point, axis)
-        if ((before - at) * (after - at) < 0) {
-          const split = splits.get(`${route}:${index}`)
+        const previous = (path[index - 1] as Point)[axis]
+        const after = (path[index + 2] as Point)[axis]
+        if ((previous - at) * (after - at) < 0) {
+          const split = splits[route]?.get(index)
           if (split === undefined) {
-            desired = before + jogAtOf(constraints[route]) * (after - before)
+            desired = previous + jogAtOf(constraints[route]) * (after - previous)
           } else {
             // As far from the merge as leaves room for the corner past it,
             // or for the S of a short jog that slants, and for the
             // adornments at the port when that is next, but never short of
             // the middle.
-            const [near, far] = split.far === 1 ? [before, after] : [after, before]
+            const [near, far] = split.far === 1 ? [previous, after] : [after, previous]
             const next = split.far === 1 ? index + 2 === path.length - 1 : index === 1
             const pack = next ? (constraints[route]?.packs?.[split.far] ?? 0) : 0
             const corner = Math.max(constraints[route]?.corner ?? 0, 0)
@@ -1107,7 +1221,7 @@ function collect(
             desired = far - Math.sign(far - near) * keep
             late = Math.sign(far - near)
           }
-          run = [Math.min(before, after), Math.max(before, after)]
+          run = [Math.min(previous, after), Math.max(previous, after)]
         }
       }
       segments.push({
@@ -1128,7 +1242,7 @@ function collect(
 
 function jogAtOf(constraints: RouteConstraints | undefined): number {
   const value = constraints?.jogAt
-  return value !== undefined && Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 0.5
+  return value !== undefined && Number.isFinite(value) ? clamp(value, 0, 1) : 0.5
 }
 
 // Moves each jog that wants to be elsewhere past the segments of other
@@ -1143,7 +1257,7 @@ function leap(
   paths: Array<Array<Point>>,
   obstacles: ReadonlyArray<Obstacle>,
   segments: ReadonlyArray<Segment>,
-  axis: number,
+  axis: Axis,
   constraints: ReadonlyArray<RouteConstraints | undefined>,
 ): boolean {
   const moves: Array<[Segment, number]> = []
@@ -1157,12 +1271,11 @@ function leap(
     // A jog that shares its line with another route keeps to its side of
     // it, the side it parts toward, so it leaps only that way.
     const holds = segments.some(
-      (other) =>
-        other.route !== jog.route &&
-        coincident(other.at, jog.at) &&
-        (other.low < jog.high || coincident(other.low, jog.high)) &&
-        (other.high > jog.low || coincident(other.high, jog.low)) &&
-        goesFirst(paths, jog, other, axis) !== step < 0,
+      (peer) =>
+        peer.route !== jog.route &&
+        coincident(peer.at, jog.at) &&
+        touches(peer.low, peer.high, jog.low, jog.high) &&
+        goesFirst(paths, jog, peer, axis) !== step < 0,
     )
     if (holds) {
       continue
@@ -1172,34 +1285,29 @@ function leap(
         ? Math.min(jog.desired, high ?? jog.desired)
         : Math.max(jog.desired, low ?? jog.desired)
     const ahead = segments
-      .filter((other) => {
-        const distance = step * (other.at - jog.at)
+      .filter((peer) => {
+        const distance = step * (peer.at - jog.at)
         return (
-          other !== jog &&
+          peer !== jog &&
           distance > 0 &&
-          !coincident(other.at, jog.at) &&
-          (step * (limit - other.at) > 0 || coincident(other.at, limit)) &&
-          (other.low < jog.high || coincident(other.low, jog.high)) &&
-          (other.high > jog.low || coincident(other.high, jog.low))
+          !coincident(peer.at, jog.at) &&
+          (step * (limit - peer.at) > 0 || coincident(peer.at, limit)) &&
+          touches(peer.low, peer.high, jog.low, jog.high)
         )
       })
       .toSorted((a, b) => step * (a.at - b.at))
     let passed: number | undefined
     let target = limit
-    for (const other of ahead) {
+    for (const peer of ahead) {
       const alongside =
-        other.route !== jog.route &&
-        other.low < jog.low &&
-        !coincident(other.low, jog.low) &&
-        other.high > jog.high &&
-        !coincident(other.high, jog.high)
+        peer.route !== jog.route && before(peer.low, jog.low) && before(jog.high, peer.high)
       if (!alongside) {
         // Halfway to the segment that stops it, which the solve then moves
         // the jog toward.
-        target = ((passed ?? jog.at) + other.at) / 2
+        target = ((passed ?? jog.at) + peer.at) / 2
         break
       }
-      passed = other.at
+      passed = peer.at
     }
     if (passed !== undefined) {
       moves.push([jog, target])
@@ -1207,8 +1315,8 @@ function leap(
   }
   for (const [jog, target] of moves) {
     const path = paths[jog.route] as Array<Point>
-    ;(path[jog.index] as Point)[axis === 0 ? 0 : 1] = target
-    ;(path[jog.index + 1] as Point)[axis === 0 ? 0 : 1] = target
+    ;(path[jog.index] as Point)[axis] = target
+    ;(path[jog.index + 1] as Point)[axis] = target
   }
   return moves.length > 0
 }
@@ -1218,25 +1326,29 @@ function leap(
 function walls(
   obstacles: ReadonlyArray<Obstacle>,
   segment: Segment,
-  axis: number,
-): [number | undefined, number | undefined] {
+  axis: Axis,
+): [number | undefined, number | undefined, number, number] {
+  const along = other(axis)
   let low: number | undefined
   let high: number | undefined
-  for (const o of obstacles) {
-    const [near, far, start, end] =
-      axis === 0 ? [o.left, o.right, o.top, o.bottom] : [o.top, o.bottom, o.left, o.right]
-    const overlaps =
-      start < segment.high &&
-      !coincident(start, segment.high) &&
-      end > segment.low &&
-      !coincident(end, segment.low)
-    if (!overlaps) {
+  let lowFrom = -1
+  let highFrom = -1
+  for (const [k, o] of obstacles.entries()) {
+    if (!overlaps(lo(o, along), hi(o, along), segment.low, segment.high)) {
       continue
     }
-    if (far < segment.at || coincident(far, segment.at)) {
-      low = low === undefined ? far : Math.max(low, far)
-    } else if (near > segment.at || coincident(near, segment.at)) {
-      high = high === undefined ? near : Math.min(high, near)
+    const near = lo(o, axis)
+    const far = hi(o, axis)
+    if (atMost(far, segment.at)) {
+      if (low === undefined || far > low) {
+        low = far
+        lowFrom = k
+      }
+    } else if (atMost(segment.at, near)) {
+      if (high === undefined || near < high) {
+        high = near
+        highFrom = k
+      }
     }
   }
   // An obstacle edge a hair past the segment still holds it in place.
@@ -1246,7 +1358,7 @@ function walls(
   if (high !== undefined && high < segment.at) {
     high = segment.at
   }
-  return [low, high]
+  return [low, high, lowFrom, highFrom]
 }
 
 // Whether segment `a` takes the lower coordinate of the two. The routes go
@@ -1257,7 +1369,7 @@ function goesFirst(
   paths: ReadonlyArray<ReadonlyArray<Point>>,
   a: Segment,
   b: Segment,
-  axis: number,
+  axis: Axis,
 ): boolean {
   const p = paths[a.route] as ReadonlyArray<Point>
   const q = paths[b.route] as ReadonlyArray<Point>
@@ -1302,7 +1414,7 @@ export function partingSide(p: ReadonlyArray<XY>, q: ReadonlyArray<XY>): number 
  */
 export function firstTurn(p: ReadonlyArray<XY>): number {
   const a = simplify(p)
-  return a.length < 3 ? 0 : turn(direction(a, 0, 1), direction(a, 1, 1))
+  return a.length < 3 ? 0 : turnOf(direction(a, 0, 1), direction(a, 1, 1))
 }
 
 // The direction of segment `index` when the route is walked forward (`step`
@@ -1311,13 +1423,6 @@ function direction(path: ReadonlyArray<Point>, index: number, step: number): [nu
   const [x0, y0] = path[index] as Point
   const [x1, y1] = path[index + 1] as Point
   return [step * (x1 - x0), step * (y1 - y0)]
-}
-
-// Whether a turn from one direction to the next is to the left (-1), to the
-// right (1), or straight on (0). With the Y axis down, a positive cross
-// product turns clockwise, to the right.
-function turn(from: [number, number], to: [number, number]): number {
-  return Math.sign(from[0] * to[1] - from[1] * to[0])
 }
 
 // Which side of route q route p runs on, 1 for the left of travel and -1 for
@@ -1350,9 +1455,9 @@ function side(
     if (!coincident(reachP, reachQ)) {
       // The one that ends first turns there, and the other runs straight on.
       if (reachQ > reachP) {
-        rankP = hasP ? turn(travel, direction(p, nextP, stepP)) : 0
+        rankP = hasP ? turnOf(travel, direction(p, nextP, stepP)) : 0
       } else {
-        rankQ = hasQ ? turn(travel, direction(q, nextQ, stepQ)) : 0
+        rankQ = hasQ ? turnOf(travel, direction(q, nextQ, stepQ)) : 0
       }
     } else {
       if (!hasP && !hasQ) {
@@ -1371,8 +1476,8 @@ function side(
         qk = nextQ
         continue
       }
-      rankP = turnP === undefined ? 0 : turn(travel, turnP)
-      rankQ = turnQ === undefined ? 0 : turn(travel, turnQ)
+      rankP = turnP === undefined ? 0 : turnOf(travel, turnP)
+      rankQ = turnQ === undefined ? 0 : turnOf(travel, turnQ)
     }
     // A left turn runs on the left of a straight run or a right turn.
     return rankP === rankQ ? 0 : rankP < rankQ ? 1 : -1

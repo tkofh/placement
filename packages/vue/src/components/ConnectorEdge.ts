@@ -37,8 +37,8 @@ export interface ConnectorEdgeProps extends PaintProps {
   via?: ReadonlyArray<Point.PointLike>
   /**
    * The way the route prefers to turn at its corners: `'none'` (default),
-   * `'clockwise'`, or `'counterclockwise'`. The layout's `turnCost` sets
-   * how strongly.
+   * `'clockwise'`, or `'counterclockwise'`. A corner against it costs the
+   * layout's `bendCost` over again.
    */
   turn?: ConnectorEdgeTurn
   /**
