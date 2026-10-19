@@ -1,0 +1,105 @@
+:root {
+  --deck-bg: #0b0e19;
+}
+
+.slidev-layout {
+  background: var(--deck-bg);
+}
+
+.slidev-layout h1 {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.4rem;
+}
+
+.slidev-layout.section h1 {
+  font-size: 3rem;
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin-bottom: 0.4rem;
+}
+
+.caption {
+  font-size: 0.75rem;
+  opacity: 0.65;
+  margin-top: 0.3rem;
+  text-align: center;
+}
+
+.terms table {
+  font-size: 0.78rem;
+}
+.terms td,
+.terms th {
+  padding: 0.22rem 0.6rem;
+}
+.terms td:first-child {
+  white-space: nowrap;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  opacity: 0.8;
+  margin-bottom: 0.3rem;
+}
+.legend-row i {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 3px;
+  margin-left: 0.5rem;
+}
+
+.ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+.rung {
+  display: grid;
+  grid-template-columns: 10rem 14rem 1fr;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  border-left: 5px solid;
+  background: #ffffff08;
+  font-size: 0.85rem;
+}
+.rung .tier {
+  font-weight: 700;
+  font-size: 1rem;
+}
+.rung .how {
+  opacity: 0.7;
+  font-size: 0.75rem;
+}
+.rung.never {
+  border-color: #ff5f6d;
+}
+.rung.cost {
+  border-color: #ffb38f;
+}
+.rung.free {
+  border-color: #a8ff8f;
+}
+.rung.tie {
+  border-color: #8fb8ff;
+}
+
+.terms.compact table {
+  font-size: 0.68rem;
+}
+.terms.compact td,
+.terms.compact th {
+  padding: 0.12rem 0.45rem;
+}

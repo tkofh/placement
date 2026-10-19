@@ -29,7 +29,7 @@ export default defineConfig({
     'typescript/no-namespace': ['error', { allowDeclarations: true }],
   },
   env: { builtin: true },
-  ignorePatterns: ['apps/playground'],
+  ignorePatterns: ['apps/playground', 'apps/connector-deck'],
   overrides: [
     {
       // Nuxt modules are default exports by contract.

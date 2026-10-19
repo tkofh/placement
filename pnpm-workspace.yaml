@@ -9,3 +9,9 @@ allowBuilds:
   esbuild: true
   oxfmt: true
   oxlint: true
+packageExtensions:
+  # Slidev's markdown parser peers on markdown-it 14, which Slidev doesn't
+  # list, so it resolved 15, whose exports drop the `lib/` paths it imports.
+  '@slidev/cli@53':
+    dependencies:
+      markdown-it: ^14.1.0

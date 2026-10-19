@@ -1,0 +1,16 @@
+{
+  "name": "@placement/connector-deck",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "slides": "slidev --open",
+    "slides:build": "slidev build",
+    "slides:export": "slidev export",
+    "scenes": "node scripts/scenes.ts"
+  },
+  "dependencies": {
+    "@slidev/cli": "53.0.0",
+    "@slidev/theme-default": "0.25.0",
+    "vue": "^3.5.0"
+  }
+}

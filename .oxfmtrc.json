@@ -13,6 +13,7 @@
   "bracketSpacing": true,
   "ignorePatterns": [
     "apps/playground",
+    "apps/connector-deck",
     ".claude/skills/simple-english/**",
     ".claude/skills/unslop/**"
   ],
