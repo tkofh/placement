@@ -5,8 +5,7 @@ import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
-import { solve } from '../src/internal/connector/pipeline.ts'
-import { normalize } from '../src/internal/connector/problem.ts'
+import { route } from '../src/internal/connector/canonical.ts'
 import type { XY } from '../src/internal/orient.ts'
 import * as Polygon from '../src/polygon.ts'
 import * as Rect from '../src/rect.ts'
@@ -606,19 +605,16 @@ function main(): void {
   const built = build(scene, args.keep)
   const shown = (i: number) => args.edges === undefined || args.edges.has(i)
   const phases: Array<string> = []
-  const layout = solve(
-    normalize(built.rects, built.edges, built.spec, built.options),
-    (phase, routes) => {
-      phases.push(`== ${phase}`)
-      for (const [k, route] of routes.entries()) {
-        const i = built.indices[k] as number
-        const edge = built.edges[k] as Edge.Edge<string>
-        if (route !== undefined && shown(i)) {
-          phases.push(`${i} ${nameOf(edge)}: ${polyline(route, edge.radius)}`)
-        }
+  const layout = route(built.rects, built.edges, built.spec, built.options, (phase, routes) => {
+    phases.push(`== ${phase}`)
+    for (const [k, points] of routes.entries()) {
+      const i = built.indices[k] as number
+      const edge = built.edges[k] as Edge.Edge<string>
+      if (points !== undefined && shown(i)) {
+        phases.push(`${i} ${nameOf(edge)}: ${polyline(points, edge.radius)}`)
       }
-    },
-  )
+    }
+  })
   const final = dump(built, layout, shown)
 
   const outDir = resolve(cwd, args.out ?? (stdin ? '.' : dirname(path)))

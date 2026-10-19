@@ -2,8 +2,7 @@ import { clamp } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import type { AdornmentPlacement } from './adornment.ts'
 import type { Edge } from './edge.ts'
-import { solve } from './internal/connector/pipeline.ts'
-import { normalize } from './internal/connector/problem.ts'
+import { route } from './internal/connector/canonical.ts'
 import { positiveLength } from './internal/orient.ts'
 import type * as Point from './point.ts'
 import type { Polygon } from './polygon.ts'
@@ -689,7 +688,9 @@ export type ConnectorNote<K extends string = string> =
  * - `notes`: what the routes gave up, and what would have fit them (see
  *   `ConnectorNote`): the edges without a route first, then the crowded
  *   channels, the merged ends without room, and the adornments without
- *   room.
+ *   room. Each note lists its edges in ascending order, and the notes of
+ *   one kind go in the order of their edges, the lowest index first, then
+ *   by their other fields.
  */
 export interface ConnectorLayout<K extends string = string> {
   /** One route per edge, in input order. */
@@ -880,8 +881,16 @@ export interface ConnectorLayout<K extends string = string> {
  * the rects apart.
  *
  * Every input is deterministic: the same rects and edges always produce the
- * same routes. Ties fall back to the order of the rects' keys, then of the
- * edges.
+ * same routes, and the routes do not depend on the order of the edges (with
+ * their `options.edges`) or of the rects' keys: an edge removed and added
+ * back at the end routes as before. Ties between edges fall back to an
+ * order of their own: the edges between the rects nearest the middle of the
+ * graph first (by eccentricity: the most hops from a rect to any rect it
+ * reaches along the edges, either way along each), then by the ids of
+ * their rects, then by the rest of their specs and options, so parallel
+ * edges that differ keep their own routes. Edges equal in all of that keep
+ * their input order among themselves. Ties between rects fall back to the
+ * order of their ids.
  *
  * The geometry comes from exact IEEE 754 arithmetic and is never rounded
  * (see PRECISION.md). Ports and the corners of routes that need no nudging
@@ -907,5 +916,5 @@ export function apply<const K extends string>(
   connector: Connector,
   options: ConnectorApplyOptions<NoInfer<K>> = {},
 ): ConnectorLayout<K> {
-  return solve(normalize(rects, edges, connector, options)) as ConnectorLayout<K>
+  return route(rects, edges, connector, options) as ConnectorLayout<K>
 }

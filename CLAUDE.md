@@ -51,7 +51,12 @@ outline fills the rect (`internal/polygon.ts`, shared with the hierarchy
 ports). `Connector` is a routing spec, and `Connector.apply` routes `Edge`s
 between rects that are already placed, keyed by id, around the others, and
 reports in `notes` what the routes gave up and what would have fit them.
-`apply` is `solve(normalize(...))`: `internal/connector/problem.ts` turns
+`apply` is `route` in `internal/connector/canonical.ts`, which sorts the
+edges into a canonical order (center first by the eccentricity of their
+rects, then ids, then the rest of the spec, then index), runs
+`solve(normalize(...))`, and maps the routes and notes back to the input
+order, so no layout depends on the order of the edges or of the rects'
+keys (`normalize` indexes the rects by id): `internal/connector/problem.ts` turns
 the inputs into a `Problem` (rects grown into obstacles, the shapes their
 ports sit on, edges with their ends, waypoints with the ways a route
 arrives and leaves, costs, and resolved adornments), and `internal/connector/pipeline.ts`

@@ -1159,17 +1159,21 @@ function nudgeAxis(
   }
   // The range each segment may sit in: between the walls beside it and the
   // anchors on the segments beside it, or its line alone when it stays put.
+  // Where an anchor holds a segment past a wall, the wall wins, so that no
+  // segment moves into a rect.
   const ranges = segments.map((segment): readonly [number, number] => {
     if (segment.fixed) {
       return [segment.at, segment.at]
     }
     const own = constraints[segment.route]?.avoid ?? []
-    const [low, high] = walls(own.length === 0 ? obstacles : [...obstacles, ...own], segment, axis)
-    const [floor, ceiling] = segment.held ?? [undefined, undefined]
-    return [
-      Math.max(low ?? Number.NEGATIVE_INFINITY, floor ?? Number.NEGATIVE_INFINITY),
-      Math.min(high ?? Number.POSITIVE_INFINITY, ceiling ?? Number.POSITIVE_INFINITY),
-    ]
+    const [low = Number.NEGATIVE_INFINITY, high = Number.POSITIVE_INFINITY] = walls(
+      own.length === 0 ? obstacles : [...obstacles, ...own],
+      segment,
+      axis,
+    )
+    const [floor = Number.NEGATIVE_INFINITY, ceiling = Number.POSITIVE_INFINITY] =
+      segment.held ?? []
+    return [Math.max(low, Math.min(floor, high)), Math.min(high, Math.max(ceiling, low))]
   })
   // Which of two segments must take the lower coordinate, `0` for neither:
   // one whose whole range sits at or below the other's, whatever the sides
@@ -1392,9 +1396,13 @@ function nudgeAxis(
         ...(segment.index === 1 ? [path[0] as Point] : []),
         ...(segment.index === path.length - 3 ? [path[path.length - 1] as Point] : []),
       ]
+      // A port on the segment's line leaves it no side to keep to, but an
+      // anchor's bound holds on its side even with the segment on it.
       const bounds: Array<readonly [at: number, below: boolean]> = segment.fixed
         ? []
-        : ends.map((end) => [end[axis], end[axis] < segment.at] as const)
+        : ends.flatMap((end) =>
+            end[axis] === segment.at ? [] : [[end[axis], end[axis] < segment.at] as const],
+          )
       if (!segment.fixed && segment.held !== undefined) {
         const [floor, ceiling] = segment.held
         if (floor !== undefined) {
@@ -1405,14 +1413,12 @@ function nudgeAxis(
         }
       }
       for (const [bound, below] of bounds) {
-        if (bound !== segment.at) {
-          variables.push({ desired: bound, fixed: true })
-          wallOf.push(-1)
-          const wall = variables.length - 1
-          separations.push(
-            below ? { left: wall, right: s, gap: 0 } : { left: s, right: wall, gap: 0 },
-          )
-        }
+        variables.push({ desired: bound, fixed: true })
+        wallOf.push(-1)
+        const wall = variables.length - 1
+        separations.push(
+          below ? { left: wall, right: s, gap: 0 } : { left: s, right: wall, gap: 0 },
+        )
       }
     }
 

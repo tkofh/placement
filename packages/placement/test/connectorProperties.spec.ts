@@ -4,6 +4,7 @@ import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
+import { restore } from '../src/internal/connector/canonical.ts'
 import type * as Point from '../src/point.ts'
 import * as Rect from '../src/rect.ts'
 
@@ -318,10 +319,22 @@ function linesOf(points: Points, via: ReadonlyArray<Point.PointLike>): Array<Lin
 // are fixed. Each has a skipped test below that shows it.
 const defects = {
   // Pairs of routes that sit closer than the gap without a note, by seed:
-  // in seed 4, a jog beside two collinear fixed segments of different
+  // in seed 12, a run beside two collinear fixed segments of different
   // thicknesses keeps the gap from the one next to it in the nudge's order
   // only.
-  gaps: [{ seed: 4, edges: [0, 9] }],
+  gaps: [{ seed: 12, edges: [2, 7] }],
+}
+
+// A permutation of `0..n-1` from a seed.
+const permutation = (n: number, seed: number): Array<number> => {
+  let state = seed
+  const list = Array.from({ length: n }, (_, i) => i)
+  for (let i = n - 1; i > 0; i--) {
+    state = (state * 1103515245 + 12345) % 2147483648
+    const j = Math.floor((state / 2147483648) * (i + 1))
+    ;[list[i], list[j]] = [list[j] as number, list[i] as number]
+  }
+  return list
 }
 
 describe('tier 0: what a layout never does', () => {
@@ -330,6 +343,71 @@ describe('tier 0: what a layout never does', () => {
     const again = Connector.apply(rects, edges, Connector.make(variant.input), options)
     expect(again).toEqual(layoutOf(seed, variant))
   })
+
+  // The same diagram listed another way: the edges, with their options, at
+  // new indices, `order` giving the old index of each, and the rects' keys
+  // in another order. Edges identical in every field keep their order among
+  // themselves, since nothing tells them apart but where they are listed.
+  const relisted = (seed: number, order: ReadonlyArray<number>, keys: ReadonlyArray<string>) => {
+    const { rects, edges, options } = diagramOf(seed)
+    const identity = (i: number) =>
+      JSON.stringify([edges[i], options.edges?.[i]], (_, value: unknown) =>
+        typeof value === 'number' && !Number.isFinite(value) ? String(value) : value,
+      )
+    const kept = [...order]
+    const groups = new Map<string, Array<number>>()
+    for (const [k, i] of order.entries()) {
+      groups.set(identity(i), [...(groups.get(identity(i)) ?? []), k])
+    }
+    for (const places of groups.values()) {
+      const old = places.map((k) => order[k] as number).toSorted((a, b) => a - b)
+      for (const [n, k] of places.entries()) {
+        kept[k] = old[n] as number
+      }
+    }
+    const shuffled: Record<string, Rect.Rect> = {}
+    for (const key of keys) {
+      shuffled[key] = rects[key] as Rect.Rect
+    }
+    return {
+      order: kept,
+      rects: shuffled,
+      edges: kept.map((i) => edges[i] as Edge.Edge<string>),
+      options: { edges: kept.map((i) => options.edges?.[i]) },
+    }
+  }
+  test.each(cases)(
+    '$label does not depend on the order of the edges or the keys',
+    ({ seed, variant, label }) => {
+      const { rects, edges } = diagramOf(seed)
+      const ids = Object.keys(rects)
+      const identity = edges.map((_, i) => i)
+      // Two shuffles of the edges, one of the keys, one of both, and one
+      // edge removed and added back at the end.
+      const middle = Math.floor(edges.length / 2)
+      const listings: Array<[name: string, order: Array<number>, keys: Array<string>]> = [
+        ['edges', permutation(edges.length, seed), ids],
+        ['edges again', permutation(edges.length, seed + 100), ids],
+        ['keys', identity, permutation(ids.length, seed).map((k) => ids[k] as string)],
+        [
+          'edges and keys',
+          permutation(edges.length, seed + 200),
+          permutation(ids.length, seed + 200).map((k) => ids[k] as string),
+        ],
+        ['an edge moved to the end', [...identity.filter((i) => i !== middle), middle], ids],
+      ]
+      for (const [name, permuted, keys] of listings) {
+        const input = relisted(seed, permuted, keys)
+        const layout = Connector.apply(
+          input.rects,
+          input.edges,
+          Connector.make(variant.input),
+          input.options,
+        )
+        expect(restore(layout, input.order), `${label}: ${name}`).toEqual(layoutOf(seed, variant))
+      }
+    },
+  )
 
   test.each(cases)('$label routes every edge, or notes it', ({ seed, variant, label }) => {
     const { edges } = diagramOf(seed)
@@ -571,9 +649,9 @@ describe('tier 1 and 3: what a layout prefers, and says when it cannot', () => {
   })
 
   test.skip('every pair of routes keeps the gap, or is noted', () => {
-    // Seed 4, bend cost 0: edges 0 (thickness 2) and 4 (thickness 1) both
-    // run through the waypoint (91, 191) along x = 91, and edge 9's jog
-    // sits at 94.5, the gap from edge 4 only.
+    // Seed 12, merging on, bend cost 0: edges 6 (thickness 1) and 7
+    // (thickness 2) both run through the waypoint (191, 291) along x = 191,
+    // and edge 2's run sits at 187.5, the gap from edge 6 only.
     for (const { seed, variant, label } of cases) {
       expect(gapPairs(seed, variant, layoutOf(seed, variant)), label).toEqual([])
     }

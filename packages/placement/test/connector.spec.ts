@@ -359,14 +359,12 @@ describe('apply', () => {
     // Three routes merge on the left of db and run back west as one bundle,
     // then turn north and peel off west one by one: auth first, then
     // billing, then orders. The routes from events down to the workers
-    // must cross auth's and billing's, which come from the west, but not
-    // orders', which comes down from above, so orders' column keeps east
-    // of them while the other two run as a bundle west of them. Billing's
-    // route to events must cross orders' route to db, so the segments on
-    // the shared column prefer orders in a cycle. The cycle breaks at those
-    // unavoidable crossings, not at the bundle's own order: auth's column
-    // sits west of billing's, and billing's west of orders', so none
-    // crosses another's lane.
+    // come in from the east and must cross all three, and billing's route
+    // to events must cross orders' route to db. The bundle keeps its own
+    // order through those unavoidable crossings: auth's column sits west
+    // of billing's, and billing's west of orders', the merge gap apart,
+    // so none crosses another's lane, and the workers' columns sit east of
+    // the bundle.
     const rects = {
       orders: Rect.make(512, 96, 120, 40),
       billing: Rect.make(500, 260, 120, 40),
@@ -409,11 +407,12 @@ describe('apply', () => {
     const [auth, orders, billing] = [columns(0).at(-1), columns(2).at(-1), columns(3).at(-1)]
     const [mailer, indexer] = [columns(4)[0], columns(5)[0]]
     expect(auth).toBeLessThan(billing as number)
-    expect(billing).toBeLessThan(mailer as number)
+    expect(billing).toBeLessThan(orders as number)
+    expect(orders).toBeLessThan(mailer as number)
     expect(mailer).toBeLessThan(indexer as number)
-    expect(indexer).toBeLessThan(orders as number)
     // The bundle keeps the merge gap, with the strokes 2 wide.
     expect((billing as number) - (auth as number)).toBeCloseTo(6, 9)
+    expect((orders as number) - (billing as number)).toBeCloseTo(6, 9)
   })
 
   test('an auto end comes in on a side with room for its corner and arrowhead', () => {
@@ -1933,6 +1932,108 @@ describe('jogs', () => {
       [0, 20],
       [-43.5, 20],
       [-43.5, 200],
+    ])
+  })
+})
+
+const pointsOfEdges = (layout: Connector.ConnectorLayout) =>
+  layout.edges.map((route) => route?.points.map(({ x, y }) => [x, y]))
+
+describe('input order', () => {
+  const rects = {
+    a: Rect.make(0, 0, 40, 20),
+    b: Rect.make(140, 80, 40, 20),
+    c: Rect.make(0, 160, 40, 20),
+    d: Rect.make(70, 40, 20, 20),
+  }
+  const spec = Connector.make({ clearance: 6, gap: 4, bendCost: 20 })
+
+  test('an edge removed and added back at the end routes as before', () => {
+    const edges = [
+      Edge.make({ source: 'a', target: 'b', adornments: [arrow(1, Adornment.orient.forward)] }),
+      Edge.make({ source: 'c', target: 'b', radius: 4 }),
+      Edge.make({ source: 'a', target: 'c' }),
+      Edge.make({ source: 'd', target: 'b', thickness: 2 }),
+      Edge.make({ source: 'c', target: 'a' }),
+    ]
+    const layout = Connector.apply(rects, edges, spec)
+    for (const [k, edge] of edges.entries()) {
+      const moved = [...edges.filter((_, i) => i !== k), edge]
+      const again = Connector.apply(rects, moved, spec)
+      // The edge at `i` of `moved` was at `old(i)`.
+      const old = (i: number) => (i === edges.length - 1 ? k : i < k ? i : i + 1)
+      expect(again.edges.map((_, i) => again.edges[i])).toEqual(
+        moved.map((_, i) => layout.edges[old(i)]),
+      )
+    }
+  })
+
+  test('the order of the rects’ keys does not matter', () => {
+    const edges = [
+      Edge.make({ source: 'a', target: 'b' }),
+      Edge.make({ source: 'c', target: 'b' }),
+      Edge.make({ source: 'd', target: 'a' }),
+    ]
+    const reversed = { d: rects.d, c: rects.c, b: rects.b, a: rects.a }
+    expect(Connector.apply(reversed, edges, spec)).toEqual(Connector.apply(rects, edges, spec))
+  })
+
+  test.each([
+    ['thickness', [0, 1, 2].map((thickness) => Edge.make({ source: 'a', target: 'b', thickness }))],
+    [
+      'adornments',
+      [10, 20, 30].map((width) =>
+        Edge.make({
+          source: 'a',
+          target: 'b',
+          adornments: [Adornment.make({ frame: Frame.make({ width, height: 6 }), at: 0.5 })],
+        }),
+      ),
+    ],
+  ])('parallel edges that differ in %s keep their own routes', (_, edges) => {
+    const layout = Connector.apply(rects, edges, spec)
+    const routes = pointsOfEdges(layout)
+    // The routes differ, so a swap would show.
+    expect(new Set(routes.map((route) => JSON.stringify(route))).size).toBe(edges.length)
+    for (const order of [
+      [2, 1, 0],
+      [1, 2, 0],
+      [0, 2, 1],
+    ]) {
+      const shuffled = Connector.apply(
+        rects,
+        order.map((i) => edges[i] as Edge.Edge<'a' | 'b'>),
+        spec,
+      )
+      expect(pointsOfEdges(shuffled)).toEqual(order.map((i) => routes[i]))
+      expect(shuffled.edges).toEqual(order.map((i) => layout.edges[i]))
+    }
+  })
+
+  test('notes name the edges by their input index, in order', () => {
+    // Three routes through a passage 10 wide between a and b, with gaps of
+    // 6, and one more that stays clear of it.
+    const passage = {
+      n: Rect.make(30, -100, 30, 20),
+      s: Rect.make(30, 100, 30, 20),
+      a: Rect.make(0, 0, 40, 40),
+      b: Rect.make(50, 0, 40, 40),
+      z: Rect.make(200, 0, 40, 40),
+    }
+    const edges = [
+      Edge.make({ source: 'n', target: 's' }),
+      Edge.make({ source: 'b', target: 'z' }),
+      Edge.make({ source: 'n', target: 's' }),
+      Edge.make({ source: 'n', target: 's' }),
+    ]
+    const wide = Connector.make({ gap: 6 })
+    const layout = Connector.apply(passage, edges, wide)
+    expect(layout.notes).toEqual([
+      { kind: Connector.note.crowded, edges: [0, 2, 3], axis: 0, rects: ['a', 'b'], need: 2 },
+    ])
+    // Reversed, edge i sits at 3 - i, and the list stays sorted.
+    expect(Connector.apply(passage, edges.toReversed(), wide).notes).toEqual([
+      { kind: Connector.note.crowded, edges: [0, 1, 3], axis: 0, rects: ['a', 'b'], need: 2 },
     ])
   })
 })

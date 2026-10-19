@@ -375,7 +375,9 @@ const ROUNDS = 3
  * frames' `grow` and `shrink` have no effect.
  *
  * Every input is deterministic: the same frames and edges always produce
- * the same layout. Ties fall back to the order of the input arrays.
+ * the same layout. Ties in placing the nodes fall back to the order of the
+ * input arrays. Routing the edges around the placed nodes does not depend
+ * on that order (see `Connector.apply`).
  *
  * The geometry comes from exact IEEE 754 arithmetic and is never rounded
  * (see PRECISION.md). The whole drawing translates so that `bounds` starts

@@ -29,11 +29,11 @@ import {
 } from '../polygon.ts'
 import { packLength } from './adornments.ts'
 
-// The normalized form of a routing problem: the rects by index, grown into
-// obstacles, the edges with their ends, costs, constraints, and resolved
-// adornments, the shapes their ports sit on, and the pins every visibility
-// graph of the problem needs. Every phase of the pipeline reads from it and
-// none writes to it.
+// The normalized form of a routing problem: the rects by index, in the
+// order of their ids, grown into obstacles, the edges with their ends,
+// costs, constraints, and resolved adornments, the shapes their ports sit
+// on, and the pins every visibility graph of the problem needs. Every
+// phase of the pipeline reads from it and none writes to it.
 
 /** The settings of a spec, as `Connector` holds them. */
 export interface Settings {
@@ -93,6 +93,16 @@ export const COUNTERCLOCKWISE = 2
 /** The merge encodings of `placement/connector`. */
 export const MERGE_NONE = 0
 export const MERGE_NEAR = 2
+
+/**
+ * Compares two ids by code unit, the order of `<` on strings. It orders
+ * inputs, so it compares exactly.
+ *
+ * @param a - The first id.
+ * @param b - The second id.
+ * @returns Negative when `a` comes first, positive when `b` does, else `0`.
+ */
+export const compareIds = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
 /** A port: a point on a side of a rect that a route leaves or enters. */
 export interface Port {
@@ -222,7 +232,8 @@ export function normalize(
   settings: Settings,
   options: ConnectorApplyOptions = {},
 ): Problem {
-  const ids = Object.keys(rects)
+  // The rects in the order of their ids, whatever the order of the keys.
+  const ids = Object.keys(rects).toSorted(compareIds)
   const index = new Map<string, number>(ids.map((id, i) => [id, i]))
   const boxes = ids.map((id) => rects[id] as Rect.Rect)
   for (const edge of edges) {

@@ -4,6 +4,7 @@ import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
 import { lengths, pointOnDrawn } from '../src/internal/adornments.ts'
+import { canonicalOrder, eccentricities, restore } from '../src/internal/connector/canonical.ts'
 import { cornerOutsets, cornerRadii } from '../src/internal/connector/corners.ts'
 import {
   type XY,
@@ -25,6 +26,7 @@ import type { Obstacle } from '../src/internal/graph/graph.ts'
 import { shortestPath } from '../src/internal/graph/search.ts'
 import { type Pin, visibilityGraph } from '../src/internal/graph/visibility.ts'
 import { type Separation, type Variable, placeSeparated } from '../src/internal/separation.ts'
+import * as Point from '../src/point.ts'
 import * as Rect from '../src/rect.ts'
 
 const place = (variables: ReadonlyArray<Variable>, constraints: ReadonlyArray<Separation>) => {
@@ -1672,5 +1674,87 @@ describe('grouped ends', () => {
       }
     }
     expect(across).toEqual([])
+  })
+})
+
+const link = (source: string, target: string) => ({ source, target })
+
+const unitRoute = (x: number): Connector.ConnectorRoute => ({
+  points: [Point.make(x, 0), Point.make(x, 10)],
+  radii: [0, 0],
+  outsets: [0, 0],
+  adornments: [],
+  merged: [-1, -1],
+})
+
+describe('canonical order', () => {
+  test.each([
+    [
+      'a path',
+      ['a', 'b', 'c', 'd'],
+      [link('a', 'b'), link('c', 'b'), link('c', 'd')],
+      [3, 2, 2, 3],
+    ],
+    [
+      'a star',
+      ['hub', 'n', 'e', 's', 'w'],
+      ['n', 'e', 's', 'w'].map((leaf) => link('hub', leaf)),
+      [1, 2, 2, 2, 2],
+    ],
+    [
+      'two components, a lone rect, and a loop',
+      ['a', 'b', 'c', 'd', 'e', 'f', 'g'],
+      [link('a', 'b'), link('c', 'd'), link('e', 'd'), link('g', 'g')],
+      [1, 1, 2, 1, 2, 0, 0],
+    ],
+  ])('eccentricities of %s', (_, ids, edges, expected) => {
+    const found = eccentricities(ids, edges)
+    expect(ids.map((id) => found.get(id))).toEqual(expected)
+  })
+
+  test('edges go centre first, then by ids, then by spec, then by index', () => {
+    const box = Rect.make(0, 0, 10, 10)
+    const rects = { a: box, b: box, c: box, d: box }
+    const edges = [
+      Edge.make({ source: 'd', target: 'c' }),
+      Edge.make({ source: 'c', target: 'b', thickness: 2 }),
+      Edge.make({ source: 'b', target: 'a' }),
+      Edge.make({ source: 'c', target: 'b', thickness: 1 }),
+      Edge.make({ source: 'b', target: 'c' }),
+      Edge.make({ source: 'c', target: 'b', thickness: 1 }),
+    ]
+    // b and c are 2 from the far end, a and d 3.
+    expect(canonicalOrder(rects, edges)).toEqual([4, 3, 5, 1, 2, 0])
+    // Options tell edges apart past their specs.
+    const twins = [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'b' })]
+    expect(canonicalOrder(rects, twins, { edges: [{ jogAt: 0.75 }, { jogAt: 0.25 }] })).toEqual([
+      1, 0,
+    ])
+    expect(canonicalOrder(rects, twins, { edges: [{ turn: 1 }] })).toEqual([1, 0])
+  })
+
+  test('restore maps routes and notes back to the input order', () => {
+    // Canonical position k holds input edge order[k].
+    const order = [2, 0, 3, 1]
+    const layout: Connector.ConnectorLayout = {
+      edges: [unitRoute(0), unitRoute(1), undefined, unitRoute(3)],
+      notes: [
+        { kind: 0, edge: 2 },
+        { kind: 1, edges: [0, 3], axis: 1, rects: ['b'], need: 1 },
+        { kind: 1, edges: [1, 2], axis: 0, rects: [], need: 2 },
+        { kind: 3, edge: 3, adornment: 0, need: 4 },
+        { kind: 3, edge: 0, adornment: 1, need: 5 },
+      ],
+    }
+    expect(restore(layout, order)).toEqual({
+      edges: [unitRoute(1), unitRoute(3), unitRoute(0), undefined],
+      notes: [
+        { kind: 0, edge: 3 },
+        { kind: 1, edges: [0, 3], axis: 0, rects: [], need: 2 },
+        { kind: 1, edges: [1, 2], axis: 1, rects: ['b'], need: 1 },
+        { kind: 3, edge: 1, adornment: 0, need: 4 },
+        { kind: 3, edge: 2, adornment: 1, need: 5 },
+      ],
+    })
   })
 })
