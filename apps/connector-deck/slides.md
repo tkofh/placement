@@ -64,140 +64,76 @@ The connector only routes. It never moves a rect. That is why it has to report: 
 layout: section
 ---
 
-# Part 1 · Vocabulary
+# Part 1 · Graphs
 
-The words we use for the parts of a route
-
----
-
-# Anatomy of a route
-
-<div class="h-[26rem] mt-2">
-  <Anatomy />
-</div>
-
-<div class="caption">hand-drawn to label the parts; everything later is routed</div>
+The abstract pieces: nodes, edges, costs, paths
 
 ---
 
-# Terms: one route
+# Nodes and edges
 
-<div class="terms">
-
-| term | meaning |
-| --- | --- |
-| **rect** / **obstacle** | a box routes avoid; grown by the **clearance** into an obstacle |
-| **side** | top, right, bottom, left of a rect; *auto* when the edge doesn't say |
-| **port** | where a route leaves or enters its rect, on a side |
-| **pin** | a port as a node of the graph, with the headings it may leave in |
-| **segment** / **run** | a straight stretch of a route |
-| **port leg** | the first or last segment, out of a port; it never moves sideways |
-| **corner** / **bend** | where a route turns; drawn as an arc of at least the edge's **radius** |
-| **jog** | the middle segment of a Z: between two corners that turn opposite ways |
-| **kink** | a jog too short for its two corners (shorter than 2R) |
-| **slant** / **S** | a short jog drawn as two arcs that meet halfway, instead of a kink |
-| **adornment** | something drawn on a route: *flow* (packed along it) or *absolute* |
-| **pack** | the room the flow adornments at an end take in front of the port |
-
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="node">
+  <Concept kind="node" />
+  <template #def>A thing a path can stand on. Also called a <b>vertex</b>. For us, a point in the plane.</template>
+</TermCard>
+<TermCard term="edge" :builds="['node']">
+  <Concept kind="edge" />
+  <template #def>A connection between two nodes: you can step from one to the other. For us, a straight line between two points.</template>
+</TermCard>
 </div>
 
 ---
 
-# Terms: routes together
+# Weights, paths and cost
 
-<div class="terms">
-
-| term | meaning |
-| --- | --- |
-| **gap** | the space kept between routes that run alongside each other |
-| **crossing** | two routes running straight through one point, the other way |
-| **channel** / **slot** | the room between two walls that parallel runs share |
-| **wall** | the nearest obstacle on one side of a run |
-| **congestion** | a slot holding more routes (strokes + gaps) than its width |
-| **merge** | ends on one side of one rect, with the same adornments, sharing one port |
-| **lane** | one route's line into a merge, a **merge gap** from the next |
-| **whisk** | the step from a lane onto the shared port's line, just past the arrowhead |
-| **zone** | the box the whisks need, walled off for other routes |
-| **bundle** | routes of one merge running together from it, coupled at the merge gap |
-| **nest** | corners that turn together and share a center, like a metro map |
-| **note** | what a layout gave up: *unrouted*, *crowded*, *cramped*, *overflow* |
-
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="weight" :builds="['edge']">
+  <Concept kind="weight" />
+  <template #def>What it costs to cross an edge, never negative. For us, its length, plus whatever else we decide a route should pay for.</template>
+</TermCard>
+<TermCard term="path · cost" :builds="['edge', 'weight']">
+  <Concept kind="path" />
+  <template #def>A <b>path</b> is a walk from node to node along edges. Its <b>cost</b> is the sum of the weights it crosses.</template>
+</TermCard>
 </div>
 
 ---
 
-# A jog, three ways
+# Shortest paths and half-edges
 
-<div class="grid grid-cols-3 gap-4 mt-6">
-<div>
-  <div class="h-48"><SceneView scene="jog-long" layers="rects routes adornments points" /></div>
-  <div class="caption">a jog with room: two full corners of radius R</div>
-</div>
-<div>
-  <div class="h-48"><SceneView scene="jog-short-upright" layers="rects routes adornments points jogs" :view="[130, 50, 220, 80]" /></div>
-  <div class="caption">a 14px jog at R = 16: the corners shrink to 7 and it draws as a <b>kink</b></div>
-</div>
-<div>
-  <div class="h-48"><SceneView scene="jog-short" layers="rects routes adornments points" :view="[130, 50, 220, 80]" /></div>
-  <div class="caption">the same jog with <code>jogSlant: 2</code>: the corners slide apart into an <b>S</b></div>
-</div>
-</div>
-
-<div class="mt-8 text-sm opacity-80">
-
-A jog shorter than `2 · radius` can't hold both corners. Three different phases care: the search prices it, the ports may slide it away, and the slant draws what's left.
-
-</div>
-
----
-
-# Merges, lanes and whisks
-
-<div class="grid grid-cols-2 gap-6 mt-4">
-<div>
-  <div class="h-64"><SceneView scene="fan-nomerge" layers="rects routes adornments" /></div>
-  <div class="caption"><code>merge: none</code> — three ports, three arrowheads</div>
-</div>
-<div>
-  <div class="h-64"><SceneView scene="fan" layers="rects routes adornments" /></div>
-  <div class="caption"><code>merge: side</code> — one port, one arrowhead; lanes a merge gap apart, whisks onto the port's line</div>
-</div>
-</div>
-
-<div class="grid grid-cols-2 gap-6 mt-4">
-<div class="h-40"><SceneView scene="fan" layers="rects routes adornments points" :view="[252, 62, 46, 22]" /></div>
-<div class="text-sm opacity-80 self-center">
-
-Zoomed on the hub's bottom: each lane steps onto the shared line with two arcs of radius `mergeGap + stroke/2`, peeling off nearest first, so they never cross.
-
-</div>
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="shortest path" :builds="['path · cost']">
+  <Concept kind="shortest" />
+  <template #def>The cheapest path between two nodes. Not the one with the fewest edges: A → C → E has two, and costs more.</template>
+</TermCard>
+<TermCard term="half-edge" :builds="['edge']">
+  <Concept kind="halfedge" />
+  <template #def>An edge taken one way. Each edge is two half-edges. Knowing which way you came in is what lets a search charge for turning.</template>
+</TermCard>
 </div>
 
 ---
 layout: section
 ---
 
-# Part 2 · Graphs
+# Part 2 · Pathfinding
 
-Shortest paths, Dijkstra, A*, and the graph we search
+Finding the shortest path: Dijkstra, then A*
 
 ---
 
-# A graph
+# Settled, frontier, relax
 
-<div class="grid grid-cols-[1.2fr_1fr] gap-8 mt-4">
-<div class="h-80"><WeightedGraph plain /></div>
-<div>
-
-- **nodes** (vertices): S, A, B, …
-- **edges** join two nodes
-- each edge has a **weight** ≥ 0 — what it costs to cross it
-- a **path** is a walk along edges; its **cost** is the sum of their weights
-- the **shortest path** problem: the cheapest path from S to T
-
-For us: nodes are points in the plane, edges are straight lines between them, and the weight of an edge is its length, plus whatever else we decide a route should pay for.
-
-</div>
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="settled · frontier" :builds="['shortest path']">
+  <Concept kind="frontier" />
+  <template #def>A <b>settled</b> node's cheapest cost is known for good. The <b>frontier</b> is every node reached but not settled yet. A search grows the settled set by taking the frontier's cheapest node.</template>
+</TermCard>
+<TermCard term="relax" :builds="['settled · frontier', 'weight']">
+  <WeightedGraph :step="2" />
+  <template #def>When a node settles, check each neighbor: if going through it is cheaper, the neighbor takes the new cost and remembers where it came from. Here B settled, and A dropped from 4 to 3.</template>
+</TermCard>
 </div>
 
 ---
@@ -273,6 +209,25 @@ Click through. Point out that S→A direct (4) loses to S→B→A (3): Dijkstra 
 
 ---
 
+# A heuristic
+
+<div class="h-[25rem] mt-2">
+<TermCard term="heuristic" :builds="['shortest path']" wide>
+  <Concept kind="heuristic" />
+  <template #def>
+
+A guess **h** at the cost still to go from a node to the goal.
+
+It is **admissible** when it never guesses high. On a graph of horizontal and vertical lines, `|dx| + |dy|` is admissible: no path to the goal is shorter, whatever stands in the way.
+
+A* uses it to settle the nodes that look closer to the goal first.
+
+  </template>
+</TermCard>
+</div>
+
+---
+
 # A*: Dijkstra with a sense of direction
 
 <div class="grid grid-cols-[1fr_1fr] gap-8 mt-2">
@@ -300,6 +255,255 @@ Ours adds:
 Crossings and congestion are left out of h; they only add.
 
 </div>
+</div>
+
+---
+layout: section
+---
+
+# Part 3 · What we want from a connector
+
+The parts of a route, each building on the last, and what we ask of each
+
+---
+
+# Rects, sides and ports
+
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="rect · side" >
+  <Concept kind="rect" />
+  <template #def>The boxes, already placed. Each has four <b>sides</b>. An edge can name the side it leaves or enters, or leave it <i>auto</i>.</template>
+</TermCard>
+<TermCard term="port" :builds="['rect · side']" want="ports spread along a side so routes don't cross at the rect">
+  <Concept kind="port" />
+  <template #def>Where a route leaves or enters its rect: a point on a side, at a fixed position or an auto one.</template>
+</TermCard>
+</div>
+
+---
+
+# Clearance, routes and segments
+
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="clearance · obstacle" :builds="['rect · side']" want="never pass through a rect, or closer than the clearance">
+  <Concept kind="clearance" />
+  <template #def>Routes keep the <b>clearance</b> from rects they pass. Grown by it, a rect is an <b>obstacle</b>.</template>
+</TermCard>
+<TermCard term="route · segment" :builds="['port']" want="short">
+  <Concept kind="segment" />
+  <template #def>A <b>route</b> is an orthogonal polyline from port to port. Each straight stretch between two of its points is a <b>segment</b>, or a <b>run</b>.</template>
+</TermCard>
+</div>
+
+---
+
+# Port legs and corners
+
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="port leg" :builds="['route · segment', 'port']" want="leave and enter straight, out of the port">
+  <Concept kind="leg" />
+  <template #def>The first and last segments, out of the ports. The nudge never moves them sideways; only a sliding port can.</template>
+</TermCard>
+<TermCard term="corner · radius" :builds="['route · segment']" want="few corners, each at least the radius">
+  <Concept kind="corner" />
+  <template #def>Where a route turns, also called a <b>bend</b>. It draws as an arc that reaches at least the edge's <b>radius</b> R along both legs.</template>
+</TermCard>
+</div>
+
+---
+
+# Jogs and kinks
+
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="jog" :builds="['corner · radius']">
+  <Concept kind="jog" />
+  <template #def>The middle segment of a Z: between two corners that turn opposite ways.</template>
+</TermCard>
+<TermCard term="kink" :builds="['jog', 'corner · radius']" want="no kinks: a jog needs room for its corners">
+  <SceneView scene="jog-short-upright" layers="rects routes adornments points jogs" :view="[180, 56, 120, 62]" />
+  <template #def>A jog shorter than 2R can't hold both corners. Here a 14px jog at R = 16: the corners shrink to 7 and it draws as a kink.</template>
+</TermCard>
+</div>
+
+---
+
+# Slants and adornments
+
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="slant · S" :builds="['kink']" want="a short jog that can't be removed reads as one smooth S">
+  <SceneView scene="jog-short" layers="rects routes adornments points" :view="[180, 56, 120, 62]" />
+  <template #def>The same jog with <code>jogSlant: 2</code>: its corners slide apart along the legs and turn less than a right angle, two arcs that meet halfway.</template>
+</TermCard>
+<TermCard term="adornment" :builds="['route · segment']" want="labels on a clear stretch of their own">
+  <Concept kind="adornment" />
+  <template #def>Something drawn on a route. <b>Flow</b> adornments are laid out along it like flex items, at the ends or between. <b>Absolute</b> ones land at a point on the route as drawn.</template>
+</TermCard>
+</div>
+
+---
+
+# Packs and gaps
+
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="pack" :builds="['adornment', 'port leg']" want="room at the port for the arrowhead and a corner">
+  <Concept kind="pack" />
+  <template #def>The room the flow adornments at one end take in front of its port. A corner inside the pack would run into the arrowhead.</template>
+</TermCard>
+<TermCard term="gap" :builds="['route · segment']" want="a gap between routes that run alongside each other">
+  <Concept kind="gap" />
+  <template #def>The space kept between routes that run alongside each other.</template>
+</TermCard>
+</div>
+
+---
+
+# Crossings and channels
+
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="crossing" :builds="['route · segment']" want="cross rarely, and never for nothing">
+  <SceneView scene="corridor" layers="clearance rects routes adornments" />
+  <template #def>Two routes running straight through one point, the other way. A1 → B2 and A2 → B1 must cross once.</template>
+</TermCard>
+<TermCard term="wall · channel" :builds="['clearance · obstacle', 'gap']">
+  <Concept kind="channel" />
+  <template #def>A segment's <b>walls</b> are the nearest obstacles on either side. The room between them is a <b>channel</b>; the parallel lines through one stretch of it are one <b>slot</b>.</template>
+</TermCard>
+</div>
+
+---
+
+# Congestion and merges
+
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="congestion" :builds="['wall · channel', 'gap']" want="out of crowded channels, when there's another way">
+  <Concept kind="congestion" />
+  <template #def>A slot holding more routes than fit: their strokes and gaps need more than its width.</template>
+</TermCard>
+<TermCard term="merge" :builds="['port', 'adornment']" want="related ends share one port and one arrowhead">
+  <SceneView scene="fan" layers="rects routes adornments" />
+  <template #def>Ends on one side of one rect, with the same adornments there, share a port and one copy of the adornments.</template>
+</TermCard>
+</div>
+
+---
+
+# Lanes, whisks and zones
+
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="lane · merge gap" :builds="['merge', 'gap']">
+  <SceneView scene="fan" layers="rects routes points" phase="ports" :view="[256, 62, 38, 26]" />
+  <template #def>Each route into a merge comes in on its own <b>lane</b>, a <b>merge gap</b> from the next, running straight to a whisk length short of the side.</template>
+</TermCard>
+<TermCard term="whisk · zone" :builds="['lane · merge gap', 'clearance · obstacle']">
+  <SceneView scene="services" layers="rects zones routes points" :view="[736, 172, 64, 56]" />
+  <template #def>A <b>whisk</b> steps each lane onto the shared port's line, just past the arrowhead. The whisks' box is a <b>zone</b> (pink), walled off from other routes.</template>
+</TermCard>
+</div>
+
+---
+
+# Bundles and nests
+
+<div class="grid grid-cols-2 gap-6 h-[25rem] mt-2">
+<TermCard term="bundle" :builds="['merge', 'lane · merge gap']" want="group up along long shared runs, when that's a local change">
+  <SceneView scene="services" :highlight="[10, 11]" :view="[600, 160, 380, 420]" />
+  <template #def>Routes of one merge running together from it, coupled at the merge gap, turning together. Mailer and indexer leave the event bus as a bundle.</template>
+</TermCard>
+<TermCard term="nest" :builds="['corner · radius', 'bundle']" want="routes that turn together keep their spacing through the turn">
+  <SceneView scene="services" layers="rects routes adornments points" :view="[620, 90, 110, 70]" :highlight="[6, 8]" />
+  <template #def>Corners that turn together share a center, like the lines of a metro map: the outer one grows to 21.75 around the inner one's 16.</template>
+</TermCard>
+</div>
+
+---
+
+# Notes
+
+<div class="h-[25rem] mt-2">
+<TermCard term="note" :builds="['congestion', 'merge', 'adornment']" want="when it can't do all of it, say what it gave up" wide>
+  <SceneView scene="diabolical" layers="clearance rects routes adornments" :highlight="[5, 6, 8, 9, 10, 11]" />
+  <template #def>
+
+What a layout gave up, and how much more room would have fit it:
+
+- `unrouted` — no route at all
+- `crowded` — a channel too narrow for the gaps (here: 7.7px short)
+- `cramped` — a merge without room for its lanes
+- `overflow` — an adornment longer than every run
+
+The connector never moves a rect; a placer reads the notes and does.
+
+  </template>
+</TermCard>
+</div>
+
+---
+
+# What we ask of a route
+
+<div class="grid grid-cols-2 gap-x-10 gap-y-2 mt-4 text-[0.95rem]">
+
+<div>
+
+- never pass through a rect; keep the **clearance**
+- leave and enter straight, out of the port
+- be **short**
+- turn **rarely**
+- **cross** others rarely
+- don't make **kinks**: a jog needs room for its corners
+
+</div>
+<div>
+
+- keep a **gap** from routes alongside
+- **group up** with related routes along long shared runs — when it's a local change
+- leave **room** at the ports for arrowheads and labels
+- stay out of **crowded** channels when there's another way
+- move **smoothly** as the rects move: no flips over a pixel
+- when it can't do all of it, **say what it gave up**
+
+</div>
+</div>
+
+<div class="mt-8 text-sm opacity-80">
+
+Most of these are *preferences* that trade against each other. The trick is giving every one of them a price on one scale.
+
+</div>
+
+---
+
+# All the parts at once
+
+<div class="h-[26rem] mt-2">
+  <Anatomy />
+</div>
+
+<div class="caption">every part at once (hand-drawn)</div>
+
+---
+layout: section
+---
+
+# Part 4 · The graph we search
+
+Turning rects and ports into nodes and edges
+
+---
+
+# Pins
+
+<div class="h-[25rem] mt-2">
+<TermCard term="pin" :builds="['port', 'node', 'half-edge']" wide>
+  <Concept kind="pin" />
+  <template #def>
+
+A port, as a node of the graph. Its line passes through its own rect's clearance, and it leaves only **outward**: the route can't set off sideways or back into the rect.
+
+The search's headings at a pin are the only ones allowed, so "leave straight out of the port" is not a cost but a shape of the graph.
+
+  </template>
+</TermCard>
 </div>
 
 ---
@@ -387,43 +591,9 @@ The state grows more parts as the costs need them:
 layout: section
 ---
 
-# Part 3 · What we want
+# Part 5 · What it costs
 
-…and how it becomes the language of graph traversal
-
----
-
-# What we ask of a route
-
-<div class="grid grid-cols-2 gap-x-10 gap-y-2 mt-4 text-[0.95rem]">
-
-<div>
-
-- never pass through a rect; keep the **clearance**
-- leave and enter straight, out of the port
-- be **short**
-- turn **rarely**
-- **cross** others rarely
-- don't make **kinks**: a jog needs room for its corners
-
-</div>
-<div>
-
-- keep a **gap** from routes alongside
-- **group up** with related routes along long shared runs — when it's a local change
-- leave **room** at the ports for arrowheads and labels
-- stay out of **crowded** channels when there's another way
-- move **smoothly** as the rects move: no flips over a pixel
-- when it can't do all of it, **say what it gave up**
-
-</div>
-</div>
-
-<div class="mt-8 text-sm opacity-80">
-
-Most of these are *preferences* that trade against each other. The trick is giving every one of them a price on one scale.
-
-</div>
+How each wish becomes a price on the graph
 
 ---
 
@@ -653,7 +823,7 @@ With side selection and the search both pricing room: billing → event bus move
 layout: section
 ---
 
-# Part 4 · The pipeline
+# Part 6 · The pipeline
 
 Ten phases, each a function of the problem and the phases before it
 
@@ -983,7 +1153,7 @@ The hierarchy does this today: up to 3 rounds, growing channels and pair room fr
 layout: section
 ---
 
-# Part 5 · Where we are
+# Part 7 · Where we are
 
 The algorithm isn't done; this is the state on 2026-10-19
 
@@ -1094,4 +1264,58 @@ pnpm --filter @placement/connector-deck slides
 Scenes live in `scripts/scenes.ts`; every drawing reads `data/*.json`.
 
 </div>
+</div>
+
+---
+layout: section
+---
+
+# Appendix · Glossary
+
+Every term on one page
+
+---
+
+# Terms: one route
+
+<div class="terms">
+
+| term | meaning |
+| --- | --- |
+| **rect** / **obstacle** | a box routes avoid; grown by the **clearance** into an obstacle |
+| **side** | top, right, bottom, left of a rect; *auto* when the edge doesn't say |
+| **port** | where a route leaves or enters its rect, on a side |
+| **pin** | a port as a node of the graph, with the headings it may leave in |
+| **segment** / **run** | a straight stretch of a route |
+| **port leg** | the first or last segment, out of a port; it never moves sideways |
+| **corner** / **bend** | where a route turns; drawn as an arc of at least the edge's **radius** |
+| **jog** | the middle segment of a Z: between two corners that turn opposite ways |
+| **kink** | a jog too short for its two corners (shorter than 2R) |
+| **slant** / **S** | a short jog drawn as two arcs that meet halfway, instead of a kink |
+| **adornment** | something drawn on a route: *flow* (packed along it) or *absolute* |
+| **pack** | the room the flow adornments at an end take in front of the port |
+
+</div>
+
+---
+
+# Terms: routes together
+
+<div class="terms">
+
+| term | meaning |
+| --- | --- |
+| **gap** | the space kept between routes that run alongside each other |
+| **crossing** | two routes running straight through one point, the other way |
+| **channel** / **slot** | the room between two walls that parallel runs share |
+| **wall** | the nearest obstacle on one side of a run |
+| **congestion** | a slot holding more routes (strokes + gaps) than its width |
+| **merge** | ends on one side of one rect, with the same adornments, sharing one port |
+| **lane** | one route's line into a merge, a **merge gap** from the next |
+| **whisk** | the step from a lane onto the shared port's line, just past the arrowhead |
+| **zone** | the box the whisks need, walled off for other routes |
+| **bundle** | routes of one merge running together from it, coupled at the merge gap |
+| **nest** | corners that turn together and share a center, like a metro map |
+| **note** | what a layout gave up: *unrouted*, *crowded*, *cramped*, *overflow* |
+
 </div>

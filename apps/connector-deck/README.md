@@ -1,9 +1,11 @@
 # connector deck
 
 A [Slidev](https://sli.dev) deck that explains how `placement/connector`
-routes edges: the vocabulary, graphs and shortest paths (Dijkstra, A*), what
-we ask of a route and how each wish becomes a cost, and the ten phases of the
-pipeline. It is the draft of the connector demo, and it captures the router as
+routes edges. It starts from the problem, then builds up: graph terms,
+shortest paths (Dijkstra, A*), the parts of a route and what we want of
+each, the graph the router searches, how each wish becomes a cost, and the
+ten phases of the pipeline. Each term gets its own picture, and its card
+names the terms it builds on. It is the draft of the connector demo, and it captures the router as
 of 2026-10-19.
 
 ```sh
@@ -36,12 +38,14 @@ behavior. The JSON is committed so the deck runs without that step.
 | component       | draws                                                              |
 | --------------- | ------------------------------------------------------------------ |
 | `SceneView`     | one scene, in layers (`rects graph zones routes points jogs …`)    |
+| `TermCard`      | one term: a picture, a meaning, what it builds on, what we want    |
+| `Concept`       | hand-drawn pictures of single terms, by `kind`                     |
 | `SearchPlayer`  | Dijkstra and A* side by side on one scene's graph, with a scrubber |
 | `WeightedGraph` | a small weighted graph, and Dijkstra on it one step per click      |
 | `TurnStates`    | why the search's state is the half-edge, not the node             |
 | `CostCurve`     | the short-jog price and the congestion price                       |
 | `PipelineStrip` | the ten phases, with the current one lit                           |
-| `Anatomy`       | a hand-drawn route with its parts labeled                          |
+| `Anatomy`       | a hand-drawn route with all its parts labeled                      |
 
 `SceneView` takes `phase` (`final`, `trial`, or a traced phase), `ghost` (a
 second phase drawn faintly under it), `highlight` and `only` (edge indices),
