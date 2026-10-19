@@ -83,9 +83,11 @@ export interface ConnectorInput {
    * front of its port for its adornments and corner costs up to twice it
    * (see `apply`). A route crosses another where it
    * runs straight on across a stretch that the other runs straight along,
-   * or comes onto that stretch on one side of the other and leaves it on
-   * the other side. Two corners around a jog shorter than twice the edge's
-   * `radius` cost in proportion to the jog.
+   * or across the end of the other, or comes onto that stretch on one side
+   * of the other and leaves it on the other side. Two corners around a jog
+   * shorter than twice the edge's `radius` cost in proportion to the jog.
+   * A route that steps off its line by such a jog and back onto it by
+   * another pays for what it stepped around.
    * Routes find these among the routes found before them, then again among
    * all the others. An omitted or non-finite value is auto: twice the
    * `clearance` and `gap` together, so the costs scale with the room the
@@ -712,13 +714,21 @@ export interface ConnectorLayout<K extends string = string> {
  * 2. It finds each edge's cheapest route on the graph, by A*: the sum of
  *    its length and `bendCost` per corner, plus as much again per corner
  *    against the edge's preferred turn, plus two fifths of it per route it
- *    runs straight across. A jog shorter than twice the edge's `radius`,
- *    whose two corners could not both fit, costs its two corners in
- *    proportion to its length, so that the cost of a route varies
- *    smoothly as the rects move and no route flips to another over a jog
- *    of a pixel. A route that comes onto a run other routes run straight
- *    along, on one side of them, and leaves it on the other crosses them,
- *    and pays for it as for any crossing. Routes pass through their `via` points and stay
+ *    runs straight across. Running straight across the end of another
+ *    route crosses it too, since what the route leads to there, its port
+ *    or the whisk of its lane, goes on the way it arrives. A jog shorter
+ *    than twice the edge's `radius`, whose two corners could not both fit,
+ *    costs its two corners in proportion to its length, so that the cost
+ *    of a route varies smoothly as the rects move and no route flips to
+ *    another over a jog of a pixel. A route that comes onto a run other
+ *    routes run straight along, on one side of them, and leaves it on the
+ *    other crosses them, and pays for it as for any crossing. A route that
+ *    steps off its line by such a short jog and later back onto the same
+ *    line by another, the other way, pays for the routes it would have
+ *    crossed on the line in between, less those it crossed on the way
+ *    around: stepping around a crossing is no cheaper than making it,
+ *    while a jog onto another line for good costs only its corners.
+ *    Routes pass through their `via` points and stay
  *    out of their `avoid` rects. Each route sees the routes found before
  *    it, and each one that still crosses another is found once more among
  *    all the others. A route whose waypoints hold a run on the line of
@@ -728,7 +738,9 @@ export interface ConnectorLayout<K extends string = string> {
  *    between the leg and a rect's clearance too narrow for the gap and
  *    the two strokes, or on the leg's line bound for that strip, the side
  *    its neighbors come from. It crosses the other route, or goes around,
- *    rather than lie on it.
+ *    rather than lie on it. The line out of a route's own port never
+ *    counts as such a strip for it: where the ports sit, and how close the
+ *    lanes of two merges lie, is not the search's to change.
  * 3. It nudges routes that run alongside each other apart, their strokes
  *    `gap` apart (see the edges' `thickness`), ordered so that routes that
  *    share a path cross only where they must. Where two must cross

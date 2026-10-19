@@ -3,12 +3,14 @@ import type { Graph } from './graph.ts'
 
 // Crossings between paths on one graph whose edges are all horizontal or
 // vertical. Two paths that meet at a node and part again cross there when
-// each runs straight on through it, across the other. Two that share a
-// run of edges, either way along it, cross on it when they come onto it
-// and leave it on different sides of each other: the side of each
-// stretch next to the run, left of it, straight on in line with it, or
-// right of it, as seen along the run. A path that starts or ends on the
-// run, or at the node, crosses nothing there.
+// each runs straight on through it, across the other, or when one does
+// and the other starts or ends there, leaving or arriving across it: what
+// a path leads to past its end goes on its way. Two that share a run of
+// edges, either way along it, cross on it when they come onto it and
+// leave it on different sides of each other: the side of each stretch
+// next to the run, left of it, straight on in line with it, or right of
+// it, as seen along the run. A path that starts or ends on the run
+// crosses nothing there, nor do two that both end at the node.
 
 /**
  * Counts the crossings between two paths on one graph.
@@ -114,18 +116,38 @@ function walkShared(
   }
 }
 
-// Whether two paths that meet at `node` both run straight on through it.
-function throughEach(graph: Graph, node: number, ...arms: Array<number | undefined>): boolean {
-  if (arms.some((arm) => arm === undefined)) {
-    return false
-  }
-  const [p0, p1, q0, q1] = arms as [number, number, number, number]
-  const straight = (a: number, b: number) => {
+// Whether two paths that meet at `node`, and share no edge there, cross
+// there: both run straight on through it, or one does and the other starts
+// or ends there, leaving or arriving across it.
+function throughEach(
+  graph: Graph,
+  node: number,
+  p0: number | undefined,
+  p1: number | undefined,
+  q0: number | undefined,
+  q1: number | undefined,
+): boolean {
+  // The heading of a path straight on through the node, or of its one arm
+  // out of the node where it ends there, or `undefined`.
+  const way = (a: number | undefined, b: number | undefined): [number, number] | undefined => {
+    if (a === undefined || b === undefined) {
+      const arm = a ?? b
+      return arm === undefined ? undefined : heading(graph, node, arm)
+    }
     const [ux, uy] = heading(graph, a, node)
     const [vx, vy] = heading(graph, node, b)
-    return ux === vx && uy === vy && (ux !== 0 || uy !== 0)
+    return ux === vx && uy === vy ? [ux, uy] : undefined
   }
-  return straight(p0, p1) && straight(q0, q1)
+  const [p, q] = [way(p0, p1), way(q0, q1)]
+  const ends = [p0, p1, q0, q1].filter((arm) => arm === undefined).length
+  return (
+    p !== undefined &&
+    q !== undefined &&
+    ends <= 1 &&
+    (p[0] !== 0 || p[1] !== 0) &&
+    (q[0] !== 0 || q[1] !== 0) &&
+    p[0] * q[0] + p[1] * q[1] === 0
+  )
 }
 
 // The unit heading from one node to another, by the signs of the axis

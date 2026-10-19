@@ -1,5 +1,5 @@
 import { coincident, minMax } from 'curvy/number'
-import { before, inside, overlaps } from '../../utils/tolerance.ts'
+import { atMost, before, inside, overlaps } from '../../utils/tolerance.ts'
 import type { Obstacle } from '../graph/graph.ts'
 import { type Axis, type XY, hi, lo, other, positiveLength } from '../orient.ts'
 import { type Route, routeOf } from './route.ts'
@@ -36,8 +36,16 @@ import { type Route, routeOf } from './route.ts'
 // jumping, though it shrinks fast for something near the end of a leg,
 // where the arc runs close along it.
 //
+// A jog shorter than the gap is a residue, such as what a port that slides
+// part of the way leaves (see `ports.ts`), not a turn of its own, and must
+// never draw as an upright kink. Its S strays off the legs by at most half
+// of it, as far as the upright corners do, so it keeps that much less than
+// the gap from the routes alongside them, and a neighbor that the legs
+// clear by the gap never holds it upright.
+//
 // A jog in a bundle, or where a route leaves a group, is the merge's, and
-// stays upright (see `exempt`).
+// stays upright (see `exempt`), unless it is shorter than the gap (see
+// `bundled` in `nudge.ts`).
 
 /** A route with its short jogs slanted. */
 export interface SlantedRoute {
@@ -273,6 +281,14 @@ export function slantJogs(
           most = Math.min(most, upright)
         }
       }
+      // A jog shorter than the gap is a residue, such as what a port that
+      // slides part of the way leaves, rather than a turn of its own. Its S
+      // strays at most half of it off the legs, toward the other one, so it
+      // keeps that much less than the gap from the routes alongside them:
+      // where the legs keep the gap, the S does too, less than half the gap
+      // nearer, and the residue never draws as an upright kink for a
+      // neighbor that the legs already clear.
+      const stray = atMost(spacing, d) ? 0 : d / 2
       for (const [other, list] of boxes.entries()) {
         const strokes = (own + width(other)) / 2
         const keep = (other !== route && partners(route, other) ? tight : spacing) + strokes
@@ -281,7 +297,7 @@ export function slantJogs(
             // A route across the legs needs only the S to end short of its
             // stroke; one alongside them keeps the gap.
             const across = lo(box, along) === hi(box, along)
-            consider(box, across ? strokes : keep)
+            consider(box, across ? strokes : Math.max(keep - stray, strokes))
           }
         }
       }

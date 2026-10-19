@@ -14,7 +14,12 @@ import {
   type ConnectorAdornmentProps,
 } from '../../src/components/ConnectorAdornment.ts'
 import { ConnectorEdge, type ConnectorEdgeProps } from '../../src/components/ConnectorEdge.ts'
-import { ConnectorLayout, type ConnectorLayoutProps } from '../../src/components/ConnectorLayout.ts'
+import {
+  ConnectorLayout,
+  type ConnectorLayoutExposed,
+  type ConnectorLayoutProps,
+  type ConnectorScene,
+} from '../../src/components/ConnectorLayout.ts'
 import { ConnectorNode, type ConnectorNodeProps } from '../../src/components/ConnectorNode.ts'
 import { GraphicGroup } from '../../src/components/GraphicGroup.ts'
 import { roundPolyline } from '../../src/internal/corners.ts'
@@ -572,6 +577,127 @@ test.each([
     node('b', pair.b),
   ])
   expect([findOne(root, 'first').props['x'], findOne(root, 'second').props['x']]).toEqual(xs)
+})
+
+describe('snapshot', () => {
+  const wall = Rect.make(120, -100, 20, 360)
+
+  async function mountSnapshot() {
+    const exposed = ref<ConnectorLayoutExposed>()
+    const { root } = mountWithRect(host, () => [
+      h(
+        ConnectorLayout,
+        { ref: exposed, clearance: 10, gap: 6, merge: 'side' },
+        {
+          default: () => [
+            edge({ from: 'a', to: 'c', fromPort: 'bottom 25%', turn: 'clockwise' }, () => [
+              h(ConnectorAdornment, { at: 'end', width: 8, height: 6, marginLeft: 2 }),
+            ]),
+            edge({ from: 'a', to: 'b', via: [{ x: 150, y: 250 }], jogAt: 0.25 }),
+            node('a', rects.a),
+            node('b', rects.b),
+            node('c', rects.c),
+            node(undefined, wall),
+          ],
+        },
+      ),
+    ])
+    await nextTick()
+    await nextTick()
+    return { root, scene: exposed.value?.snapshot() }
+  }
+
+  // Rebuilds the core inputs from a scene.
+  function apply(scene: ConnectorScene) {
+    const rectOf = ({ x, y, width, height }: Rect.RectLike) => Rect.make(x, y, width, height)
+    return Connector.apply(
+      Object.fromEntries(Object.entries(scene.rects).map(([id, rect]) => [id, rectOf(rect)])),
+      scene.edges.map(({ adornments = [], ...fields }) =>
+        Edge.make({
+          ...fields,
+          adornments: adornments.map(({ at, position, layer, orient, ...frame }) =>
+            Adornment.make({ frame: Frame.make(frame), at, position, layer, orient }),
+          ),
+        }),
+      ),
+      Connector.make(scene.spec),
+      {
+        edges: scene.options.edges.map(({ avoid, ...rest }) => ({
+          ...rest,
+          avoid: avoid?.map(rectOf),
+        })),
+      },
+    )
+  }
+
+  test('reads the routed problem back as plain JSON', async () => {
+    const { scene } = await mountSnapshot()
+
+    expect(scene).toEqual({
+      spec: {
+        clearance: 10,
+        gap: 6,
+        alignAdornments: 0.5,
+        justifyAdornments: 0.5,
+        justifyAdornmentsSpace: 0,
+        justifyAdornmentsSpaceOuter: 0,
+        adornmentGap: 0,
+        jogAt: 0.5,
+        jogSlant: 1,
+        merge: Connector.merge.side,
+      },
+      rects: {
+        a: { x: 20, y: 20, width: 60, height: 30 },
+        b: { x: 220, y: 120, width: 60, height: 30 },
+        c: { x: 220, y: 20, width: 60, height: 30 },
+        // The obstacle without an id.
+        '\u00000': { x: 120, y: -100, width: 20, height: 360 },
+      },
+      edges: [
+        {
+          source: 'a',
+          target: 'c',
+          weight: 1,
+          minLength: 1,
+          sourceSide: Edge.side.bottom,
+          sourceAt: 0.25,
+          radius: 0,
+          thickness: 0,
+          adornments: [
+            {
+              offsetTop: 0,
+              offsetRight: 0,
+              offsetBottom: 0,
+              offsetLeft: 2,
+              width: 8,
+              height: 6,
+              grow: 0,
+              shrink: 0,
+              at: 1,
+              position: Adornment.position.flow,
+              layer: 0,
+              orient: Adornment.orient.forward,
+            },
+          ],
+        },
+        { source: 'a', target: 'b', weight: 1, minLength: 1, radius: 0, thickness: 0 },
+      ],
+      options: {
+        edges: [
+          { turn: Connector.turn.clockwise },
+          { via: [{ x: 150, y: 250 }], turn: Connector.turn.none, jogAt: 0.25 },
+        ],
+      },
+    })
+    expect(JSON.parse(JSON.stringify(scene))).toEqual(scene)
+  })
+
+  test('the scene routes as the layout did', async () => {
+    const { root, scene } = await mountSnapshot()
+
+    expect(scene).toBeDefined()
+    expect(apply(scene as ConnectorScene).edges.map(pointsOf)).toEqual(routes(root))
+  })
 })
 
 describe('reactivity', () => {

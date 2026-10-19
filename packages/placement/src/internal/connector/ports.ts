@@ -11,7 +11,9 @@ import { routeOf } from './route.ts'
 // instead: the port stays clear of the side's ends by the gap, and its leg
 // keeps clear of the rects and, by the gap, of the routes alongside it (the
 // merge gap, for those that share a merge with it). A route across the leg
-// crosses it wherever it slides.
+// crosses it wherever it slides. A jog a little longer than half of what its
+// corners need slides only part of the way, and the residue it leaves
+// slants into an S.
 
 /** An end of a route whose port may slide along its side. */
 export interface SlidingEnd {
@@ -116,7 +118,9 @@ export function straightenPorts(
       // How far the port and its leg slide toward the jog's far line: all
       // the way for a jog up to half the short length, then less, down to
       // none at the short length, so the slide never jumps as the jog
-      // grows. The rest of the jog stays for a slant.
+      // grows. The rest of the jog stays for a slant: just past half the
+      // short length it is a residue as short as can be, which a slant
+      // always takes while it is shorter than the gap (see `slants.ts`).
       const length = Math.abs(jog)
       const sign = Math.sign(jog)
       const full = short / 2

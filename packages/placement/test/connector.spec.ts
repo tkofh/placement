@@ -1608,6 +1608,61 @@ describe('held runs', () => {
   })
 })
 
+describe('held runs beside merges', () => {
+  // Two merges on the left of a hub: two routes in, with arrowheads, from
+  // a and b, and two out to c and d. Their lanes sit less than the gap and
+  // the strokes apart, as the merges set them, and the lanes out run on
+  // past the lanes in before they turn down.
+  const head = Adornment.make({
+    frame: Frame.make({ width: 9, height: 8, offsetLeft: 4 }),
+    at: 1,
+    orient: Adornment.orient.forward,
+  })
+  const rects = {
+    a: Rect.make(512, 96, 120, 40),
+    b: Rect.make(512, 288, 120, 40),
+    hub: Rect.make(784, 176, 136, 40),
+    c: Rect.make(557, 540, 112, 36),
+    d: Rect.make(692, 540, 112, 36),
+  }
+  type Id = keyof typeof rects
+  const edge = (source: Id, target: Id) =>
+    Edge.make<Id>({
+      source,
+      target,
+      ...(source === 'hub' ? { sourceSide: Edge.side.left } : { targetSide: Edge.side.left }),
+      radius: 16,
+      thickness: 1.75,
+      adornments: [head],
+    })
+
+  test('a route turns straight onto its lane beside the lanes of another merge', () => {
+    // The route from b comes up and turns onto the lower lane in, which
+    // lies in the strip between the upper lane out and the whisks in. That
+    // strip is too narrow for nudging, but the route cannot leave its own
+    // lane, so it does not jog onto it at the last moment to keep off the
+    // strip, and runs in no narrow channel.
+    const layout = Connector.apply(
+      rects,
+      [edge('a', 'hub'), edge('b', 'hub'), edge('hub', 'c'), edge('hub', 'd')],
+      Connector.make({ clearance: 16, gap: 8, merge: Connector.merge.side, mergeGap: 4 }),
+    )
+    const points = pointsOf(layout, 1) as Array<[number, number]>
+    const lane = (pointsOf(layout, 2) as Array<[number, number]>)[2]?.[1] as number
+    expect(points).toHaveLength(5)
+    const [start, corner, laneEnd] = points as [
+      [number, number],
+      [number, number],
+      [number, number],
+    ]
+    expect(start).toEqual([572, 288])
+    expect(corner[0]).toBe(572)
+    expect(laneEnd[1]).toBe(corner[1])
+    expect(lane - corner[1]).toBeLessThan(8 + 1.75)
+    expect(layout.notes).toEqual([])
+  })
+})
+
 describe('jogs', () => {
   test('a jog of a pixel costs a pixel, so a route does not flip over one', () => {
     // From the hub's left, one corner reaches the worker: left along the

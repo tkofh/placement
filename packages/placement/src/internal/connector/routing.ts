@@ -4,7 +4,7 @@ import { crossedRuns, crossingsBetween } from '../graph/crossings.ts'
 import type { Graph, Obstacle } from '../graph/graph.ts'
 import { type Path, markThrough, searchAll, shortestPath } from '../graph/search.ts'
 import { type Pin, visibilityGraph } from '../graph/visibility.ts'
-import { type Axis, type XY, hi, lo, other } from '../orient.ts'
+import { type Axis, type XY, hi, lo, other, outward } from '../orient.ts'
 import {
   type EdgeEnd,
   type Port,
@@ -30,7 +30,16 @@ import {
 // run, and so could one on the held run's line that nudging would move
 // into that strip, the side its neighbors come from. The nodes there cost
 // such a route crossings too, so it crosses or goes around instead of
-// lying on the other route.
+// lying on the other route. A route leaves and arrives along the lines out
+// of its own ports however it goes, so those lines cost it nothing in the
+// strips of others: where the ports sit, and how close the lanes of two
+// merges lie, is for the spread and the merges to decide, and a route
+// that turned onto its lane at the last moment to keep off a strip would
+// only add a jog.
+//
+// The search counts all of these marks the way it counts crossings, so a
+// route that steps off a marked line by a short jog and back onto it pays
+// for the nodes it stepped around, as it would for running through them.
 //
 // Two routes may also share a run and cross on it, coming onto it on one
 // side of each other and leaving on the other, which the search counts
@@ -196,6 +205,15 @@ export function routeAll(
       let along = false
       const runs = runsOf(graph, path)
       const ownHeld = heldRuns(graph, path, waypoints[i] as Set<number>, true)
+      // The path runs out of its ports along the lines out of them however
+      // it goes, so the strips of others' held runs leave those lines out:
+      // where the spread put the ports is not the search's to change.
+      const rays = (ports[i] as readonly [Port, Port]).map((port, end) => ({
+        pin: nodes[(pinOfEnd[i] as [number, number])[end] as number] as number,
+        out: outward(port.side),
+      }))
+      const strip = (list: ReadonlyArray<number>, vertical: boolean) =>
+        list.filter((node) => !rays.some((ray) => onRay(graph, ray.pin, ray.out, vertical, node)))
       for (const [j, other] of paths.entries()) {
         if (j === i || other === undefined) {
           continue
@@ -226,10 +244,10 @@ export function routeAll(
         const need = problem.settings.gap + (thickness + (edges[j] as ProblemEdge).thickness) / 2
         for (const run of heldOf(j)) {
           if (before(run.at - run.low, need)) {
-            mark(run.lowStrip, run.vertical)
+            mark(strip(run.lowStrip, run.vertical), run.vertical)
           }
           if (before(run.high - run.at, need)) {
-            mark(run.highStrip, run.vertical)
+            mark(strip(run.highStrip, run.vertical), run.vertical)
           }
           if (
             runs.some((own, r) =>
@@ -508,6 +526,23 @@ function stuckAlong(
     return !roomy(-1) && !roomy(1)
   }
   return [...sides].some((side) => !roomy(side))
+}
+
+// Whether `node` lies on the line out of the pin at node `pin` that heads
+// along `out`, at the pin or in front of it, when that line is vertical as
+// asked.
+function onRay(graph: Graph, pin: number, out: XY, vertical: boolean, node: number): boolean {
+  if ((out[0] === 0) !== vertical) {
+    return false
+  }
+  const { xs, ys } = graph
+  const [across, from, to, sign] = vertical
+    ? [coincident(xs[node] as number, xs[pin] as number), ys[pin], ys[node], out[1]]
+    : [coincident(ys[node] as number, ys[pin] as number), xs[pin], xs[node], out[0]]
+  return (
+    across &&
+    (sign > 0 ? atMost(from as number, to as number) : atMost(to as number, from as number))
+  )
 }
 
 // Whether a path runs straight on through a node that `counts` marks on

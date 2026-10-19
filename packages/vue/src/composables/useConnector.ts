@@ -11,6 +11,7 @@ import {
   toValue,
   watchEffect,
 } from 'vue'
+import { type ConnectorScene, toScene } from '../internal/connectorScene.ts'
 import {
   type EdgeAdornmentInput,
   type EdgeAdornmentPlacement,
@@ -22,6 +23,15 @@ import {
   useEdgeAdornments,
 } from '../internal/edge.ts'
 import { type Child, useChild, useChildren } from './useChildren.ts'
+
+export type {
+  ConnectorScene,
+  ConnectorSceneAdornment,
+  ConnectorSceneEdge,
+  ConnectorSceneEdgeOptions,
+  ConnectorSceneSpec,
+  ConnectorSceneWaypoint,
+} from '../internal/connectorScene.ts'
 
 // See `useChildren.ts`: bundlers replace `process.env.NODE_ENV`, so
 // production output drops the guarded warnings.
@@ -74,6 +84,8 @@ type NodeChild = Child<ConnectorNodeInput>
 type EdgeChild = Child<EdgeEntry, EdgeRoute>
 
 interface Solution {
+  // What the layout routed, for `snapshot`.
+  readonly scene: () => ConnectorScene
   readonly edges: ReadonlyMap<EdgeChild, EdgeRoute>
   // The reasons that children were left out of the solve, for dev warnings.
   readonly problems: ReadonlyArray<string>
@@ -134,7 +146,19 @@ function solve(
     })
     routes.set(child, drawn.includes(false) ? { ...route, drawn } : route)
   }
-  return { edges: routes, problems }
+  return { scene: () => toScene(spec, rects, specs, options), edges: routes, problems }
+}
+
+/** What `useConnectorLayout` returns. */
+export interface ConnectorLayoutHandle {
+  /**
+   * The problem the layout last routed, as plain JSON: the spec, the node
+   * rects, the edges, and their route constraints. Nodes without an id
+   * have keys that start with `\0`.
+   *
+   * @returns The scene, which `JSON.stringify` writes as is.
+   */
+  readonly snapshot: () => ConnectorScene
 }
 
 /**
@@ -147,8 +171,11 @@ function solve(
  * group positioned on its own.
  *
  * @param spec - The routing specification.
+ * @returns A handle that reads the routed problem back.
  */
-export function useConnectorLayout(spec: MaybeRefOrGetter<Connector.Connector>): void {
+export function useConnectorLayout(
+  spec: MaybeRefOrGetter<Connector.Connector>,
+): ConnectorLayoutHandle {
   const nodes = shallowRef<ReadonlyArray<NodeChild>>([])
   const edges = shallowRef<ReadonlyArray<EdgeChild>>([])
 
@@ -201,6 +228,8 @@ export function useConnectorLayout(spec: MaybeRefOrGetter<Connector.Connector>):
       { flush: 'post' },
     )
   }
+
+  return { snapshot: () => solution.value.scene() }
 }
 
 /**

@@ -1,7 +1,7 @@
 import * as Connector from 'placement/connector'
 import type { Rect } from 'placement/rect'
-import { type SlotsType, type VNode, computed, defineComponent } from 'vue'
-import { useConnectorLayout } from '../composables/useConnector.ts'
+import { type ComputedRef, type SlotsType, type VNode, computed, defineComponent } from 'vue'
+import { type ConnectorScene, useConnectorLayout } from '../composables/useConnector.ts'
 import { RECT_PROP_KEYS, type RectProps, useRect } from '../composables/useRect.ts'
 import { useParentRectRegistration } from '../composables/useSizingContext.ts'
 import { keywordResults } from '../internal/props/justifyContent.ts'
@@ -93,6 +93,26 @@ export interface ConnectorLayoutProps extends RectProps {
   debug?: boolean
 }
 
+/**
+ * What a template ref on `ConnectorLayout` reaches: its rect, its routing
+ * spec, and `snapshot`, which reads the routed problem back as plain JSON
+ * (see `ConnectorScene`).
+ */
+export interface ConnectorLayoutExposed {
+  readonly rect: ComputedRef<Rect>
+  readonly layout: ComputedRef<Connector.Connector>
+  readonly snapshot: () => ConnectorScene
+}
+
+export type {
+  ConnectorScene,
+  ConnectorSceneAdornment,
+  ConnectorSceneEdge,
+  ConnectorSceneEdgeOptions,
+  ConnectorSceneSpec,
+  ConnectorSceneWaypoint,
+} from '../composables/useConnector.ts'
+
 /** A merge setting for `ConnectorLayout`. */
 export type ConnectorMergeInput = keyof typeof Connector.merge
 
@@ -129,9 +149,9 @@ export const ConnectorLayout = defineComponent(
       })
     })
 
-    useConnectorLayout(layout)
+    const { snapshot } = useConnectorLayout(layout)
 
-    expose({ rect, layout })
+    expose({ rect, layout, snapshot } satisfies ConnectorLayoutExposed)
 
     return useGroupRenderer(rect, () => boolProp(props.debug))
   },

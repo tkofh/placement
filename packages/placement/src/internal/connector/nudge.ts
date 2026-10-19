@@ -35,8 +35,11 @@ import { type Separation, type Variable, placeSeparated } from '../separation.ts
 // may slide stays too, for the port to slide it away. The
 // segments at the ends of a route attach to its pins and stay put, and the
 // segment past each keeps to its side of the port, so the route still leaves
-// and enters straight. A jog that shares its line with another route leaps
-// only toward the side it parts to. Routes
+// and enters straight. The one exception is an end that runs among the
+// lanes of a merge, which hold still too: it holds up to a gap short of
+// them, then steps past them, and the step stays out of every obstacle. A
+// jog that shares its line with another route leaps only toward the side
+// it parts to. Routes
 // that leave one merge on lanes stay coupled, the merge gap apart instead
 // of the full gap, for as long as they run alongside each other from it,
 // turning the same ways, and a coupled jog sits beside the rest of its
@@ -148,6 +151,22 @@ interface Split {
   readonly leaving: boolean
 }
 
+// Where an end that runs among the lanes of a merge steps past them (see
+// `stepOut`): the end it is, and the least and most its step may move to
+// along the lanes, with where it wants to be, as late as it may.
+interface Step {
+  readonly end: number
+  readonly low: number
+  readonly high: number
+  readonly at: number
+}
+
+// What each route keeps through the passes: what it was given, and its
+// steps.
+interface Held extends RouteConstraints {
+  readonly steps?: ReadonlyArray<Step> | undefined
+}
+
 // How many times the gaps of crowded channels shrink before they give way.
 const SHRINK_STEPS = 12
 
@@ -218,29 +237,30 @@ export function nudgeRoutes(
   const tight = Math.min(positiveLength(mergeGap), spacing)
   const thickness = paths.map((_, route) => positiveLength(constraints[route]?.thickness))
   const mergesOf = (route: number) => constraints[route]?.merges ?? []
-  const steps: Array<Array<XY>> = paths.map(() => [])
+  const steps: Array<Array<Step>> = paths.map(() => [])
   // The ends of other routes step out from among the lanes of a merge,
-  // which hold still like they do, and the steps stay put: those among the
-  // lanes as found, then, once more, those the passes leave among them.
+  // which hold still like they do, and the steps stay between the
+  // obstacles around the port and the lanes: those among the lanes as
+  // found, then, once more, those the passes leave among them.
   for (let attempt = 0; attempt < 2; attempt++) {
     const found = bundlesOf(paths, mergesOf)
     const stepped = stepOut(paths, found.lanes, found.ids, obstacles, {
       thickness,
       spacing,
       tight,
+      corners: constraints.map((given) => Math.max(given?.corner ?? 0, 0)),
+      slants: constraints.map((given) => Math.max(given?.slant ?? 0, 0)),
     })
     if (attempt > 0 && stepped.every((points) => points.length === 0)) {
       break
     }
-    for (const [route, points] of stepped.entries()) {
-      ;(steps[route] as Array<XY>).push(...points)
+    for (const [route, list] of stepped.entries()) {
+      ;(steps[route] as Array<Step>).push(...list)
     }
-    const held = paths.map((_, route): RouteConstraints | undefined => {
+    const held = paths.map((_, route): Held | undefined => {
       const given = constraints[route]
-      const points = steps[route] ?? []
-      return points.length === 0
-        ? given
-        : { ...given, anchors: [...(given?.anchors ?? []), ...points] }
+      const list = steps[route] ?? []
+      return list.length === 0 ? given : { ...given, steps: list }
     })
     // The passes move points but never add or drop them, so the couples
     // found before them hold throughout. A jog where a route parts from its
@@ -462,27 +482,40 @@ export interface Bundled {
  * @param merges - The merges each route's start and end lead into, as ids
  * shared by the routes of each merge, or `-1` for an end that does not
  * merge.
+ * @param short - The length below which a segment is no visible turn of
+ * the bundle, such as the gap: a coupled segment that short is left out,
+ * and so is a parting corner whose segment away from the merge is that
+ * short, so a residue of a port's slide is free to slant. Defaults to `0`.
  * @returns The coupled segments and parting corners of each route.
  */
 export function bundled(
   routes: ReadonlyArray<ReadonlyArray<XY>>,
   merges: ReadonlyArray<readonly [number, number]>,
+  short = 0,
 ): Bundled {
   const paths = routes.map(simplify)
   const { ids, couples, leaves } = bundlesOf(paths, (route) => merges[route] ?? [])
+  const visible = (path: ReadonlyArray<Point>, index: number) => {
+    const [x0, y0] = path[index] as Point
+    const [x1, y1] = path[index + 1] as Point
+    return atMost(short, Math.abs(x1 - x0) + Math.abs(y1 - y0))
+  }
   const coupled = paths.map(() => new Set<number>())
   // Both orders of each pair are in, so the first segment of each covers
   // every coupled segment.
   for (const key of couples) {
     const segment = Math.floor(key / ids.size)
-    coupled[Math.floor(segment / ids.stride)]?.add(segment % ids.stride)
+    const [route, index] = [Math.floor(segment / ids.stride), segment % ids.stride]
+    if (visible(paths[route] as ReadonlyArray<Point>, index)) {
+      coupled[route]?.add(index)
+    }
   }
   const parting = paths.map((path, route) => {
     const corners = new Set<number>()
     for (const { start, k } of leaves[route] ?? []) {
       // The corner between the last segment shared and the next.
       const corner = start ? k : path.length - 1 - k
-      if (corner > 0 && corner < path.length - 1) {
+      if (corner > 0 && corner < path.length - 1 && visible(path, start ? corner : corner - 1)) {
         corners.add(corner)
       }
     }
@@ -685,14 +718,20 @@ function keepOut(
 // The lanes hold still, as the segments at the ends of every route do, so
 // nothing else takes an end out from among the lanes that sit packed, next
 // to each other, when it runs alongside one of them, no further from the
-// line than the lanes reach. The end leaves its port straight as far as the
-// obstacles around the port reach, then steps past those lanes to the side
-// with fewer of them, or the nearer one, a gap from the last. The rest of
-// the segment runs on there, so the segment past it moves its corner. An
-// end that meets the lanes within the obstacles, or whose step would turn
-// the segment past it back, stays as it is. Changes the paths in place, and
-// returns the corners where each route steps out, which hold the steps
-// still.
+// line than the lanes reach. The end leaves its port straight, as held, up
+// to a gap and the reach of the step's corners (or of its S) short of where
+// it meets the first of those lanes, though at least out of the obstacles
+// around the port, then steps past them to the side with fewer of them, or
+// the nearer one, a gap from the last. The rest of the segment runs on
+// there, so the segment past it moves its corner.
+// The step and the run past it keep out of every obstacle: where the step
+// would cross one, it comes back toward the port to the obstacle's near
+// edge. An end that meets the lanes within the obstacles, whose step finds
+// no room outside them, whose run past the step would lie in one, or whose
+// step would turn the segment past it back, stays as it is. Changes the
+// paths in place, and returns where each route steps out: the passes move
+// a step no nearer the port than the obstacles around it, nor nearer the
+// lanes than that gap and reach.
 function stepOut(
   paths: Array<Array<Point>>,
   merges: ReadonlyArray<ReadonlySet<number>>,
@@ -702,13 +741,17 @@ function stepOut(
     thickness,
     spacing,
     tight,
+    corners,
+    slants,
   }: {
     readonly thickness: ReadonlyArray<number>
     readonly spacing: number
     readonly tight: number
+    readonly corners: ReadonlyArray<number>
+    readonly slants: ReadonlyArray<number>
   },
-): Array<Array<XY>> {
-  const steps: Array<Array<XY>> = paths.map(() => [])
+): Array<Array<Step>> {
+  const steps: Array<Array<Step>> = paths.map(() => [])
   const width = (route: number) => thickness[route] ?? 0
   interface Lane {
     readonly route: number
@@ -796,11 +839,25 @@ function stepOut(
             reach = Math.max(reach, heading * ((heading > 0 ? hi(o, along) : lo(o, along)) - from))
           }
         }
-        const meets = Math.min(
-          ...run
-            .filter((lane) => extentsOverlap(extent, lane))
-            .map((lane) => heading * ((heading > 0 ? lane.low : lane.high) - from)),
-        )
+        // Where it meets the first of the lanes it runs alongside, and how
+        // far short of it the step stays: the gap, and the reach of its
+        // corners, or of the S they make when the step is short and slants
+        // (see `slants.ts`).
+        const rise = Math.abs(line - at)
+        const bend = corners[route] ?? 0
+        const slant = slants[route] ?? 0
+        const spread = slant > 0 && rise < 2 * bend ? slant * bend - ((slant - 1) * rise) / 2 : 0
+        let meets = Number.POSITIVE_INFINITY
+        let room = 0
+        for (const lane of run) {
+          if (extentsOverlap(extent, lane)) {
+            const distance = heading * ((heading > 0 ? lane.low : lane.high) - from)
+            if (distance < meets) {
+              meets = distance
+              room = spacing + (width(route) + width(lane.route)) / 2 + Math.max(bend, spread)
+            }
+          }
+        }
         const next = (end === 0 ? path[2] : path.at(-3)) as Point
         const turn = next[axis] - corner[axis]
         if (
@@ -811,16 +868,54 @@ function stepOut(
         ) {
           continue
         }
+        // The step crosses from the end's line to the new one: an obstacle
+        // it would cross brings it back toward the port, to that obstacle's
+        // near edge, as long as that is still out of the obstacles around
+        // the port.
+        const [across0, across1] = [Math.min(at, line), Math.max(at, line)]
+        let distance = Math.max(reach, meets - room)
+        for (let guard = obstacles.length; guard >= 0; guard--) {
+          const along0 = from + heading * distance
+          const blocking = obstacles.find(
+            (o) =>
+              inside(along0, lo(o, along), hi(o, along)) &&
+              overlaps(across0, across1, lo(o, axis), hi(o, axis)),
+          )
+          if (blocking === undefined) {
+            break
+          }
+          distance = heading * ((heading > 0 ? lo(blocking, along) : hi(blocking, along)) - from)
+        }
+        const stepAt = from + heading * distance
+        const [run0, run1] = [Math.min(stepAt, to), Math.max(stepAt, to)]
+        if (
+          before(distance, reach) ||
+          obstacles.some(
+            (o) =>
+              (inside(stepAt, lo(o, along), hi(o, along)) &&
+                overlaps(across0, across1, lo(o, axis), hi(o, axis))) ||
+              (inside(line, lo(o, axis), hi(o, axis)) &&
+                overlaps(run0, run1, lo(o, along), hi(o, along))),
+          )
+        ) {
+          continue
+        }
         const point = (a: number, b: number): Point => (axis === 0 ? [a, b] : [b, a])
-        const step = point(at, from + heading * reach)
-        const out = point(line, from + heading * reach)
+        const step = point(at, stepAt)
+        const out = point(line, stepAt)
         const moved = point(line, to)
         if (end === 0) {
           path.splice(0, 2, port, step, out, moved)
         } else {
           path.splice(-2, 2, moved, out, step, port)
         }
-        ;(steps[route] as Array<XY>).push(step)
+        const [early, late] = [from + heading * reach, from + heading * (meets - room)]
+        ;(steps[route] as Array<Step>).push({
+          end,
+          low: Math.min(early, late, stepAt),
+          high: Math.max(early, late, stepAt),
+          at: stepAt,
+        })
       }
     }
   }
@@ -896,7 +991,7 @@ function nudgeAxis(
   },
   splits: ReadonlyArray<ReadonlyMap<number, Split>>,
   axis: Axis,
-  constraints: ReadonlyArray<RouteConstraints | undefined>,
+  constraints: ReadonlyArray<Held | undefined>,
   report: (found: Crowded) => void,
   keep: number,
 ): boolean {
@@ -1324,7 +1419,7 @@ function nudgeAxis(
 function collect(
   paths: ReadonlyArray<ReadonlyArray<Point>>,
   axis: Axis,
-  constraints: ReadonlyArray<RouteConstraints | undefined>,
+  constraints: ReadonlyArray<Held | undefined>,
   splits: ReadonlyArray<ReadonlyMap<number, Split>> = [],
   keep = 0,
 ): Array<Segment> {
@@ -1370,7 +1465,17 @@ function collect(
       let late: number | undefined
       let held: Segment['held']
       let bounds: Segment['bounds']
-      if (!fixed) {
+      // A step past the lanes of a merge sits between the obstacles around
+      // its port and the lanes, as late as it may.
+      const step = constraints[route]?.steps?.find(
+        ({ end }) => index === (end === 0 ? 1 : last - 1),
+      )
+      if (!fixed && step !== undefined) {
+        desired = step.at
+        run = [step.low, step.high]
+        held = run
+        bounds = run
+      } else if (!fixed) {
         const previous = (path[index - 1] as Point)[axis]
         const after = (path[index + 2] as Point)[axis]
         let low: number | undefined

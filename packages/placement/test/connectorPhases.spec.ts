@@ -5,9 +5,10 @@ import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
 import { lengths, pointOnDrawn } from '../src/internal/adornments.ts'
 import { cornerOutsets, cornerRadii } from '../src/internal/connector/corners.ts'
-import { addWhisk, step } from '../src/internal/connector/merge.ts'
+import { addWhisk, planMerges, step } from '../src/internal/connector/merge.ts'
 import {
   type XY,
+  bundled,
   firstTurn,
   nudge,
   partingCorners,
@@ -17,7 +18,10 @@ import {
 import { straightenPorts } from '../src/internal/connector/ports.ts'
 import { normalize, roomAt, tightCostAt } from '../src/internal/connector/problem.ts'
 import { type Route, routeOf } from '../src/internal/connector/route.ts'
+import { routeAll } from '../src/internal/connector/routing.ts'
+import { chooseSides } from '../src/internal/connector/sides.ts'
 import { type SlantedRoute, slantJogs } from '../src/internal/connector/slants.ts'
+import { placePorts } from '../src/internal/connector/spread.ts'
 import type { Obstacle } from '../src/internal/graph/graph.ts'
 import { shortestPath } from '../src/internal/graph/search.ts'
 import { type Pin, visibilityGraph } from '../src/internal/graph/visibility.ts'
@@ -557,7 +561,7 @@ describe('nudge', () => {
 
   test('an end between the lanes of a merge steps out past them', () => {
     // r leaves its port between p's and q's lanes, which hold still as it
-    // does. It runs straight out of the obstacle around its port, then
+    // does. It runs straight out of its port until a gap short of p, then
     // steps a gap past p, and that step stays put.
     const p = route([100, 0], [0, 0], [0, 50])
     const q = route([100, 2], [30, 2], [30, 50])
@@ -566,6 +570,21 @@ describe('nudge', () => {
     const merges = [0, -1] as const
     const constraints = [{ merges }, { merges }, {}]
     expect(nudge([p, q, r], port, 8, constraints, 2)[2]).toEqual(
+      route([-40, 1], [-8, 1], [-8, -8], [60, -8], [60, 80]),
+    )
+    // With corners, it stops their reach shorter, or the reach of the S
+    // that a step too short for them slants into.
+    const cornered = [{ merges }, { merges }, { corner: 4 }]
+    expect(nudge([p, q, r], port, 8, cornered, 2)[2]).toEqual(
+      route([-40, 1], [-12, 1], [-12, -8], [60, -8], [60, 80]),
+    )
+    const slanted = [{ merges }, { merges }, { corner: 8, slant: 2 }]
+    expect(nudge([p, q, r], port, 8, slanted, 2)[2]).toEqual(
+      route([-40, 1], [-19.5, 1], [-19.5, -8], [60, -8], [60, 80]),
+    )
+    // But never back into the obstacle around its port.
+    const close = [{ merges }, { merges }, { corner: 32 }]
+    expect(nudge([p, q, r], port, 8, close, 2)[2]).toEqual(
       route([-40, 1], [-30, 1], [-30, -8], [60, -8], [60, 80]),
     )
     // Lanes of different merges hold it nowhere.
@@ -574,6 +593,69 @@ describe('nudge', () => {
     // Nor do lanes that it meets within the obstacle.
     const near = [{ left: -60, top: -20, right: 10, bottom: 20 }]
     expect(nudge([p, q, r], near, 8, constraints, 2)[2]).toEqual(r)
+  })
+
+  test('a step out from among lanes keeps out of obstacles', () => {
+    // r leaves its port, inside the box from x 100 to 140, heading left
+    // between the lanes of p and q, which start at x 20. A zone sits just
+    // above r's leg where the leg leaves the box. The leg holds through it,
+    // and the step past the lanes comes only a gap short of them.
+    const p = route([-100, 0], [20, 0], [20, -60])
+    const q = route([-100, 2], [10, 2], [10, -60])
+    const r = route([110, 1], [-50, 1], [-50, 80])
+    const port = { left: 100, top: -40, right: 140, bottom: 40 }
+    const zone = { left: 95, top: -12, right: 105, bottom: -4 }
+    const merges = [0, -1] as const
+    const constraints = [{ merges }, { merges }, {}]
+    const [, , moved] = nudge([p, q, r], [port, zone], 8, constraints, 2)
+    expect(moved).toEqual(route([110, 1], [28, 1], [28, -8], [-50, -8], [-50, 80]))
+    // A zone where that step would cross comes before it, and the step
+    // comes back to the zone's near edge.
+    const crossing = { left: 26, top: -6, right: 40, bottom: -2 }
+    expect(nudge([p, q, r], [port, crossing], 8, constraints, 2)[2]).toEqual(
+      route([110, 1], [40, 1], [40, -8], [-50, -8], [-50, 80]),
+    )
+    // A zone on the line the run past the step would take leaves the end
+    // where it is.
+    const onLine = { left: -20, top: -12, right: -10, bottom: -4 }
+    expect(nudge([p, q, r], [port, onLine], 8, constraints, 2)[2]).toEqual(r)
+    // In every case, no segment of any route ends up inside an obstacle.
+    for (const zones of [
+      [port, zone],
+      [port, crossing],
+      [port, onLine],
+    ]) {
+      const routes = nudge([p, q, r], zones, 8, constraints, 2)
+      for (const path of routes) {
+        for (let k = 0; k + 1 < path.length; k++) {
+          const [[x0, y0], [x1, y1]] = [path[k] as XY, path[k + 1] as XY]
+          for (const o of zones.slice(1)) {
+            const across =
+              Math.min(x0, x1) < o.right &&
+              Math.max(x0, x1) > o.left &&
+              Math.min(y0, y1) < o.bottom &&
+              Math.max(y0, y1) > o.top
+            expect(across).toBe(false)
+          }
+        }
+      }
+    }
+  })
+
+  test('a step out from among lanes moves back toward the port for a route beside it', () => {
+    // As above, r steps a gap short of the lanes, at x 28, but a route
+    // leaves its port down at x 26, past r's step: the step moves back the
+    // gap from it, and r still runs straight up to there.
+    const p = route([-100, 0], [20, 0], [20, -60])
+    const q = route([-100, 2], [10, 2], [10, -60])
+    const r = route([110, 1], [-50, 1], [-50, 80])
+    const s = route([26, -50], [26, 50], [80, 50])
+    const port = { left: 100, top: -40, right: 140, bottom: 40 }
+    const merges = [0, -1] as const
+    const constraints = [{ merges }, { merges }, {}, {}]
+    expect(nudge([p, q, r, s], [port], 8, constraints, 2)[2]).toEqual(
+      route([110, 1], [34, 1], [34, -8], [-50, -8], [-50, 80]),
+    )
   })
 
   test('the segment past a port stays on its side of it', () => {
@@ -1292,6 +1374,101 @@ describe('straightenPorts', () => {
   })
 })
 
+describe('a port slide’s residue', () => {
+  // Two routes leave one merge on lanes at y 0 and 5.75, run down together
+  // a merge gap apart, and turn left: a at y 158.75 for good, b at 164.5
+  // for a jog `jog` long before it runs down onto the top of a rect, where
+  // its port may slide. With corners of 16, a jog up to 16 slides away
+  // whole; past that the slide tapers, and leaves a residue jog that grows
+  // from none. Here it is shorter than the gap, and must never draw as an
+  // upright kink: it slants, though a runs right beside its leg.
+  const R = 16
+  const gap = 8
+  const rect = { left: -60, top: 340, right: 60, bottom: 380 }
+  const grown = { left: -76, top: 324, right: 76, bottom: 396 }
+  const merges = [
+    [0, -1],
+    [0, -1],
+  ] as const
+  const a = route([100, 0], [0, 0], [0, 158.75], [-145, 158.75], [-145, 340])
+  const b = (jog: number) =>
+    route([100, 5.75], [5.75, 5.75], [5.75, 164.5], [5.75 - jog, 164.5], [5.75 - jog, 340])
+  const drawn = (jog: number) => {
+    const straight = straightenPorts(
+      [a, b(jog)],
+      [
+        [undefined, undefined],
+        [undefined, { rect, own: 0, side: 0 }],
+      ],
+      [grown],
+      {
+        gap,
+        reach: [R, R],
+        thickness: [1.75, 1.75],
+        anchors: [[], []],
+        packs: [
+          [0, 0],
+          [0, 0],
+        ],
+        merges,
+        mergeGap: 4,
+      },
+    )
+    // The jogs the pipeline keeps upright for the bundle.
+    const { coupled, parting } = bundled(straight, merges, gap)
+    const upright = straight.map((_, k) => {
+      const set = new Set(coupled[k])
+      for (const corner of parting[k] ?? []) {
+        set.add(corner - 1).add(corner)
+      }
+      return set
+    })
+    const routes = straight.map((points) => routeOf(points))
+    const sizes = cornerRadii(routes, [R, R])
+    const strokes = { gap, thickness: [1.75, 1.75], merges, mergeGap: 4 }
+    return {
+      straight: straight[1] as Array<XY>,
+      slanted: slantJogs(routes, sizes, [R, R], 2, [], [grown], upright, strokes)[1],
+    }
+  }
+
+  test.each([4, 12, 16])('a jog of %d slides away whole', (jog) => {
+    expect(drawn(jog).straight).toEqual(route([100, 5.75], [5.75, 5.75], [5.75, 340]))
+  })
+
+  test.each([16.01, 16.39, 17, 18, 19, 19.9])('a jog of %d leaves a residue that slants', (jog) => {
+    const { straight, slanted } = drawn(jog)
+    // The slide leaves a residue: 2 * jog - 32 of it.
+    const [, , near, far] = straight
+    expect((near as XY)[0] - (far as XY)[0]).toBeCloseTo(2 * jog - 2 * R, 9)
+    // Drawn, no corner is upright with a reach shorter than the gap: the
+    // jog's two corners slid apart along the legs into an S.
+    const points = slanted?.route.points ?? []
+    const radii = slanted?.radii ?? []
+    for (let k = 1; k + 1 < points.length; k++) {
+      const [p, q, r] = [points[k - 1], points[k], points[k + 1]] as [XY, XY, XY]
+      const upright = (p[0] === q[0] || p[1] === q[1]) && (q[0] === r[0] || q[1] === r[1])
+      if (upright) {
+        expect(radii[k]).toBeGreaterThanOrEqual(gap)
+      }
+    }
+    expect(points).toHaveLength(5)
+    expect(points[2]?.[1]).toBeLessThan(164.5)
+    expect(points[3]?.[1]).toBeGreaterThan(164.5)
+  })
+
+  test('a residue shorter than the gap is no turn of the bundle', () => {
+    // b's residue of 6 overlaps a's run left by a quarter, so the two turn
+    // together there, but a jog shorter than the gap is no visible turn.
+    const straight = [
+      a,
+      route([100, 5.75], [5.75, 5.75], [5.75, 164.5], [-0.25, 164.5], [-0.25, 340]),
+    ]
+    expect(bundled(straight, merges).coupled[1]).toEqual(new Set([1, 2, 3]))
+    expect(bundled(straight, merges, gap).coupled[1]).toEqual(new Set([1, 3]))
+  })
+})
+
 // The S's span along the legs, and whether the route as drawn comes into a
 // box.
 function spanOf(slanted: SlantedRoute | undefined): number {
@@ -1364,6 +1541,35 @@ describe('slantJogs', () => {
   ])('%s keeps the jog upright', (_, options) => {
     expect(slant(options)?.route.points).toEqual(zed)
     expect(slant(options)?.radii).toEqual(sizes)
+  })
+
+  test.each([
+    [2, true],
+    [6, true],
+    [10, false],
+  ])('a jog of %d beside a route the gap from its leg slants: %s', (d, slants) => {
+    // A route runs alongside the first leg, the gap of 8 below it, up to
+    // where its box, grown by the gap, ends at the jog. The S strays
+    // toward it by half the jog, as the upright corners do. A jog shorter
+    // than the gap, a residue, keeps that much less than the gap from it
+    // and slants; a longer one keeps the gap and stays upright.
+    const jog = route([0, 0], [30, 0], [30, d], [60, d])
+    const beside = route([0, 8], [22, 8])
+    const [slanted] = slantJogs(
+      [jog, beside].map(routeOf),
+      [
+        [0, d / 2, d / 2, 0],
+        [0, 0],
+      ],
+      [8, 0],
+      1,
+      [],
+      [],
+      [],
+      { gap: 8 },
+    )
+    expect(slanted?.route.points.length).toBe(4)
+    expect(slanted?.route.points[1]?.[0] !== 30).toBe(slants)
   })
 
   test('an exempt jog stays as it is', () => {
@@ -1499,5 +1705,75 @@ describe('tight ends', () => {
     expect(tightCostAt(problem, 0, 1, 1, 0.5)).toBe(cost)
     expect(tightCostAt(problem, 0, 1, 0, 0.5)).toBe(0)
     expect(tightCostAt(problem, 0, 0, 2, 0.5)).toBe(0)
+  })
+})
+
+// A point as a key.
+const key = ([x, y]: XY) => `${x},${y}`
+
+describe('lane ends', () => {
+  test('the search runs no route straight across the end of another', () => {
+    // Routes from a and b merge into the left of t, and into the left of u
+    // below it. The lanes into t end in a column a whisk out from it, which
+    // the route from a to u would run straight down through, between lane
+    // ends, for no crossing, had the lanes not run on into the whisks.
+    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+    const rects = {
+      a: Rect.make(0, 0, 40, 20),
+      b: Rect.make(0, 60, 40, 20),
+      c: Rect.make(0, 120, 40, 20),
+      t: Rect.make(200, 50, 40, 40),
+      u: Rect.make(200, 150, 40, 40),
+    }
+    const into = (source: 'a' | 'b' | 'c', target: 't' | 'u', input = {}) =>
+      Edge.make({ source, target, adornments: [head], ...input })
+    const problem = normalize(
+      rects,
+      [
+        into('a', 't', { radius: 10, thickness: 2 }),
+        into('b', 't', { radius: 10, thickness: 2 }),
+        into('c', 't', { radius: 10, thickness: 2 }),
+        into('c', 'u', { radius: 10, thickness: 2 }),
+        into('a', 'u', { targetSide: 3, targetAt: 0.5 }),
+        into('b', 'u', { targetSide: 3, targetAt: 0.5 }),
+      ],
+      Connector.make({ clearance: 8, gap: 4, bendCost: 20, merge: 1, mergeGap: 2 }),
+    )
+    const placed = placePorts(problem, chooseSides(problem))
+    const plan = planMerges(problem, placed.ports, placed.merges)
+    const { routes } = routeAll(
+      problem,
+      plan.ports,
+      problem.edges.map((_, i) => i),
+      plan.blocks,
+    )
+    // The end of each route, with whether it arrives across the X axis.
+    const ends = new Map<string, Array<{ edge: number; vertical: boolean }>>()
+    for (const [i, route] of routes.entries()) {
+      const points = route as Array<XY>
+      for (const [end, next] of [
+        [points[0], points[1]],
+        [points.at(-1), points.at(-2)],
+      ] as Array<[XY, XY]>) {
+        const list = ends.get(key(end)) ?? []
+        list.push({ edge: i, vertical: end[0] === next[0] })
+        ends.set(key(end), list)
+      }
+    }
+    const across: Array<[number, number]> = []
+    for (const [i, route] of routes.entries()) {
+      const points = route as Array<XY>
+      for (let k = 1; k + 1 < points.length; k++) {
+        const [a, b, c] = [points[k - 1], points[k], points[k + 1]] as [XY, XY, XY]
+        const vertical = a[0] === b[0] && b[0] === c[0]
+        const horizontal = a[1] === b[1] && b[1] === c[1]
+        for (const end of ends.get(key(b)) ?? []) {
+          if (end.edge !== i && (vertical || horizontal) && end.vertical !== vertical) {
+            across.push([i, end.edge])
+          }
+        }
+      }
+    }
+    expect(across).toEqual([])
   })
 })

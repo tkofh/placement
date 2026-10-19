@@ -47,12 +47,20 @@ import { type SharedEnd, placePorts } from './spread.ts'
 // 10. `placeAdornments` lands the absolute adornments on the drawn routes.
 
 /**
+ * Hears the routes after each phase of `solve`, for diagnostics: the phase
+ * (`'search'`, `'nudge'`, `'ports'`, `'whisks'`, `'slants'`) and one
+ * polyline per edge, `undefined` for an edge without a route.
+ */
+export type Trace = (phase: string, routes: ReadonlyArray<ReadonlyArray<XY> | undefined>) => void
+
+/**
  * Solves a routing problem.
  *
  * @param problem - The problem, from `normalize`.
+ * @param trace - Hears the routes after each phase, for diagnostics.
  * @returns One route per edge.
  */
-export function solve(problem: Problem): ConnectorLayout {
+export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
   const { ids, edges, boxes, obstacles, settings, mergeGap } = problem
   const chosen = chooseSides(problem)
   const placed = placePorts(problem, chosen)
@@ -124,6 +132,19 @@ export function solve(problem: Problem): ConnectorLayout {
   }
   const found = routes.flatMap((route, i) => (route === undefined ? [] : [i]))
   const edgeOf = (k: number) => edges[found[k] as number] as ProblemEdge
+  const report = (phase: string, list: ReadonlyArray<ReadonlyArray<XY>>) => {
+    if (trace !== undefined) {
+      const byEdge: Array<ReadonlyArray<XY> | undefined> = edges.map(() => undefined)
+      for (const [k, i] of found.entries()) {
+        byEdge[i] = list[k]
+      }
+      trace(phase, byEdge)
+    }
+  }
+  report(
+    'search',
+    routes.filter((route) => route !== undefined),
+  )
   // The length the flow adornments between an edge's ports take on a run,
   // and the gap that keeps them off a pack.
   const flowsOf = (edge: ProblemEdge) => {
@@ -168,6 +189,7 @@ export function solve(problem: Problem): ConnectorLayout {
     }),
     mergeGap,
   )
+  report('nudge', nudgedRoutes)
   const mergesOf = found.map(
     (i) => [mergeOf.get(endId(i, 0)) ?? -1, mergeOf.get(endId(i, 1)) ?? -1] as const,
   )
@@ -201,13 +223,15 @@ export function solve(problem: Problem): ConnectorLayout {
     },
   )
 
+  report('ports', straight)
+
   // Merged ends lead from their lanes to the shared port. Their steps keep
   // the corners they were given, so nothing slants them further. Where a
   // route leaves a group that goes on without it, the jog that leaves it
   // stays upright. A jog in a bundle turns with it, so it stays upright
   // too. The locks carry these decisions to the passes that size corners
   // and slant jogs.
-  const { coupled, parting } = bundled(straight, mergesOf)
+  const { coupled, parting } = bundled(straight, mergesOf, settings.gap)
   const dressed = straight.map((route, k) => {
     const i = found[k] as number
     let locks = emptyLocks()
@@ -242,6 +266,10 @@ export function solve(problem: Problem): ConnectorLayout {
   // change: each pass that moves points makes new routes.
   const nudged = dressed.map(({ points }) => routeOf(points))
   const locks = dressed.map(({ locks: held }) => held)
+  report(
+    'whisks',
+    dressed.map(({ points }) => points),
+  )
 
   // Flow adornments wall off corners, and absolute ones land on the route
   // as drawn, with its corners sized.
@@ -292,6 +320,10 @@ export function solve(problem: Problem): ConnectorLayout {
   // slant made room beside; the corners nested inside a slanted one grow
   // to its arc.
   const shaped = slanted.map(({ route }) => route)
+  report(
+    'slants',
+    shaped.map((route) => route.points),
+  )
   const settled = cornerRadii(nudged, radii, walls, {
     fixed: slanted.map(({ route: { points }, radii: slantedSizes }, k) => {
       const kept = new Map((locks[k] as Locks).cornerSize)

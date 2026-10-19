@@ -5,6 +5,7 @@
     <GraphicText right="24px" top="20px" class="label">DRAG THE BOXES</GraphicText>
 
     <ConnectorLayout
+      ref="layout"
       :clearance="`${clearance}px`"
       :gap="`${gap}px`"
       :bend-cost="bendCost === 'auto' ? undefined : `${bendCost}px`"
@@ -155,6 +156,8 @@
 </template>
 
 <script setup lang="ts">
+import type { ConnectorLayoutExposed } from '@placement/vue/ConnectorLayout'
+
 const GAPS = [4, 8] as const
 const CLEARANCES = [16, 28] as const
 const BEND_COSTS = ['auto', 0, 40] as const
@@ -268,7 +271,10 @@ function reset() {
   nodes.value = initial.map((node) => ({ ...node }))
 }
 
-// The settings and where each box sits, as JSON, to share a layout.
+// The settings and where each box sits, as JSON, to share a layout, and
+// the routed problem itself under `scene`, which
+// `packages/placement/scripts/scene.ts` replays.
+const layoutRef = useTemplateRef<ConnectorLayoutExposed>('layout')
 const copied = ref(false)
 let unmark: ReturnType<typeof setTimeout> | undefined
 
@@ -284,6 +290,7 @@ async function copy() {
     merge: merge.value,
     mergeGap: mergeGap.value,
     nodes: nodes.value.map(({ id, x, y }) => ({ id, x, y })),
+    scene: layoutRef.value?.snapshot(),
   }
   await navigator.clipboard.writeText(JSON.stringify(state))
   copied.value = true

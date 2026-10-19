@@ -39,11 +39,23 @@ import type { Graph, Obstacle } from './graph.ts'
 // costs that much more, and pops when nothing cheaper is left.
 //
 // A path that runs straight on through a node where other paths run
-// straight on the other way crosses them, at a cost each, and so does a
-// path that jogs across a run that other paths run straight along at both
-// ends of the jog, since it comes onto their line from one side and leaves
-// to the other. The estimate leaves crossings out, so it stays a lower
-// bound.
+// straight on the other way crosses them, at a cost each, and so does one
+// that runs straight on through a node where another path ends, arriving
+// or leaving the other way, since what that path leads to past its end
+// goes on its way. So does a path that jogs across a run that other paths
+// run straight along at both ends of the jog, since it comes onto their
+// line from one side and leaves to the other. A path that steps off its
+// line by a jog shorter than twice the radius and back onto it by another
+// the other way pays, at the turn that brings it back, for the counts of
+// the nodes on the line from where it left to where it is back, as a path
+// running straight along the line would, less what the way around paid for
+// the paths it crossed: a dodge pays what it dodged. A jog onto another
+// line for good pays nothing for the line it left. The state does not hold
+// where the path left the line, so the search finds it by walking the path
+// back from the turn; of two paths into one state, the search keeps the
+// cheaper, which may owe a dodge the other would not, so with crossings
+// counted the path it finds is not always the cheapest. The estimate
+// leaves crossings out, so it stays a lower bound.
 //
 // A path may also run along its partners' paths for less: their half-edges
 // cost a share less of their length, and the estimate takes that share off
@@ -85,11 +97,12 @@ export interface SearchOptions {
   // The cost of each crossing, where the path runs straight on through a
   // node that other paths run straight on through the other way, or jogs
   // across a run that other paths run straight along at both ends of the
-  // jog (see `radius`). Defaults to `0`.
+  // jog, or steps around such a node and back onto its line (see
+  // `radius`). Defaults to `0`.
   readonly crossingCost?: number
-  // How many other paths run straight on through each node, at `2 * node`
-  // horizontally and `2 * node + 1` vertically, on a graph whose edges are
-  // all horizontal or vertical.
+  // How many other paths run straight on through each node, or end there,
+  // at `2 * node` horizontally and `2 * node + 1` vertically, on a graph
+  // whose edges are all horizontal or vertical (see `markThrough`).
   readonly through?: ArrayLike<number>
   // The share of its length that a half-edge costs less where `partners`
   // marks it, from `0` to `1`. Defaults to `0`.
@@ -343,6 +356,127 @@ export function shortestPath(
     return usable[e] === 1
   }
 
+  // What a path in `state` that turns at `node` onto the heading (hx, hy),
+  // the second turn of a jog, stepped around, in crossings: when the jog
+  // brings it back onto the line it left by a jog the other way, both
+  // within the reach, what the nodes on that line from where it left to
+  // where it is back would have cost a path running straight along it,
+  // less the crossings the way around paid, and nothing when the way around
+  // paid as much. Nothing either when the line between them is not a run of
+  // open edges, since the path could not have stayed on it.
+  const dodged = (state: number, node: number, hx: number, hy: number): number => {
+    if (through === undefined) {
+      return 0
+    }
+    const back = edgeOf[state % stride] as number
+    const jx = Math.sign(dxOf(back))
+    const jy = Math.sign(dyOf(back))
+    // The headings of the runs back from here: the jog back, the stretch
+    // beside the line, the jog away, and the line itself.
+    const ways = [jx, jy, hx, hy, -jx, -jy, hx, hy]
+    const lengths = [0, 0, 0]
+    // The nodes of the way around, from here back to where it left.
+    const around = [node]
+    let group = 0
+    let previous = -1
+    let left = -1
+    for (let current = state; current !== -1; current = parent[current] as number) {
+      const e = edgeOf[current % stride] as number
+      if (e === previous) {
+        continue
+      }
+      previous = e
+      const ex = Math.sign(dxOf(e))
+      const ey = Math.sign(dyOf(e))
+      if (ex === 0 && ey === 0) {
+        continue
+      }
+      if (ex !== ways[2 * group] || ey !== ways[2 * group + 1]) {
+        group++
+        if (group > 3 || ex !== ways[2 * group] || ey !== ways[2 * group + 1]) {
+          return 0
+        }
+        if (group === 3) {
+          left = targets[e] as number
+          break
+        }
+      }
+      const total = (lengths[group] as number) + lengthOf(dxOf(e), dyOf(e))
+      if (group !== 1 && !before(total, reach)) {
+        return 0
+      }
+      lengths[group] = total
+      around.push(sources[e] as number)
+    }
+    const across = hy === 0 ? ys : xs
+    if (left < 0 || !coincident(across[left] as number, across[node] as number)) {
+      return 0
+    }
+    // What the way around paid: the paths it ran straight across, and the
+    // two jogs, each across the paths that run along its line at both ends.
+    const count = (at: number, slot: number) => through[2 * at + slot] ?? 0
+    const jog = jy === 0 ? 0 : 1
+    const corners = around.length - 1
+    let paid = 0
+    for (let k = 1; k < corners; k++) {
+      const [a, b, c] = [around[k + 1], around[k], around[k - 1]] as [number, number, number]
+      const [ux, uy] = [
+        (xs[b] as number) - (xs[a] as number),
+        (ys[b] as number) - (ys[a] as number),
+      ]
+      const [vx, vy] = [
+        (xs[c] as number) - (xs[b] as number),
+        (ys[c] as number) - (ys[b] as number),
+      ]
+      if (uy === 0 && vy === 0 && ux * vx > 0) {
+        paid += count(b, 1)
+      } else if (ux === 0 && vx === 0 && uy * vy > 0) {
+        paid += count(b, 0)
+      }
+    }
+    const turnsAt = around.filter((at, k) => {
+      if (k === 0 || k === corners) {
+        return true
+      }
+      const [a, b, c] = [around[k + 1], at, around[k - 1]] as [number, number, number]
+      const straight =
+        Math.sign((xs[b] as number) - (xs[a] as number)) ===
+          Math.sign((xs[c] as number) - (xs[b] as number)) &&
+        Math.sign((ys[b] as number) - (ys[a] as number)) ===
+          Math.sign((ys[c] as number) - (ys[b] as number))
+      return !straight
+    })
+    // Here, where the jog back began, where the stretch beside began, and
+    // where the path left the line.
+    const [here, back0, beside, from] = turnsAt as [number, number, number, number]
+    paid += Math.min(count(here, jog), count(back0, jog))
+    paid += Math.min(count(beside, jog), count(from, jog))
+    // What staying on the line would have cost.
+    const slot = hy === 0 ? 1 : 0
+    let at = left
+    let stay = count(at, slot)
+    let walked = 0
+    while (at !== node) {
+      let step = -1
+      for (let e = offsets[at] as number; e < (offsets[at + 1] as number); e++) {
+        if (Math.sign(dxOf(e)) === hx && Math.sign(dyOf(e)) === hy && open(e)) {
+          step = e
+          break
+        }
+      }
+      if (step < 0) {
+        return 0
+      }
+      walked += lengthOf(dxOf(step), dyOf(step))
+      if (before(lengths[1] as number, walked)) {
+        return 0
+      }
+      at = targets[step] as number
+      stay += count(at, slot)
+    }
+    return Math.max(stay - paid, 0)
+  }
+
   const relax = (state: number, total: number, turns: number, from: number) => {
     const known = seen[state] === round ? (cost[state] as number) : Number.POSITIVE_INFINITY
     const better =
@@ -510,6 +644,7 @@ export function shortestPath(
             extra += costOfTurn(turning) * paid
             if (through !== undefined) {
               next = last > first ? 3 + 2 * (last - first) + turning : shared ? 1 + turning : 0
+              extra += crossingCost * dodged(state, node, Math.sign(bx), Math.sign(by))
             }
           } else {
             extra += owed
@@ -671,7 +806,10 @@ export function markAlong(
 
 /**
  * Counts a path into, or out of, how many paths run straight on through
- * each node (see `SearchOptions.through`).
+ * each node (see `SearchOptions.through`). A path counts at its ends too,
+ * along the way it leaves or arrives, as if it ran on through them: what
+ * it leads to there, a port or a lane's whisk, goes on that way, so a path
+ * that runs straight across an end crosses it.
  *
  * @param graph - The graph the path runs on.
  * @param through - The counts, at `2 * node` horizontally and
@@ -685,10 +823,12 @@ export function markThrough(
   path: Path | undefined,
   by: number,
 ): void {
-  straightOn(graph, path, (slot) => {
+  const add = (slot: number) => {
     const count = through[slot] as number
     through[slot] = count + by
-  })
+  }
+  straightOn(graph, path, add)
+  endsOn(graph, path, add)
 }
 
 // Whether a path runs straight on across any of the paths counted in
@@ -723,6 +863,29 @@ function straightOn(
       visit(2 * b, 2 * b + 1)
     } else if (ux === 0 && vx === 0 && uy * vy > 0) {
       visit(2 * b + 1, 2 * b)
+    }
+  }
+}
+
+// Calls `visit` with the slot in `through` of each end of a path on the
+// axis it leaves or arrives along, as if it ran straight on through: what
+// it leads to past its end, a port or a lane's whisk, goes on that way.
+function endsOn(graph: Graph, path: Path | undefined, visit: (slot: number) => void): void {
+  const { xs, ys } = graph
+  const nodes = path?.nodes ?? []
+  if (nodes.length < 2) {
+    return
+  }
+  for (const [end, next] of [
+    [nodes[0], nodes[1]],
+    [nodes.at(-1), nodes.at(-2)],
+  ] as Array<[number, number]>) {
+    const dx = (xs[next] as number) - (xs[end] as number)
+    const dy = (ys[next] as number) - (ys[end] as number)
+    if (dy === 0 && dx !== 0) {
+      visit(2 * end)
+    } else if (dx === 0 && dy !== 0) {
+      visit(2 * end + 1)
     }
   }
 }
