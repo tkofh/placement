@@ -47,6 +47,13 @@ import {
 // that turned onto its lane at the last moment to keep off a strip would
 // only add a jog.
 //
+// Nor can nudging place a run between two held runs of other routes, or
+// a held run and a wall, that lie beside different parts of it closer than
+// the gap and the strokes on both sides, since it moves the run as a whole:
+// such a route is found again with the nodes between them, and between any
+// other two held runs as close, costing crossings, so it crosses or goes
+// around instead of being squeezed onto them.
+//
 // The search counts all of these marks the way it counts crossings, so a
 // route that steps off a marked line by a short jog and back onto it pays
 // for the nodes it stepped around, as it would for running through them.
@@ -239,6 +246,12 @@ export function routeAll(
       const [a, b] = [pinOfEnd[i] as [number, number], pinOfEnd[j] as [number, number]]
       return a.some((pin) => b.some((other) => nodes[pin] === nodes[other]))
     }
+    // Whether two edges run out of one port or one merge, whose lanes the
+    // nudge orders at the merge gap.
+    const bundled = (i: number, j: number) => {
+      const [a, b] = [merges[placeOf.get(i) as number], merges[placeOf.get(j) as number]]
+      return sharePort(i, j) || (a?.some((id) => id >= 0 && b?.includes(id)) ?? false)
+    }
     const heldOf = (j: number) => {
       let list = held[j]
       if (list === undefined) {
@@ -261,7 +274,8 @@ export function routeAll(
       if (path === undefined) {
         continue
       }
-      const thickness = (edges[i] as ProblemEdge).thickness
+      const edge = edges[i] as ProblemEdge
+      const { thickness } = edge
       const extra = new Float64Array(through.length)
       const mark = (nodes: ReadonlyArray<number>, vertical: boolean, by = HELD_RUN) => {
         for (const node of nodes) {
@@ -273,6 +287,10 @@ export function routeAll(
       let along = false
       const runs = runsOf(graph, path)
       const ownHeld = heldRuns(graph, path, waypoints[i] as Set<number>, true)
+      // The held runs of the routes that could pinch a run of this one: all
+      // but those of the routes it shares a port or a merge with, whose
+      // lanes the nudge orders at the merge gap.
+      const pinching: Array<{ readonly run: Held; readonly need: number }> = []
       // The path runs out of its ports along the lines out of them however
       // it goes, so the strips of others' held runs leave those lines out:
       // where the spread put the ports is not the search's to change.
@@ -310,6 +328,9 @@ export function routeAll(
           }
         }
         const need = problem.settings.gap + (thickness + (edges[j] as ProblemEdge).thickness) / 2
+        if (!bundled(i, j)) {
+          pinching.push(...heldOf(j).map((run) => ({ run, need })))
+        }
         for (const run of heldOf(j)) {
           if (before(run.at - run.low, need)) {
             mark(strip(run.lowStrip, run.vertical), run.vertical)
@@ -341,6 +362,30 @@ export function routeAll(
             )
             mark([...other.nodes.subarray(from, to + 1)], vertical)
           }
+        }
+      }
+      // A run this path may move, which nudging would hold between the
+      // held runs of two others, or one and a wall, too close for it, goes
+      // around them or across them instead. The nodes between each such
+      // pair, beside either, cost it what lying on a held run does, so that
+      // it cannot slip into the same pinch a line over, and so do those of
+      // every other gap between two held runs too narrow for a route, so
+      // that it cannot slip into another.
+      const heldAt = new Set(ownHeld.map(([from]) => from))
+      const bands: Array<Pinch> = []
+      for (const [r, [from]] of runs.entries()) {
+        if (!heldAt.has(from)) {
+          bands.push(
+            ...pinches(graph, path, runs, r, pinching, [...blocks, ...edge.avoid], thickness),
+          )
+        }
+      }
+      if (bands.length > 0) {
+        along = true
+        bands.push(...narrowGaps(pinching))
+        for (const vertical of [false, true]) {
+          const list = bands.filter((band) => band.vertical === vertical)
+          mark(strip(inBands(graph, list), vertical), vertical)
         }
       }
       if (along || runsThrough(graph, path, extra)) {
@@ -573,8 +618,28 @@ function stuckAlong(
     return true
   }
   const roomy = (side: number) => !before(side < 0 ? held.at - held.low : held.high - held.at, need)
-  // The sides the run's neighbors come from, where they meet it within the
-  // held run's extent.
+  const sides = sidesOf(graph, path, runs, r, held)
+  if (sides.size === 0) {
+    return !roomy(-1) && !roomy(1)
+  }
+  return [...sides].some((side) => !roomy(side))
+}
+
+// The sides of a held run's line that the neighbors of run `r` of a path,
+// on that line, come from where they meet it within the held run's extent:
+// `-1` for the side of lower coordinates, `1` for the side of higher.
+function sidesOf(
+  graph: Graph,
+  path: Path,
+  runs: ReadonlyArray<Run>,
+  r: number,
+  held: Held,
+): Set<number> {
+  const { xs, ys } = graph
+  const [from, to] = runs[r] as Run
+  const [a, b] = [path.nodes[from] as number, path.nodes[to] as number]
+  const acrossOf = (node: number) => (held.vertical ? xs[node] : ys[node]) as number
+  const alongOf = (node: number) => (held.vertical ? ys[node] : xs[node]) as number
   const sides = new Set<number>()
   for (const [neighbor, junction] of [
     [runs[r - 1], a],
@@ -590,10 +655,170 @@ function stuckAlong(
       sides.add(side)
     }
   }
-  if (sides.size === 0) {
-    return !roomy(-1) && !roomy(1)
+  return sides
+}
+
+// The room between two things beside a run that nudging would hold it
+// between, closer than it fits: the lines or edges of the two across the
+// run, and their extents along it.
+interface Pinch {
+  readonly vertical: boolean
+  readonly low: number
+  readonly high: number
+  readonly spans: ReadonlyArray<readonly [number, number]>
+}
+
+// What a run is held between across its line: the line of a held run of
+// another route, or the edge of an obstacle, with its extent along, and the
+// least or greatest coordinate it leaves the run.
+interface Bound {
+  readonly at: number
+  readonly line: number
+  readonly a0: number
+  readonly a1: number
+  readonly held: boolean
+}
+
+// Where nudging would pinch run `r` of a path, a run it may move, between
+// held runs of other routes, or a held run and a wall. Nudging moves the
+// run as one segment over its whole extent, so it keeps the run past each
+// held run beside any part of it, on the run's side of that line, by the
+// gap and half of both strokes (`need`), and past each wall by half its
+// stroke. Two held runs that each lie beside a different part of the run,
+// or a held run and a wall, can bound it from both sides closer than that,
+// and it then has nowhere to go: nudging squeezes it onto them, or splits
+// it into jogs, and only the search can take it elsewhere. A run on a held
+// run's line is bound for the side its neighbors come from (see
+// `stuckAlong`), and one whose neighbors come from both sides, or meet it
+// outside the held run's extent, for neither. Returns each pair of things
+// whose bounds cross, at least one a held run: two walls alone are the
+// channels' to price.
+function pinches(
+  graph: Graph,
+  path: Path,
+  runs: ReadonlyArray<Run>,
+  r: number,
+  held: ReadonlyArray<{ readonly run: Held; readonly need: number }>,
+  obstacles: ReadonlyArray<Obstacle>,
+  thickness: number,
+): Array<Pinch> {
+  const { xs, ys } = graph
+  const [from, to] = runs[r] as Run
+  const [a, b] = [path.nodes[from] as number, path.nodes[to] as number]
+  const vertical = coincident(xs[a] as number, xs[b] as number)
+  const across: Axis = vertical ? 0 : 1
+  const along = other(across)
+  const c = vertical ? (xs[a] as number) : (ys[a] as number)
+  const [p, q] = vertical ? [ys[a] as number, ys[b] as number] : [xs[a] as number, xs[b] as number]
+  if (coincident(p, q)) {
+    return []
   }
-  return [...sides].some((side) => !roomy(side))
+  const [r0, r1] = [Math.min(p, q), Math.max(p, q)]
+  const lower: Array<Bound> = []
+  const upper: Array<Bound> = []
+  for (const { run, need } of held) {
+    if (run.vertical !== vertical || !overlaps(r0, r1, run.a0, run.a1)) {
+      continue
+    }
+    let side = before(run.at, c) ? 1 : before(c, run.at) ? -1 : 0
+    if (side === 0) {
+      const sides = sidesOf(graph, path, runs, r, run)
+      side = sides.size === 1 ? ([...sides][0] as number) : 0
+    }
+    const bound = { line: run.at, a0: run.a0, a1: run.a1, held: true }
+    if (side > 0) {
+      lower.push({ ...bound, at: run.at + need })
+    } else if (side < 0) {
+      upper.push({ ...bound, at: run.at - need })
+    }
+  }
+  // The nearest wall on either side, beside the run, as nudging finds them.
+  let low: Bound | undefined
+  let high: Bound | undefined
+  for (const o of obstacles) {
+    const [o0, o1] = [lo(o, along), hi(o, along)]
+    if (!overlaps(o0, o1, r0, r1)) {
+      continue
+    }
+    const span = { a0: Math.max(o0, r0), a1: Math.min(o1, r1), held: false }
+    if (atMost(hi(o, across), c) && (low === undefined || before(low.line, hi(o, across)))) {
+      low = { ...span, line: hi(o, across), at: hi(o, across) + thickness / 2 }
+    } else if (
+      atMost(c, lo(o, across)) &&
+      (high === undefined || before(lo(o, across), high.line))
+    ) {
+      high = { ...span, line: lo(o, across), at: lo(o, across) - thickness / 2 }
+    }
+  }
+  if (low !== undefined) {
+    lower.push(low)
+  }
+  if (high !== undefined) {
+    upper.push(high)
+  }
+  const found: Array<Pinch> = []
+  for (const l of lower) {
+    for (const u of upper) {
+      if ((l.held || u.held) && before(u.at, l.at)) {
+        found.push({
+          vertical,
+          low: Math.min(l.line, u.line),
+          high: Math.max(l.line, u.line),
+          spans: [
+            [l.a0, l.a1],
+            [u.a0, u.a1],
+          ],
+        })
+      }
+    }
+  }
+  return found
+}
+
+// The gaps between two parallel held runs, on different lines, too narrow
+// for a route between them: closer than the gap and the strokes on either
+// side. A run that lies beside both, wherever along them, would be pinched
+// (see `pinches`).
+function narrowGaps(
+  held: ReadonlyArray<{ readonly run: Held; readonly need: number }>,
+): Array<Pinch> {
+  const found: Array<Pinch> = []
+  for (const [k, { run: a, need: na }] of held.entries()) {
+    for (const { run: b, need: nb } of held.slice(k + 1)) {
+      const apart = Math.abs(a.at - b.at)
+      if (a.vertical === b.vertical && !coincident(a.at, b.at) && before(apart, na + nb)) {
+        found.push({
+          vertical: a.vertical,
+          low: Math.min(a.at, b.at),
+          high: Math.max(a.at, b.at),
+          spans: [
+            [a.a0, a.a1],
+            [b.a0, b.a1],
+          ],
+        })
+      }
+    }
+  }
+  return found
+}
+
+// The nodes of a graph within any of the given bands, all across lines of
+// one axis: between their lines, and beside either of their spans.
+function inBands(graph: Graph, bands: ReadonlyArray<Pinch>): Array<number> {
+  const { xs, ys } = graph
+  const found: Array<number> = []
+  for (let node = 0; node < xs.length; node++) {
+    const inside = bands.some((band) => {
+      const [c, l] = band.vertical
+        ? [xs[node] as number, ys[node] as number]
+        : [ys[node] as number, xs[node] as number]
+      return within(c, band.low, band.high) && band.spans.some(([a0, a1]) => within(l, a0, a1))
+    })
+    if (inside) {
+      found.push(node)
+    }
+  }
+  return found
 }
 
 // Whether `node` lies on the line out of the pin at node `pin` that heads

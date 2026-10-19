@@ -66,7 +66,8 @@ spreads auto ports along shared sides and groups the ends that merge,
 `merge.ts` plans the lanes and whisks of merges, `routing.ts` finds the
 routes (a run that waypoints hold goes around the port legs of other
 routes, and so does a run along or beside one where a wall leaves nudging
-no room to move it off, and a run shared with an earlier route and left
+no room to move it off, and one that nudging would hold between two held
+runs, or one and a wall, too close for it, and a run shared with an earlier route and left
 on its other side counts as the crossing it is; a channel too narrow for
 its routes costs more by how far over it is, in rounds of rising
 pressure that move the route that gains most first, so the routes with

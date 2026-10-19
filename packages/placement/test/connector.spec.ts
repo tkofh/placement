@@ -1772,6 +1772,72 @@ describe('held runs', () => {
   })
 })
 
+// The route from a leaves right along a line and turns up into b, and
+// the route from c comes up and turns right along a line into d. The
+// route from e to f, from the top right to the bottom left, crosses
+// neither by running left between the two lines, beside the leg out of a
+// and the leg into d, which nudging cannot move. It can only move the
+// run between them as a whole, which must keep the gap and the strokes
+// from each. The top of d, and so the line into it, is given.
+const pinched = (top: number) => {
+  const rects = {
+    a: Rect.make(0, 80, 40, 40),
+    b: Rect.make(180, 0, 40, 20),
+    c: Rect.make(180, 240, 40, 20),
+    d: Rect.make(360, top, 40, 40),
+    e: Rect.make(300, 0, 40, 20),
+    f: Rect.make(60, 240, 40, 20),
+  }
+  type Id = keyof typeof rects
+  const edge = (source: Id, sourceSide: number, target: Id, targetSide: number) =>
+    Edge.make<Id>({ source, target, sourceSide, sourceAt: 0.5, targetSide, targetAt: 0.5 })
+  return Connector.apply(
+    rects,
+    [edge('a', 1, 'b', 2), edge('c', 0, 'd', 3), edge('e', 2, 'f', 0)],
+    Connector.make({ clearance: 10, gap: 8, bendCost: 20 }),
+  )
+}
+
+describe('held runs that pinch a route', () => {
+  test('a route crosses held runs too close to run between', () => {
+    // The legs lie four apart, and a run between them needs the gap from
+    // each, sixteen. The route crosses the leg into d and the route up to
+    // it instead, and nothing is crowded.
+    const layout = pinched(84)
+    expect(pointsOf(layout, 0)).toEqual([
+      [40, 100],
+      [200, 100],
+      [200, 20],
+    ])
+    expect(pointsOf(layout, 1)).toEqual([
+      [200, 240],
+      [200, 104],
+      [360, 104],
+    ])
+    expect(pointsOf(layout, 2)).toEqual([
+      [320, 20],
+      [320, 130],
+      [80, 130],
+      [80, 240],
+    ])
+    expect(layout.notes).toEqual([])
+  })
+
+  test('a route runs between held runs with room for it', () => {
+    // The legs lie thirty apart, room for the gap from each, so the route
+    // runs between them, as it would without the rule, the gap from the
+    // leg into d.
+    const layout = pinched(110)
+    expect(pointsOf(layout, 2)).toEqual([
+      [320, 20],
+      [320, 122],
+      [80, 122],
+      [80, 240],
+    ])
+    expect(layout.notes).toEqual([])
+  })
+})
+
 describe('held runs beside merges', () => {
   // Two merges on the left of a hub: two routes in, with arrowheads, from
   // a and b, and two out to c and d. Their lanes sit less than the gap and
