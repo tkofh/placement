@@ -5,220 +5,189 @@
 // placed rect, a frame against its container's content rect. Horizontal
 // fields resolve against the basis width and vertical fields against its
 // height, as `useRect` and `internal/frame.ts` do in `@placement/vue`.
+//
+// Each input has one table that says what each of its fields is, and the
+// check and the resolution both read it.
+import * as AspectRatio from '../../aspectRatio.ts'
 import * as Box from '../../box.ts'
 import * as Frame from '../../frame.ts'
 import * as Length from '../../length.ts'
 import * as Offset from '../../offset.ts'
 import * as Point from '../../point.ts'
 import type { Rect } from '../../rect.ts'
+import { isPlainRecord } from '../../utils/object.ts'
 import type { BoxInput, FrameInput, GutterInput, TranslateInput } from './types.ts'
 
-const defaultBox = Box.make({})
-const defaultFrame = Frame.make({})
+// What a field is: a length on an axis, a size on an axis, a ratio, or a
+// plain number. A size that resolves to `NaN` is unset, because a frame
+// reads a `NaN` size literally and a `NaN` bound poisons the solve, as
+// `@placement/vue` has it. A box reads `NaN` as unset anyway. A margin, a
+// gutter side, or a translation keeps its `NaN`, so a `NaN` margin stays
+// auto.
+type Field = 'x' | 'y' | 'width' | 'height' | 'ratio' | 'number'
 
-/** Checks for a plain object, as a literal or a proxy of one gives. */
-export const isPlain = (value: unknown): value is object => {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  const proto = Object.getPrototypeOf(value)
-  return proto === Object.prototype || proto === null
+type Table = { readonly [field: string]: Field }
+
+// A table for the input `I` names each of its fields once.
+type TableOf<I> = { readonly [K in keyof I]-?: Field }
+
+const BOX = {
+  top: 'y',
+  right: 'x',
+  bottom: 'y',
+  left: 'x',
+  width: 'width',
+  height: 'height',
+  aspectRatio: 'ratio',
+  minWidth: 'width',
+  minHeight: 'height',
+  maxWidth: 'width',
+  maxHeight: 'height',
+} as const satisfies TableOf<BoxInput>
+
+const FRAME = {
+  offsetTop: 'y',
+  offsetRight: 'x',
+  offsetBottom: 'y',
+  offsetLeft: 'x',
+  width: 'width',
+  height: 'height',
+  aspectRatio: 'ratio',
+  minWidth: 'width',
+  minHeight: 'height',
+  maxWidth: 'width',
+  maxHeight: 'height',
+  grow: 'number',
+  shrink: 'number',
+  align: 'number',
+  stretch: 'number',
+} as const satisfies TableOf<FrameInput>
+
+const GUTTER = {
+  top: 'y',
+  right: 'x',
+  bottom: 'y',
+  left: 'x',
+} as const satisfies TableOf<GutterInput>
+
+const TRANSLATE = { x: 'x', y: 'y' } as const satisfies TableOf<TranslateInput>
+
+const CHECKS: { readonly [F in Field]: (value: unknown) => boolean } = {
+  x: Length.isLengthInput,
+  y: Length.isLengthInput,
+  width: Length.isLengthInput,
+  height: Length.isLengthInput,
+  ratio: AspectRatio.isAspectRatio,
+  number: (value) => typeof value === 'number',
 }
+
+// An input with its lengths resolved: what the spec's own input takes.
+type Resolved<T extends Table> = {
+  -readonly [K in keyof T]?: T[K] extends 'ratio' ? AspectRatio.AspectRatio : number
+}
+
+function resolveField(field: Field, value: unknown, basis: Rect): unknown {
+  switch (field) {
+    case 'x':
+      return Length.resolve(value as Length.LengthInput, basis.width)
+    case 'y':
+      return Length.resolve(value as Length.LengthInput, basis.height)
+    case 'width':
+    case 'height': {
+      const size = Length.resolve(
+        value as Length.LengthInput,
+        field === 'width' ? basis.width : basis.height,
+      )
+      return Number.isNaN(size) ? undefined : size
+    }
+    case 'ratio':
+    case 'number':
+      return value
+  }
+}
+
+/** A prop that takes a built spec `S` or a plain input that resolves to one. */
+export interface Input<S> {
+  /**
+   * Checks for a spec, or for a plain object whose every field the input
+   * has and, unless `undefined`, of the right type.
+   */
+  readonly check: (value: unknown) => boolean
+  /**
+   * The spec to solve: a built one as it is, a plain input resolved against
+   * `basis`, or the spec of the empty input for `undefined`.
+   */
+  readonly resolve: (value: unknown, basis: Rect) => S
+}
+
+function input<T extends Table, S>(
+  table: T,
+  isSpec: (value: unknown) => value is S,
+  build: (resolved: Resolved<T>) => S,
+): Input<S> {
+  const empty = build({})
+  return {
+    check: (value) =>
+      isSpec(value) ||
+      (isPlainRecord(value) &&
+        Object.entries(value).every(([name, each]) => {
+          const field = table[name]
+          return field !== undefined && (each === undefined || CHECKS[field](each))
+        })),
+    resolve: (value, basis) => {
+      if (value === undefined) {
+        return empty
+      }
+      if (isSpec(value)) {
+        return value
+      }
+      const resolved: Record<string, unknown> = {}
+      for (const [name, each] of Object.entries(value as object)) {
+        if (each !== undefined) {
+          resolved[name] = resolveField(table[name] as Field, each, basis)
+        }
+      }
+      return build(resolved as Resolved<T>)
+    },
+  }
+}
+
+/** The `box` prop, against the parent rect. */
+export const box: Input<Box.Box> = input(BOX, Box.isBox, Box.make)
+
+/**
+ * The `frame` prop, against the container's content rect. Vertical
+ * margins resolve against its height, unlike CSS, to match
+ * `@placement/vue`.
+ */
+export const frame: Input<Frame.Frame> = input(FRAME, Frame.isFrame, Frame.make)
+
+/** The `gutter` prop, against the flex's placed rect. An omitted side is `0`. */
+export const gutter: Input<Offset.Offset> = input(GUTTER, Offset.isOffset, (sides) =>
+  Offset.trbl(sides.top ?? 0, sides.right ?? 0, sides.bottom ?? 0, sides.left ?? 0),
+)
+
+/**
+ * The `translate` prop, against the rect it moves, as CSS `translate`
+ * resolves. An omitted component is `0`.
+ */
+export const translate: Input<Point.Point> = input(TRANSLATE, Point.isPoint, (by) =>
+  Point.make(by.x ?? 0, by.y ?? 0),
+)
 
 /**
  * Copies and freezes a plain input, with a `[width, height]` ratio pair in
  * it, so a spec never shares mutable data with its caller.
  *
- * @param input - The plain input.
+ * @param value - The plain input.
  * @returns The frozen copy.
  */
-export const freezeInput = (input: object): object =>
+export const freezeInput = (value: object): object =>
   Object.freeze(
     Object.fromEntries(
-      Object.entries(input).map(([field, value]) => [
+      Object.entries(value).map(([field, each]) => [
         field,
-        Array.isArray(value) ? Object.freeze([...value]) : value,
+        Array.isArray(each) ? Object.freeze([...each]) : each,
       ]),
     ),
   )
-
-const isLengthInput = (value: unknown): boolean =>
-  typeof value === 'number' || Length.isLength(value)
-
-const isNumber = (value: unknown): boolean => typeof value === 'number'
-
-const isAspectRatio = (value: unknown): boolean =>
-  typeof value === 'number' ||
-  (Array.isArray(value) &&
-    value.length === 2 &&
-    typeof value[0] === 'number' &&
-    typeof value[1] === 'number')
-
-type Guards = Readonly<Record<string, (value: unknown) => boolean>>
-
-const X = ['left', 'right', 'width', 'minWidth', 'maxWidth'] as const
-const Y = ['top', 'bottom', 'height', 'minHeight', 'maxHeight'] as const
-
-const lengths = (fields: ReadonlyArray<string>): Guards =>
-  Object.fromEntries(fields.map((field) => [field, isLengthInput]))
-
-const BOX_FIELDS: Guards = { ...lengths([...X, ...Y]), aspectRatio: isAspectRatio }
-
-const FRAME_FIELDS: Guards = {
-  ...lengths([
-    'offsetTop',
-    'offsetRight',
-    'offsetBottom',
-    'offsetLeft',
-    'width',
-    'height',
-    'minWidth',
-    'minHeight',
-    'maxWidth',
-    'maxHeight',
-  ]),
-  aspectRatio: isAspectRatio,
-  grow: isNumber,
-  shrink: isNumber,
-  align: isNumber,
-  stretch: isNumber,
-}
-
-const GUTTER_FIELDS: Guards = lengths(['top', 'right', 'bottom', 'left'])
-
-const TRANSLATE_FIELDS: Guards = lengths(['x', 'y'])
-
-// A plain object whose every field is known and, unless `undefined`, of
-// the right type.
-const fieldsOf =
-  (guards: Guards) =>
-  (value: unknown): boolean =>
-    isPlain(value) &&
-    Object.entries(value).every(([field, each]) => {
-      const guard = guards[field]
-      return guard !== undefined && (each === undefined || guard(each))
-    })
-
-/** Checks for a `BoxInput`. */
-export const isBoxInput: (value: unknown) => boolean = fieldsOf(BOX_FIELDS)
-
-/** Checks for a `FrameInput`. */
-export const isFrameInput: (value: unknown) => boolean = fieldsOf(FRAME_FIELDS)
-
-/** Checks for a `GutterInput`. */
-export const isGutterInput: (value: unknown) => boolean = fieldsOf(GUTTER_FIELDS)
-
-/** Checks for a `TranslateInput`. */
-export const isTranslateInput: (value: unknown) => boolean = fieldsOf(TRANSLATE_FIELDS)
-
-const resolve = (input: Length.LengthInput | undefined, basis: number): number | undefined =>
-  input === undefined ? undefined : Length.resolve(input, basis)
-
-// A frame reads a `NaN` size literally, and a `NaN` bound poisons the
-// solve, so a size that resolves to `NaN` is left unset instead, as
-// `@placement/vue` does.
-const size = (input: Length.LengthInput | undefined, basis: number): number | undefined => {
-  const value = resolve(input, basis)
-  return value !== undefined && Number.isNaN(value) ? undefined : value
-}
-
-/**
- * The box to solve, resolved against the parent rect.
- *
- * @param input - The `box` prop.
- * @param basis - The parent rect.
- * @returns The box.
- */
-export function boxFor(input: Box.Box | BoxInput | undefined, basis: Rect): Box.Box {
-  if (input === undefined) {
-    return defaultBox
-  }
-  if (Box.isBox(input)) {
-    return input
-  }
-  const { width, height } = basis
-  return Box.make({
-    top: resolve(input.top, height),
-    right: resolve(input.right, width),
-    bottom: resolve(input.bottom, height),
-    left: resolve(input.left, width),
-    width: resolve(input.width, width),
-    height: resolve(input.height, height),
-    aspectRatio: input.aspectRatio,
-    minWidth: resolve(input.minWidth, width),
-    minHeight: resolve(input.minHeight, height),
-    maxWidth: resolve(input.maxWidth, width),
-    maxHeight: resolve(input.maxHeight, height),
-  })
-}
-
-/**
- * The frame to solve, resolved against the container's content rect.
- * Vertical margins resolve against its height, unlike CSS, to match
- * `@placement/vue`.
- *
- * @param input - The `frame` prop.
- * @param basis - The container's content rect.
- * @returns The frame.
- */
-export function frameFor(input: Frame.Frame | FrameInput | undefined, basis: Rect): Frame.Frame {
-  if (input === undefined) {
-    return defaultFrame
-  }
-  if (Frame.isFrame(input)) {
-    return input
-  }
-  const { width, height } = basis
-  return Frame.make({
-    offsetTop: resolve(input.offsetTop, height),
-    offsetRight: resolve(input.offsetRight, width),
-    offsetBottom: resolve(input.offsetBottom, height),
-    offsetLeft: resolve(input.offsetLeft, width),
-    width: size(input.width, width),
-    height: size(input.height, height),
-    aspectRatio: input.aspectRatio,
-    minWidth: size(input.minWidth, width),
-    minHeight: size(input.minHeight, height),
-    maxWidth: size(input.maxWidth, width),
-    maxHeight: size(input.maxHeight, height),
-    grow: input.grow,
-    shrink: input.shrink,
-    align: input.align,
-    stretch: input.stretch,
-  })
-}
-
-/**
- * The gutter to contract by, resolved against the placed rect.
- *
- * @param input - The `gutter` prop.
- * @param basis - The flex's placed rect.
- * @returns The gutter.
- */
-export function gutterFor(input: Offset.Offset | GutterInput, basis: Rect): Offset.Offset {
-  if (Offset.isOffset(input)) {
-    return input
-  }
-  const { width, height } = basis
-  return Offset.trbl(
-    resolve(input.top, height) ?? 0,
-    resolve(input.right, width) ?? 0,
-    resolve(input.bottom, height) ?? 0,
-    resolve(input.left, width) ?? 0,
-  )
-}
-
-/**
- * The translation, resolved against the node's own placed rect, as CSS
- * `translate` resolves.
- *
- * @param input - The `translate` prop.
- * @param basis - The rect before the translation.
- * @returns The translation.
- */
-export function translateFor(input: Point.Point | TranslateInput, basis: Rect): Point.Point {
-  if (Point.isPoint(input)) {
-    return input
-  }
-  return Point.make(resolve(input.x, basis.width) ?? 0, resolve(input.y, basis.height) ?? 0)
-}

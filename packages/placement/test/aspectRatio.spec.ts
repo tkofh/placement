@@ -1,6 +1,25 @@
 import { describe, expect, test } from 'vitest'
 import * as AspectRatio from '../src/aspectRatio.ts'
 
+describe('isAspectRatio', () => {
+  test.each<[unknown, boolean]>([
+    [1.5, true],
+    [0, true],
+    [Number.NaN, true],
+    [[16, 9], true],
+    [[1, 0], true],
+    [[16], false],
+    [[16, 9, 1], false],
+    [[16, '9'], false],
+    ['16 / 9', false],
+    [{ 0: 16, 1: 9, length: 2 }, false],
+    [undefined, false],
+    [null, false],
+  ])('%j is %s', (value, expected) => {
+    expect(AspectRatio.isAspectRatio(value)).toBe(expected)
+  })
+})
+
 describe('toNumber', () => {
   test.each<[AspectRatio.AspectRatio, number]>([
     [1.5, 1.5],

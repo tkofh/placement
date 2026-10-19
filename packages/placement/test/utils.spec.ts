@@ -1,7 +1,24 @@
 import { describe, expect, test } from 'vitest'
 import { auto } from '../src/unstable/utils.ts'
+import { isPlainRecord } from '../src/utils/object.ts'
 
 const { POSITIVE_INFINITY: inf, NEGATIVE_INFINITY: ninf, NaN: nan } = Number
+
+describe('isPlainRecord', () => {
+  class Thing {}
+  test.each<[string, unknown, boolean]>([
+    ['a literal', { a: 1 }, true],
+    ['a null-prototype object', Object.create(null), true],
+    ['a proxy of a literal', new Proxy({ a: 1 }, {}), true],
+    ['a class instance', new Thing(), false],
+    ['an array', [1, 2], false],
+    ['a function', () => {}, false],
+    ['null', null, false],
+    ['a number', 1, false],
+  ])('%s is %s', (_, value, expected) => {
+    expect(isPlainRecord(value)).toBe(expected)
+  })
+})
 
 describe('auto', () => {
   test.each([

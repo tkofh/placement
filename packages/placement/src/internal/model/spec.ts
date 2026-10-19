@@ -1,17 +1,8 @@
 import { Pipeable } from 'curvy/utils'
-import { isBox } from '../../box.ts'
-import { isFrame } from '../../frame.ts'
-import { isOffset } from '../../offset.ts'
 import { isPoint } from '../../point.ts'
+import { isPlainRecord } from '../../utils/object.ts'
 import { isFlexbox } from '../flexbox.ts'
-import {
-  freezeInput,
-  isBoxInput,
-  isFrameInput,
-  isGutterInput,
-  isPlain,
-  isTranslateInput,
-} from './lengths.ts'
+import * as Lengths from './lengths.ts'
 import type {
   AcceptsOf,
   ContainerIndex,
@@ -104,25 +95,17 @@ export const ACCEPTS: { readonly [T in Kind]: ReadonlySet<Kind> } = {
 /** The kinds a root can have, mirroring `RootKind`. */
 export const ROOT_KINDS: ReadonlySet<Kind> = new Set<RootKind>(['group', 'flex'])
 
-const either =
-  (a: (value: unknown) => boolean, b: (value: unknown) => boolean) =>
-  (value: unknown): boolean =>
-    a(value) || b(value)
-
-const box = either(isBox, isBoxInput)
-const translate = either(isPoint, isTranslateInput)
-
 // Each prop's guard, by kind. A prop may also be `undefined`.
 const PROPS: { readonly [T in Kind]: Readonly<Record<string, (value: unknown) => boolean>> } = {
-  group: { box, origin: isPoint, translate },
+  group: { box: Lengths.box.check, origin: isPoint, translate: Lengths.translate.check },
   flex: {
-    box,
+    box: Lengths.box.check,
     origin: isPoint,
-    translate,
+    translate: Lengths.translate.check,
     layout: isFlexbox,
-    gutter: either(isOffset, isGutterInput),
+    gutter: Lengths.gutter.check,
   },
-  item: { frame: either(isFrame, isFrameInput) },
+  item: { frame: Lengths.frame.check },
 }
 
 /**
@@ -151,7 +134,7 @@ export function checkProps<T extends Kind>(kind: T, props: unknown): PropsOf<T> 
     if (value !== undefined && !guard(value)) {
       throw new TypeError(`The "${field}" prop of a ${kind} has the wrong type`)
     }
-    copy[field] = isPlain(value) ? freezeInput(value) : value
+    copy[field] = isPlainRecord(value) ? Lengths.freezeInput(value) : value
   }
   return Object.freeze(copy) as PropsOf<T>
 }

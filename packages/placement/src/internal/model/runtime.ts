@@ -14,7 +14,7 @@ import * as Box from '../../box.ts'
 import * as Point from '../../point.ts'
 import * as Rect from '../../rect.ts'
 import * as Flexbox from '../flexbox.ts'
-import { boxFor, frameFor, gutterFor, translateFor } from './lengths.ts'
+import * as Lengths from './lengths.ts'
 import { ACCEPTS, ROOT_KINDS, type Spec, checkKey, checkProps, isSpec, keyAt } from './spec.ts'
 import type { FlexProps, GroupProps, ItemProps, Kind, OutputName, Outputs } from './types.ts'
 
@@ -91,12 +91,12 @@ const sameRect = (a: Rect.Rect, b: Rect.Rect): boolean =>
 // box resolves its percentages against the parent rect, the translation
 // against the rect it moves.
 function place(props: GroupProps, parent: Rect.Rect): Rect.Rect {
-  let rect = Box.apply(boxFor(props.box, parent), parent)
+  let rect = Box.apply(Lengths.box.resolve(props.box, parent), parent)
   if (props.origin !== undefined) {
     rect = Rect.align(rect, Point.make(rect.x, rect.y), props.origin)
   }
   if (props.translate !== undefined) {
-    const by = translateFor(props.translate, rect)
+    const by = Lengths.translate.resolve(props.translate, rect)
     rect = Rect.translate(rect, by.x, by.y)
   }
   return rect
@@ -273,7 +273,9 @@ export class Runtime {
       rect = stable(() => {
         const gutter = (props() as FlexProps).gutter
         const placed = outer()
-        return gutter === undefined ? placed : Rect.contract(placed, gutterFor(gutter, placed))
+        return gutter === undefined
+          ? placed
+          : Rect.contract(placed, Lengths.gutter.resolve(gutter, placed))
       })
       solved = computed(() => {
         if (!alive()) {
@@ -282,7 +284,7 @@ export class Runtime {
         const items = children()
         const content = rect()
         const rects = Flexbox.apply(
-          items.map((child) => frameFor((child.props() as ItemProps).frame, content)),
+          items.map((child) => Lengths.frame.resolve((child.props() as ItemProps).frame, content)),
           (props() as FlexProps).layout ?? defaultLayout,
           content,
         )
