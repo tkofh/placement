@@ -1218,6 +1218,219 @@ describe('merging', () => {
     expect(layout.edges[2]?.radii[2]).toBe(8)
   })
 
+  test('the lanes shift as a group around a member that runs straight in', () => {
+    // s sits level with the port, so its route runs straight in on the
+    // line, though spread lists it last, below a and c, which come down
+    // from above. The lanes pack against it, the merge gap apart, rather
+    // than centre on the line with s stepping down onto the lowest: a on
+    // the lane 4 above, and c, which parts from a farther out, 4 above that.
+    const layout = Connector.apply(
+      {
+        c: Rect.make(0, -100, 40, 20),
+        a: Rect.make(0, -40, 40, 20),
+        s: Rect.make(0, 10, 40, 20),
+        t: rects.t,
+      },
+      (['c', 'a', 's'] as const).map((source) =>
+        Edge.make<'c' | 'a' | 's' | 't'>({
+          source,
+          target: 't',
+          sourceSide: Edge.side.right,
+          targetSide: Edge.side.left,
+          radius: 8,
+          adornments: [head],
+        }),
+      ),
+      merging(Connector.merge.side),
+    )
+    expect(layout.edges.map((edge) => edge?.merged)).toEqual([
+      [-1, 0],
+      [-1, 0],
+      [-1, 0],
+    ])
+    expect(pointsAt(layout, 2)).toEqual([
+      [40, 20],
+      [200, 20],
+    ])
+    // No route jogs on its way to its lane: c steps 8 off the line, two
+    // full corners of radius 4 behind the arrowhead, and a, 4 off, on an S.
+    expect(pointsAt(layout, 0)).toEqual([
+      [40, -90],
+      [54, -90],
+      [54, 12],
+      [188, 12],
+      [188, 20],
+      [200, 20],
+    ])
+    const a = pointsAt(layout, 1) as Array<[number, number]>
+    expect(a.slice(0, 3)).toEqual([
+      [40, -30],
+      [50, -30],
+      [50, 16],
+    ])
+    expect(a[3]?.[1]).toBe(16)
+    expect(a.slice(-2)).toEqual([
+      [a[4]?.[0], 20],
+      [200, 20],
+    ])
+  })
+
+  test('the lanes shift as a group where a member’s clearance holds its run off the line', () => {
+    // s's route comes up out of s and runs on along its clearance at y 17,
+    // 3 off the port's line, and comes in on that line, where it meets t's
+    // deeper clearance, rather than jog down onto the lane below a's. a's
+    // lane packs above it, the merge gap apart, 7 off the line, which its
+    // step takes on an S of the full radius, 4.
+    const layout = Connector.apply(
+      { a: Rect.make(0, -40, 40, 20), s: Rect.make(60, 27, 40, 20), t: rects.t },
+      (
+        [
+          ['a', Edge.side.right],
+          ['s', Edge.side.top],
+        ] as const
+      ).map(([source, sourceSide]) =>
+        Edge.make<'a' | 's' | 't'>({
+          source,
+          target: 't',
+          sourceSide,
+          targetSide: Edge.side.left,
+          radius: 8,
+          adornments: [head],
+        }),
+      ),
+      merging(Connector.merge.side),
+    )
+    const runs = [
+      [
+        [40, -30],
+        [50, -30],
+        [50, 13],
+      ],
+      [
+        [80, 27],
+        [80, 17],
+      ],
+    ]
+    for (const [k, run] of runs.entries()) {
+      const points = pointsAt(layout, k) as Array<[number, number]>
+      expect(points.slice(0, run.length)).toEqual(run)
+      // Straight on along the lane to the step onto the port's line.
+      expect(points[run.length]?.[1]).toBe(run.at(-1)?.[1])
+      expect(points.slice(run.length + 1)).toEqual([
+        [points[run.length + 1]?.[0], 20],
+        [200, 20],
+      ])
+    }
+    // The steps keep the radius of the arcs, 4: a's S reaches 4 tan(theta / 2).
+    const theta = Math.acos(1 - 7 / 8)
+    expect(layout.edges[0]?.radii.at(-2)).toBeCloseTo(4 * Math.tan(theta / 2), 12)
+    expect(layout.notes).toEqual([])
+  })
+
+  test('no lane steps farther off the line than an S of the merge’s radius', () => {
+    // With c above a, the lanes would have to shift 13 off the line for s
+    // to run straight in at y 15, more than the 8 an S of radius 4 can
+    // step. s comes in on the port's line instead, with a jog in its own
+    // run, and no step is more than 8 off.
+    const layout = Connector.apply(
+      {
+        c: Rect.make(0, -100, 40, 20),
+        a: Rect.make(0, -40, 40, 20),
+        s: Rect.make(60, 25, 40, 20),
+        t: rects.t,
+      },
+      (
+        [
+          ['c', Edge.side.right],
+          ['a', Edge.side.right],
+          ['s', Edge.side.top],
+        ] as const
+      ).map(([source, sourceSide]) =>
+        Edge.make<'c' | 'a' | 's' | 't'>({
+          source,
+          target: 't',
+          sourceSide,
+          targetSide: Edge.side.left,
+          radius: 8,
+          adornments: [head],
+        }),
+      ),
+      merging(Connector.merge.side),
+    )
+    // The step of each lane: from its corner on the lane to the one on the
+    // port's line, both within the whisk, 12.72 from t.
+    for (const route of layout.edges) {
+      const [lane, trunk] = route?.points.slice(-3, -1) ?? []
+      const stepped = trunk?.y === 20 && (lane?.x as number) > 180
+      expect(stepped ? Math.abs((lane?.y as number) - 20) : 0).toBeLessThanOrEqual(8)
+    }
+    expect(layout.notes).toEqual([])
+  })
+
+  test('a route past a merged side runs straight along its deeper clearance', () => {
+    // The steps of the merge into t reach out past its clearance, so t's
+    // obstacle deepens on that side, over all of it. The route from e, above
+    // t, to m, below it, comes down along that face on one line, rather
+    // than along the clearance with a jog around the steps, and keeps the
+    // gap from the face where it crosses the lanes, as it would from them.
+    const face = 200 - 8 - 4 * Math.sqrt(6 * Math.sqrt(3) - 9)
+    const layout = Connector.apply(
+      { ...rects, e: Rect.make(200, -100, 40, 40), m: Rect.make(190, 150, 40, 20) },
+      [
+        into('a', { radius: 8 }),
+        into('b', { radius: 8 }),
+        Edge.make<Id | 'e' | 'm'>({
+          source: 'e',
+          target: 'm',
+          sourceSide: Edge.side.left,
+          targetSide: Edge.side.top,
+          radius: 8,
+        }),
+      ],
+      merging(Connector.merge.side).pipe(Connector.setBendCost(20)),
+    )
+    const route = pointsAt(layout, 2) as Array<[number, number]>
+    expect(route).toHaveLength(5)
+    expect(route[0]).toEqual([200, -80])
+    expect(route[1]?.[1]).toBe(-80)
+    expect(route[1]?.[0]).toBeCloseTo(face - 4, 12)
+    expect(route[2]?.[0]).toBe(route[1]?.[0])
+    expect(route.slice(2)).toEqual([
+      [route[1]?.[0], 50],
+      [210, 50],
+      [210, 150],
+    ])
+    expect(layout.notes).toEqual([])
+  })
+
+  test('a neighbour beside a merged side keeps its clearance, and a zone walls off the steps', () => {
+    // w sits beside t's left, so a deeper clearance there would run into
+    // w's. The merge keeps a zone over its lanes instead, and its routes
+    // still come in on lanes the merge gap apart.
+    const layout = Connector.apply(
+      { ...rects, w: Rect.make(165, -20, 20, 25) },
+      [into('a', { radius: 8 }), into('b', { radius: 8 })],
+      merging(Connector.merge.side),
+    )
+    expect(layout.edges.map((edge) => edge?.merged)).toEqual([
+      [-1, 0],
+      [-1, 0],
+    ])
+    expect(pointsAt(layout, 0)?.slice(0, 4)).toEqual([
+      [40, -30],
+      [50, -30],
+      [50, 18],
+      [pointsAt(layout, 0)?.[3]?.[0], 18],
+    ])
+    expect(pointsAt(layout, 1)?.slice(0, 4)).toEqual([
+      [40, 70],
+      [50, 70],
+      [50, 22],
+      [pointsAt(layout, 1)?.[3]?.[0], 22],
+    ])
+    expect(layout.notes).toEqual([])
+  })
+
   test('the merge gap sets the lanes apart', () => {
     const layout = Connector.apply(
       rects,
@@ -1840,9 +2053,8 @@ describe('held runs that pinch a route', () => {
 
 describe('held runs beside merges', () => {
   // Two merges on the left of a hub: two routes in, with arrowheads, from
-  // a and b, and two out to c and d. Their lanes sit less than the gap and
-  // the strokes apart, as the merges set them, and the lanes out run on
-  // past the lanes in before they turn down.
+  // a and b, and two out to c and d. The lanes out run on past the lanes in
+  // before they turn down.
   const head = Adornment.make({
     frame: Frame.make({ width: 9, height: 8, offsetLeft: 4 }),
     at: 1,
@@ -1867,11 +2079,11 @@ describe('held runs beside merges', () => {
     })
 
   test('a route turns straight onto its lane beside the lanes of another merge', () => {
-    // The route from b comes up and turns onto the lower lane in, which
-    // lies in the strip between the upper lane out and the whisks in. That
-    // strip is too narrow for nudging, but the route cannot leave its own
-    // lane, so it does not jog onto it at the last moment to keep off the
-    // strip, and runs in no narrow channel.
+    // The route from b comes up and turns onto the lower lane in, beside
+    // the upper lane out. It does not jog onto its lane at the last moment
+    // to keep off the strip beside the lane out, and the nudge sets the
+    // lanes of the two merges the gap and the strokes apart, so it runs in
+    // no narrow channel.
     const layout = Connector.apply(
       rects,
       [edge('a', 'hub'), edge('b', 'hub'), edge('hub', 'c'), edge('hub', 'd')],
@@ -1888,7 +2100,7 @@ describe('held runs beside merges', () => {
     expect(start).toEqual([572, 288])
     expect(corner[0]).toBe(572)
     expect(laneEnd[1]).toBe(corner[1])
-    expect(lane - corner[1]).toBeLessThan(8 + 1.75)
+    expect(lane - corner[1]).toBe(8 + 1.75)
     expect(layout.notes).toEqual([])
   })
 })

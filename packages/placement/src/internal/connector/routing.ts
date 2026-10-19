@@ -1,5 +1,5 @@
 import { coincident } from 'curvy/number'
-import { atMost, before, overlaps, within } from '../../utils/tolerance.ts'
+import { atMost, before, inside, overlaps, within } from '../../utils/tolerance.ts'
 import { type Fill, channelsOf, congestionFor, fillPath, groupsOf } from '../graph/channels.ts'
 import { crossedRuns, crossingsBetween } from '../graph/crossings.ts'
 import type { Graph, Obstacle } from '../graph/graph.ts'
@@ -11,13 +11,14 @@ import {
   shortestPath,
 } from '../graph/search.ts'
 import { type Pin, visibilityGraph } from '../graph/visibility.ts'
-import { type Axis, type XY, hi, lo, other, outward } from '../orient.ts'
+import { type Axis, type XY, hi, lo, normalAxis, other, outward, outwardSign } from '../orient.ts'
 import {
   type EdgeEnd,
   type Port,
   type Problem,
   type ProblemEdge,
   PRESSURE_ROUNDS,
+  endId,
   headingOf,
   mergeIds,
   pinOf,
@@ -27,7 +28,14 @@ import {
 // The search phase: the routes of edges between given ports, on the
 // visibility graph of the obstacles and those ports, found one among the
 // others so that they cross as little as they can afford, with ends next
-// to each other traded when that crosses less.
+// to each other traded when that crosses less. A merged end whose whisk
+// starts past the clearance comes in at any node on the face there within
+// the reach of its lane, on whatever line suits it, rather than jog onto
+// the line out of its port; the nudge then spreads the lanes. The runs the
+// members of a merge come in on are one bundle to every other route: a run
+// along one of their lines, or between two of them where both run, costs
+// what lying on a held run does, so the route crosses the bundle rather
+// than ride inside it.
 //
 // Routes may share runs, since nudging moves them apart, but not the runs
 // it cannot move: a route's first and last segments, out of its ports, and
@@ -105,6 +113,21 @@ interface Held {
 // A straight run of a path, as a range of indices into its nodes.
 type Run = readonly [number, number]
 
+/**
+ * Where a merged end may come in: on any node of the visibility graph on the
+ * face its whisk starts at, within the reach of its lane.
+ */
+export interface Landing {
+  /** The side the end's port sits on. */
+  readonly side: number
+  /** The face's coordinate across the side. */
+  readonly face: number
+  /** The least coordinate along the side the end may come in at. */
+  readonly low: number
+  /** The most coordinate along the side the end may come in at. */
+  readonly high: number
+}
+
 /** The routes a search found, and the trades it made. */
 export interface Routed {
   /** Each edge's route, or `undefined` for one with no path. */
@@ -128,6 +151,9 @@ export interface Routed {
  * @param merged - The ends of each planned merge, whose routes fill the
  * channels as one bundle, or none yet planned, where the ends that could
  * merge do.
+ * @param landings - Where each merged end may come in, by end id, instead
+ * of only at its port: any node on its face within its reach, or the port
+ * where none is.
  * @returns The routes, by edge, and the trades made.
  */
 export function routeAll(
@@ -137,15 +163,63 @@ export function routeAll(
   blocks: ReadonlyArray<Obstacle> = problem.obstacles,
   trades: ReadonlyArray<readonly [EdgeEnd, EdgeEnd]> = [],
   merged?: ReadonlyArray<ReadonlyArray<EdgeEnd>>,
+  landings: ReadonlyMap<number, Landing> = new Map(),
 ): Routed {
   const { edges, extraPins, crossingCost } = problem
-  const pins: Array<Pin> = [...extraPins]
-  for (const [i, edge] of edges.entries()) {
-    const [source, target] = ports[i] as readonly [Port, Port]
-    pins.push(pinOf(source, edge.source))
-    pins.push(pinOf(target, edge.target))
+  // The pins of the ports. A merged end that comes in on its face needs no
+  // line of its own there, so its pin draws none, unless no other line
+  // meets the face within its reach.
+  const pinsWith = (lined: ReadonlySet<number>) => {
+    const pins: Array<Pin> = [...extraPins]
+    for (const [i, edge] of edges.entries()) {
+      for (const [end, port] of (ports[i] as readonly [Port, Port]).entries()) {
+        const pin = pinOf(port, end === 0 ? edge.source : edge.target)
+        const key = endId(i, end)
+        pins.push(landings.has(key) && !lined.has(key) ? { ...pin, directions: 0 } : pin)
+      }
+    }
+    return pins
   }
-  const { graph, pins: nodes } = visibilityGraph(blocks, pins)
+  // The nodes on each landing's face within its reach that a line comes in
+  // to from outside, by end id.
+  const landingsOn = (graph: Graph) => {
+    const found = new Map<number, Array<number>>()
+    for (const [key, landing] of landings) {
+      const across = normalAxis(landing.side)
+      const sign = outwardSign(landing.side)
+      const [lines, alongs] = across === 0 ? [graph.xs, graph.ys] : [graph.ys, graph.xs]
+      const list: Array<number> = []
+      for (let node = 0; node < lines.length; node++) {
+        const at = alongs[node] as number
+        if (
+          !coincident(lines[node] as number, landing.face) ||
+          !within(at, landing.low, landing.high)
+        ) {
+          continue
+        }
+        for (let e = graph.offsets[node] as number; e < (graph.offsets[node + 1] as number); e++) {
+          const next = graph.targets[e] as number
+          if (
+            coincident(alongs[next] as number, at) &&
+            before(0, sign * ((lines[next] as number) - landing.face))
+          ) {
+            list.push(node)
+            break
+          }
+        }
+      }
+      found.set(key, list)
+    }
+    return found
+  }
+  let built = visibilityGraph(blocks, pinsWith(new Set()))
+  let landed = landingsOn(built.graph)
+  const bare = new Set([...landed].flatMap(([key, list]) => (list.length === 0 ? [key] : [])))
+  if (bare.size > 0) {
+    built = visibilityGraph(blocks, pinsWith(bare))
+    landed = landingsOn(built.graph)
+  }
+  const { graph, pins: nodes } = built
   // The pin each end leaves from or arrives at, which trades swap.
   const pinOfEnd = edges.map((_, i) => [extraPins.length + 2 * i, extraPins.length + 2 * i + 1])
   const paths: Array<Path | undefined> = edges.map(() => undefined)
@@ -163,6 +237,14 @@ export function routeAll(
   const groupOf = (i: number) => {
     const k = placeOf.get(i) as number
     return groupsOf(which.length, k, merges[k] as [number, number])
+  }
+  // The nodes each end may leave from or come in at: those on its face for
+  // a merged end that has nodes there, and its pin's otherwise.
+  const landingNodes = (i: number, end: number) => {
+    const list = landed.get(endId(i, end))
+    return list !== undefined && list.length > 0
+      ? list
+      : [nodes[(pinOfEnd[i] as [number, number])[end] as number] as number]
   }
   const search = (
     i: number,
@@ -186,10 +268,12 @@ export function routeAll(
     if (nodes[start] === nodes[end] && edge.viaPins.length === 0) {
       return { nodes: Int32Array.of(nodes[start] as number), cost: 0, start: 0, end: 0 }
     }
+    const out = [headingOf(source.side, 1)]
+    const into = [headingOf(target.side, -1)]
     return shortestPath(
       graph,
-      [{ node: nodes[start] as number, headings: [headingOf(source.side, 1)] }],
-      [{ node: nodes[end] as number, headings: [headingOf(target.side, -1)] }],
+      landingNodes(i, 0).map((node) => ({ node, headings: out })),
+      landingNodes(i, 1).map((node) => ({ node, headings: into })),
       {
         ...edge.costs,
         radius: edge.radius,
@@ -266,6 +350,33 @@ export function routeAll(
       }
       return list
     }
+    // The runs each merge's members come in on where they land on its face,
+    // from the face back to their first turn, by merge id.
+    const landingRuns = () => {
+      const found = new Map<number, Array<Lane>>()
+      for (const [k, j] of which.entries()) {
+        const path = paths[j]
+        if (path === undefined || path.nodes.length < 2) {
+          continue
+        }
+        for (const [end, id] of (merges[k] ?? []).entries()) {
+          if (id < 0 || !landings.has(endId(j, end))) {
+            continue
+          }
+          const runs = runsOf(graph, path)
+          const [from, to] = (end === 0 ? runs[0] : runs.at(-1)) as Run
+          const [a, b] = [path.nodes[from] as number, path.nodes[to] as number]
+          const vertical = coincident(graph.xs[a] as number, graph.xs[b] as number)
+          const [line, a0, a1] = vertical
+            ? [graph.xs[a] as number, graph.ys[a] as number, graph.ys[b] as number]
+            : [graph.ys[a] as number, graph.xs[a] as number, graph.xs[b] as number]
+          const list = found.get(id) ?? []
+          list.push({ vertical, line, low: Math.min(a0, a1), high: Math.max(a0, a1) })
+          found.set(id, list)
+        }
+      }
+      return found
+    }
     // A path whose waypoints hold a run along a held run of another's, or
     // that runs along or beside a held run of another's where nudging
     // could not move it off, goes around instead.
@@ -295,7 +406,7 @@ export function routeAll(
       // it goes, so the strips of others' held runs leave those lines out:
       // where the spread put the ports is not the search's to change.
       const rays = (ports[i] as readonly [Port, Port]).map((port, end) => ({
-        pin: nodes[(pinOfEnd[i] as [number, number])[end] as number] as number,
+        pin: path.nodes[end === 0 ? 0 : path.nodes.length - 1] as number,
         out: outward(port.side),
       }))
       const strip = (list: ReadonlyArray<number>, vertical: boolean) =>
@@ -311,7 +422,7 @@ export function routeAll(
         // riding the whole run costs what the crossing is. Not so for two
         // paths that share a port: the runs out of it are their bundle,
         // and a crossing on it is for the nudge to order.
-        if ((order.get(j) as number) < (order.get(i) as number) && !sharePort(i, j)) {
+        if ((order.get(j) as number) < (order.get(i) as number) && !bundled(i, j)) {
           for (const [from, to] of crossedRuns(graph, path.nodes, other.nodes)) {
             const nodes = straightOn(graph, path.nodes, from, to)
             if (nodes.length > 0) {
@@ -378,6 +489,21 @@ export function routeAll(
           bands.push(
             ...pinches(graph, path, runs, r, pinching, [...blocks, ...edge.avoid], thickness),
           )
+        }
+      }
+      // A run along the landing runs of a merge this path is not in, or
+      // between two of them where both run, would lie inside the bundle
+      // they come in as, between lanes the nudge packs: it costs what
+      // lying on a held run does, so the path crosses the bundle instead.
+      const own: ReadonlyArray<number> = merges[placeOf.get(i) as number] ?? []
+      for (const [id, runs] of landingRuns()) {
+        if (!own.includes(id)) {
+          for (const vertical of [false, true]) {
+            const list = runs.filter((run) => run.vertical === vertical)
+            if (list.length > 0) {
+              mark(inBundle(graph, list), vertical)
+            }
+          }
         }
       }
       if (bands.length > 0) {
@@ -804,6 +930,40 @@ function narrowGaps(
 
 // The nodes of a graph within any of the given bands, all across lines of
 // one axis: between their lines, and beside either of their spans.
+// A run a merged end comes in on: its line, and its extent along it.
+interface Lane {
+  readonly vertical: boolean
+  readonly line: number
+  readonly low: number
+  readonly high: number
+}
+
+// The nodes on the lines of the runs of one bundle, within each run, and
+// between two of the lines, where both runs reach.
+function inBundle(graph: Graph, runs: ReadonlyArray<Lane>): Array<number> {
+  const { xs, ys } = graph
+  const found: Array<number> = []
+  for (let node = 0; node < xs.length; node++) {
+    const vertical = (runs[0] as Lane).vertical
+    const [c, l] = vertical
+      ? [xs[node] as number, ys[node] as number]
+      : [ys[node] as number, xs[node] as number]
+    const onLine = runs.some((run) => coincident(c, run.line) && within(l, run.low, run.high))
+    const between = runs.some((p) =>
+      runs.some(
+        (q) =>
+          p.line < q.line &&
+          inside(c, p.line, q.line) &&
+          within(l, Math.max(p.low, q.low), Math.min(p.high, q.high)),
+      ),
+    )
+    if (onLine || between) {
+      found.push(node)
+    }
+  }
+  return found
+}
+
 function inBands(graph: Graph, bands: ReadonlyArray<Pinch>): Array<number> {
   const { xs, ys } = graph
   const found: Array<number> = []
