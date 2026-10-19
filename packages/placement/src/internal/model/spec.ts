@@ -1,8 +1,5 @@
 import { Pipeable } from 'curvy/utils'
-import { isPoint } from '../../point.ts'
-import { isPlainRecord } from '../../utils/object.ts'
-import { isFlexbox } from '../flexbox.ts'
-import * as Lengths from './lengths.ts'
+import * as Props from './props.ts'
 import type {
   AcceptsOf,
   ContainerIndex,
@@ -95,50 +92,6 @@ export const ACCEPTS: { readonly [T in Kind]: ReadonlySet<Kind> } = {
 /** The kinds a root can have, mirroring `RootKind`. */
 export const ROOT_KINDS: ReadonlySet<Kind> = new Set<RootKind>(['group', 'flex'])
 
-// Each prop's guard, by kind. A prop may also be `undefined`.
-const PROPS: { readonly [T in Kind]: Readonly<Record<string, (value: unknown) => boolean>> } = {
-  group: { box: Lengths.box.check, origin: isPoint, translate: Lengths.translate.check },
-  flex: {
-    box: Lengths.box.check,
-    origin: isPoint,
-    translate: Lengths.translate.check,
-    layout: isFlexbox,
-    gutter: Lengths.gutter.check,
-  },
-  item: { frame: Lengths.frame.check },
-}
-
-/**
- * Checks props against a kind and returns a frozen copy. A plain input,
- * such as a `BoxInput`, is copied and frozen too, so a spec never shares
- * mutable data with its caller.
- *
- * @param kind - The node kind.
- * @param props - The props to check.
- * @returns The frozen copy.
- * @throws `TypeError` when `props` is not an object, has a field the kind
- * lacks, or has a field of the wrong type, including a plain input with a
- * field it lacks or a length that is neither a number nor a `Length`.
- */
-export function checkProps<T extends Kind>(kind: T, props: unknown): PropsOf<T> {
-  if (typeof props !== 'object' || props === null) {
-    throw new TypeError(`The props of a ${kind} must be an object`)
-  }
-  const guards = PROPS[kind]
-  const copy: Record<string, unknown> = {}
-  for (const [field, value] of Object.entries(props)) {
-    const guard = guards[field]
-    if (guard === undefined) {
-      throw new TypeError(`A ${kind} has no prop "${field}"`)
-    }
-    if (value !== undefined && !guard(value)) {
-      throw new TypeError(`The "${field}" prop of a ${kind} has the wrong type`)
-    }
-    copy[field] = isPlainRecord(value) ? Lengths.freezeInput(value) : value
-  }
-  return Object.freeze(copy) as PropsOf<T>
-}
-
 /**
  * Checks a key: non-empty, without a dot, and not starting with a digit, so
  * it never reads as a path or collides with a position.
@@ -192,7 +145,7 @@ function make(kind: Kind, args: ReadonlyArray<unknown>): Spec {
     seen.add(childKey)
   }
 
-  return new Spec(key, kind, checkProps(kind, props), Object.freeze([...children]))
+  return new Spec(key, kind, Props.check(kind, props), Object.freeze([...children]))
 }
 
 type Children<T extends Kind> = ReadonlyArray<Spec<string | undefined, AcceptsOf<T>>>

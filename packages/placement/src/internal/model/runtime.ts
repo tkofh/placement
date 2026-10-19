@@ -4,26 +4,24 @@
 // signals. Its output is a computed that returns the previous rect when the
 // new one is equal, so an unchanged node never notifies. A flex node adds a
 // solve computed that places all of its items at once. The graph discovers
-// its own evaluation order, so each kind only states what it reads.
+// its own evaluation order, so each kind only states what it reads. What
+// the props mean against each basis is `props.ts`'s business: the graph
+// hands it a basis and gets back a rect or a frame.
 //
 // Callbacks never run inside alien-signals. A watcher effect per observed
 // node records changes, and the runtime delivers them in rounds after each
 // batch (see `apply` and `#deliver`).
 import { computed, effect, endBatch, setActiveSub, signal, startBatch } from 'alien-signals'
-import * as Box from '../../box.ts'
-import * as Point from '../../point.ts'
 import * as Rect from '../../rect.ts'
 import * as Flexbox from '../flexbox.ts'
-import * as Lengths from './lengths.ts'
-import { ACCEPTS, ROOT_KINDS, type Spec, checkKey, checkProps, isSpec, keyAt } from './spec.ts'
+import * as Props from './props.ts'
+import { ACCEPTS, ROOT_KINDS, type Spec, checkKey, isSpec, keyAt } from './spec.ts'
 import type { FlexProps, GroupProps, ItemProps, Kind, OutputName, Outputs } from './types.ts'
 
 interface Signal<T> {
   (): T
   (value: T): void
 }
-
-type Props = GroupProps | FlexProps | ItemProps
 
 /** One output change: `prev` is `undefined` for an insert, `next` for a removal. */
 export interface Change<T> {
@@ -40,7 +38,7 @@ interface Node {
   readonly path: string
   readonly kind: Kind
   readonly parent: Node | undefined
-  readonly props: Signal<Props>
+  readonly props: Signal<Props.NodeProps>
   readonly children: Signal<ReadonlyArray<Node>>
   readonly alive: Signal<boolean>
   /** The node's output. */
@@ -74,7 +72,6 @@ const OUTPUT_OF: { readonly [T in Kind]: OutputName } = {
   item: 'rect',
 }
 
-const defaultLayout = Flexbox.make({})
 const noItems: ReadonlyMap<Node, Rect.Rect> = new Map()
 
 // "Did this rect change" compares fields exactly. The solvers are pure, so
@@ -85,22 +82,6 @@ const sameRect = (a: Rect.Rect, b: Rect.Rect): boolean =>
   Object.is(a.y, b.y) &&
   Object.is(a.width, b.width) &&
   Object.is(a.height, b.height)
-
-// Places a group or a flex: the box against the parent rect, then the
-// origin and the translation, as `useRect` does in `@placement/vue`. The
-// box resolves its percentages against the parent rect, the translation
-// against the rect it moves.
-function place(props: GroupProps, parent: Rect.Rect): Rect.Rect {
-  let rect = Box.apply(Lengths.box.resolve(props.box, parent), parent)
-  if (props.origin !== undefined) {
-    rect = Rect.align(rect, Point.make(rect.x, rect.y), props.origin)
-  }
-  if (props.translate !== undefined) {
-    const by = Lengths.translate.resolve(props.translate, rect)
-    rect = Rect.translate(rect, by.x, by.y)
-  }
-  return rect
-}
 
 // Runs `fn` outside any active subscriber, so effects created inside it are
 // not owned by whatever is running.
@@ -239,8 +220,8 @@ export class Runtime {
     return node
   }
 
-  #create(kind: Kind, path: string, parent: Node | undefined, initial: Props): Node {
-    const props = signal<Props>(initial)
+  #create(kind: Kind, path: string, parent: Node | undefined, initial: Props.NodeProps): Node {
+    const props = signal<Props.NodeProps>(initial)
     const children = signal<ReadonlyArray<Node>>([])
     const alive = signal(true)
     const root = this.#root
@@ -265,18 +246,12 @@ export class Runtime {
     if (kind === 'item') {
       rect = stable(() => parent?.solved?.().get(node) ?? Rect.zero)
     } else if (kind === 'group') {
-      rect = stable(() => place(props() as GroupProps, parentRect()))
+      rect = stable(() => Props.place(props() as GroupProps, parentRect()))
     } else {
       const outer = computed(() =>
-        alive() ? place(props() as FlexProps, parentRect()) : Rect.zero,
+        alive() ? Props.place(props() as FlexProps, parentRect()) : Rect.zero,
       )
-      rect = stable(() => {
-        const gutter = (props() as FlexProps).gutter
-        const placed = outer()
-        return gutter === undefined
-          ? placed
-          : Rect.contract(placed, Lengths.gutter.resolve(gutter, placed))
-      })
+      rect = stable(() => Props.content(props() as FlexProps, outer()))
       solved = computed(() => {
         if (!alive()) {
           return noItems
@@ -284,8 +259,8 @@ export class Runtime {
         const items = children()
         const content = rect()
         const rects = Flexbox.apply(
-          items.map((child) => Lengths.frame.resolve((child.props() as ItemProps).frame, content)),
-          (props() as FlexProps).layout ?? defaultLayout,
+          items.map((child) => Props.frame(child.props() as ItemProps, content)),
+          Props.layout(props() as FlexProps),
           content,
         )
         return new Map(items.map((child, index) => [child, rects[index] ?? Rect.zero]))
@@ -440,7 +415,7 @@ export class Runtime {
     for (const op of ops) {
       switch (op.op) {
         case 'update': {
-          const props = checkProps(shadow.require(op.path), op.props)
+          const props = Props.check(shadow.require(op.path), op.props)
           checked.push({ op: 'update', path: op.path, props })
           break
         }
@@ -512,7 +487,7 @@ export class Runtime {
     switch (op.op) {
       case 'update': {
         const node = this.#require(op.path)
-        node.props({ ...node.props(), ...(op.props as Props) })
+        node.props({ ...node.props(), ...(op.props as Props.NodeProps) })
         break
       }
       case 'insert': {
