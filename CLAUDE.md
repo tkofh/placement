@@ -63,11 +63,7 @@ their own rects, in rounds after a first one without the pull, against
 the price of channels over capacity, as in `routing.ts`),
 `spread.ts`
 spreads auto ports along shared sides and groups the ends that merge,
-`merge.ts` sets the branch of each merge, where its routes come in (on
-any line that meets the face there within the lanes' reach), and deepens
-the rect's clearance there (or walls off the whisks with a zone where
-that would close on a neighbor), and builds the whisks from where the
-nudge leaves the lanes, `routing.ts` finds the
+`merge.ts` plans the lanes and whisks of merges, `routing.ts` finds the
 routes (a run that waypoints hold goes around the port legs of other
 routes, and so does a run along or beside one where a wall leaves nudging
 no room to move it off, and one that nudging would hold between two held
@@ -75,13 +71,10 @@ runs, or one and a wall, too close for it, and a run shared with an earlier rout
 on its other side counts as the crossing it is; a channel too narrow for
 its routes costs more by how far over it is, in rounds of rising
 pressure that move the route that gains most first, so the routes with
-another way leave it) and trades lone ends that
+another way leave it) and trades ends that
 cross, `nudge.ts` moves overlapping segments
 apart (with `internal/separation.ts`, a 1D separation-constraint solver,
-VPSC), spreads the routes of a merge onto lanes that move, in the order
-they part in (a jog behind a lane stops a gap short of a route in its
-way, and others keep the gap from the face where the lanes end), and
-keeps other routes out of merged bundles (a segment beside a
+VPSC) and keeps other routes out of merged bundles (a segment beside a
 kink too short for its corners stays put, as does a kink a port will
 slide away), `ports.ts` slides auto
 ports to straighten short jogs, `adornments.ts` places adornments on the

@@ -782,55 +782,44 @@ export interface ConnectorLayout<K extends string = string> {
  * end of the side gets the port nearer that end, so the routes nest
  * instead of crossing at the rect. Routes that never part go in the order
  * of where their other ends are. Where the routes from two ports next to
- * each other on a side still cross each other, the ends trade places when
- * that leaves fewer crossings among all the routes (with a `bendCost`). An
- * edge from a rect to itself leaves on the right and enters on the top, by
+ * each other on a side, or two lanes next to each other in a merge, still
+ * cross each other, the ends trade places when that leaves fewer
+ * crossings among all the routes (with a `bendCost`). An edge
+ * from a rect to itself leaves on the right and enters on the top, by
  * default.
  *
- * With `merge` on, ends on one side of a rect that carry the same adornments
- * there share one port, which takes one spot among the side's auto ports, or
- * the spot they are pinned to. Their routes come in a whisk length from the
- * side, on any line within reach of the port's where the whisk starts past
- * the clearance (close enough that the step from it is at most an S at the
- * steps' radius, below, with room for the other lanes beside it), and on the
- * line out of the port where it does not, and the nudge spreads them onto
- * lanes whose strokes are `mergeGap` apart, in the order they part in:
- * centered on the line where nothing is in the way, and shifted together
- * where something is. Other routes cross the runs the routes come in on
- * rather than ride along or between them. A jog right behind a lane goes no
- * further along its run than a gap short of a route in its way. At the whisk
- * each lane steps onto the line out of the port on two arcs that leave the
- * merge gap inside them, of radius the merge gap plus half the thickest lane
- * (none on an edge without a `radius`), the second ending right behind the
- * adornments: an S for a lane less than two radii off the line, and two full
- * corners for one farther. The lanes on one side of the line all meet it on
- * the same circle, so they peel off one another along it, and run on to the
- * port as one. Back from the merge, the routes' strokes stay the merge gap
- * apart for as long as they run alongside each other, turning the same ways,
- * and their jogs sit beside one another rather than at `jogAt`, so the
- * bundle turns together and its corners nest. Other routes never run inside
- * a bundle, between strokes that sit the merge gap apart: they go past it,
- * to the side with fewer of its routes alongside, and the lanes move aside
- * from a route whose port leaves it among them. A route parts from its
+ * With `merge` on, ends on one side of a rect that carry the same
+ * adornments there share one port, which takes one spot among the side's
+ * auto ports, or the spot they are pinned to. Their routes come in on
+ * lanes whose strokes are `mergeGap` apart, in the order they part in, and
+ * run straight to a whisk length from the side. There each lane steps
+ * onto the line out of the port on two arcs that leave the merge gap
+ * inside them, of radius the merge gap plus half the thickest lane (none
+ * on an edge without a `radius`), the second ending right behind the adornments: an
+ * S for a lane less than two radii off the line, and two full corners for
+ * one farther. The lanes on one side of the line all meet it on the same
+ * circle, so they peel off one another along it, and run on to the port
+ * as one. Back from the merge, the routes' strokes stay the merge gap
+ * apart for as long as they run alongside each other, turning the same
+ * ways, and their jogs sit beside one another rather than at `jogAt`, so
+ * the bundle turns together and its corners nest. Other routes never run
+ * inside a bundle, between strokes that sit the merge gap apart: they go
+ * past it, to the side with fewer of its routes alongside, and a route
+ * whose port leaves it among the lanes steps out past them once it clears
+ * its rect. A route parts from its
  * bundle as far from the merge as its run allows, short of room for the
  * corner past it (and the adornments at its port, when that comes next),
  * and, where the run has the room, for the flow adornments between its
- * ports, so that they sit on a stretch of their own past the bundle. A route
- * that goes on alone there, from a group of which at least two go on
- * together, keeps its parting jog upright. The whisk is as long as the
- * outermost lane's step needs past the adornments, with the lanes centered
- * on the line, and at least what any S at the steps' radius needs, or half
- * the room before the next rect in front, or before the far end of one of
- * its routes that faces it, less the gap, if less. Where the steps of the
- * lanes as the nudge leaves them do not fit, the arcs of all of them shrink
- * to fit. The rect's clearance on that side deepens to the whisk, so other
- * routes keep out of it and run along one face past it, the gap from it
- * where they cross the lanes, as from the lanes; where that would reach into
- * a neighbor's, cover a port or a waypoint, or close a passage on a route, a
- * zone over the lanes keeps them out instead. `jogSlant` leaves the steps as
- * they are. With no room past the adornments, the ends share the port as
- * they are. Each route's `merged` names the edge that draws the shared
- * adornments.
+ * ports, so that they sit on a stretch of their own past the bundle.
+ * A route that goes on alone there, from a group of which at least two go
+ * on together, keeps its parting jog upright. The whisk is as long as the
+ * outermost lane's step needs past the
+ * adornments, or half the room before the next rect in front, or before
+ * the far end of one of its routes that faces it, less the gap, if less,
+ * with the arcs shrunk to fit. Other routes keep out of it, and
+ * `jogSlant` leaves the steps as they are. With no room past the
+ * adornments, the ends share the port as they are. Each route's `merged`
+ * names the edge that draws the shared adornments.
  *
  * Each route's corners report their `radii`: the edge's `radius` at least,
  * except where a leg is too short for it, and the corners of routes that
