@@ -4,6 +4,14 @@ import { isFrame } from '../../frame.ts'
 import { isOffset } from '../../offset.ts'
 import { isPoint } from '../../point.ts'
 import { isFlexbox } from '../flexbox.ts'
+import {
+  freezeInput,
+  isBoxInput,
+  isFrameInput,
+  isGutterInput,
+  isPlain,
+  isTranslateInput,
+} from './lengths.ts'
 import type {
   AcceptsOf,
   ContainerIndex,
@@ -96,33 +104,45 @@ export const ACCEPTS: { readonly [T in Kind]: ReadonlySet<Kind> } = {
 /** The kinds a root can have, mirroring `RootKind`. */
 export const ROOT_KINDS: ReadonlySet<Kind> = new Set<RootKind>(['group', 'flex'])
 
+const either =
+  (a: (value: unknown) => boolean, b: (value: unknown) => boolean) =>
+  (value: unknown): boolean =>
+    a(value) || b(value)
+
+const box = either(isBox, isBoxInput)
+const translate = either(isPoint, isTranslateInput)
+
 // Each prop's guard, by kind. A prop may also be `undefined`.
 const PROPS: { readonly [T in Kind]: Readonly<Record<string, (value: unknown) => boolean>> } = {
-  group: { box: isBox, origin: isPoint, translate: isPoint },
+  group: { box, origin: isPoint, translate },
   flex: {
-    box: isBox,
+    box,
     origin: isPoint,
-    translate: isPoint,
+    translate,
     layout: isFlexbox,
-    gutter: isOffset,
+    gutter: either(isOffset, isGutterInput),
   },
-  item: { frame: isFrame },
+  item: { frame: either(isFrame, isFrameInput) },
 }
 
 /**
- * Checks props against a kind and returns a frozen copy.
+ * Checks props against a kind and returns a frozen copy. A plain input,
+ * such as a `BoxInput`, is copied and frozen too, so a spec never shares
+ * mutable data with its caller.
  *
  * @param kind - The node kind.
  * @param props - The props to check.
  * @returns The frozen copy.
  * @throws `TypeError` when `props` is not an object, has a field the kind
- * lacks, or has a field of the wrong type.
+ * lacks, or has a field of the wrong type, including a plain input with a
+ * field it lacks or a length that is neither a number nor a `Length`.
  */
 export function checkProps<T extends Kind>(kind: T, props: unknown): PropsOf<T> {
   if (typeof props !== 'object' || props === null) {
     throw new TypeError(`The props of a ${kind} must be an object`)
   }
   const guards = PROPS[kind]
+  const copy: Record<string, unknown> = {}
   for (const [field, value] of Object.entries(props)) {
     const guard = guards[field]
     if (guard === undefined) {
@@ -131,8 +151,9 @@ export function checkProps<T extends Kind>(kind: T, props: unknown): PropsOf<T> 
     if (value !== undefined && !guard(value)) {
       throw new TypeError(`The "${field}" prop of a ${kind} has the wrong type`)
     }
+    copy[field] = isPlain(value) ? freezeInput(value) : value
   }
-  return Object.freeze({ ...props }) as PropsOf<T>
+  return Object.freeze(copy) as PropsOf<T>
 }
 
 /**

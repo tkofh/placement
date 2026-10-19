@@ -11,10 +11,10 @@
 // batch (see `apply` and `#deliver`).
 import { computed, effect, endBatch, setActiveSub, signal, startBatch } from 'alien-signals'
 import * as Box from '../../box.ts'
-import * as Frame from '../../frame.ts'
 import * as Point from '../../point.ts'
 import * as Rect from '../../rect.ts'
 import * as Flexbox from '../flexbox.ts'
+import { boxFor, frameFor, gutterFor, translateFor } from './lengths.ts'
 import { ACCEPTS, ROOT_KINDS, type Spec, checkKey, checkProps, isSpec, keyAt } from './spec.ts'
 import type { FlexProps, GroupProps, ItemProps, Kind, OutputName, Outputs } from './types.ts'
 
@@ -74,9 +74,7 @@ const OUTPUT_OF: { readonly [T in Kind]: OutputName } = {
   item: 'rect',
 }
 
-const defaultBox = Box.make({})
 const defaultLayout = Flexbox.make({})
-const defaultFrame = Frame.make({})
 const noItems: ReadonlyMap<Node, Rect.Rect> = new Map()
 
 // "Did this rect change" compares fields exactly. The solvers are pure, so
@@ -89,14 +87,17 @@ const sameRect = (a: Rect.Rect, b: Rect.Rect): boolean =>
   Object.is(a.height, b.height)
 
 // Places a group or a flex: the box against the parent rect, then the
-// origin and the translation, as `useRect` does in `@placement/vue`.
+// origin and the translation, as `useRect` does in `@placement/vue`. The
+// box resolves its percentages against the parent rect, the translation
+// against the rect it moves.
 function place(props: GroupProps, parent: Rect.Rect): Rect.Rect {
-  let rect = Box.apply(props.box ?? defaultBox, parent)
+  let rect = Box.apply(boxFor(props.box, parent), parent)
   if (props.origin !== undefined) {
     rect = Rect.align(rect, Point.make(rect.x, rect.y), props.origin)
   }
   if (props.translate !== undefined) {
-    rect = Rect.translate(rect, props.translate.x, props.translate.y)
+    const by = translateFor(props.translate, rect)
+    rect = Rect.translate(rect, by.x, by.y)
   }
   return rect
 }
@@ -271,17 +272,19 @@ export class Runtime {
       )
       rect = stable(() => {
         const gutter = (props() as FlexProps).gutter
-        return gutter === undefined ? outer() : Rect.contract(outer(), gutter)
+        const placed = outer()
+        return gutter === undefined ? placed : Rect.contract(placed, gutterFor(gutter, placed))
       })
       solved = computed(() => {
         if (!alive()) {
           return noItems
         }
         const items = children()
+        const content = rect()
         const rects = Flexbox.apply(
-          items.map((child) => (child.props() as ItemProps).frame ?? defaultFrame),
+          items.map((child) => frameFor((child.props() as ItemProps).frame, content)),
           (props() as FlexProps).layout ?? defaultLayout,
-          rect(),
+          content,
         )
         return new Map(items.map((child, index) => [child, rects[index] ?? Rect.zero]))
       })
