@@ -12,7 +12,7 @@ runs TypeScript directly, against the workspace source rather than `dist`.
 - `<name>.svg.png`, the same drawing as an image, on macOS only (through
   `qlmanage` and `sips`).
 - `<name>.txt`, every route after each traced phase of the solve
-  (`search`, `nudge`, `ports`, `whisks`, `slants`) and as returned
+  (`search`, `nudge`, `ports`, `slants`) and as returned
   (`final`), then the layout's notes.
 
 ```sh

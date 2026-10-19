@@ -8,10 +8,9 @@ import type { PlacedAdornment, SolveAdornment } from '../adornments.ts'
 import type { XY } from '../orient.ts'
 import { betweenLength, placeAdornments, placeFlow } from './adornments.ts'
 import { cornerOutsets, cornerRadii } from './corners.ts'
-import { type Locks, emptyLocks, shiftLocks } from './locks.ts'
-import { addWhisk, planMerges, stepped } from './merge.ts'
+import { emptyLocks } from './locks.ts'
 import { type RouteConstraints, bundled, nudgeRoutes } from './nudge.ts'
-import { type SlidingEnd, straightenPorts } from './ports.ts'
+import { type SlidingEnd, type SlidingGroup, slideGroups, straightenPorts } from './ports.ts'
 import {
   type EdgeEnd,
   type Port,
@@ -30,26 +29,24 @@ import { type SharedEnd, placePorts } from './spread.ts'
 // of the problem and the phases before it.
 //
 // 1. `chooseSides` picks the side of every auto end, and finds trial routes.
-// 2. `placePorts` spreads the auto ports along their sides and groups the
-//    ends that merge.
-// 3. `planMerges` lays out the lanes and whisks of each merge, and walls
-//    off the whisks.
-// 4. `routeAll` finds the routes on the final ports, trading ends next to
+// 2. `placePorts` spreads the auto ports along their sides, with the ends
+//    that merge grouped on ports next to each other.
+// 3. `routeAll` finds the routes on the final ports, trading ends next to
 //    each other when that crosses less.
-// 5. `nudge` moves routes that run alongside each other apart.
-// 6. `straightenPorts` slides auto ports to take out short jogs.
-// 7. The whisks lead merged ends onto their shared ports, and the jogs and
-//    corner sizes that later passes leave alone are noted.
-// 8. `placeFlow` lays out the flow adornments, whose stretches wall off
+// 4. `nudge` moves routes that run alongside each other apart.
+// 5. `straightenPorts` slides lone auto ports to take out short jogs, and
+//    `slideGroups` slides groups of auto ports as one.
+// 6. The jogs and corner sizes that later passes leave alone are noted.
+// 7. `placeFlow` lays out the flow adornments, whose stretches wall off
 //    corners.
-// 9. `cornerRadii` sizes the corners, `slantJogs` slants the short jogs,
+// 8. `cornerRadii` sizes the corners, `slantJogs` slants the short jogs,
 //    and `cornerRadii` settles the corners again on the routes as drawn.
-// 10. `placeAdornments` lands the absolute adornments on the drawn routes.
+// 9. `placeAdornments` lands the absolute adornments on the drawn routes.
 
 /**
  * Hears the routes after each phase of `solve`, for diagnostics: the phase
- * (`'search'`, `'nudge'`, `'ports'`, `'whisks'`, `'slants'`) and one
- * polyline per edge, `undefined` for an edge without a route.
+ * (`'search'`, `'nudge'`, `'ports'`, `'slants'`) and one polyline per
+ * edge, `undefined` for an edge without a route.
  */
 export type Trace = (phase: string, routes: ReadonlyArray<ReadonlyArray<XY> | undefined>) => void
 
@@ -64,11 +61,11 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
   const { ids, edges, boxes, obstacles, settings, mergeGap } = problem
   const chosen = chooseSides(problem)
   const placed = placePorts(problem, chosen)
-  const plan = planMerges(problem, placed.ports, placed.merges)
-  const { ports, whisks, merged, blocks, cramped } = plan
+  const { ports, cramped } = placed
+  const merged = placed.groups.map(({ ends }) => ends.map(({ edge, end }) => ({ edge, end })))
 
   // The routes, on a graph with the final ports. Ends next to each other on
-  // a side, alone or as lanes of one merge, may trade ports to cross less.
+  // a side, alone or in one group, may trade ports to cross less.
   const lone = (end: EdgeEnd) =>
     !merged.some((members) => members.some((m) => m.edge === end.edge && m.end === end.end))
   const trades: Array<readonly [EdgeEnd, EdgeEnd]> = []
@@ -77,8 +74,8 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
       .filter(lone)
       .toSorted(
         (a, b) =>
-          (placed.positions.get(endId(a.edge, a.end)) ?? 0.5) -
-          (placed.positions.get(endId(b.edge, b.end)) ?? 0.5),
+          (placed.positions.get(endId(a.edge, a.end)) ?? 0) -
+          (placed.positions.get(endId(b.edge, b.end)) ?? 0),
       )
     for (let k = 1; k < sorted.length; k++) {
       trades.push([sorted[k - 1] as SharedEnd, sorted[k] as SharedEnd])
@@ -87,7 +84,7 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
   for (const members of merged) {
     for (let k = 1; k < members.length; k++) {
       const [a, b] = [members[k - 1] as EdgeEnd, members[k] as EdgeEnd]
-      // Lanes of different strokes sit different distances apart.
+      // Ends of different strokes sit different distances apart.
       if ((edges[a.edge] as ProblemEdge).thickness === (edges[b.edge] as ProblemEdge).thickness) {
         trades.push([a, b])
       }
@@ -97,33 +94,16 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
     problem,
     ports,
     edges.map((_, i) => i),
-    blocks,
+    obstacles,
     trades,
     merged,
   )
   for (const [a, b] of traded) {
     const [p, q] = [ports[a.edge] as [Port, Port], ports[b.edge] as [Port, Port]]
     ;[p[a.end], q[b.end]] = [q[b.end] as Port, p[a.end] as Port]
-    const [ka, kb] = [endId(a.edge, a.end), endId(b.edge, b.end)]
-    const [wa, wb] = [whisks.get(ka), whisks.get(kb)]
-    if (wa !== undefined && wb !== undefined) {
-      whisks.set(ka, wb)
-      whisks.set(kb, wa)
-    }
   }
 
-  // The first edge of each merge with a route draws the shared adornments.
-  const leaders = new Map<number, number>()
-  for (const members of merged) {
-    const first = members
-      .filter(({ edge }) => routes[edge] !== undefined)
-      .reduce((lead, { edge }) => Math.min(lead, edge), Infinity)
-    for (const { edge, end } of members) {
-      leaders.set(endId(edge, end), Number.isFinite(first) ? first : -1)
-    }
-  }
-
-  // Nudge the routes that were found, together. The routes of a merge stay
+  // Nudge the routes that were found, together. The routes of a group stay
   // the merge gap apart while they run together from it.
   const mergeOf = new Map<number, number>()
   for (const [id, members] of merged.entries()) {
@@ -160,7 +140,7 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
       ) as [number, number],
   )
   // Whether an end's port may slide along its side: an auto port that
-  // neither merges nor belongs to a loop.
+  // neither groups nor belongs to a loop.
   const slides = (i: number, end: number) => {
     const edge = edges[i] as ProblemEdge
     const { at } = edge.ends[end] as ProblemEdge['ends'][number]
@@ -168,7 +148,7 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
   }
   const { routes: nudgedRoutes, crowded } = nudgeRoutes(
     found.map((i) => routes[i] as Array<XY>),
-    blocks,
+    obstacles,
     settings.gap,
     found.map((i, k): RouteConstraints => {
       const edge = edges[i] as ProblemEdge
@@ -194,9 +174,18 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
   const mergesOf = found.map(
     (i) => [mergeOf.get(endId(i, 0)) ?? -1, mergeOf.get(endId(i, 1)) ?? -1] as const,
   )
-  // Auto ports that do not merge slide along their sides to take out the
-  // short jogs right past them.
-  const straight = straightenPorts(
+  // Auto ports that do not group slide along their sides to take out the
+  // short jogs right past them, and then whole groups of auto ports do.
+  const strokes = {
+    gap: settings.gap,
+    reach: found.map((i) => (edges[i] as ProblemEdge).radius),
+    thickness: found.map((i) => (edges[i] as ProblemEdge).thickness),
+    anchors: found.map((i) => (edges[i] as ProblemEdge).via),
+    packs,
+    merges: mergesOf,
+    mergeGap,
+  }
+  const alone = straightenPorts(
     nudgedRoutes,
     found.map((i) => {
       const edge = edges[i] as ProblemEdge
@@ -212,65 +201,54 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
         }
       }) as [SlidingEnd | undefined, SlidingEnd | undefined]
     }),
-    blocks,
-    {
-      gap: settings.gap,
-      reach: found.map((i) => (edges[i] as ProblemEdge).radius),
-      thickness: found.map((i) => (edges[i] as ProblemEdge).thickness),
-      anchors: found.map((i) => (edges[i] as ProblemEdge).via),
-      packs,
-      merges: mergesOf,
-      mergeGap,
-    },
+    obstacles,
+    strokes,
   )
+  const routeOfEdge = new Map(found.map((i, k) => [i, k]))
+  // A group of auto ports slides as one, once every member has a route.
+  const sliding = merged.flatMap((members): Array<SlidingGroup> => {
+    const routed = members.map(({ edge, end }) => ({ route: routeOfEdge.get(edge), end }))
+    const first = members[0] as EdgeEnd
+    const { rect } = (edges[first.edge] as ProblemEdge).ends[
+      first.end
+    ] as ProblemEdge['ends'][number]
+    if (
+      routed.some(({ route }) => route === undefined) ||
+      members.some(({ edge, end }) => (edges[edge] as ProblemEdge).ends[end]?.at !== undefined)
+    ) {
+      return []
+    }
+    return [
+      {
+        rect: boxes[rect] as Rect.Rect,
+        own: rect,
+        side: ((ports[first.edge] as [Port, Port])[first.end] as Port).side,
+        members: routed as Array<{ route: number; end: number }>,
+      },
+    ]
+  })
+  const straight = slideGroups(alone, sliding, obstacles, strokes)
 
   report('ports', straight)
 
-  // Merged ends lead from their lanes to the shared port. Their steps keep
-  // the corners they were given, so nothing slants them further. Where a
-  // route leaves a group that goes on without it, the jog that leaves it
-  // stays upright. A jog in a bundle turns with it, so it stays upright
-  // too. The locks carry these decisions to the passes that size corners
-  // and slant jogs.
+  // Where a route leaves a group that goes on without it, the jog that
+  // leaves it stays upright. A jog in a bundle turns with it, so it stays
+  // upright too. The locks carry these decisions to the passes that size
+  // corners and slant jogs.
   const { coupled, parting } = bundled(straight, mergesOf, settings.gap)
-  const dressed = straight.map((route, k) => {
-    const i = found[k] as number
-    let locks = emptyLocks()
+  const locks = straight.map((_, k) => {
+    const held = emptyLocks()
     for (const corner of parting[k] ?? []) {
-      locks.upright.add(corner - 1).add(corner)
+      held.upright.add(corner - 1).add(corner)
     }
     for (const segment of coupled[k] ?? []) {
-      locks.upright.add(segment)
+      held.upright.add(segment)
     }
-    let points: Array<XY> = route
-    const target = whisks.get(endId(i, 1))
-    if (target !== undefined) {
-      points = addWhisk(points, target, false)
-      if (stepped(target)) {
-        locks.upright.add(points.length - 3)
-        locks.cornerSize.set(points.length - 3, target.reach).set(points.length - 2, target.reach)
-      }
-    }
-    const source = whisks.get(endId(i, 0))
-    if (source !== undefined) {
-      const before = points.length
-      points = addWhisk(points, source, true)
-      locks = shiftLocks(locks, points.length - before)
-      if (stepped(source)) {
-        locks.upright.add(1)
-        locks.cornerSize.set(1, source.reach).set(2, source.reach)
-      }
-    }
-    return { points, locks }
+    return held
   })
   // The routes as nudged, which the passes from here on read and never
   // change: each pass that moves points makes new routes.
-  const nudged = dressed.map(({ points }) => routeOf(points))
-  const locks = dressed.map(({ locks: held }) => held)
-  report(
-    'whisks',
-    dressed.map(({ points }) => points),
-  )
+  const nudged = straight.map((points) => routeOf(points))
 
   // Flow adornments wall off corners, and absolute ones land on the route
   // as drawn, with its corners sized.
@@ -297,13 +275,10 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
         : [],
     )
   })
-  // The steps keep the corners they were given.
   const radii = found.map((i) => (edges[i] as ProblemEdge).radius)
   const walls = flows.map((flow) => flow.walls)
   const thickness = found.map((i) => (edges[i] as ProblemEdge).thickness)
-  const sizes = cornerRadii(nudged, radii, walls, {
-    fixed: locks.map((held) => held.cornerSize),
-  })
+  const sizes = cornerRadii(nudged, radii, walls)
   // Short jogs slant, and the flow adornments past them move up the
   // shorter route.
   const slanted = slantJogs(
@@ -327,7 +302,7 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
   )
   const settled = cornerRadii(nudged, radii, walls, {
     fixed: slanted.map(({ route: { points }, radii: slantedSizes }, k) => {
-      const kept = new Map((locks[k] as Locks).cornerSize)
+      const kept = new Map<number, number>()
       const orthogonal = (nudged[k] as Route).points
       const moved = (index: number) => {
         const [x, y] = points[index] as XY
@@ -357,15 +332,14 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
       kind: 1,
       edges: channel.routes.map((k) => found[k] as number),
       axis: channel.axis,
-      // The zones past the obstacles hold routes too, but are no rect.
-      rects: channel.obstacles.flatMap((o) => (o < obstacles.length ? [ids[o] as string] : [])),
+      rects: channel.obstacles.map((o) => ids[o] as string),
       need: channel.need,
     })
   }
   for (const { ends, rect, side, need } of cramped) {
     notes.push({
       kind: 2,
-      edges: [...new Set(ends.map(({ edge }) => edge))],
+      edges: [...new Set(ends.map(({ edge }) => edge))].toSorted((a, b) => a - b),
       rect: ids[rect] as string,
       side,
       need,
@@ -405,7 +379,8 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
       radii: single ? [0, 0] : routeRadii,
       outsets: single ? [0, 0] : (outsets[k] as Array<number>),
       adornments: landed.map((adornment, a) => placementOf(adornment, list[a] as SolveAdornment)),
-      merged: [leaders.get(endId(i, 0)) ?? -1, leaders.get(endId(i, 1)) ?? -1],
+      // Grouped ends share no adornments: each route draws its own.
+      merged: [-1, -1],
     }
   }
   return { edges: result, notes }

@@ -102,7 +102,7 @@ export function placeFlow(
       a,
       axis,
       sign,
-      // A slanted run, the step of a merged lane, takes no adornments.
+      // A slanted run takes no adornments.
       slanted: route.isSlanted(index),
       start: cumulative[index] as number,
       end: cumulative[index + 1] as number,

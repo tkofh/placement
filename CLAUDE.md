@@ -62,8 +62,9 @@ and routes that could merge pull each other along within the span of
 their own rects, in rounds after a first one without the pull, against
 the price of channels over capacity, as in `routing.ts`),
 `spread.ts`
-spreads auto ports along shared sides and groups the ends that merge,
-`merge.ts` plans the lanes and whisks of merges, `routing.ts` finds the
+spreads auto ports along shared sides, with the ends that merge grouped
+on ports next to each other a merge gap apart in parting order, and equal
+free space around the groups and lone ports, `routing.ts` finds the
 routes (a run that waypoints hold goes around the port legs of other
 routes, and so does a run along or beside one where a wall leaves nudging
 no room to move it off, and one that nudging would hold between two held
@@ -76,15 +77,16 @@ cross, `nudge.ts` moves overlapping segments
 apart (with `internal/separation.ts`, a 1D separation-constraint solver,
 VPSC) and keeps other routes out of merged bundles (a segment beside a
 kink too short for its corners stays put, as does a kink a port will
-slide away), `ports.ts` slides auto
-ports to straighten short jogs, `adornments.ts` places adornments on the
+slide away), `ports.ts` slides lone auto
+ports, and then whole groups of auto ports as one, to straighten short
+jogs, `adornments.ts` places adornments on the
 routes, `corners.ts` sizes corners (the edge's radius is the least a corner
 turns, and the corners of routes that turn together grow outward from the
 innermost to share a center), and `slants.ts` turns jogs too short for
 their corners into S curves. `route.ts` is the polyline those passes read, with
 its lengths, headings, and segment boxes worked out once. `locks.ts`
 carries what a pass decided to the
-passes after it (upright jogs, set corner sizes), so the
+passes after it (upright jogs), so the
 order of `solve` is the order in which decisions yield. The phases build
 on `internal/graph/` (not yet public): `graph.ts` stores graphs of points
 in flat arrays, `visibility.ts` builds the orthogonal visibility graph of
@@ -96,7 +98,7 @@ for more through channels over capacity, between sets of endpoints, and
 routes several paths among one another, `channels.ts` groups the
 half-edges between one pair of walls into the slots those prices read
 and keeps what the routes fill of them, a merged bundle as one out of
-its shared port,
+its ports,
 `crossings.ts`
 counts the crossings between two paths, shared runs included, and
 `acyclic.ts` breaks cycles and orders pairwise preferences for both

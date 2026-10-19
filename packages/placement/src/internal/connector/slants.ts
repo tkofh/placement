@@ -43,7 +43,7 @@ import { type Route, routeOf } from './route.ts'
 // the gap from the routes alongside them, and a neighbor that the legs
 // clear by the gap never holds it upright.
 //
-// A jog in a bundle, or where a route leaves a group, is the merge's, and
+// A jog in a bundle, or where a route leaves a group, is the group's, and
 // stays upright (see `exempt`), unless it is shorter than the gap (see
 // `bundled` in `nudge.ts`).
 
@@ -147,8 +147,7 @@ interface Slant {
  * @param walls - The stretches of each route that its flow adornments take.
  * @param obstacles - The rects, grown by the clearance.
  * @param exempt - The jogs of each route, by the index of their first point,
- * to leave as they are, such as the steps of merged lanes onto their
- * shared line.
+ * to leave as they are, such as those in a bundle.
  * @param strokes - The gap between the strokes of routes, and how thick
  * each route draws, which an S keeps clear by.
  * @returns Each route with its short jogs slanted.

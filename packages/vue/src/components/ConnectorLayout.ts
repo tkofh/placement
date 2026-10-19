@@ -75,19 +75,19 @@ export interface ConnectorLayoutProps extends RectProps {
   /**
    * Which edge ends merge: `'none'` (default), `'side'`, or `'near'`. Ends
    * merge when they sit on one side of one node with the same adornments
-   * there, none counting as the same, and share one port and one copy of
-   * the adornments: their lines come in on lanes `mergeGap` apart and step
-   * together right behind the adornments. `'side'` merges every such end
-   * on a side, and `'near'` only those whose routes come in from the same
-   * way.
+   * there, none counting as the same. Merged ends group on ports next to
+   * each other, their strokes `mergeGap` apart, in the order their lines
+   * part in, and their lines run together the merge gap apart for as long
+   * as they run alongside each other. Each end keeps its own port and
+   * adornments. `'side'` merges every such end on a side, and `'near'`
+   * only those whose routes come in from the same way.
    */
   merge?: ConnectorMergeInput
   /**
-   * The space between the strokes of merged lanes, `gap` by default, and
-   * between their lines while they run together back from the merge. It is
-   * also the space inside the turns each lane steps onto the shared line
-   * with. `0` makes lanes that touch. Percentages resolve against the
-   * width of the layout's parent.
+   * The space between the strokes of merged ends at their ports, `gap` by
+   * default, and between their lines while they run together back from
+   * the ports. `0` makes strokes that touch. Percentages resolve against
+   * the width of the layout's parent.
    */
   mergeGap?: LengthPercentageInput
   debug?: boolean

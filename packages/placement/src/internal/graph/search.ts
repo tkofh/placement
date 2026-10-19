@@ -73,8 +73,8 @@ import type { Graph, Obstacle } from './graph.ts'
 // And a path may pay for the room it takes. With congestion, a half-edge
 // costs more along its length by how far its channel (see `channelsOf`)
 // would be over capacity with the path in it, in routes of a stroke and a
-// gap each (merged routes fill it as one bundle out of their shared port,
-// see `fillPath`), times a pressure. The price grows with the pixels missing, with
+// gap each (merged routes fill it as one bundle out of their ports, see
+// `fillPath`), times a pressure. The price grows with the pixels missing, with
 // no step at a whole route, so a path leaves a channel only once the
 // squeeze is worth more than its way around. It only ever adds to a length,
 // so the estimate's least cost per unit of length still bounds it.
@@ -1039,7 +1039,7 @@ export function markAlong(
  * Counts a path into, or out of, how many paths run straight on through
  * each node (see `SearchOptions.through`). A path counts at its ends too,
  * along the way it leaves or arrives, as if it ran on through them: what
- * it leads to there, a port or a lane's whisk, goes on that way, so a path
+ * it leads to there, a port, goes on that way, so a path
  * that runs straight across an end crosses it.
  *
  * @param graph - The graph the path runs on.
@@ -1100,7 +1100,7 @@ function straightOn(
 
 // Calls `visit` with the slot in `through` of each end of a path on the
 // axis it leaves or arrives along, as if it ran straight on through: what
-// it leads to past its end, a port or a lane's whisk, goes on that way.
+// it leads to past its end, a port, goes on that way.
 function endsOn(graph: Graph, path: Path | undefined, visit: (slot: number) => void): void {
   const { xs, ys } = graph
   const nodes = path?.nodes ?? []

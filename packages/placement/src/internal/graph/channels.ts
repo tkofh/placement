@@ -19,9 +19,8 @@ import type { Congestion, Path } from './search.ts'
 //
 // A slot fills with the routes through it, each with its stroke, and with
 // the gaps between them. Routes that merge run as lanes of one bundle, a
-// merge gap apart, alongside each other out of their shared port, and
-// past where they part each is a route of its own, as the nudge spaces
-// them. So each half-edge of a route counts under a group: the merge's, on
+// merge gap apart, alongside each other out of their ports, and past
+// where they part each is a route of its own, as the nudge spaces them. So each half-edge of a route counts under a group: the merge's, on
 // the straight run out of a merged end, and the route's own elsewhere. A
 // group fills a slot with its strokes, one gap toward the other groups, and
 // a merge gap between each two of its half-edges there: the fill of a slot
@@ -315,7 +314,7 @@ export function congestionFor(
  * pin, and the route's own otherwise. A path of one run counts under the
  * source's merge where it merges, and the target's where only that does.
  * Merged routes run as lanes of one bundle only alongside each other out
- * of their shared port, as the nudge spaces them; past where they part,
+ * of their ports, as the nudge spaces them; past where they part,
  * each is a route of its own.
  *
  * @param graph - The graph the path runs on.

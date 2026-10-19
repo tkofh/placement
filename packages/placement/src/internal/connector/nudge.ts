@@ -36,18 +36,19 @@ import { type Separation, type Variable, placeSeparated } from '../separation.ts
 // segments at the ends of a route attach to its pins and stay put, and the
 // segment past each keeps to its side of the port, so the route still leaves
 // and enters straight. The one exception is an end that runs among the
-// lanes of a merge, which hold still too: it holds up to a gap short of
+// lanes of a group, the first segments of its routes out of their ports
+// next to each other, which hold still too: it holds up to a gap short of
 // them, then steps past them, and the step stays out of every obstacle. A
 // jog that shares its line with another route leaps only toward the side
-// it parts to. Routes
-// that leave one merge on lanes stay coupled, the merge gap apart instead
-// of the full gap, for as long as they run alongside each other from it,
-// turning the same ways, and a coupled jog sits beside the rest of its
-// bundle rather than at `jogAt`, so the bundle turns together. A jog where a
-// route parts from its bundle goes as far from the merge as its corners
-// leave room for, so the bundle stays together as long as it can, though
-// it leaves the flow adornments between the route's ports a stretch of
-// their own past it where its run has the room. Where a channel is too
+// it parts to. Routes that leave one group on lanes stay coupled, the
+// merge gap apart instead of the full gap, for as long as they run
+// alongside each other from it, turning the same ways, and a coupled jog
+// sits beside the rest of its bundle rather than at `jogAt`, so the bundle
+// turns together. A jog where a route parts from its bundle goes as far
+// from the group as its corners leave room for, so the bundle stays
+// together as long as it can, though it leaves the flow adornments between
+// the route's ports a stretch of their own past it where its run has the
+// room. Where a channel is too
 // narrow for the full gap, the gaps of the segments that crowd it shrink
 // until they fit, down to none, but no segment ever moves into a rect.
 
@@ -212,8 +213,8 @@ export function nudge(
  * @param gap - The space between the strokes of overlapping segments.
  * @param constraints - What each route keeps, by route index.
  * @param mergeGap - The distance between coupled segments.
- * @returns The routes with their segments moved, and the crowded channels,
- * each once, with the most room it was found to need.
+ * @returns The routes with their segments moved, and the channels crowded
+ * as they are returned, each once, with the most room it was found to need.
  */
 export function nudgeRoutes(
   routes: ReadonlyArray<ReadonlyArray<XY>>,
@@ -223,9 +224,14 @@ export function nudgeRoutes(
   mergeGap = gap,
 ): Nudged {
   const paths = routes.map(simplify)
-  // The crowded channels, each once: the passes and rounds find the same
-  // ones again, and the first finding of each is the fullest.
+  // The crowded channels, each once, as the round whose positions come
+  // back finds them, and those an earlier round found that the routes as
+  // returned still crowd: a later round may clear a channel, or leave it
+  // squeezed as it was without finding it again. The notes describe the
+  // routes as returned. The two passes of a round may find one channel
+  // twice, and the fuller finding stands.
   const crowded = new Map<string, Crowded>()
+  const earlier = new Map<string, Crowded>()
   const report = (found: Crowded) => {
     const key = `${found.axis}|${found.routes.join(',')}|${found.obstacles.join(',')}`
     const known = crowded.get(key)
@@ -292,6 +298,10 @@ export function nudgeRoutes(
     // can make them overlap, so the passes repeat until neither moves
     // anything.
     for (let round = 0; round < ROUNDS; round++) {
+      for (const [key, found] of crowded) {
+        earlier.set(key, found)
+      }
+      crowded.clear()
       const bundles = { ids, couples, groups, packed }
       const movedX = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 0, held, report, spacing)
       const movedY = nudgeAxis(paths, obstacles, gapOf, bundles, splits, 1, held, report, spacing)
@@ -300,7 +310,103 @@ export function nudgeRoutes(
       }
     }
   }
+  const { ids, couples } = bundlesOf(paths, mergesOf)
+  const gapOf = (a: Line, b: Line) =>
+    (couples.has(ids.pair(ids.segment(a.route, a.index), ids.segment(b.route, b.index)))
+      ? tight
+      : spacing) +
+    ((thickness[a.route] as number) + (thickness[b.route] as number)) / 2
+  // What the last round found already names the routes and walls it
+  // squeezes.
+  const last = [...crowded.values()]
+  const named = (axis: Axis, names: (found: Crowded) => boolean) =>
+    last.some((found) => found.axis === axis && names(found))
+  for (const [key, found] of earlier) {
+    if (!crowded.has(key) && squeezed(paths, found, obstacles, thickness, gapOf, named)) {
+      crowded.set(key, found)
+    }
+  }
   return { routes: paths.map(simplify), crowded: [...crowded.values()] }
+}
+
+// A segment of a route that runs across an axis: its line on that axis and
+// its extent along the other, and whether it is the route's first or last,
+// which its pin holds.
+interface Line {
+  readonly route: number
+  readonly index: number
+  readonly at: number
+  readonly low: number
+  readonly high: number
+  readonly end: boolean
+}
+
+// Whether a line's extent overlaps the one from `low` to `high` by more
+// than rounding.
+const meet = (a: Line, low: number, high: number): boolean =>
+  before(Math.max(a.low, low), Math.min(a.high, high))
+
+// Whether the routes of a crowded channel still sit closer than their gaps
+// across its axis, to one another or to the rects on either side, where no
+// channel the last round found (`named`) names them already.
+function squeezed(
+  paths: ReadonlyArray<ReadonlyArray<Point>>,
+  found: Crowded,
+  obstacles: ReadonlyArray<Obstacle>,
+  thickness: ReadonlyArray<number>,
+  gapOf: (a: Line, b: Line) => number,
+  named: (axis: Axis, names: (found: Crowded) => boolean) => boolean,
+): boolean {
+  const { axis } = found
+  const along = other(axis)
+  const lines = found.routes.flatMap((route) => {
+    const path = paths[route] ?? []
+    return path.slice(1).flatMap((b, index): Array<Line> => {
+      const a = path[index] as Point
+      if (!coincident(a[axis], b[axis]) || coincident(a[along], b[along])) {
+        return []
+      }
+      return [
+        {
+          route,
+          index,
+          at: a[axis],
+          low: Math.min(a[along], b[along]),
+          high: Math.max(a[along], b[along]),
+          end: index === 0 || index === path.length - 2,
+        },
+      ]
+    })
+  })
+  for (const [k, a] of lines.entries()) {
+    for (const b of lines.slice(k + 1)) {
+      if (
+        a.route !== b.route &&
+        !(a.end && b.end) &&
+        meet(a, b.low, b.high) &&
+        before(Math.abs(a.at - b.at), gapOf(a, b)) &&
+        !named(axis, ({ routes }) => routes.includes(a.route) && routes.includes(b.route))
+      ) {
+        return true
+      }
+    }
+    const half = (thickness[a.route] as number) / 2
+    for (const o of found.obstacles) {
+      const box = obstacles[o] as Obstacle
+      if (
+        meet(a, lo(box, along), hi(box, along)) &&
+        before(lo(box, axis) - half, a.at) &&
+        before(a.at, hi(box, axis) + half) &&
+        !named(
+          axis,
+          ({ routes, obstacles: walls }) => routes.includes(a.route) && walls.includes(o),
+        )
+      ) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 // The integer ids of segments and of pairs of them, for the paths of one

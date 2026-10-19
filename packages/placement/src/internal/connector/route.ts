@@ -58,8 +58,8 @@ class Route {
   }
 
   /**
-   * Whether a segment runs along neither axis, within rounding: the step
-   * of a merged lane, or a slanted jog.
+   * Whether a segment runs along neither axis, within rounding: a slanted
+   * jog.
    *
    * @param segment - The index of the segment's first point.
    * @returns Whether the segment slants.

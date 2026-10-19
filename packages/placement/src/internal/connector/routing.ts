@@ -42,10 +42,10 @@ import {
 // such a route crossings too, so it crosses or goes around instead of
 // lying on the other route. A route leaves and arrives along the lines out
 // of its own ports however it goes, so those lines cost it nothing in the
-// strips of others: where the ports sit, and how close the lanes of two
-// merges lie, is for the spread and the merges to decide, and a route
-// that turned onto its lane at the last moment to keep off a strip would
-// only add a jog.
+// strips of others: where the ports sit, and how close two groups of
+// them lie, is for the spread to decide, and a route that turned onto its
+// port's line at the last moment to keep off a strip would only add a
+// jog.
 //
 // Nor can nudging place a run between two held runs of other routes, or
 // a held run and a wall, that lie beside different parts of it closer than
@@ -67,8 +67,9 @@ import {
 // the runs out of it are their bundle, whose lanes the nudge orders.
 //
 // The routes also fill the channels between the obstacles, each with its
-// stroke and the gap, or the merge gap beside the other lanes of its
-// merge on the run out of their shared port, and a channel too narrow for the routes in it costs
+// stroke and the gap, or the merge gap beside the others of its group on
+// the runs out of their ports, and a channel too narrow for the routes in
+// it costs
 // more per unit of length for each route it is over by, at a pressure
 // that doubles over the rounds of the search (see `searchAll`): a route
 // with another way leaves the channel, and one without stays and is
@@ -125,9 +126,8 @@ export interface Routed {
  * @param which - The edges to route.
  * @param blocks - The obstacles, the problem's by default.
  * @param trades - The pairs of ends that may trade ports.
- * @param merged - The ends of each planned merge, whose routes fill the
- * channels as one bundle, or none yet planned, where the ends that could
- * merge do.
+ * @param merged - The ends of each group, whose routes fill the channels
+ * as one bundle, or none yet placed, where the ends that could merge do.
  * @returns The routes, by edge, and the trades made.
  */
 export function routeAll(
@@ -241,12 +241,12 @@ export function routeAll(
     // first needed and again after the path is found again.
     const held: Array<Array<Held> | undefined> = []
     const order = new Map(which.map((edge, k) => [edge, k]))
-    // Whether two edges leave from or arrive at one node, as merged ends do.
+    // Whether two edges leave from or arrive at one node.
     const sharePort = (i: number, j: number) => {
       const [a, b] = [pinOfEnd[i] as [number, number], pinOfEnd[j] as [number, number]]
       return a.some((pin) => b.some((other) => nodes[pin] === nodes[other]))
     }
-    // Whether two edges run out of one port or one merge, whose lanes the
+    // Whether two edges run out of one port or one group, whose lanes the
     // nudge orders at the merge gap.
     const bundled = (i: number, j: number) => {
       const [a, b] = [merges[placeOf.get(i) as number], merges[placeOf.get(j) as number]]
@@ -288,7 +288,7 @@ export function routeAll(
       const runs = runsOf(graph, path)
       const ownHeld = heldRuns(graph, path, waypoints[i] as Set<number>, true)
       // The held runs of the routes that could pinch a run of this one: all
-      // but those of the routes it shares a port or a merge with, whose
+      // but those of the routes it shares a port or a group with, whose
       // lanes the nudge orders at the merge gap.
       const pinching: Array<{ readonly run: Held; readonly need: number }> = []
       // The path runs out of its ports along the lines out of them however

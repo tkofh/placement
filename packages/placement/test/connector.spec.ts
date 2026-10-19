@@ -1062,8 +1062,8 @@ describe('merging', () => {
 
   test('a route that could merge is pulled along the route it could merge with', () => {
     // From b, the top and the left of t cost the same. Pulled along a's
-    // route, a tenth cheaper, b comes in on the left too, and merges with
-    // it.
+    // route, a tenth cheaper, b comes in on the left too, and groups with
+    // it: b's port sits above a's, the gap of 4 between them.
     const rects = {
       a: Rect.make(0, 120, 40, 40),
       b: Rect.make(60, 0, 40, 40),
@@ -1074,10 +1074,13 @@ describe('merging', () => {
     const layout = Connector.apply(rects, edges, pulled)
     expect(pointsOf(layout, 1)).toEqual([
       [80, 40],
-      [80, 140],
-      [140, 140],
+      [80, 138],
+      [140, 138],
     ])
-    expect(layout.edges[1]?.merged).toEqual([-1, 0])
+    expect(pointsOf(layout, 0)).toEqual([
+      [40, 142],
+      [140, 142],
+    ])
     // With merging off, nothing pulls.
     const apart = Connector.apply(rects, edges, pulled.pipe(Connector.setMerge(0)))
     expect(pointsOf(apart, 1)).toEqual([
@@ -1119,7 +1122,8 @@ describe('merging', () => {
     // would settle the middle route's tie for the left, and the two would
     // hold each other there. Found alone first, the middle route takes the
     // bottom for its fewer turns, and the long run down from the bottom
-    // then draws the far route too: all three leave the bottom together.
+    // then draws the far route too: all three leave the bottom together, on
+    // ports the gap apart.
     const head = Adornment.make({ frame: Frame.make({ width: 8, height: 8 }), at: 1, orient: 1 })
     const rects = {
       hub: Rect.make(800, 240, 136, 40),
@@ -1136,65 +1140,67 @@ describe('merging', () => {
       edges,
       Connector.make({ clearance: 16, gap: 8, merge: 1 }),
     )
-    for (const route of layout.edges) {
-      expect(route?.points[0]).toEqual(Point.make(868, 280))
-      expect(route?.merged).toEqual([0, -1])
-    }
+    expect(layout.edges.map((route) => route?.points[0])).toEqual([
+      Point.make(860, 280),
+      Point.make(868, 280),
+      Point.make(876, 280),
+    ])
     expect(layout.notes).toEqual([])
   })
 
-  test('ends on one side with the same adornments share a port and one arrowhead', () => {
+  test('ends on one side with the same adornments group on ports next to each other', () => {
     const layout = Connector.apply(rects, [into('a'), into('b')], merging(Connector.merge.side))
-    // The lanes, 4 apart, jog onto the line out of the port right behind
-    // the arrowhead, x 192. They part as far back from the merge as they
-    // can, the clearance from their sources, so they run together longest.
+    // The ports sit the gap of 4 apart about the middle of the side, in the
+    // order the routes part in, so they run straight in. They part as far
+    // back from the group as they can, the clearance from their sources,
+    // so they run together longest.
     expect(pointsAt(layout, 0)).toEqual([
       [40, -30],
       [50, -30],
       [50, 18],
-      [192, 18],
-      [192, 20],
-      [200, 20],
+      [200, 18],
     ])
     expect(pointsAt(layout, 1)).toEqual([
       [40, 70],
       [50, 70],
       [50, 22],
-      [192, 22],
-      [192, 20],
-      [200, 20],
+      [200, 22],
     ])
-    // The first edge draws the arrowhead, which lands in one place for both.
+    // Each route draws its own arrowhead.
     expect(layout.edges.map((edge) => edge?.merged)).toEqual([
-      [-1, 0],
-      [-1, 0],
+      [-1, -1],
+      [-1, -1],
     ])
-    expect(layout.edges[1]?.adornments).toEqual(layout.edges[0]?.adornments)
+    expect(layout.edges.map((edge) => edge?.adornments[0]?.rect.centerY)).toEqual([18, 22])
   })
 
-  test('with a radius, each lane steps onto the line on arcs of the merge gap', () => {
+  test('a group of three sits in the order its routes part, strokes the merge gap apart', () => {
+    const layout = Connector.apply(
+      rects,
+      [into('a', { thickness: 2 }), into('b', { thickness: 2 }), into('c', { thickness: 2 })],
+      merging(Connector.merge.side).pipe(Connector.setMergeGap(2)),
+    )
+    // c, from farthest up, takes the top port and b the bottom: strokes 2
+    // wide and 2 apart put the lines 4 apart, about the middle of the side.
+    expect(layout.edges.map((edge) => edge?.points.at(-1))).toEqual([
+      Point.make(200, 20),
+      Point.make(200, 24),
+      Point.make(200, 16),
+    ])
+    expect(layout.edges.map((edge) => edge?.merged)).toEqual([
+      [-1, -1],
+      [-1, -1],
+      [-1, -1],
+    ])
+    expect(layout.notes).toEqual([])
+  })
+
+  test('with a radius, the routes of a group that part keep their radius', () => {
     const layout = Connector.apply(
       rects,
       [into('a', { radius: 8 }), into('b', { radius: 8 })],
       merging(Connector.merge.side),
     )
-    // The lanes, 2 off the line, cross on an S of two arcs of radius 4
-    // that ends at the back of the arrowhead, x 192.
-    const theta = Math.acos(1 - 2 / 8)
-    const reach = 4 * Math.tan(theta / 2)
-    for (const [k, lane] of [
-      [0, 18],
-      [1, 22],
-    ] as const) {
-      const route = layout.edges[k] as Connector.ConnectorRoute
-      const [onLane, onLine, port] = route.points.slice(-3)
-      expect(onLane?.y).toBe(lane)
-      expect(onLane?.x).toBeCloseTo(192 - reach - 2 * reach * Math.cos(theta), 12)
-      expect(onLine?.y).toBe(20)
-      expect(onLine?.x).toBeCloseTo(192 - reach, 12)
-      expect(port).toEqual(Point.make(200, 20))
-      expect(route.radii.slice(-3, -1)).toEqual([reach, reach])
-    }
     // A pair that parts leaves no group behind, so both keep their radius.
     for (const k of [0, 1]) {
       const route = layout.edges[k] as Connector.ConnectorRoute
@@ -1218,56 +1224,43 @@ describe('merging', () => {
     expect(layout.edges[2]?.radii[2]).toBe(8)
   })
 
-  test('the merge gap sets the lanes apart', () => {
+  test('the merge gap sets the ports apart', () => {
     const layout = Connector.apply(
       rects,
       [into('a'), into('b')],
       merging(Connector.merge.side).pipe(Connector.setMergeGap(2)),
     )
-    expect(pointsAt(layout, 0)?.slice(-4)).toEqual([
+    expect(pointsAt(layout, 0)?.slice(-2)).toEqual([
       [50, 19],
-      [192, 19],
-      [192, 20],
-      [200, 20],
+      [200, 19],
     ])
-    expect(pointsAt(layout, 1)?.slice(-4)).toEqual([
+    expect(pointsAt(layout, 1)?.slice(-2)).toEqual([
       [50, 21],
-      [192, 21],
-      [192, 20],
-      [200, 20],
+      [200, 21],
     ])
   })
 
-  test('the merge gap is between the strokes, and inside the steps', () => {
-    const thick = (radius: number) =>
-      Connector.apply(
-        rects,
-        [into('a', { thickness: 2, radius }), into('b', { thickness: 2, radius })],
-        merging(Connector.merge.side).pipe(Connector.setMergeGap(2)),
-      )
+  test('the merge gap is between the strokes', () => {
+    const layout = Connector.apply(
+      rects,
+      [into('a', { thickness: 2 }), into('b', { thickness: 2 })],
+      merging(Connector.merge.side).pipe(Connector.setMergeGap(2)),
+    )
     // Strokes 2 wide and 2 apart: lines 4 apart.
-    expect(pointsAt(thick(0), 0)?.slice(-3)).toEqual([
-      [192, 18],
-      [192, 20],
-      [200, 20],
+    expect(pointsAt(layout, 0)?.slice(-2)).toEqual([
+      [51, 18],
+      [200, 18],
     ])
-    expect(pointsAt(thick(0), 1)?.slice(-3)).toEqual([
-      [192, 22],
-      [192, 20],
-      [200, 20],
+    expect(pointsAt(layout, 1)?.slice(-2)).toEqual([
+      [51, 22],
+      [200, 22],
     ])
-    // The steps turn on arcs of radius 2 + 1, which leave 2 inside them.
-    const theta = Math.acos(1 - 2 / 6)
-    const reach = 3 * Math.tan(theta / 2)
-    const route = thick(8).edges[0] as Connector.ConnectorRoute
-    expect(route.radii.slice(-3, -1)[0]).toBeCloseTo(reach, 12)
-    expect(route.points.at(-2)?.x).toBeCloseTo(192 - reach, 12)
   })
 
-  test('merges that face each other close by leave room to cross between them', () => {
+  test('groups that face each other close by leave room to cross between them', () => {
     // Two edges between rects 20 apart and offset, so neither sits in front
-    // of the other's lanes, merged at both ends: the lanes stop short of
-    // passing each other, so the routes run on without turning back.
+    // of the other's ports, grouped at both ends: the routes run on without
+    // turning back.
     const near = { a: Rect.make(0, 0, 40, 40), b: Rect.make(60, 60, 40, 40) }
     const tail = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 0 })
     const edges = [0.25, 0.25].map(() =>
@@ -1307,50 +1300,83 @@ describe('merging', () => {
     expect(layout.edges[1]?.points.at(-1)?.y).toBeCloseTo(80 / 3, 12)
   })
 
-  test('near merges routes that come from the same way, nested', () => {
+  test('near groups routes that come from the same way, nested', () => {
     const layout = Connector.apply(rects, [into('a'), into('c')], merging(Connector.merge.near))
-    expect(layout.edges.map((edge) => edge?.merged)).toEqual([
-      [-1, 0],
-      [-1, 0],
-    ])
-    // The route from farther up takes the upper lane and the outer bend.
+    // The route from farther up takes the upper port and the outer bend.
     expect(pointsAt(layout, 0)).toEqual([
       [40, -30],
-      [114, -30],
-      [114, 22],
-      [192, 22],
-      [192, 20],
-      [200, 20],
+      [118, -30],
+      [118, 22],
+      [200, 22],
     ])
     expect(pointsAt(layout, 1)).toEqual([
       [40, -90],
-      [118, -90],
-      [118, 18],
-      [192, 18],
-      [192, 20],
-      [200, 20],
+      [122, -90],
+      [122, 18],
+      [200, 18],
     ])
   })
 
-  test('ends pinned to one spot merge there', () => {
+  test('near groups only the runs of ends whose routes come in together', () => {
+    // Four ends with one arrowhead: two routes come down from above and two
+    // up from below, so they form two groups, each two ports the gap
+    // apart, with a third of the free space, 12, between and around them.
     const layout = Connector.apply(
-      rects,
-      [into('a', { targetAt: 0.25 }), into('b', { targetAt: 0.25 })],
+      { ...rects, d: Rect.make(0, 120, 40, 20), t: Rect.make(200, 0, 40, 44) },
+      (['a', 'b', 'c', 'd'] as const).map((source) =>
+        Edge.make({ source, target: 't', targetSide: Edge.side.left, adornments: [head] }),
+      ),
       merging(Connector.merge.near),
     )
-    expect(pointsAt(layout, 0)?.slice(-3)).toEqual([
-      [192, 8],
-      [192, 10],
-      [200, 10],
-    ])
-    expect(pointsAt(layout, 1)?.slice(-3)).toEqual([
-      [192, 12],
-      [192, 10],
-      [200, 10],
+    expect(layout.edges.map((edge) => edge?.points.at(-1)?.y)).toEqual([16, 28, 12, 32])
+  })
+
+  test('a group and a lone end share the free space of their side evenly', () => {
+    // c and a group, 4 wide, and b, with no arrowhead, is alone: the 36
+    // the side has left over sits a third before the group, a third
+    // between, and a third after b.
+    const layout = Connector.apply(
+      rects,
+      [into('a'), into('b', { adornments: [] }), into('c')],
+      merging(Connector.merge.side),
+    )
+    expect(layout.edges.map((edge) => edge?.points.at(-1)?.y)).toEqual([16, 28, 12])
+  })
+
+  test('a side without groups spreads its ends evenly', () => {
+    const layout = Connector.apply(rects, [into('a'), into('b')], merging(Connector.merge.none))
+    expect(layout.edges.map((edge) => edge?.points.at(-1)?.y)).toEqual([40 * (1 / 3), 40 * (2 / 3)])
+  })
+
+  test('a group too wide for its side packs its ports closer, and is noted', () => {
+    // Three ports the gap of 4 apart take 8, twice the side: they pack
+    // half as close, and the side would need 4 more.
+    const layout = Connector.apply(
+      { ...rects, t: Rect.make(200, 0, 40, 4) },
+      [into('a'), into('b'), into('c')],
+      merging(Connector.merge.side),
+    )
+    expect(layout.edges.map((edge) => edge?.points.at(-1)?.y)).toEqual([2, 4, 0])
+    expect(layout.notes).toEqual([
+      { kind: Connector.note.shared, edges: [0, 1, 2], rect: 't', side: Edge.side.left, need: 4 },
     ])
   })
 
-  test('sources with no adornments merge, and with no room to jog share the port', () => {
+  test.each([
+    ['in the middle of the side', 0.25, [8, 12]],
+    ['as far as the side allows', 0, [0, 4]],
+  ])('ends pinned to one spot group about it, %s', (_, at, ys) => {
+    const layout = Connector.apply(
+      rects,
+      [into('a', { targetAt: at }), into('b', { targetAt: at })],
+      merging(Connector.merge.near),
+    )
+    expect(layout.edges.map((edge) => edge?.points.at(-1))).toEqual(
+      ys.map((y) => Point.make(200, y)),
+    )
+  })
+
+  test('sources with no adornments group', () => {
     const layout = Connector.apply(
       { s: Rect.make(0, 0, 40, 40), a: Rect.make(200, -40, 40, 20), b: Rect.make(200, 60, 40, 20) },
       [
@@ -1359,31 +1385,78 @@ describe('merging', () => {
       ],
       merging(Connector.merge.side),
     )
-    expect(layout.edges.map((edge) => edge?.merged)).toEqual([
-      [0, -1],
-      [0, -1],
-    ])
-    expect(layout.edges.map((edge) => [edge?.points[0]?.x, edge?.points[0]?.y])).toEqual([
-      [40, 20],
-      [40, 20],
+    expect(layout.edges.map((edge) => edge?.points[0])).toEqual([
+      Point.make(40, 18),
+      Point.make(40, 22),
     ])
   })
 
-  test('a rect close in front leaves the merge only the shared port', () => {
-    // The rects 12 apart leave 6 of room, half of it for the lanes, less
-    // than the arrowhead's 8.
+  test('a group needs no room in front of its side', () => {
+    // The rects 12 apart leave 6 of room in front of the side, less than
+    // the arrowheads' 8, which spill around the corners as a lone end's do.
     const layout = Connector.apply(
       { ...rects, w: Rect.make(180, 0, 8, 40) },
       [into('a'), into('b')],
       merging(Connector.merge.side),
     )
     expect(pointsAt(layout, 0)?.slice(-2)).toEqual([
-      [194, 20],
-      [200, 20],
+      [194, 18],
+      [200, 18],
     ])
     expect(pointsAt(layout, 1)?.slice(-2)).toEqual([
-      [194, 20],
-      [200, 20],
+      [194, 22],
+      [200, 22],
+    ])
+    expect(layout.notes).toEqual([])
+  })
+})
+
+describe('group slides', () => {
+  const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+  const spec = Connector.make({ clearance: 10, gap: 4, bendCost: 0, merge: Connector.merge.side })
+  type Id = 'a' | 'b' | 't'
+  const into = (source: Id, input: Partial<Edge.EdgeInput<Id>> = {}) =>
+    Edge.make<Id>({ source, target: 't', targetSide: Edge.side.left, adornments: [head], ...input })
+
+  test.each([0, 8])(
+    'a group slides as one to take out a short jog past a port, with radius %d',
+    (radius) => {
+      // b's source is pinned to y 24, which holds its run off its port at
+      // y 22, the gap below a's at 18: a jog of 2 past the port. The group
+      // slides down 2 as one, a's port with it, and b runs straight.
+      const layout = Connector.apply(
+        { a: Rect.make(0, -40, 40, 20), b: Rect.make(0, 14, 40, 20), t: Rect.make(200, 0, 40, 40) },
+        [into('a', { radius }), into('b', { sourceSide: Edge.side.right, sourceAt: 0.5, radius })],
+        spec,
+      )
+      expect(pointsAt(layout, 0)?.slice(-2)).toEqual([
+        [50, 20],
+        [200, 20],
+      ])
+      expect(pointsAt(layout, 1)).toEqual([
+        [40, 24],
+        [200, 24],
+      ])
+    },
+  )
+
+  test('a group with no room to slide stays', () => {
+    // The side is 12 long, and the group's ports, at 4 and 8, already sit
+    // the gap from its ends, so b keeps its jog of 2.
+    const layout = Connector.apply(
+      { a: Rect.make(0, -60, 40, 20), b: Rect.make(0, 0, 40, 20), t: Rect.make(200, 0, 40, 12) },
+      [into('a'), into('b', { sourceSide: Edge.side.right, sourceAt: 0.5 })],
+      spec,
+    )
+    expect(layout.edges.map((edge) => edge?.points.at(-1))).toEqual([
+      Point.make(200, 4),
+      Point.make(200, 8),
+    ])
+    expect(pointsAt(layout, 1)).toEqual([
+      [40, 10],
+      [50, 10],
+      [50, 8],
+      [200, 8],
     ])
   })
 })
@@ -1554,12 +1627,12 @@ describe('notes', () => {
     expect(layout.notes).toEqual([])
   })
 
-  test('routes that merge fill a channel as one bundle', () => {
-    // Three routes of stroke 2 merge into `t` through a slit 24 wide, 16
+  test('routes that group fill a channel as one bundle', () => {
+    // Three routes of stroke 2 group into `t` through a slit 24 wide, 16
     // between the rects grown by the clearance. Apart, at the gap of 8,
-    // they would need 22 there, but merged they are one bundle, which a
-    // slot never prices alone, so all three take the slit, as before
-    // channels were priced.
+    // they would need 22 there, but grouped, their strokes the merge gap
+    // of 2 apart, they are one bundle, which a slot never prices alone, so
+    // all three take the slit.
     const rects = {
       a: Rect.make(0, 0, 40, 20),
       b: Rect.make(0, 50, 40, 20),
@@ -1574,69 +1647,13 @@ describe('notes', () => {
     const layout = Connector.apply(
       rects,
       edges,
-      Connector.make({ clearance: 4, gap: 8, merge: Connector.merge.side }),
+      Connector.make({ clearance: 4, gap: 8, merge: Connector.merge.side, mergeGap: 2 }),
     )
-    expect(layout.edges.map((route) => route?.points.map(({ x, y }) => [x, y]))).toEqual([
-      [
-        [40, 10],
-        [45, 10],
-        [45, 70],
-        [65, 70],
-        [65, 60],
-        [300, 60],
-      ],
-      [
-        [40, 60],
-        [300, 60],
-      ],
-      [
-        [40, 110],
-        [55, 110],
-        [55, 60],
-        [300, 60],
-      ],
-    ])
-    expect(layout.notes).toEqual([])
-  })
-
-  test('a merge without room for its lanes is noted', () => {
-    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
-    const rects = {
-      a: Rect.make(0, -40, 40, 20),
-      b: Rect.make(0, 60, 40, 20),
-      t: Rect.make(200, 0, 40, 40),
-      w: Rect.make(180, 0, 8, 40),
+    for (const route of layout.edges) {
+      const through = route?.points.find(({ x }) => x >= 150) ?? Point.make(0, 0)
+      expect(through.y).toBeGreaterThanOrEqual(54)
+      expect(through.y).toBeLessThanOrEqual(70)
     }
-    const into = (source: 'a' | 'b') =>
-      Edge.make({ source, target: 't', targetSide: Edge.side.left, adornments: [head] })
-    const layout = Connector.apply(
-      rects,
-      [into('a'), into('b')],
-      spec.pipe(Connector.setMerge(Connector.merge.side)),
-    )
-    // The rects 12 apart leave 6 of room in front of the side, half of it
-    // for the lanes, less than the arrowhead's 8: the merge would need 16.
-    // Sharing the port, the two routes then overlap on the line into it,
-    // which is crowded too.
-    expect(layout.notes).toEqual([
-      { kind: Connector.note.crowded, edges: [0, 1], axis: 0, rects: ['t', 'w'], need: 4 },
-      { kind: Connector.note.shared, edges: [0, 1], rect: 't', side: Edge.side.left, need: 10 },
-    ])
-  })
-
-  test('a merge with nothing to fit shares its port without a note', () => {
-    const rects = {
-      a: Rect.make(0, -40, 40, 20),
-      b: Rect.make(0, 60, 40, 20),
-      t: Rect.make(200, 0, 40, 40),
-    }
-    const into = (source: 'a' | 'b') =>
-      Edge.make({ source, target: 't', targetSide: Edge.side.left })
-    const layout = Connector.apply(
-      rects,
-      [into('a'), into('b')],
-      spec.pipe(Connector.setMerge(Connector.merge.side)),
-    )
     expect(layout.notes).toEqual([])
   })
 
@@ -1838,11 +1855,10 @@ describe('held runs that pinch a route', () => {
   })
 })
 
-describe('held runs beside merges', () => {
-  // Two merges on the left of a hub: two routes in, with arrowheads, from
-  // a and b, and two out to c and d. Their lanes sit less than the gap and
-  // the strokes apart, as the merges set them, and the lanes out run on
-  // past the lanes in before they turn down.
+describe('held runs beside groups', () => {
+  // Two groups on the left of a hub: two routes in, with arrowheads, from
+  // a and b, and two out to c and d. The groups sit less than the gap and
+  // the strokes apart, as the spread sets them.
   const head = Adornment.make({
     frame: Frame.make({ width: 9, height: 8, offsetLeft: 4 }),
     at: 1,
@@ -1866,29 +1882,25 @@ describe('held runs beside merges', () => {
       adornments: [head],
     })
 
-  test('a route turns straight onto its lane beside the lanes of another merge', () => {
-    // The route from b comes up and turns onto the lower lane in, which
-    // lies in the strip between the upper lane out and the whisks in. That
-    // strip is too narrow for nudging, but the route cannot leave its own
-    // lane, so it does not jog onto it at the last moment to keep off the
-    // strip, and runs in no narrow channel.
+  test('a route turns straight onto its port line beside the ports of another group', () => {
+    // The route from b comes up and turns onto the line out of the lower
+    // port in, which lies in the strip between it and the upper port out.
+    // That strip is too narrow for nudging, but the route cannot leave its
+    // own port line, so it does not jog onto it at the last moment to keep
+    // off the strip, and runs in no narrow channel.
     const layout = Connector.apply(
       rects,
       [edge('a', 'hub'), edge('b', 'hub'), edge('hub', 'c'), edge('hub', 'd')],
       Connector.make({ clearance: 16, gap: 8, merge: Connector.merge.side, mergeGap: 4 }),
     )
     const points = pointsOf(layout, 1) as Array<[number, number]>
-    const lane = (pointsOf(layout, 2) as Array<[number, number]>)[2]?.[1] as number
-    expect(points).toHaveLength(5)
-    const [start, corner, laneEnd] = points as [
-      [number, number],
-      [number, number],
-      [number, number],
-    ]
+    const out = (pointsOf(layout, 2) as Array<[number, number]>)[0]?.[1] as number
+    expect(points).toHaveLength(3)
+    const [start, corner, port] = points as [[number, number], [number, number], [number, number]]
     expect(start).toEqual([572, 288])
     expect(corner[0]).toBe(572)
-    expect(laneEnd[1]).toBe(corner[1])
-    expect(lane - corner[1]).toBeLessThan(8 + 1.75)
+    expect(port[1]).toBe(corner[1])
+    expect(out - port[1]).toBeLessThan(8 + 1.75)
     expect(layout.notes).toEqual([])
   })
 })

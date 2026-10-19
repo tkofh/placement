@@ -28,13 +28,17 @@ export const turn = {
 export type ConnectorTurn = (typeof turn)[keyof typeof turn]
 
 /**
- * Which edge ends merge, encoded as numbers: `none` is `0`, `side` is `1`,
- * `near` is `2`. Ends merge when they sit on one side of one rect and carry
- * the same adornments at that end, none counting as the same. With `side`,
- * every such end on a side merges; with `near`, only those next to each
- * other along the side whose routes come in from the same way: routes that
- * turn opposite ways first, on their way out from the side, stay apart.
- * Ends pinned to one spot merge whenever merging is on.
+ * Which edge ends merge into a group, encoded as numbers: `none` is `0`,
+ * `side` is `1`, `near` is `2`. Ends merge when they sit on one side of one
+ * rect and carry the same adornments at that end, none counting as the
+ * same. With `side`, every such end on a side merges. With `near`, only
+ * those next to each other along the side whose routes come in from the
+ * same way merge: routes that turn opposite ways first, on their way out
+ * from the side, stay apart. Ends pinned to one spot merge whenever
+ * merging is on.
+ *
+ * Ends that merge keep their own ports and adornments. Their ports sit
+ * next to each other, and their routes run together (see `mergeGap`).
  */
 export const merge = {
   none: 0,
@@ -154,25 +158,19 @@ export interface ConnectorInput {
    */
   readonly jogSlant?: number | undefined
   /**
-   * Which edge ends merge, one of the `merge` encodings. Merged ends share
-   * one port and one copy of their adornments there: their routes come in
-   * on lanes whose strokes are `mergeGap` apart, in the order they part in,
-   * and each lane
-   * steps onto the line out of the port to meet the others right behind
-   * the adornments. Other values act as `none`, the default.
+   * Which edge ends merge, one of the `merge` encodings. Merged ends group
+   * on ports next to each other, their strokes `mergeGap` apart, in the
+   * order their routes part in, and their routes run together the merge
+   * gap apart for as long as they run alongside each other. Each end keeps
+   * its own port and adornments. Other values act as `none`, the default.
    */
   readonly merge?: number | undefined
   /**
-   * The space between the strokes of the lanes of merged ends, and of
+   * The space between the strokes of merged ends at their ports, and of
    * their routes for as long as they run alongside each other back from
-   * the merge, turning the same ways, as `gap` is for other routes. It is
-   * also the space inside the turns that each lane steps onto the line out
-   * of the port with, on edges with a `radius`: arcs whose radius is this
-   * plus half the thickest lane. A lane less than two radii off the line
-   * crosses on an S of two such arcs, and one farther off turns two full
-   * corners, so the lanes on one side of the line all meet it on one
-   * circle and peel off one another along it. `0` makes lanes that touch.
-   * Negative and non-finite values, the default, act as `gap`.
+   * the ports, turning the same ways, as `gap` is for other routes. `0`
+   * makes strokes that touch. Negative and non-finite values, the default,
+   * act as `gap`.
    */
   readonly mergeGap?: number | undefined
 }
@@ -209,7 +207,7 @@ class Connector extends Pipeable {
   readonly jogSlant: number
   /** Which edge ends merge, one of the `merge` encodings. */
   readonly merge: ConnectorMerge
-  /** The space between the strokes of merged lanes, `NaN` for `gap`. */
+  /** The space between the strokes of merged ends, `NaN` for `gap`. */
   readonly mergeGap: number
 
   constructor(input: ConnectorInput) {
@@ -478,9 +476,9 @@ export const setMerge: {
 } = dual(2, (self: Connector, merge: number) => new Connector({ ...self.toJSON(), merge }))
 
 /**
- * Sets the space between the strokes of the lanes of merged ends, which
- * also sets the space inside their steps onto the shared line. The data-last form omits `self` and
- * returns a function of it.
+ * Sets the space between the strokes of merged ends, at their ports and
+ * along their routes as they run together. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The spec to update.
  * @param mergeGap - The new space, or a negative or non-finite value for
@@ -616,9 +614,11 @@ export interface ConnectorRoute {
   /**
    * The edge that draws the adornments this edge shares at each end, as
    * `[source, target]`: the index of an edge, this one's own when it draws
-   * them, or `-1` where the end does not merge (see `merge`). The routes of
-   * merged ends place their shared adornments in the same spots, so only
-   * one of them needs drawing.
+   * them, or `-1` where the end shares none.
+   *
+   * No end shares adornments for now. Merged ends keep their own ports,
+   * and every route draws its own adornments, so this is always
+   * `[-1, -1]`.
    */
   readonly merged: readonly [source: number, target: number]
 }
@@ -646,10 +646,10 @@ export const note = {
  *   They need `need` more room between the rects along `axis` (`0` for x,
  *   `1` for y). `rects` names the rects on either side of the channel that
  *   hold the routes in, and is empty where only ports do.
- * - `shared`: the ends of `edges` merge on `side` of `rect`, but the merge
- *   has no room in front of the side for its lanes, so the ends share the
- *   port as they are. Whatever sits in front of the side, a rect or the far
- *   end of one of the routes, would have to be `need` farther from it.
+ * - `shared`: the ends of `edges` merge on `side` of `rect`, but their
+ *   ports, with their strokes `mergeGap` apart, take more room than the
+ *   side has, so they sit closer, in proportion, to fit. The side would
+ *   have to be `need` longer.
  * - `overflow`: no run of the route of `edge` has room for its flow
  *   adornment `adornment`, which sits on the roomiest run, `need` longer
  *   than the run is.
@@ -688,7 +688,8 @@ export type ConnectorNote<K extends string = string> =
  *   waypoints cannot be reached.
  * - `notes`: what the routes gave up, and what would have fit them (see
  *   `ConnectorNote`): the edges without a route first, then the crowded
- *   channels, the merges without room, and the adornments without room.
+ *   channels, the merged ends without room, and the adornments without
+ *   room.
  */
 export interface ConnectorLayout<K extends string = string> {
   /** One route per edge, in input order. */
@@ -715,8 +716,8 @@ export interface ConnectorLayout<K extends string = string> {
  *    its length and `bendCost` per corner, plus as much again per corner
  *    against the edge's preferred turn, plus two fifths of it per route it
  *    runs straight across. Running straight across the end of another
- *    route crosses it too, since what the route leads to there, its port
- *    or the whisk of its lane, goes on the way it arrives. A jog shorter
+ *    route crosses it too, since what the route leads to there, its port,
+ *    goes on the way it arrives. A jog shorter
  *    than twice the edge's `radius`, whose two corners could not both fit,
  *    costs its two corners in proportion to its length, so that the cost
  *    of a route varies smoothly as the rects move and no route flips to
@@ -739,8 +740,8 @@ export interface ConnectorLayout<K extends string = string> {
  *    the two strokes, or on the leg's line bound for that strip, the side
  *    its neighbors come from. It crosses the other route, or goes around,
  *    rather than lie on it. The line out of a route's own port never
- *    counts as such a strip for it: where the ports sit, and how close the
- *    lanes of two merges lie, is not the search's to change.
+ *    counts as such a strip for it: where the ports sit is not the
+ *    search's to change.
  * 3. It nudges routes that run alongside each other apart, their strokes
  *    `gap` apart (see the edges' `thickness`), ordered so that routes that
  *    share a path cross only where they must. Where two must cross
@@ -782,44 +783,36 @@ export interface ConnectorLayout<K extends string = string> {
  * end of the side gets the port nearer that end, so the routes nest
  * instead of crossing at the rect. Routes that never part go in the order
  * of where their other ends are. Where the routes from two ports next to
- * each other on a side, or two lanes next to each other in a merge, still
+ * each other on a side, alone or merged and of one `thickness`, still
  * cross each other, the ends trade places when that leaves fewer
  * crossings among all the routes (with a `bendCost`). An edge
  * from a rect to itself leaves on the right and enters on the top, by
  * default.
  *
  * With `merge` on, ends on one side of a rect that carry the same
- * adornments there share one port, which takes one spot among the side's
- * auto ports, or the spot they are pinned to. Their routes come in on
- * lanes whose strokes are `mergeGap` apart, in the order they part in, and
- * run straight to a whisk length from the side. There each lane steps
- * onto the line out of the port on two arcs that leave the merge gap
- * inside them, of radius the merge gap plus half the thickest lane (none
- * on an edge without a `radius`), the second ending right behind the adornments: an
- * S for a lane less than two radii off the line, and two full corners for
- * one farther. The lanes on one side of the line all meet it on the same
- * circle, so they peel off one another along it, and run on to the port
- * as one. Back from the merge, the routes' strokes stay the merge gap
- * apart for as long as they run alongside each other, turning the same
- * ways, and their jogs sit beside one another rather than at `jogAt`, so
- * the bundle turns together and its corners nest. Other routes never run
- * inside a bundle, between strokes that sit the merge gap apart: they go
- * past it, to the side with fewer of its routes alongside, and a route
- * whose port leaves it among the lanes steps out past them once it clears
- * its rect. A route parts from its
- * bundle as far from the merge as its run allows, short of room for the
- * corner past it (and the adornments at its port, when that comes next),
- * and, where the run has the room, for the flow adornments between its
- * ports, so that they sit on a stretch of their own past the bundle.
- * A route that goes on alone there, from a group of which at least two go
- * on together, keeps its parting jog upright. The whisk is as long as the
- * outermost lane's step needs past the
- * adornments, or half the room before the next rect in front, or before
- * the far end of one of its routes that faces it, less the gap, if less,
- * with the arcs shrunk to fit. Other routes keep out of it, and
- * `jogSlant` leaves the steps as they are. With no room past the
- * adornments, the ends share the port as they are. Each route's `merged`
- * names the edge that draws the shared adornments.
+ * adornments there group on ports next to each other, their strokes
+ * `mergeGap` apart, in the order their routes part in, centered on one
+ * spot. Each end keeps its own port, and each route draws its own
+ * adornments. The groups and the lone auto ports on a side spread along
+ * it with as much free space between each two as at either end, a group
+ * as wide as its ports, so a side without groups spreads its ports
+ * evenly. A group pinned to one spot centers on it, as far as the side
+ * allows. A group too wide for its side packs its ports closer, in
+ * proportion, until it fits, and is noted. Back from the ports, the
+ * routes' strokes stay the merge gap apart for as long as they run
+ * alongside each other, turning the same ways, and their jogs sit beside
+ * one another rather than at `jogAt`, so the bundle turns together and
+ * its corners nest. Other routes never run inside a bundle, between
+ * strokes that sit the merge gap apart: they go past it, to the side with
+ * fewer of its routes alongside, and a route whose port leaves it among
+ * the legs out of the group's ports steps out past them once it clears
+ * its rect. A route parts from its bundle as far from the ports as its run
+ * allows, short of room for the corner past it (and the adornments at its
+ * port, when that comes next), and, where the run has the room, for the
+ * flow adornments between its ports, so that they sit on a stretch of
+ * their own past the bundle. A route that goes on alone there, from a
+ * group of which at least two go on together, keeps its parting jog
+ * upright.
  *
  * Each route's corners report their `radii`: the edge's `radius` at least,
  * except where a leg is too short for it, and the corners of routes that
@@ -862,21 +855,27 @@ export interface ConnectorLayout<K extends string = string> {
  * shrinking them into a kink, as far as `jogSlant` and the free length
  * around it allow, with the curve the gap from other routes and clear of
  * the rects. A jog in a bundle, or where a route leaves a group, stays
- * upright. A short jog right past an auto port that does not merge comes
- * out instead where it can: the port slides along its side, short of its
- * ends by the gap and of the other routes by the gap (the merge gap, for
- * those that share a merge with it), and the route runs straight. A jog is short when it is shorter than its two corners need,
- * and the corner at the port has no more of the leg out of it than the
- * adornments packed there leave. A jog up to half the short length slides
- * away whole, and a longer one less, down to none at the short length, so
- * ports move smoothly; what is left slants.
+ * upright. A short jog right past an auto port comes out instead where it
+ * can: the port slides along its side, short of its ends by the gap and of
+ * the other routes by the gap (the merge gap, for those it merged with),
+ * and the route runs straight. A jog is short when it is shorter than its
+ * two corners need, and the corner at the port has no more of the leg out
+ * of it than the adornments packed there leave. A jog up to half the short
+ * length slides away whole, and a longer one less, down to none at the
+ * short length, so ports move smoothly; what is left slants. The ports of
+ * merged ends slide only together, keeping their offsets, as far as the
+ * short jog past one of them would slide it alone, where the runs past the
+ * others neither turn back nor grow into short jogs. Of the ways they
+ * could slide, they take the one that slides the most of them as their
+ * own jogs would, then the shortest, and with less room they slide as far
+ * as it allows.
  *
  * The edge's `weight` and `minLength` have no effect.
  *
  * Where the rects leave too little room, the routes give something up and
  * the layout's `notes` say what, and how much more room would have fit it
- * (see `ConnectorNote`): a channel too narrow for the gaps, a merge with no
- * room for its lanes, an adornment longer than every run, or an edge with
+ * (see `ConnectorNote`): a channel too narrow for the gaps, merged ends
+ * too wide for their side, an adornment longer than every run, or an edge with
  * no route at all. A layout that places the rects can read them and move
  * the rects apart.
  *

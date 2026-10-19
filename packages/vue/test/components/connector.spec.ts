@@ -339,7 +339,7 @@ describe('adornments', () => {
     expect(findOne(root, 'path').props['d']).toBe(data)
   })
 
-  test('merged ends draw their shared arrowhead once, and every line stops behind it', async () => {
+  test('merged ends sit on ports next to each other, each line with its own arrowhead', async () => {
     const merged = { a: rects.a, d: Rect.make(20, 120, 60, 30), b: Rect.make(220, 70, 60, 30) }
     const arrow = () => [adornment({ at: 'end', width: 8, height: 6 }, 'arrow')]
     const { root } = await mountLayout({ clearance: 10, gap: 4, merge: 'side' }, () => [
@@ -360,17 +360,19 @@ describe('adornments', () => {
     )
     expect(routes(root)).toEqual(core.edges.map(pointsOf))
     expect(core.edges.map((route) => route?.merged)).toEqual([
-      [-1, 0],
-      [-1, 0],
+      [-1, -1],
+      [-1, -1],
     ])
+    // The ports sit the gap of 4 apart about the middle of b's left side,
+    // and each line ends at the back of its own arrowhead.
     expect(findAll(root, 'arrow').map((n) => n.props)).toEqual([
-      { x: 212, y: 82, width: 8, height: 6 },
+      { x: 212, y: 80, width: 8, height: 6 },
+      { x: 212, y: 84, width: 8, height: 6 },
     ])
-    // Both lines end at the back of the arrowhead, on the line out of the
-    // port.
-    for (const path of findAll(root, 'path')) {
-      expect(String(path.props['d']).trim().endsWith('212,85')).toBe(true)
-    }
+    expect(findAll(root, 'path').map((path) => String(path.props['d']).trim().slice(-6))).toEqual([
+      '212,83',
+      '212,87',
+    ])
   })
 
   test.each([0, 40, undefined])('a bend cost of %s reaches the core', async (cost) => {

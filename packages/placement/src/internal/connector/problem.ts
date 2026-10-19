@@ -99,8 +99,6 @@ export interface Port {
   readonly side: number
   readonly x: number
   readonly y: number
-  // The obstacle the port's pin belongs to, when it is not the rect's.
-  readonly owner?: number
 }
 
 /** One end of an edge: `0` its source, `1` its target. */
@@ -183,7 +181,7 @@ export interface Problem {
   readonly ids: ReadonlyArray<string>
   /** The shape of each rect, by index, or `undefined` for the rect itself. */
   readonly shapes: ReadonlyArray<Shape | undefined>
-  /** The space between merged lanes: `mergeGap`, or `gap` when unset. */
+  /** The space between the strokes of merged ends: `mergeGap`, or `gap` when unset. */
   readonly mergeGap: number
   /** The cost of each corner, resolved. */
   readonly bendCost: number
@@ -339,12 +337,12 @@ export const rectAt = (edge: ProblemEdge, end: number): number =>
 
 /**
  * The merges at the ends of the edges `which`, for the channels their
- * routes fill (see `fillPath`). With `merged`, the merges planned; without,
+ * routes fill (see `fillPath`). With `merged`, the groups placed; without,
  * the ends that could merge: two or more at one rect with one merge key.
  *
  * @param problem - The problem.
  * @param which - The edges, by index.
- * @param merged - The ends of each planned merge, if planned.
+ * @param merged - The ends of each group, if placed.
  * @returns The ids of the merges at the source and target of each of
  * `which`, by its place there, from `0` to one less than twice the count,
  * or `-1` for an end that does not merge.
@@ -526,9 +524,21 @@ export const headingOf = (side: number, scale: number): Point.PointLike => {
  * @param at - The position along the side, from `0` to `1`.
  * @returns The port.
  */
-export function portOf(problem: Problem, rect: number, side: number, at: number): Port {
-  const box = problem.boxes[rect] as Rect.Rect
-  const on = alongSide(box, side, at)
+export const portOf = (problem: Problem, rect: number, side: number, at: number): Port =>
+  portAlong(problem, rect, side, alongSide(problem.boxes[rect] as Rect.Rect, side, at))
+
+/**
+ * A port on a side of a rect, at `on` along it, on the rect's shape where
+ * it has one (see `portOf`).
+ *
+ * @param problem - The problem.
+ * @param rect - The rect index.
+ * @param side - The side.
+ * @param on - The port's coordinate along the side: x on the top and
+ * bottom, y on the left and right.
+ * @returns The port.
+ */
+export function portAlong(problem: Problem, rect: number, side: number, on: number): Port {
   const [x, y] = pointOn(sideAxis(side), on, depthOf(problem, rect, side, on))
   return { side, x, y }
 }
@@ -600,19 +610,18 @@ const wayOf = (heading: Point.PointLike | undefined): Point.PointLike | undefine
     : undefined
 
 /**
- * The pin of a port, which leaves its side outward and passes through its
- * owner.
+ * The pin of a port, which leaves its side outward and passes through the
+ * obstacle its rect is.
  *
  * @param port - The port.
- * @param owner - The obstacle the port's rect is, unless the port names
- * another.
+ * @param owner - The obstacle the port's rect is.
  * @returns The pin.
  */
 export const pinOf = (port: Port, owner: number): Pin => ({
   x: port.x,
   y: port.y,
   directions: 1 << port.side,
-  owner: port.owner ?? owner,
+  owner,
 })
 
 /**

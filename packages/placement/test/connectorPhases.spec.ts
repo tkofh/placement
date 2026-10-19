@@ -5,7 +5,6 @@ import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
 import { lengths, pointOnDrawn } from '../src/internal/adornments.ts'
 import { cornerOutsets, cornerRadii } from '../src/internal/connector/corners.ts'
-import { addWhisk, planMerges, step } from '../src/internal/connector/merge.ts'
 import {
   type XY,
   bundled,
@@ -939,106 +938,6 @@ describe('firstTurn', () => {
   })
 })
 
-describe('step', () => {
-  test('a lane two radii or more off steps with two full corners', () => {
-    expect(step(16, 8)).toEqual({ trunk: 8, lane: 8, reach: 8 })
-    expect(step(24, 8)).toEqual({ trunk: 8, lane: 8, reach: 8 })
-  })
-
-  test('a lane nearer crosses on an S of two arcs of the radius', () => {
-    // Each arc turns 60 degrees, so each corner reaches 8 * tan(30).
-    const { trunk, lane, reach } = step(8, 8)
-    expect(reach).toBeCloseTo(8 / Math.sqrt(3), 12)
-    expect(trunk).toBeCloseTo(reach, 12)
-    expect(lane).toBeCloseTo(2 * reach, 12)
-  })
-
-  test.each([0.5, 2, 7, 12, 15.5])('the arcs of a lane %d off have the radius', (offset) => {
-    const { trunk, lane, reach } = step(offset, 8)
-    // The slanted segment between the corners is 2 * reach long.
-    const cos = (lane - trunk) / (2 * reach)
-    const theta = Math.acos(cos)
-    expect(2 * reach * Math.sin(theta)).toBeCloseTo(offset, 12)
-    expect(reach / Math.tan(theta / 2)).toBeCloseTo(8, 12)
-  })
-
-  test.each([
-    [0, 8],
-    [4, 0],
-  ])('a lane %d off with arcs of radius %d steps square, at the merge point', (offset, radius) => {
-    expect(step(offset, radius)).toEqual({ trunk: 0, lane: 0, reach: 0 })
-  })
-})
-
-describe('addWhisk', () => {
-  const whisk = {
-    port: [100, 20],
-    outward: [-1, 0],
-    lateral: [0, -2],
-    trunk: 12,
-    lane: 16,
-    reach: 2,
-  } as const
-
-  test('a lane steps onto the line out of the port', () => {
-    expect(
-      addWhisk(
-        [
-          [0, 0],
-          [60, 0],
-          [60, 18],
-          [76, 18],
-        ],
-        whisk,
-        false,
-      ),
-    ).toEqual([
-      [0, 0],
-      [60, 0],
-      [60, 18],
-      [84, 18],
-      [88, 20],
-      [100, 20],
-    ])
-  })
-
-  test('at the start, the route leaves the port and jogs onto its lane', () => {
-    expect(
-      addWhisk(
-        [
-          [76, 18],
-          [60, 18],
-          [60, 0],
-        ],
-        whisk,
-        true,
-      ),
-    ).toEqual([
-      [100, 20],
-      [88, 20],
-      [84, 18],
-      [60, 18],
-      [60, 0],
-    ])
-  })
-
-  test('the lane on the line runs straight in', () => {
-    expect(
-      addWhisk(
-        [
-          [0, 20],
-          [76, 20],
-        ],
-        { ...whisk, lateral: [0, 0] },
-        false,
-      ),
-    ).toEqual([
-      [0, 20],
-      [100, 20],
-    ])
-  })
-})
-
 describe('partingCorners', () => {
   // p and q run east together and part, one turning down and the other
   // up; r turns west off the lanes.
@@ -1711,12 +1610,12 @@ describe('tight ends', () => {
 // A point as a key.
 const key = ([x, y]: XY) => `${x},${y}`
 
-describe('lane ends', () => {
+describe('grouped ends', () => {
   test('the search runs no route straight across the end of another', () => {
-    // Routes from a and b merge into the left of t, and into the left of u
-    // below it. The lanes into t end in a column a whisk out from it, which
-    // the route from a to u would run straight down through, between lane
-    // ends, for no crossing, had the lanes not run on into the whisks.
+    // Routes from a, b, and c group into the left of t, on ports next to
+    // each other, and routes from a and b group at one spot on the left of
+    // u below it. No route runs straight through the end of another,
+    // across the way it arrives, since the port there goes on that way.
     const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
     const rects = {
       a: Rect.make(0, 0, 40, 20),
@@ -1740,12 +1639,10 @@ describe('lane ends', () => {
       Connector.make({ clearance: 8, gap: 4, bendCost: 20, merge: 1, mergeGap: 2 }),
     )
     const placed = placePorts(problem, chooseSides(problem))
-    const plan = planMerges(problem, placed.ports, placed.merges)
     const { routes } = routeAll(
       problem,
-      plan.ports,
+      placed.ports,
       problem.edges.map((_, i) => i),
-      plan.blocks,
     )
     // The end of each route, with whether it arrives across the X axis.
     const ends = new Map<string, Array<{ edge: number; vertical: boolean }>>()

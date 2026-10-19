@@ -85,8 +85,8 @@ export interface EdgeInput<K extends string> {
   /**
    * How thick the edge draws, its stroke width. `Connector.apply` (from
    * `placement/connector`) keeps its gaps between the strokes rather than
-   * the lines they follow, and sizes the turns of merged lanes to leave
-   * their gap inside them. `Hierarchy.apply` does not read it yet. Negative
+   * the lines they follow, and sets the ports of merged ends apart by
+   * their strokes as well. `Hierarchy.apply` does not read it yet. Negative
    * and non-finite values act as `0`. Defaults to `0`.
    */
   readonly thickness?: number | undefined

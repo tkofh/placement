@@ -137,8 +137,8 @@ function solve(
       problems.push(`no route connects the edge "${source}" -> "${target}"`)
       continue
     }
-    // At an end merged with others, one of their edges draws the adornments
-    // they share there.
+    // Where an end shares its adornments with other edges' ends, one of
+    // their edges draws them (see `ConnectorRoute.merged`).
     const shared = route.merged.map((leader) => leader >= 0 && leader !== index)
     const drawn = adornments.map((adornment) => {
       const at = Number.isFinite(adornment.at) ? Math.min(Math.max(adornment.at, 0), 1) : 0.5

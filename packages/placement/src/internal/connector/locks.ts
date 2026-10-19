@@ -8,12 +8,10 @@
 export interface Locks {
   /**
    * The jogs that stay upright, by the index of the segment's first point:
-   * the steps of merged lanes, the jogs where a route parts from a bundle,
-   * and the segments that turn with a bundle.
+   * the jogs where a route parts from a bundle, and the segments that turn
+   * with a bundle.
    */
   readonly upright: Set<number>
-  /** The corners whose size is set, by point index, and their size. */
-  readonly cornerSize: Map<number, number>
 }
 
 /**
@@ -23,23 +21,4 @@ export interface Locks {
  */
 export const emptyLocks = (): Locks => ({
   upright: new Set(),
-  cornerSize: new Map(),
 })
-
-/**
- * The locks of a route after `by` points were put in front of it: every
- * index moves up by that many.
- *
- * @param locks - The locks on the route before.
- * @param by - How many points went in front.
- * @returns The locks on the route after.
- */
-export function shiftLocks(locks: Locks, by: number): Locks {
-  if (by === 0) {
-    return locks
-  }
-  return {
-    upright: new Set([...locks.upright].map((index) => index + by)),
-    cornerSize: new Map([...locks.cornerSize].map(([index, size]) => [index + by, size])),
-  }
-}
