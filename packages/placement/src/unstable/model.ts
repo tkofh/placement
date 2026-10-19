@@ -26,10 +26,8 @@ export type { Constructor, Spec } from '../internal/model/spec.ts'
 export { isStore, mutate, store } from '../internal/model/store.ts'
 export type { Change, Draft, Store, StoreOptions } from '../internal/model/store.ts'
 export type {
-  BoxInput,
   Dynamic,
   FlexProps,
-  FrameInput,
   GroupProps,
   GutterInput,
   Index,

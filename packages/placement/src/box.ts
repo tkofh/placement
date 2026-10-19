@@ -1,6 +1,7 @@
 import { clamp } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import * as AspectRatio from './aspectRatio.ts'
+import type { LengthInput } from './length.ts'
 import * as Rect from './rect.ts'
 import { normalizeTRBL } from './utils/arguments.ts'
 
@@ -26,48 +27,55 @@ type RawInput = {
  * `apply` resolves them against a parent (see `apply` for the resolution
  * order). Unset constraints default to `0` (minimums) and `Infinity`
  * (maximums).
+ *
+ * The type parameter `L` is the type of the length fields: every field but
+ * `aspectRatio`. `make` takes numbers, the default. A layer that knows a
+ * box's basis can take `BoxInput<LengthInput>`, whose lengths may be
+ * percentages (see `placement/length`), and resolve them with
+ * `Length.resolve` before it calls `make`: `left`, `right`, and the widths
+ * against the basis width, the rest against its height.
  */
-export interface BoxInput {
+export interface BoxInput<L extends LengthInput = number> {
   /**
    * The gap between the parent's top edge and the box, as `top` in CSS
    * absolute positioning. When set, it anchors the vertical position.
    * Together with `bottom`, it also determines an unset height. It is unset
    * when omitted or non-finite.
    */
-  readonly top?: number | undefined
+  readonly top?: L | undefined
   /**
    * The gap between the box and the parent's right edge, as `right` in CSS
    * absolute positioning. When it is set and `left` is unset, the box
    * anchors to the right edge. Together with `left`, it also determines an
    * unset width. It is unset when omitted or non-finite.
    */
-  readonly right?: number | undefined
+  readonly right?: L | undefined
   /**
    * The gap between the box and the parent's bottom edge, as `bottom` in
    * CSS absolute positioning. When it is set and `top` is unset, the box
    * anchors to the bottom edge. Together with `top`, it also determines an
    * unset height. It is unset when omitted or non-finite.
    */
-  readonly bottom?: number | undefined
+  readonly bottom?: L | undefined
   /**
    * The gap between the parent's left edge and the box, as `left` in CSS
    * absolute positioning. When set, it anchors the horizontal position.
    * Together with `right`, it also determines an unset width. It is unset
    * when omitted or non-finite.
    */
-  readonly left?: number | undefined
+  readonly left?: L | undefined
   /**
    * The preferred width. It is unset when omitted or non-finite. The
    * resolved width then derives from the horizontal insets, from the height
    * and `aspectRatio`, or fills the parent (see `apply`).
    */
-  readonly width?: number | undefined
+  readonly width?: L | undefined
   /**
    * The preferred height. It is unset when omitted or non-finite. The
    * resolved height then derives from the vertical insets, from the width
    * and `aspectRatio`, or fills the parent (see `apply`).
    */
-  readonly height?: number | undefined
+  readonly height?: L | undefined
   /**
    * The width-to-height ratio, as a number (`width / height`) or a
    * `[width, height]` pair such as `[16, 9]` (see `placement/aspectRatio`).
@@ -81,24 +89,24 @@ export interface BoxInput {
    * The lower bound on the resolved width. Negative values clamp to `0`.
    * The default is `0`. Non-finite values act as unset.
    */
-  readonly minWidth?: number | undefined
+  readonly minWidth?: L | undefined
   /**
    * The lower bound on the resolved height. Negative values clamp to `0`.
    * The default is `0`. Non-finite values act as unset.
    */
-  readonly minHeight?: number | undefined
+  readonly minHeight?: L | undefined
   /**
    * The upper bound on the resolved width. Negative values clamp to `0`.
    * If the bounds cross, `minWidth` wins, as in CSS `clamp()`. The default
    * is `Infinity` (unconstrained). Non-finite values act as unset.
    */
-  readonly maxWidth?: number | undefined
+  readonly maxWidth?: L | undefined
   /**
    * The upper bound on the resolved height. Negative values clamp to `0`.
    * If the bounds cross, `minHeight` wins, as in CSS `clamp()`. The default
    * is `Infinity` (unconstrained). Non-finite values act as unset.
    */
-  readonly maxHeight?: number | undefined
+  readonly maxHeight?: L | undefined
 }
 
 /**

@@ -79,9 +79,11 @@ describe('lengths', () => {
   const pct = Length.percent
 
   test('props take built specs or plain inputs with lengths', () => {
-    expectTypeOf<Model.GroupProps['box']>().toEqualTypeOf<Box.Box | Model.BoxInput | undefined>()
+    expectTypeOf<Model.GroupProps['box']>().toEqualTypeOf<
+      Box.Box | Box.BoxInput<Length.LengthInput> | undefined
+    >()
     expectTypeOf<Model.ItemProps['frame']>().toEqualTypeOf<
-      Frame.Frame | Model.FrameInput | undefined
+      Frame.Frame | Frame.FrameInput<undefined, Length.LengthInput> | undefined
     >()
     expectTypeOf<Model.FlexProps['gutter']>().toEqualTypeOf<
       Offset.Offset | Model.GutterInput | undefined
@@ -89,8 +91,14 @@ describe('lengths', () => {
     expectTypeOf<Model.GroupProps['translate']>().toEqualTypeOf<
       Point.Point | Model.TranslateInput | undefined
     >()
-    expectTypeOf<Model.BoxInput['width']>().toEqualTypeOf<Length.LengthInput | undefined>()
-    expectTypeOf<Model.FrameInput['grow']>().toEqualTypeOf<number | undefined>()
+    expectTypeOf<Box.BoxInput<Length.LengthInput>['width']>().toEqualTypeOf<
+      Length.LengthInput | undefined
+    >()
+    expectTypeOf<Frame.FrameInput<undefined, Length.LengthInput>['grow']>().toEqualTypeOf<
+      number | undefined
+    >()
+    expectTypeOf<Box.BoxInput['width']>().toEqualTypeOf<number | undefined>()
+    expectTypeOf<Frame.FrameInput['width']>().toEqualTypeOf<number | undefined>()
 
     Model.group('g', { box: { width: pct(50), top: 10, aspectRatio: [16, 9] } })
     Model.flex('t', { gutter: { left: pct(5) }, translate: { x: pct(-50) } }, [

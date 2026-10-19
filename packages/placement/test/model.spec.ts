@@ -300,7 +300,7 @@ describe('lengths', () => {
     const ratio: [number, number] = [16, 9]
     const box = { width: 10, aspectRatio: ratio }
     const spec = Model.group('g', { box })
-    const kept = spec.props.box as Model.BoxInput
+    const kept = spec.props.box as Box.BoxInput<Length.LengthInput>
     expect(kept).not.toBe(box)
     expect(Object.isFrozen(kept)).toBe(true)
     expect(kept.aspectRatio).not.toBe(ratio)

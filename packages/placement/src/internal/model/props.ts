@@ -22,9 +22,7 @@ import * as Rect from '../../rect.ts'
 import { isPlainRecord } from '../../utils/object.ts'
 import * as Flexbox from '../flexbox.ts'
 import type {
-  BoxInput,
   FlexProps,
-  FrameInput,
   GroupProps,
   GutterInput,
   ItemProps,
@@ -36,13 +34,13 @@ import type {
 /** The props of any node. */
 export type NodeProps = GroupProps | FlexProps | ItemProps
 
-// What a field is: a length on an axis, a size on an axis, a ratio, or a
-// plain number. A size that resolves to `NaN` is unset, because a frame
+// What a field is: a length on an axis, a size on an axis, a ratio, a
+// plain number, or a field that must stay unset. A size that resolves to `NaN` is unset, because a frame
 // reads a `NaN` size literally and a `NaN` bound poisons the solve, as
 // `@placement/vue` has it. A box reads `NaN` as unset anyway. A margin, a
 // gutter side, or a translation keeps its `NaN`, so a `NaN` margin stays
 // auto.
-type Field = 'x' | 'y' | 'width' | 'height' | 'ratio' | 'number'
+type Field = 'x' | 'y' | 'width' | 'height' | 'ratio' | 'number' | 'none'
 
 type Table = { readonly [field: string]: Field }
 
@@ -61,9 +59,10 @@ const BOX = {
   minHeight: 'height',
   maxWidth: 'width',
   maxHeight: 'height',
-} as const satisfies TableOf<BoxInput>
+} as const satisfies TableOf<Box.BoxInput<Length.LengthInput>>
 
 const FRAME = {
+  id: 'none',
   offsetTop: 'y',
   offsetRight: 'x',
   offsetBottom: 'y',
@@ -79,7 +78,7 @@ const FRAME = {
   shrink: 'number',
   align: 'number',
   stretch: 'number',
-} as const satisfies TableOf<FrameInput>
+} as const satisfies TableOf<Frame.FrameInput<undefined, Length.LengthInput>>
 
 const GUTTER = {
   top: 'y',
@@ -97,11 +96,17 @@ const CHECKS: { readonly [F in Field]: (value: unknown) => boolean } = {
   height: Length.isLengthInput,
   ratio: AspectRatio.isAspectRatio,
   number: (value) => typeof value === 'number',
+  // An item's path is its id, so its frame input takes none.
+  none: () => false,
 }
 
 // An input with its lengths resolved: what the spec's own input takes.
 type Resolved<T extends Table> = {
-  -readonly [K in keyof T]?: T[K] extends 'ratio' ? AspectRatio.AspectRatio : number
+  -readonly [K in keyof T]?: T[K] extends 'ratio'
+    ? AspectRatio.AspectRatio
+    : T[K] extends 'none'
+      ? undefined
+      : number
 }
 
 function resolveField(field: Field, value: unknown, basis: Rect.Rect): unknown {
@@ -120,6 +125,7 @@ function resolveField(field: Field, value: unknown, basis: Rect.Rect): unknown {
     }
     case 'ratio':
     case 'number':
+    case 'none':
       return value
   }
 }
@@ -211,7 +217,7 @@ const freeze = (value: object): object =>
 
 /**
  * Checks props against a kind and returns a frozen copy. A plain input,
- * such as a `BoxInput`, is copied and frozen too, so a spec never shares
+ * such as a box's fields, is copied and frozen too, so a spec never shares
  * mutable data with its caller.
  *
  * @param kind - The node kind.

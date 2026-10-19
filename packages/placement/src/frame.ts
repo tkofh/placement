@@ -1,5 +1,6 @@
 import { Pipeable, dual } from 'curvy/utils'
 import type * as AspectRatio from './aspectRatio.ts'
+import type { LengthInput } from './length.ts'
 import { type NormalizedSizing, normalizeSizing, normalizeTRBL } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/frame')
@@ -30,9 +31,17 @@ type RawSizing = {
  * set (see `Frame`). The `id` stays `undefined` when omitted.
  *
  * The type parameter `K` is the literal type of `id`, or `undefined` when
- * the frame has none.
+ * the frame has none. The type parameter `L` is the type of the length
+ * fields: the offsets, the sizes, and the min/max constraints. `make` takes
+ * numbers, the default. A layer that knows a frame's basis can take
+ * `FrameInput<K, LengthInput>`, whose lengths may be percentages (see
+ * `placement/length`), and resolve them with `Length.resolve` before it
+ * calls `make`.
  */
-export interface FrameInput<K extends string | undefined = string | undefined> {
+export interface FrameInput<
+  K extends string | undefined = string | undefined,
+  L extends LengthInput = number,
+> {
   /**
    * An identifier for the frame. Layouts that connect frames to each other,
    * such as `Hierarchy.apply` (from `placement/hierarchy`), require it and
@@ -45,37 +54,37 @@ export interface FrameInput<K extends string | undefined = string | undefined> {
    * container. A non-finite value requests an auto margin. Layout then gives
    * the edge an equal share of the free space on its axis. Defaults to `0`.
    */
-  readonly offsetTop?: number | undefined
+  readonly offsetTop?: L | undefined
   /**
    * Space reserved to the right of the frame, which is its right margin. A
    * non-finite value requests an auto margin. Layout then gives the edge an
    * equal share of the free space on its axis. Defaults to `0`.
    */
-  readonly offsetRight?: number | undefined
+  readonly offsetRight?: L | undefined
   /**
    * Space reserved below the frame, which is its bottom margin. A non-finite
    * value requests an auto margin. Layout then gives the edge an equal share
    * of the free space on its axis. Defaults to `0`.
    */
-  readonly offsetBottom?: number | undefined
+  readonly offsetBottom?: L | undefined
   /**
    * Space reserved to the left of the frame, which is its left margin. A
    * non-finite value requests an auto margin. Layout then gives the edge an
    * equal share of the free space on its axis. Defaults to `0`.
    */
-  readonly offsetLeft?: number | undefined
+  readonly offsetLeft?: L | undefined
   /**
    * The preferred width. If you omit it, the width is unset. The resolved
    * width then derives from the height and `aspectRatio`, or falls back to
    * `0`.
    */
-  readonly width?: number | undefined
+  readonly width?: L | undefined
   /**
    * The preferred height. If you omit it, the height is unset. The resolved
    * height then derives from the width and `aspectRatio`, or falls back to
    * `0`.
    */
-  readonly height?: number | undefined
+  readonly height?: L | undefined
   /**
    * The width-to-height ratio, as a number (`width / height`) or a
    * `[width, height]` pair such as `[16, 9]` (see `placement/aspectRatio`).
@@ -88,22 +97,22 @@ export interface FrameInput<K extends string | undefined = string | undefined> {
    * The lower bound on the resolved width. Negative values clamp to `0`.
    * Defaults to `0`.
    */
-  readonly minWidth?: number | undefined
+  readonly minWidth?: L | undefined
   /**
    * The lower bound on the resolved height. Negative values clamp to `0`.
    * Defaults to `0`.
    */
-  readonly minHeight?: number | undefined
+  readonly minHeight?: L | undefined
   /**
    * The upper bound on the resolved width. Negative values clamp to `0`.
    * Defaults to `Infinity` (unconstrained).
    */
-  readonly maxWidth?: number | undefined
+  readonly maxWidth?: L | undefined
   /**
    * The upper bound on the resolved height. Negative values clamp to `0`.
    * Defaults to `Infinity` (unconstrained).
    */
-  readonly maxHeight?: number | undefined
+  readonly maxHeight?: L | undefined
   /**
    * The flex grow factor: the frame's share of positive free space along
    * the container's main axis, in proportion to the other items' factors.
