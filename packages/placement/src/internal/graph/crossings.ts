@@ -20,13 +20,59 @@ import type { Graph } from './graph.ts'
  * @returns How many times the paths cross.
  */
 export function crossingsBetween(graph: Graph, p: ArrayLike<number>, q: ArrayLike<number>): number {
+  let count = 0
+  const crossed = () => {
+    count++
+  }
+  walkShared(graph, p, q, crossed, crossed)
+  return count
+}
+
+/**
+ * Finds the runs that two paths on one graph share and cross each other
+ * on, which a search that counts crossings only where paths run straight
+ * on across each other does not see.
+ *
+ * @param graph - The graph the paths run on, with horizontal and vertical
+ * edges.
+ * @param p - One path's nodes, from start to end.
+ * @param q - The other's.
+ * @returns The first and last index in `p` of each such run.
+ */
+export function crossedRuns(
+  graph: Graph,
+  p: ArrayLike<number>,
+  q: ArrayLike<number>,
+): Array<readonly [number, number]> {
+  const runs: Array<readonly [number, number]> = []
+  walkShared(
+    graph,
+    p,
+    q,
+    () => {},
+    (first, last) => {
+      runs.push([first, last])
+    },
+  )
+  return runs
+}
+
+// Walks `p` past the nodes and runs it shares with `q`, calling `atNode`
+// with the index in `p` of each node the paths cross at, and `onRun` with
+// the first and last index in `p` of each run they cross on.
+function walkShared(
+  graph: Graph,
+  p: ArrayLike<number>,
+  q: ArrayLike<number>,
+  atNode: (index: number) => void,
+  onRun: (first: number, last: number) => void,
+): void {
   const at = new Map<number, number>()
   for (let j = 0; j < q.length; j++) {
     if (!at.has(q[j] as number)) {
       at.set(q[j] as number, j)
     }
   }
-  let count = 0
   let i = 0
   while (i < p.length) {
     const j = at.get(p[i] as number)
@@ -38,7 +84,9 @@ export function crossingsBetween(graph: Graph, p: ArrayLike<number>, q: ArrayLik
     const next = p[i + 1]
     const way = next === undefined ? 0 : next === q[j + 1] ? 1 : next === q[j - 1] ? -1 : 0
     if (way === 0) {
-      count += throughEach(graph, p[i] as number, p[i - 1], p[i + 1], q[j - 1], q[j + 1]) ? 1 : 0
+      if (throughEach(graph, p[i] as number, p[i - 1], p[i + 1], q[j - 1], q[j + 1])) {
+        atNode(i)
+      }
       i++
       continue
     }
@@ -59,12 +107,11 @@ export function crossingsBetween(graph: Graph, p: ArrayLike<number>, q: ArrayLik
       const [b0, b1] = before as [number, number]
       const [a0, a1] = after as [number, number]
       if (b0 !== b1 && a0 !== a1 && b0 < b1 !== a0 < a1) {
-        count++
+        onRun(i, last)
       }
     }
     i = last + 1
   }
-  return count
 }
 
 // Whether two paths that meet at `node` both run straight on through it.

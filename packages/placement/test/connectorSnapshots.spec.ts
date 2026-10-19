@@ -27,7 +27,7 @@ const same = (
           `[${rect.x},${rect.y} ${rect.width}x${rect.height} @${angle} ${along.start}+${along.size}]`,
       )
       .join('')
-    return `${i}: ${points} | r ${route.radii.join(',')} | i ${route.insets.join(',')} | m ${route.merged.join(',')} | ${adornments}`
+    return `${i}: ${points} | r ${route.radii.join(',')} | o ${route.outsets.join(',')} | m ${route.merged.join(',')} | ${adornments}`
   })
   const notes = layout.notes.map((note) => JSON.stringify(note))
   expect([...lines, ...notes].join('\n')).toMatchSnapshot()

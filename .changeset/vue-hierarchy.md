@@ -21,11 +21,11 @@ diagrams.
   `fromPort`/`toPort` (`'right'`, `'25%'`, or `'right 25%'`), and takes
   `weight` and `minLength`. It draws its route as a path with the paint
   props, and passes other attributes through to it. `r` and `smoothing`
-  round its corners to the sizes the layout solves, which shrink where the
-  route is crowded, and `minR` sets the least radius the layout keeps room
-  for. The inner corners of routes that turn together draw as their
-  outermost corner moved in, so smoothed corners keep one center. Its slot
-  receives the route's `points` and corner `radii`.
+  round its corners to the sizes the layout solves: at least `r`, which
+  the layout keeps room for, and more where the edge turns outside others
+  that turn with it. The corners of routes that turn together draw as
+  their innermost corner moved out, so smoothed corners keep one center.
+  Its slot receives the route's `points` and corner `radii`.
 - `HierarchyAdornment` children decorate an edge. `at` places one along it
   (`'start'`, `'end'`, `'center'`, or a ratio), and `position="flow"` (the
   default) keeps it on a straight run that the layout makes long enough,

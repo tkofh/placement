@@ -1,5 +1,6 @@
 import { clamp as clampNumber, lerp as lerpNumber } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
+import * as AspectRatio from './aspectRatio.ts'
 import type { Rect } from './rect.ts'
 import { isRecord } from './utils/object.ts'
 import { fieldsCoincident } from './utils/tolerance.ts'
@@ -203,7 +204,8 @@ export const setHeight: {
 } = dual(2, (self: Dimensions | Rect, height: number) => new Dimensions(self.width, height))
 
 // Self can be a Rect, so the predicate routes on the Like shape. The
-// data-last form's first argument is always a number, never DimensionsLike.
+// data-last form's first argument is always a ratio input, never
+// DimensionsLike: a ratio is a number or a pair.
 /**
  * Sets the aspect ratio (`width / height`) as a blend between keeping the
  * width and keeping the height.
@@ -215,7 +217,8 @@ export const setHeight: {
  * function of it.
  *
  * @param self - The source extents. A `Rect` contributes only its width and height.
- * @param ratio - The target `width / height` ratio.
+ * @param ratio - The target `width / height` ratio, or a `[width, height]` pair
+ *   (see `placement/aspectRatio`), which derives the other extent with one rounding.
  * @param bias - The blend from keeping the width (0) to keeping the height (1). Defaults to 0.5.
  * @returns A `Dimensions` with aspect ratio `ratio`.
  * @example
@@ -226,16 +229,16 @@ export const setHeight: {
  * ```
  */
 export const setAspectRatio: {
-  (self: Dimensions | Rect, ratio: number, bias?: number): Dimensions
-  (ratio: number, bias?: number): (self: Dimensions | Rect) => Dimensions
+  (self: Dimensions | Rect, ratio: AspectRatio.AspectRatio, bias?: number): Dimensions
+  (ratio: AspectRatio.AspectRatio, bias?: number): (self: Dimensions | Rect) => Dimensions
 } = dual(
   (args) => isDimensionsLike(args[0]),
-  (self: Dimensions | Rect, ratio: number, bias = 0.5) =>
+  (self: Dimensions | Rect, ratio: AspectRatio.AspectRatio, bias = 0.5) =>
     // Lerps from keeping the width (bias 0) to keeping the height (bias 1).
     // Every blend still has the requested ratio, because height = width / ratio.
     new Dimensions(
-      lerpNumber(bias, self.width, self.height * ratio),
-      lerpNumber(bias, self.width / ratio, self.height),
+      lerpNumber(bias, self.width, AspectRatio.widthFor(ratio, self.height)),
+      lerpNumber(bias, AspectRatio.heightFor(ratio, self.width), self.height),
     ),
 )
 
@@ -459,7 +462,8 @@ export const scaleToHeight: {
  * function of it.
  *
  * @param self - The extents to fit inside. A `Rect` contributes only its width and height.
- * @param ratio - The target `width / height` ratio.
+ * @param ratio - The target `width / height` ratio, or a `[width, height]` pair
+ *   (see `placement/aspectRatio`), which derives the other extent with one rounding.
  * @returns The largest `Dimensions` with ratio `ratio` that fit inside `self`.
  * @example
  * ```ts
@@ -469,9 +473,10 @@ export const scaleToHeight: {
  * ```
  */
 export const contain: {
-  (self: Dimensions | Rect, ratio: number): Dimensions
-  (ratio: number): (self: Dimensions | Rect) => Dimensions
-} = dual(2, (self: Dimensions | Rect, ratio: number) => {
+  (self: Dimensions | Rect, ratio: AspectRatio.AspectRatio): Dimensions
+  (ratio: AspectRatio.AspectRatio): (self: Dimensions | Rect) => Dimensions
+} = dual(2, (self: Dimensions | Rect, input: AspectRatio.AspectRatio) => {
+  const ratio = AspectRatio.toNumber(input)
   const aspectRatio = self.width / self.height
 
   // A coincident ratio keeps the exact input extents instead of
@@ -484,10 +489,10 @@ export const contain: {
   }
 
   if (ratio > aspectRatio) {
-    return new Dimensions(self.width, self.width / ratio)
+    return new Dimensions(self.width, AspectRatio.heightFor(input, self.width))
   }
 
-  return new Dimensions(self.height * ratio, self.height)
+  return new Dimensions(AspectRatio.widthFor(input, self.height), self.height)
 })
 
 /**
@@ -506,7 +511,8 @@ export const contain: {
  * it.
  *
  * @param self - The extents to cover. A `Rect` contributes only its width and height.
- * @param ratio - The target `width / height` ratio.
+ * @param ratio - The target `width / height` ratio, or a `[width, height]` pair
+ *   (see `placement/aspectRatio`), which derives the other extent with one rounding.
  * @returns The smallest `Dimensions` with ratio `ratio` that cover `self`.
  * @example
  * ```ts
@@ -516,9 +522,10 @@ export const contain: {
  * ```
  */
 export const cover: {
-  (self: Dimensions | Rect, ratio: number): Dimensions
-  (ratio: number): (self: Dimensions | Rect) => Dimensions
-} = dual(2, (self: Dimensions | Rect, ratio: number) => {
+  (self: Dimensions | Rect, ratio: AspectRatio.AspectRatio): Dimensions
+  (ratio: AspectRatio.AspectRatio): (self: Dimensions | Rect) => Dimensions
+} = dual(2, (self: Dimensions | Rect, input: AspectRatio.AspectRatio) => {
+  const ratio = AspectRatio.toNumber(input)
   const aspectRatio = self.width / self.height
 
   // The check is finite-only, as in contain. coincident(x, Infinity) is true
@@ -529,10 +536,10 @@ export const cover: {
   }
 
   if (ratio > aspectRatio) {
-    return new Dimensions(self.height * ratio, self.height)
+    return new Dimensions(AspectRatio.widthFor(input, self.height), self.height)
   }
 
-  return new Dimensions(self.width, self.width / ratio)
+  return new Dimensions(self.width, AspectRatio.heightFor(input, self.width))
 })
 
 /**

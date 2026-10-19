@@ -179,19 +179,26 @@ function fit(turn: Turn, r: number, smoothing: number, room: number) {
   return { r: room / turn.halfTan, smoothing: 0 }
 }
 
-// The inner corner of a nest, `inset` inside its outermost corner: that
-// corner as it would fit with the inset's more room, moved in by the inset.
-// Its radius shrinks by the inset and its smoothing grows to fill the room,
-// up to 1. Past the outer corner's radius, it keeps the room with full
-// smoothing.
-function nested(turn: Turn, r: number, smoothing: number, room: number, inset: number) {
-  const outer = fit(turn, r, smoothing, room + inset)
-  const radius = outer.r - inset
-  if (!(radius > 0) || coincident(radius, 0)) {
-    return { r: room / (2 * turn.halfTan), smoothing: 1 }
-  }
+// The radius a corner of radius `r` takes to reach `reach` along its legs:
+// `r`, or more where the reach is past what `r` reaches with its smoothing,
+// as the gentle turns of a connector's slanted jog and the outer corners
+// of its nests have.
+function grownRadius(turn: Turn, r: number, smoothing: number, reach: number): number {
+  const full = (1 + smoothing) * r * turn.halfTan
+  return reach > full && !coincident(reach, full) ? reach / ((1 + smoothing) * turn.halfTan) : r
+}
+
+// A corner of a nest, `outset` larger than its innermost corner: that
+// corner, fitted to the room less the outset, moved out by the outset. Its
+// radius grows by the outset, so the nest keeps one center (or comes as
+// near to it as a corner its leg holds short can), and its smoothing
+// shrinks to keep its reach within the room.
+function nested(turn: Turn, r: number, smoothing: number, room: number, outset: number) {
+  const reach = Math.max(room - outset, 0)
+  const inner = fit(turn, grownRadius(turn, r, smoothing, reach), smoothing, reach)
+  const radius = inner.r + outset
   const filled = room / (radius * turn.halfTan) - 1
-  return { r: radius, smoothing: Math.min(Math.max(filled, outer.smoothing), 1) }
+  return { r: radius, smoothing: coincident(filled, 0) ? 0 : Math.min(Math.max(filled, 0), 1) }
 }
 
 /**
@@ -211,22 +218,24 @@ function nested(turn: Turn, r: number, smoothing: number, room: number, inset: n
  * reaches along its legs, as the corner sizes that `placement/hierarchy`
  * and `placement/connector` solve do. A corner with less room gives way as
  * a crowded one does. A corner with more room than `r` reaches, as the
- * gentle turns of a connector's slanted jog have, grows to fill it.
+ * gentle turns of a connector's slanted jog and the outer corners of its
+ * nests have, grows to fill it.
  *
- * `nests`, one per point, sets how far inside the outermost corner of its
- * nest each corner sits, for the inner corners of routes that turn
- * together. Such a corner is drawn as that outermost corner, fitted to its
- * room plus the inset, moved in by the inset: its radius shrinks by the
- * inset, so the nest keeps one center, and its smoothing grows to fill its
- * room, up to `1`. It never takes more radius than the corners outside it.
+ * `nests`, one per point, sets how much larger than the innermost corner
+ * of its nest each corner is, for the corners of routes that turn
+ * together: how far outside it the corner sits, where the nest keeps one
+ * center. Such a corner is drawn as that innermost corner, fitted to its
+ * room less the outset, moved out by the outset: its radius grows by the
+ * outset, so the nest keeps one center, and its smoothing shrinks to keep
+ * its reach within its room.
  *
  * @param points - The polyline.
  * @param r - The corner radius. `0` keeps every corner sharp.
  * @param smoothing - From `0` (circular fillets) to `1` (fully smoothed).
  * @param closed - Whether the last point joins back to the first.
- * @param rooms - The most each corner may reach along its legs, per point.
- * @param nests - How far inside the outermost corner of its nest each
- * corner sits, per point.
+ * @param rooms - How far each corner reaches along its legs, per point.
+ * @param nests - How much larger than the innermost corner of its nest
+ * each corner is, per point.
  * @returns The rounded path, or `undefined` for fewer than two distinct points.
  */
 export function roundPolyline(
@@ -289,20 +298,20 @@ function fitCorners(
   | undefined {
   let distinct: Array<XY> = []
   // The cap on each distinct point's corner: the least of its repeats'. And
-  // its inset in a nest: the most of theirs.
+  // its outset in a nest: the most of theirs.
   const caps: Array<number> = []
-  const insets: Array<number> = []
+  const outsets: Array<number> = []
   for (const [i, { x, y }] of points.entries()) {
     const cap = rooms?.[i] ?? Number.POSITIVE_INFINITY
-    const inset = nests?.[i] ?? 0
+    const outset = nests?.[i] ?? 0
     const last = distinct.at(-1)
     if (last === undefined || !coincident(last[0], x) || !coincident(last[1], y)) {
       distinct.push([x, y])
       caps.push(cap)
-      insets.push(inset)
+      outsets.push(outset)
     } else {
       caps[caps.length - 1] = Math.min(caps.at(-1)!, cap)
-      insets[insets.length - 1] = Math.max(insets.at(-1)!, inset)
+      outsets[outsets.length - 1] = Math.max(outsets.at(-1)!, outset)
     }
   }
   if (closed) {
@@ -344,11 +353,7 @@ function fitCorners(
   // Each corner's radius: `r`, or larger where its room asks for more.
   const radii = turns.map((turn, i) => {
     const cap = caps[i]!
-    if (closed || turn === undefined || !Number.isFinite(cap)) {
-      return r
-    }
-    const reach = (1 + s) * r * turn.halfTan
-    return cap > reach && !coincident(cap, reach) ? cap / ((1 + s) * turn.halfTan) : r
+    return closed || turn === undefined || !Number.isFinite(cap) ? r : grownRadius(turn, r, s, cap)
   })
   const wanted = turns.map((turn, i) =>
     turn === undefined ? 0 : (1 + s) * radii[i]! * turn.halfTan,
@@ -370,10 +375,10 @@ function fitCorners(
       share(i, i + 1, lengths[i]!),
       closed ? Number.POSITIVE_INFINITY : Math.max(caps[i]!, 0),
     )
-    const inset = closed ? 0 : insets[i]!
+    const outset = closed ? 0 : outsets[i]!
     const size =
-      inset > 0 && Number.isFinite(inset)
-        ? nested(turn, radii[i]!, s, room, inset)
+      outset > 0 && Number.isFinite(outset)
+        ? nested(turn, r, s, room, outset)
         : fit(turn, radii[i]!, s, room)
     return { turn, r: size.r, smoothing: size.smoothing }
   })

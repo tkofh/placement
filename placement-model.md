@@ -166,7 +166,7 @@ Vue keeps the component-API concerns and hands the model ordered arrays. `useChi
 | Concern                                       | Lives in                         | Notes                                                                                                                   |
 | --------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Child ordering (vnode DFS)                    | Vue: `useChildren`               | Its mapper becomes `m.setChildren(parentPath, paths)`                                                                   |
-| Prop parsing (`'50%'`, gap and align strings) | Vue: `internal/props/*`          | Parses to values; percentages stay unresolved (see the blocker below)                                                   |
+| Prop parsing (`'50%'`, gap and align strings) | Vue: `internal/props/*`          | Parses to values; percentages stay unresolved (see the paragraph below)                                                 |
 | Percent resolution against the parent         | Model                            | Must move, or vue reads a parent rect just to write a child prop                                                        |
 | Box, flex, hierarchy, connector solves        | Model                            | Replaces `useRect`, `useFlex`, `useHierarchy`, `useConnector`                                                           |
 | Bad-id filtering and problems list            | Model                            | Now in `useHierarchy.ts:114` and `useConnector.ts:84`                                                                   |
@@ -176,7 +176,7 @@ Vue keeps the component-API concerns and hands the model ordered arrays. `useChi
 | Node keys                                     | Vue                              | Use the `id` prop as the key, else a key generated from the component's uid. The path is the parent's path plus the key |
 | Paint, viewBox, SVG output                    | Vue                              | Render-only                                                                                                             |
 
-**Blocker: core has no length-percentage value.** `grep -i percent` finds nothing under `packages/placement/src`. Vue resolves percentages itself (`resolveSize1D` in `internal/props/size1d.ts`). If vue kept that, every percentage would round-trip: read the parent rect from the store, resolve, then mutate the child, which turns a pure derivation into a write-after-read loop. So something like vue's `Size1DValue` has to move into core and become a `Box`/`Frame` input.
+**Percentages resolve in the model.** `placement/length` is the value type (`Length.px`, `Length.percent`, `Length.resolve`). `Box` and `Frame` take numbers only, because the basis of a percentage is a tree decision: the parent rect for a box, the container's inner rect for a flex item, and the layout's parent for a hierarchy. If vue kept resolving them, every percentage would round-trip: read the parent rect from the store, resolve, then mutate the child, which turns a pure derivation into a write-after-read loop. So the model's props take lengths where a spec takes numbers, and each node resolves its own against its basis before it builds the spec it solves.
 
 **Bridging.** Vue and alien-signals are two reactive systems. Each output becomes `shallowRef` plus an alien effect, disposed in `onScopeDispose`. Each input becomes a vue `watch` (`flush: 'pre'`) that queues its change as a function of a draft. Once per vue pre-flush the adapter folds the queue into one `mutate` (`(m) => queue.reduce((d, op) => op(d), m)`), so a render that changes many props runs one `mutate` and one round of subscribers. The adapter holds one `Store<Model.Dynamic>` and never re-wires a subscription. Adapters subscribe to output computeds, not raw signals, so vue rerenders only when a rect actually changes.
 
@@ -184,7 +184,7 @@ Vue keeps the component-API concerns and hands the model ordered arrays. `useChi
 
 These need settling before code; each states the recommendation.
 
-1. **Length-percentage in core.** Add a parsed length value (px or %) that `Box` and `Frame` accept and the model resolves against the right basis. Required for vue on the model.
+1. **Length-percentage in core.** `placement/length` holds the value, and the model resolves it against each node's basis before it builds a `Box` or `Frame`, which keep taking numbers. Required for vue on the model.
 2. **Change detection vs PRECISION.md.** It bans raw `===` for discrete questions. Exact field comparison is still right for "did this rect change": the solvers are pure, so identical inputs give identical outputs, and tolerance would hide real sub-epsilon moves. Write the carve-out into PRECISION.md.
 3. **Connector membership by role.** Hierarchy nodes are structural children, because the hierarchy positions them. Connector nodes are not positioned by the connector, so any rect-bearing node carries `connector: { id }`, and the nearest connector ancestor collects them, stopping at nested connector layouts. This keeps a connector node inside a flex item working as it does today.
 4. **Where alien-signals lives.** Make it a dependency of core under `placement/unstable/model`, since vue would pull it in anyway. `unstable/utils` is the path precedent. Core goes from one dependency (`curvy`) to two.
@@ -201,7 +201,7 @@ These need settling before code; each states the recommendation.
 
 Each step ships on its own and leaves vue working.
 
-1. Move length-percentage parsing into core, with `Box`/`Frame` accepting it. Vue switches to it with no behavior change.
+1. Add `placement/length` to core and resolve vue's percentages through `Length.resolve`, with no behavior change.
 2. Extract the tolerant `solve` adapters from `useHierarchy.ts` and `useConnector.ts` into core.
 3. Ship `placement/unstable/model` with root, box/group and flex nodes, paths, `get`/`subscribe`/`Model.mutate`, and the alien-signals dependency. Type tests cover every rejection in the type index list, with `expectTypeOf` and `@ts-expect-error` under vitest's typecheck mode.
 4. Port `GraphicRoot`, `GraphicGroup`, `FlexLayout` and `FlexItem` onto the model. The existing component tests are the parity check.

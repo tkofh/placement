@@ -15,15 +15,24 @@ import { type Separation, type Variable, placeSeparated } from '../separation.ts
 // that share a path stay on the same side of each other along all of it, so
 // their order is decided where the shared path ends: the route that turns
 // left of the other there runs on its left. When the two ends disagree, one
-// crossing is unavoidable, and the end the first route reaches first wins.
-// The orders of a line's segments come from these pairwise sides, with
-// cycles broken.
+// crossing is unavoidable, so the order is loose: the segments sit where
+// they want to be, as a leap would put them, and the crossing falls on the
+// leg that leaves. A segment that may only sit on one side of another, for
+// the walls beside it or the anchors it keeps, goes there whatever the
+// sides say. The orders of a line's segments come from these pairwise
+// sides, the firmer first, and a cycle among them breaks at its loosest
+// pair.
 //
 // The new positions come from a separation solver (see `separation.ts`). A
 // segment wants to stay where it is, and moves no further than the obstacles
 // beside it allow. A jog wants its spot along the run it shifts, and may
 // first leap over the segments of other routes that run alongside all of
-// it, since that moves a crossing from one of its legs to the other. The
+// it, since that moves a crossing from one of its legs to the other. A jog
+// is the rise of a Z between two legs: a leg between two corners too short
+// for them, or for the gap, is a kink that a slant or a sliding port takes
+// care of, and the segment beside it stays put rather than balance the
+// route into a staircase around the kink; a kink right past a port that
+// may slide stays too, for the port to slide it away. The
 // segments at the ends of a route attach to its pins and stay put, and the
 // segment past each keeps to its side of the port, so the route still leaves
 // and enters straight. A jog that shares its line with another route leaps
@@ -33,9 +42,11 @@ import { type Separation, type Variable, placeSeparated } from '../separation.ts
 // turning the same ways, and a coupled jog sits beside the rest of its
 // bundle rather than at `jogAt`, so the bundle turns together. A jog where a
 // route parts from its bundle goes as far from the merge as its corners
-// leave room for, so the bundle stays together as long as it can. Where a
-// channel is too narrow for the full gap, the gaps of the segments that
-// crowd it shrink until they fit, down to none.
+// leave room for, so the bundle stays together as long as it can, though
+// it leaves the flow adornments between the route's ports a stretch of
+// their own past it where its run has the room. Where a channel is too
+// narrow for the full gap, the gaps of the segments that crowd it shrink
+// until they fit, down to none, but no segment ever moves into a rect.
 
 export type { XY }
 
@@ -66,10 +77,20 @@ export interface RouteConstraints {
   // of at the far end of its run.
   readonly corner?: number | undefined
   readonly packs?: readonly [source: number, target: number] | undefined
+  // The length the flow adornments between the route's ports take on a
+  // run. A jog that parts from a bundle leaves them that much past it,
+  // between its corner and the pack or corner beyond, where its run has
+  // the room, so they get a stretch of their own, clear of the bundle.
+  readonly flows?: number | undefined
   // How far a short jog's corners slide apart into an S, as a multiple of
   // what keeps the shape continuous (see `slants.ts`), which a parting jog
   // that slants keeps room for.
   readonly slant?: number | undefined
+  // Whether the port at each end may slide along its side afterward (see
+  // `ports.ts`). A jog right past such a port, too short for its two
+  // corners, stays where it is for the port to slide it away, rather than
+  // move along its run. Neither may by default.
+  readonly sliding?: readonly [source: boolean, target: boolean] | undefined
 }
 
 /**
@@ -593,6 +614,7 @@ function keepOut(
   packed: (a: Segment, b: Segment) => number,
   order: Array<number>,
   positions: ArrayLike<number>,
+  ranges: ReadonlyArray<readonly [number, number]>,
 ): boolean {
   const tight: Array<Array<number>> = []
   for (const bundle of bundles) {
@@ -633,8 +655,20 @@ function keepOut(
       }
       const mean =
         alongside.reduce((sum, m) => sum + (positions[m] as number), 0) / alongside.length
-      const low =
+      // It goes past the side with fewer of the bundle's segments, or else
+      // the nearer to where it wants to be, as long as its walls leave room
+      // past the bundle there; with no room on either side, it stays, and
+      // the crowding is reported.
+      const [floor, ceiling] = ranges[s] as readonly [number, number]
+      const placed = alongside.map((m) => positions[m] as number)
+      const belowOpen = !Number.isFinite(floor) || before(floor, Math.min(...placed))
+      const aboveOpen = !Number.isFinite(ceiling) || before(Math.max(...placed), ceiling)
+      if (!belowOpen && !aboveOpen) {
+        continue
+      }
+      const wanted =
         earlier.length !== later.length ? earlier.length < later.length : segment.desired <= mean
+      const low = wanted ? belowOpen : !aboveOpen
       const places = alongside.map((m) => order.indexOf(m))
       order.splice(place, 1)
       const edge = low ? Math.min(...places) : Math.max(...places)
@@ -824,11 +858,21 @@ function simplify(route: ReadonlyArray<XY>): Array<Point> {
 }
 
 // The axis a segment runs across: 0 for a vertical segment, whose x the
-// x pass moves, 1 for a horizontal one, and -1 for a diagonal one.
+// x pass moves, 1 for a horizontal one, and -1 for a diagonal one or one
+// of no length, which neither pass moves.
 function axisOf(route: ReadonlyArray<Point>, index: number): Axis | -1 {
   const [x0, y0] = route[index] as Point
   const [x1, y1] = route[index + 1] as Point
-  return x0 === x1 ? 0 : y0 === y1 ? 1 : -1
+  return x0 === x1 ? (y0 === y1 ? -1 : 0) : y0 === y1 ? 1 : -1
+}
+
+// Whether a segment runs diagonally. One of no length does not: it is
+// where a jog moved onto the line of the segment past it, and the
+// segments on either side of it run on as one.
+function slanted(route: ReadonlyArray<Point>, index: number): boolean {
+  const [x0, y0] = route[index] as Point
+  const [x1, y1] = route[index + 1] as Point
+  return x0 !== x1 && y0 !== y1
 }
 
 // Moves the segments that run across `axis`: vertical ones for axis 0,
@@ -912,37 +956,101 @@ function nudgeAxis(
       list.push(i)
     }
   }
-  const preferences = new Map<number, Array<DirectedEdge>>()
+  // The range each segment may sit in: between the walls beside it and the
+  // anchors on the segments beside it, or its line alone when it stays put.
+  const ranges = segments.map((segment): readonly [number, number] => {
+    if (segment.fixed) {
+      return [segment.at, segment.at]
+    }
+    const own = constraints[segment.route]?.avoid ?? []
+    const [low, high] = walls(own.length === 0 ? obstacles : [...obstacles, ...own], segment, axis)
+    const [floor, ceiling] = segment.held ?? [undefined, undefined]
+    return [
+      Math.max(low ?? Number.NEGATIVE_INFINITY, floor ?? Number.NEGATIVE_INFINITY),
+      Math.min(high ?? Number.POSITIVE_INFINITY, ceiling ?? Number.POSITIVE_INFINITY),
+    ]
+  })
+  // Which of two segments must take the lower coordinate, `0` for neither:
+  // one whose whole range sits at or below the other's, whatever the sides
+  // say, as a segment that stays put on the line of a wall leaves no room
+  // on that side. Two that stay put on one line force nothing, and nor does
+  // a range open on the side in question.
+  const below = (top: number, bottom: number) =>
+    Number.isFinite(top) && Number.isFinite(bottom) && atMost(top, bottom)
+  const forced = (a: number, b: number) => {
+    const [ra, rb] = [
+      ranges[a] as readonly [number, number],
+      ranges[b] as readonly [number, number],
+    ]
+    const still = (segments[a] as Segment).fixed && (segments[b] as Segment).fixed
+    if (ra[0] > ra[1] || rb[0] > rb[1]) {
+      return 0
+    }
+    if (below(ra[1], rb[0]) && !(still && coincident(ra[1], rb[0]))) {
+      return 1
+    }
+    if (below(rb[1], ra[0]) && !(still && coincident(rb[1], ra[0]))) {
+      return -1
+    }
+    return 0
+  }
+
+  // The preferences of each line, with how firmly each holds: a cycle among
+  // them breaks at the loosest, where a crossing is unavoidable anyway.
+  const preferences = new Map<number, Array<DirectedEdge & { readonly firmness: number }>>()
+  const prefer = (root: number, first: number, second: number, firmness: number) => {
+    const list = preferences.get(root) ?? []
+    list.push({ source: first, target: second, firmness })
+    preferences.set(root, list)
+  }
+  const paired = new Set<number>()
   for (const [a, b] of pairs) {
+    paired.add(a * segments.length + b)
     const sa = segments[a] as Segment
     const sb = segments[b] as Segment
-    let first = goesFirst(paths, sa, sb, axis) ? [a, b] : [b, a]
-    // A segment that stays put on the line of a wall leaves no room on
-    // that side, so the one that moves goes on the other.
-    if (sa.fixed !== sb.fixed) {
-      const [held, free, h, f] = sa.fixed ? [sa, sb, a, b] : [sb, sa, b, a]
-      const own = constraints[free.route]?.avoid ?? []
-      const [low, high] = walls(own.length === 0 ? obstacles : [...obstacles, ...own], free, axis)
-      if (low !== undefined && atMost(held.at, low)) {
-        first = [h, f]
-      } else if (high !== undefined && atMost(high, held.at)) {
-        first = [f, h]
+    const { lower, firmness: sided } = goesFirst(paths, sa, sb, axis)
+    let first = lower ? [a, b] : [b, a]
+    let firmness = sided
+    // Where a crossing is unavoidable either way, it falls on whichever leg
+    // leaves the segments where they want to be, as a leap would put it.
+    if (firmness === LOOSE && !coincident(sa.desired, sb.desired)) {
+      first = sa.desired < sb.desired ? [a, b] : [b, a]
+    }
+    const must = forced(a, b)
+    if (must !== 0) {
+      first = must > 0 ? [a, b] : [b, a]
+      firmness = FORCED
+    }
+    prefer(find(a), first[0] as number, first[1] as number, firmness)
+  }
+  // Segments of one line that never touch still order each other through
+  // the segments between them, so where their ranges force an order, the
+  // chain follows it.
+  for (const [root, list] of members) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const [a, b] = [list[i] as number, list[j] as number]
+        if (paired.has(a * segments.length + b)) {
+          continue
+        }
+        const must = forced(a, b)
+        if (must !== 0) {
+          prefer(root, must > 0 ? a : b, must > 0 ? b : a, FORCED)
+        }
       }
     }
-    const root = find(a)
-    const list = preferences.get(root) ?? []
-    list.push({ source: first[0] as number, target: first[1] as number })
-    preferences.set(root, list)
   }
   const rank = new Int32Array(segments.length)
   for (const [root, list] of members) {
     const local = new Map(list.map((segment, i) => [segment, i]))
+    const own = preferences.get(root) ?? []
     const position = preferredOrder(
       list.length,
-      (preferences.get(root) ?? []).map(({ source, target }) => ({
+      own.map(({ source, target }) => ({
         source: local.get(source) as number,
         target: local.get(target) as number,
       })),
+      own.map(({ firmness }) => firmness),
     )
     for (const [i, segment] of list.entries()) {
       rank[segment] = position[i] as number
@@ -1180,7 +1288,7 @@ function nudgeAxis(
   // bundle that sit packed goes past the bundle, and the solve runs again.
   const bundles = groups.flatMap((group) => bundlesIn(segments, ids, group))
   for (let round = 0; round < KEEP_OUT_ROUNDS; round++) {
-    if (!keepOut(segments, bundles, packed, order, positions)) {
+    if (!keepOut(segments, bundles, packed, order, positions, ranges)) {
       break
     }
     place = placeOf(order)
@@ -1190,12 +1298,15 @@ function nudgeAxis(
   let anyMoved = false
   for (const [s, segment] of segments.entries()) {
     // Where a crowded channel left the solve no room, the anchors on the
-    // segments beside this one still hold: the route passes through them.
+    // segments beside this one still hold, and so do its walls: the route
+    // passes through its anchors and never into a rect.
     const [floor, ceiling] = segment.bounds ?? [undefined, undefined]
+    const [low, high] = ranges[s] as readonly [number, number]
+    const walled = low <= high
     const moved = clamp(
       positions[s] as number,
-      floor ?? Number.NEGATIVE_INFINITY,
-      ceiling ?? Number.POSITIVE_INFINITY,
+      Math.max(floor ?? Number.NEGATIVE_INFINITY, walled ? low : Number.NEGATIVE_INFINITY),
+      Math.min(ceiling ?? Number.POSITIVE_INFINITY, walled ? high : Number.POSITIVE_INFINITY),
     )
     // A move within rounding is no move, so the rounds can end.
     if (segment.fixed || coincident(moved, segment.at)) {
@@ -1246,8 +1357,8 @@ function collect(
         index === 0 ||
         index === last ||
         anchored ||
-        axisOf(path, index - 1) === -1 ||
-        axisOf(path, index + 1) === -1
+        slanted(path, index - 1) ||
+        slanted(path, index + 1)
       // A jog between turns that go opposite ways wants its spot along the
       // run it shifts, between where the segments on either side of it
       // start and end: the middle, unless the route says otherwise. Other
@@ -1290,15 +1401,47 @@ function collect(
           held = [low, high]
           bounds = [floor, ceiling]
         }
-        if ((previous - at) * (after - at) < 0) {
+        // A jog is the rise of a Z between two legs. A leg between two
+        // corners too short for them, or for the gap, is a kink that a
+        // slant or a sliding port takes care of, not a leg: the segment
+        // beside it is part of an L, and stays put rather than move to
+        // balance the two sides of the kink into a Z with real legs.
+        const corner = Math.max(constraints[route]?.corner ?? 0, 0)
+        const kink = (leg: number, k: number) =>
+          k > 0 && k < last && before(leg, Math.max(2 * corner, keep))
+        if (
+          (previous - at) * (after - at) < 0 &&
+          !kink(Math.abs(at - previous), index - 1) &&
+          !kink(Math.abs(after - at), index + 1)
+        ) {
           const split = splits[route]?.get(index)
           if (split === undefined) {
-            desired = previous + jogAtOf(constraints[route]) * (after - previous)
+            // A jog right past a port that may slide, short enough for the
+            // port to slide it all the way out (see `ports.ts`: up to half
+            // of what its two corners need, the far one its reach and the
+            // near one what the leg out of the port leaves it past the pack
+            // there, or of the gap), stays for the port to do so.
+            const sliding = constraints[route]?.sliding
+            const stays = [previous, after].some((far, end) => {
+              if (!(end === 0 ? index === 1 : index === last - 1) || !sliding?.[end]) {
+                return false
+              }
+              const pack = Math.max(constraints[route]?.packs?.[end] ?? 0, 0)
+              const leg = Math.abs(far - at)
+              const short = Math.max(corner + Math.min(corner, Math.max(leg - pack, 0)), keep)
+              return atMost(Math.abs(b - a), short / 2)
+            })
+            if (!stays) {
+              desired = previous + jogAtOf(constraints[route]) * (after - previous)
+            }
           } else {
             // As far from the merge as leaves room for the corner past it,
             // or for the S of a short jog that slants, and for the
             // adornments at the port when that is next, but never short of
-            // the middle.
+            // the middle. Where the run has the room, it also leaves a
+            // stretch for the flow adornments between the ports, between
+            // its corner and the pack or corner beyond, so they sit clear
+            // of the bundle.
             const [near, far] = split.far === 1 ? [previous, after] : [after, previous]
             const next = split.far === 1 ? index + 2 === path.length - 1 : index === 1
             const pack = next ? (constraints[route]?.packs?.[split.far] ?? 0) : 0
@@ -1310,7 +1453,11 @@ function collect(
                 ? slant * corner - ((slant - 1) * d) / 2
                 : 0
             const room = Math.max(corner, spread) + Math.max(pack, 0)
-            const keep = Math.min(Number.isFinite(room) ? room : 0, Math.abs(far - near) / 2)
+            const half = Math.abs(far - near) / 2
+            const flows = Math.max(constraints[route]?.flows ?? 0, 0)
+            const roomy = room + flows + (next ? 0 : corner)
+            const wanted = flows > 0 && atMost(roomy, half) ? roomy : room
+            const keep = Math.min(Number.isFinite(wanted) ? wanted : 0, half)
             desired = far - Math.sign(far - near) * keep
             late = Math.sign(far - near)
           }
@@ -1378,14 +1525,19 @@ function leap(
     const high = ceiling === undefined ? highWall : Math.min(highWall ?? ceiling, ceiling)
     const step = jog.desired > jog.at ? 1 : -1
     // A jog that shares its line with another route keeps to its side of
-    // it, the side it parts toward, so it leaps only that way.
-    const holds = segments.some(
-      (peer) =>
-        peer.route !== jog.route &&
-        coincident(peer.at, jog.at) &&
-        touches(peer.low, peer.high, jog.low, jog.high) &&
-        goesFirst(paths, jog, peer, axis) !== step < 0,
-    )
+    // it, the side it parts toward, so it leaps only that way. Where the
+    // two part to different sides at the two ends, it has no side to keep.
+    const holds = segments.some((peer) => {
+      if (
+        peer.route === jog.route ||
+        !coincident(peer.at, jog.at) ||
+        !touches(peer.low, peer.high, jog.low, jog.high)
+      ) {
+        return false
+      }
+      const { lower, firmness } = goesFirst(paths, jog, peer, axis)
+      return firmness === FIRM && lower !== step < 0
+    })
     if (holds) {
       continue
     }
@@ -1470,16 +1622,28 @@ function walls(
   return [low, high, lowFrom, highFrom]
 }
 
-// Whether segment `a` takes the lower coordinate of the two. The routes go
-// apart at each end of the path they share, and each runs on the side it
-// turns toward there. Without a side at either end, the earlier route goes
-// first.
+// How firmly two segments on one line are ordered: by the ranges they may
+// sit in, which leave no choice; by a side that the two ends of their
+// shared path agree on, or that one end alone has; by a side the ends
+// disagree on; or by nothing but the order of their routes.
+const FORCED = 3
+const FIRM = 2
+const LOOSE = 1
+const ARBITRARY = 0
+
+// Whether segment `a` takes the lower coordinate of the two, and how firmly.
+// The routes go apart at each end of the path they share, and each runs on
+// the side it turns toward there. When the two ends agree, or only one has a
+// side, the order is firm. When they disagree, one crossing is unavoidable
+// whichever way the segments sit, so the order is loose, and the end the
+// first route reaches first wins. Without a side at either end, the earlier
+// route goes first, arbitrarily.
 function goesFirst(
   paths: ReadonlyArray<ReadonlyArray<Point>>,
   a: Segment,
   b: Segment,
   axis: Axis,
-): boolean {
+): { readonly lower: boolean; readonly firmness: number } {
   const p = paths[a.route] as ReadonlyArray<Point>
   const q = paths[b.route] as ReadonlyArray<Point>
   const [dx, dy] = direction(p, a.index, 1)
@@ -1487,14 +1651,18 @@ function goesFirst(
   const together = dx * ex + dy * ey > 0 ? 1 : -1
   const ahead = side(p, a.index, 1, q, b.index, together)
   // Behind, left and right swap.
-  const left = ahead !== 0 ? ahead : -side(p, a.index, -1, q, b.index, -together)
+  const behind = -side(p, a.index, -1, q, b.index, -together)
+  const left = ahead !== 0 ? ahead : behind
   if (left === 0) {
-    return a.route < b.route
+    return { lower: a.route < b.route, firmness: ARBITRARY }
   }
   // The left of travel along (dx, dy), with the Y axis down, is (dy, -dx).
   const leftward = axis === 0 ? Math.sign(dy) : Math.sign(-dx)
   // On the left, `a` takes the higher coordinate when left points that way.
-  return left * leftward < 0
+  return {
+    lower: left * leftward < 0,
+    firmness: ahead !== 0 && behind !== 0 && ahead !== behind ? LOOSE : FIRM,
+  }
 }
 
 /**

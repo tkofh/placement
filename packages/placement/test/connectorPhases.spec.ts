@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest'
+import * as Adornment from '../src/adornment.ts'
+import * as Connector from '../src/connector.ts'
+import * as Edge from '../src/edge.ts'
+import * as Frame from '../src/frame.ts'
 import { lengths, pointOnDrawn } from '../src/internal/adornments.ts'
-import { cornerInsets, cornerRadii } from '../src/internal/connector/corners.ts'
+import { cornerOutsets, cornerRadii } from '../src/internal/connector/corners.ts'
 import { addWhisk, step } from '../src/internal/connector/merge.ts'
 import {
   type XY,
@@ -8,14 +12,17 @@ import {
   nudge,
   partingCorners,
   partingSide,
+  nudgeRoutes,
 } from '../src/internal/connector/nudge.ts'
 import { straightenPorts } from '../src/internal/connector/ports.ts'
+import { normalize, roomAt, tightCostAt } from '../src/internal/connector/problem.ts'
 import { type Route, routeOf } from '../src/internal/connector/route.ts'
 import { type SlantedRoute, slantJogs } from '../src/internal/connector/slants.ts'
 import type { Obstacle } from '../src/internal/graph/graph.ts'
 import { shortestPath } from '../src/internal/graph/search.ts'
 import { type Pin, visibilityGraph } from '../src/internal/graph/visibility.ts'
 import { type Separation, type Variable, placeSeparated } from '../src/internal/separation.ts'
+import * as Rect from '../src/rect.ts'
 
 const place = (variables: ReadonlyArray<Variable>, constraints: ReadonlyArray<Separation>) => {
   const { positions, conflicts } = placeSeparated(variables, constraints)
@@ -225,6 +232,22 @@ describe('nudge', () => {
     ])
   })
 
+  test('a jog that straightens onto the line of the segment past it leaves it be', () => {
+    // The anchor on the first segment, which the route runs straight
+    // through, keeps the jog a gap past it: exactly on the line of the
+    // segment two on, which holds an anchor of its own. The jog moves
+    // there, the segment between them is left with no length, and the
+    // run on through both anchors stays as one.
+    const path = route([0, 0], [14, 0], [14, 40], [18, 40], [18, 60], [13, 60], [13, 80])
+    const anchors: Array<XY> = [
+      [10, 0],
+      [18, 50],
+    ]
+    expect(nudgeRoutes([path], [], 8, [{ anchors, straight: anchors }]).routes).toEqual([
+      route([0, 0], [18, 0], [18, 60], [13, 60], [13, 80]),
+    ])
+  })
+
   test('a shared segment splits, with each route on the side it leaves to', () => {
     // Both come in from the left and go back out to the left. The inner
     // route, which runs alongside the outer one for less, keeps inside.
@@ -317,6 +340,28 @@ describe('nudge', () => {
       pinned,
       a,
       route([-30, -5], [2.875, -5], [2.875, 45], [-30, 45]),
+    ])
+  })
+
+  test('the ranges two segments may sit in order them, whatever their sides say', () => {
+    // The two share y = 50 and part to different sides at the two ends, so
+    // a crossing is unavoidable, and the sides alone put a above b. But a
+    // runs straight through an anchor 4 below its line and keeps the gap
+    // from it, so it may only move down, and b likewise only up.
+    const a = route([0, 100], [0, 50], [100, 50], [100, 0])
+    const b = route([20, 0], [20, 50], [120, 50], [120, 100])
+    expect(nudge([a, b], [], 8)).toEqual([
+      route([0, 100], [0, 46], [100, 46], [100, 0]),
+      route([20, 0], [20, 54], [120, 54], [120, 100]),
+    ])
+    expect(
+      nudge([a, b], [], 8, [
+        { anchors: [[100, 46]], straight: [[100, 46]] },
+        { anchors: [[120, 54]], straight: [[120, 54]] },
+      ]),
+    ).toEqual([
+      route([0, 100], [0, 54], [100, 54], [100, 0]),
+      route([20, 0], [20, 46], [120, 46], [120, 100]),
     ])
   })
 
@@ -455,6 +500,26 @@ describe('nudge', () => {
     expect(nr?.[1]?.[1]).toBe(10)
   })
 
+  test('a jog that parts from its bundle leaves the flow adornments between the ports a stretch', () => {
+    // With 30 of adornments to place between the ports, p's jog parts 30
+    // earlier, so they sit past it, between its corner and the pack, clear
+    // of q. With 40, the stretch would reach past the middle of the run,
+    // so the jog goes as late as it would with none.
+    const p = route([0, 0], [0, 20], [60, 20], [60, 100])
+    const q = route([4, 0], [4, 100])
+    const merges = [0, -1] as const
+    const parted = (flows: number) =>
+      nudge(
+        [p, q],
+        [],
+        8,
+        [{ merges, corner: 10, packs: [0, 8], flows }, { merges }],
+        2,
+      )[0]?.[1]?.[1]
+    expect(parted(30)).toBe(52)
+    expect(parted(40)).toBe(82)
+  })
+
   test('jogs that part from a bundle together go as late as the least of them', () => {
     // p and q part from s together, turning east with q inside, then down
     // with p inside; p's larger corner holds the pair back.
@@ -482,6 +547,12 @@ describe('nudge', () => {
     // Lanes of different merges are no bundle.
     const apart = [{ merges: [0, -1] as const }, { merges: [1, -1] as const }, {}]
     expect(nudge([p, q, r], [], 8, apart, 2)[2]).toEqual(r)
+    // A rect up to x 1 beside the jog leaves it no room past p, so it goes
+    // past q instead, rather than into the rect.
+    const wall = [{ left: -20, right: 1, top: 45, bottom: 55 }]
+    expect(nudge([p, q, r], wall, 8, constraints, 2)[2]).toEqual(
+      route([-50, 40], [10, 40], [10, 60], [50, 60]),
+    )
   })
 
   test('an end between the lanes of a merge steps out past them', () => {
@@ -519,6 +590,27 @@ describe('nudge', () => {
     const outer = route([0, 0], [10, 0], [10, 30], [0, 30])
     const inner = route([0, 10], [10, 10], [10, 20], [0, 20])
     expect(nudge([outer, inner], [], 0)).toEqual([outer, inner])
+  })
+
+  test('the segment beside a kink stays put rather than balance a staircase', () => {
+    // A long leg down, then a step of half a pixel before the port. With
+    // corners of 16 the step is a kink, so the leg beside it is no rise of
+    // a Z to center between the port legs, which would make the step a jog
+    // of 22. The step itself centers along the leg.
+    const path = route([0, 20], [-43.5, 20], [-43.5, 184], [-44, 184], [-44, 200])
+    expect(nudgeRoutes([path], [], 8, [{ corner: 16 }]).routes).toEqual([
+      route([0, 20], [-43.5, 20], [-43.5, 110], [-44, 110], [-44, 200]),
+    ])
+    // Without a corner, the step is a leg, and the long leg centers.
+    expect(nudgeRoutes([path], [], 0, [{ corner: 0 }]).routes).toEqual([
+      route([0, 20], [-22, 20], [-22, 110], [-44, 110], [-44, 200]),
+    ])
+  })
+
+  test('a kink right past a port that may slide stays for the port', () => {
+    const path = route([0, 20], [-43.5, 20], [-43.5, 184], [-44, 184], [-44, 200])
+    const constraints = [{ corner: 16, sliding: [false, true] as [boolean, boolean] }]
+    expect(nudgeRoutes([path], [], 8, constraints).routes).toEqual([path])
   })
 })
 
@@ -914,58 +1006,79 @@ describe('cornerRadii', () => {
   })
 
   test.each([
-    [2, [10, 6]],
-    [3, [10, 6, 2]],
-  ])('a nest of %i shrinks its inner corners to share a center', (count, expected) => {
+    [2, [14, 10]],
+    [3, [18, 14, 10]],
+  ])('a nest of %i grows its outer corners to share a center', (count, expected) => {
     const sizes = cornerRadii(
       nest(count, 4),
       Array.from({ length: count }, () => 10),
     )
     expect(sizes.map((list) => list[1])).toEqual(expected)
     // The centers sit back from each corner along the way in and over
-    // along the way out, by its size.
-    const centers = sizes.flatMap((list, k) =>
-      (list[1] as number) > 0
-        ? [[30 - 4 * k - (list[1] as number), 4 * k + (list[1] as number)]]
-        : [],
-    )
-    for (const center of centers) {
-      expect(center).toEqual([20, 10])
+    // along the way out, by its size: the innermost corner's, of radius 10.
+    const inner = 4 * (count - 1)
+    for (const [k, list] of sizes.entries()) {
+      const size = list[1] as number
+      expect([30 - 4 * k - size, 4 * k + size]).toEqual([30 - inner - 10, inner + 10])
     }
   })
 
-  test('a corner past the center its nest shares grows back by as much', () => {
-    // The fourth corner sits 12 inside the outermost, 2 past their center:
-    // it takes 2, as far as it sits past, rather than none.
-    const sizes = cornerRadii(nest(4, 4), [10, 10, 10, 10])
-    expect(sizes.map((list) => list[1])).toEqual([10, 6, 2, 2])
+  test('the growth tapers off past the outer radius, to none at both radii', () => {
+    // 12 inside a corner of radius 10, past that radius, the outer corner
+    // grows by the 8 left to both radii together; 20 inside, it keeps its
+    // own.
+    expect(cornerRadii(nest(2, 12), [10, 10]).map((list) => list[1])).toEqual([18, 10])
+    expect(cornerRadii(nest(2, 20), [10, 10]).map((list) => list[1])).toEqual([10, 10])
   })
 
-  test('an inner corner that short legs hold small holds the outer one too', () => {
-    // The inner route's last leg is 4 long, so its corner reaches 4 at most,
-    // and the outer corner, 4 farther out, reaches 8 about the same center.
+  test('an end leg too short for the grown size holds the outer corner, not the inner', () => {
+    // The outer route's first leg is 12 long: its corner reaches 12, not
+    // the 14 that shares a center, and the inner one keeps its radius.
+    const outer = routed([18, 0], [30, 0], [30, 40])
+    const inner = routed([0, 4], [26, 4], [26, 40])
+    expect(cornerRadii([outer, inner], [10, 10])).toEqual([
+      [0, 12, 0],
+      [0, 10, 0],
+    ])
+  })
+
+  test('the corner at the other end of a short leg gives way to a grown one', () => {
+    // The outer route turns onto the leg into its nest corner `leg` before
+    // it: that corner wants 10, and the nest corner 14. At 22 the leg has
+    // 2 to spare past both radii, and the first corner gives up the 2 the
+    // nest is short. At 21 it has 1 to spare and gives up 1, and the nest
+    // drifts. At 20 both keep their radius, as with no nest, so nothing
+    // jumps on the way.
+    const outer = (leg: number) => routed([30 - leg, -30], [30 - leg, 0], [30, 0], [30, 40])
+    const inner = routed([0, 4], [26, 4], [26, 40])
+    expect(cornerRadii([outer(24), inner], [10, 10])[0]).toEqual([0, 10, 14, 0])
+    expect(cornerRadii([outer(22), inner], [10, 10])[0]).toEqual([0, 8, 14, 0])
+    expect(cornerRadii([outer(21), inner], [10, 10])[0]).toEqual([0, 9, 12, 0])
+    expect(cornerRadii([outer(20), inner], [10, 10])[0]).toEqual([0, 10, 10, 0])
+    // A fixed corner at the other end gives way to nothing.
+    const fixed = [new Map([[1, 10]]), new Map<number, number>()]
+    expect(cornerRadii([outer(22), inner], [10, 10], [], { fixed })[0]).toEqual([0, 10, 12, 0])
+  })
+
+  test('an inner corner that short legs hold small holds back nothing', () => {
+    // The inner route's last leg is 4 long, so its corner reaches 4 at
+    // most. The outer one keeps its radius rather than shrinking around
+    // it, and the two drift apart through the turn.
     const outer = routed([0, 0], [30, 0], [30, 40])
     const inner = routed([0, 4], [26, 4], [26, 8])
     expect(cornerRadii([outer, inner], [16, 16])).toEqual([
-      [0, 8, 0],
+      [0, 16, 0],
       [0, 4, 0],
     ])
   })
 
-  test('uneven offsets shrink the inner corner by the larger', () => {
+  test('uneven offsets grow the outer corner by the larger', () => {
     const outer = routed([0, 0], [30, 0], [30, 40])
     const inner = routed([0, 8], [26, 8], [26, 40])
     expect(cornerRadii([outer, inner], [10, 10])).toEqual([
+      [0, 18, 0],
       [0, 10, 0],
-      [0, 2, 0],
     ])
-  })
-
-  test('an inner corner past the outer center grows back with the distance', () => {
-    // 12 inside a corner of 10, the inner one takes the 2 it sits past the
-    // center; 20 inside, past both radii, it keeps its own.
-    expect(cornerRadii(nest(2, 12), [10, 10]).map((list) => list[1])).toEqual([10, 2])
-    expect(cornerRadii(nest(2, 20), [10, 10]).map((list) => list[1])).toEqual([10, 10])
   })
 
   test('corners that turn differently, or fan out, keep their size', () => {
@@ -975,94 +1088,147 @@ describe('cornerRadii', () => {
     expect(cornerRadii([right, left], [10, 10]).map((list) => list[1])).toEqual([10, 10])
     expect(cornerRadii([right, fanned], [10, 10]).map((list) => list[1])).toEqual([10, 10])
   })
-  test('an inner corner follows an outer one that its legs hold short', () => {
-    // The outer corner's jog is 6 long, so it reaches 3, less than the 4 the
-    // inner corner sits inside it: the inner one takes the 1 it sits past
-    // the center rather than jumping back to its radius.
+
+  test('an outer corner that its legs hold short leaves the inner one its radius', () => {
+    // The outer corner's jog is 6 long, so it reaches 3, less than the 4
+    // the inner corner sits inside it, which keeps its 10.
     const outer = routed([0, 0], [30, 0], [30, 6], [60, 6])
     const inner = routed([0, 4], [26, 4], [26, 40])
-    expect(cornerRadii([outer, inner], [10, 10]).map((list) => list[1])).toEqual([3, 1])
+    expect(cornerRadii([outer, inner], [10, 10]).map((list) => list[1])).toEqual([3, 10])
   })
 
-  test('a nest shrinks no corner below half its thickness', () => {
-    // The outer corner of 5 would leave the inner one 1, inside a stroke 4
-    // wide that needs 2.
+  test('a jog too short for the grown sizes keeps both corners their radius', () => {
+    // Two routes jog together, 4 apart: each is the inner one at one corner
+    // and the outer one at the other, so each wants 10 and 14 of a jog. A
+    // jog of 20 holds the radii only; one of 28 holds the nests too. On one
+    // of 22, the inner corner of each nest gives way to nothing, though
+    // the leg has 2 to spare, or the nests would chase each other: the
+    // outer corners take what is left and drift.
+    const jog = (d: number) => [
+      routed([0, 0], [30, 0], [30, d], [60, d]),
+      routed([0, 4], [26, 4], [26, d + 4], [60, d + 4]),
+    ]
+    expect(cornerRadii(jog(20), [10, 10])).toEqual([
+      [0, 10, 10, 0],
+      [0, 10, 10, 0],
+    ])
+    expect(cornerRadii(jog(22), [10, 10])).toEqual([
+      [0, 12, 10, 0],
+      [0, 10, 12, 0],
+    ])
+    expect(cornerRadii(jog(28), [10, 10])).toEqual([
+      [0, 14, 10, 0],
+      [0, 10, 14, 0],
+    ])
+  })
+
+  test('fixed corners keep their size, and corners grow around them', () => {
     const routes = nest(2, 4)
-    const thickness = [0, 4]
-    expect(cornerRadii(routes, [5, 10], [], { thickness }).map((list) => list[1])).toEqual([5, 2])
+    const outerFixed = [new Map([[1, 3]]), new Map<number, number>()]
+    expect(cornerRadii(routes, [10, 10], [], { fixed: outerFixed }).map((list) => list[1])).toEqual(
+      [3, 10],
+    )
+    const innerFixed = [new Map<number, number>(), new Map([[1, 8]])]
+    expect(cornerRadii(routes, [10, 10], [], { fixed: innerFixed }).map((list) => list[1])).toEqual(
+      [12, 8],
+    )
   })
 
-  test('corners that part from a bundle turn tight, nests growing outward', () => {
-    // Both part from a bundle, the inner one at the tightest turn and the
-    // outer one around it, the offset farther out.
-    const routes = nest(2, 4)
-    const exits = [new Set([1]), new Set([1])]
-    const sizes = cornerRadii(routes, [10, 10], [], { exits, turning: [3, 3] })
-    expect(sizes.map((list) => list[1])).toEqual([7, 3])
-  })
-
-  test('fixed corners keep their size and take no part in nests', () => {
-    const routes = nest(2, 4)
-    const fixed = [new Map([[1, 3]]), new Map<number, number>()]
-    expect(cornerRadii(routes, [10, 10], [], { fixed }).map((list) => list[1])).toEqual([3, 10])
-  })
-
-  test('an inner corner grows with the arc of an outer corner that turns less', () => {
+  test('an inner corner grows to the arc of an outer corner that turns less', () => {
     // The outer corner turns down and right, 45 degrees, once slanted: its
-    // size of 4 draws an arc of radius 4 / tan(pi / 8), and the inner corner
-    // takes that less the 4 it sits inside, where upright it would take 0.
+    // size of 4 draws an arc of radius 4 / tan(pi / 8), and the inner
+    // corner, of radius 4, takes that less the 4 it sits inside.
     const routes = nest(2, 4)
     const shaped = [routed([0, 0], [26, 0], [40, 14]), routes[1] as Route]
     const fixed = [new Map([[1, 4]]), new Map<number, number>()]
-    const sizes = cornerRadii(routes, [10, 10], [], { fixed, shaped })
+    const sizes = cornerRadii(routes, [10, 4], [], { fixed, shaped })
     expect(sizes[1]?.[1]).toBeCloseTo(4 / Math.tan(Math.PI / 8) - 4, 9)
-    // Upright, an outer corner of 6 would leave it 2.
-    expect(cornerRadii(routes, [6, 10]).map((list) => list[1])).toEqual([6, 2])
+    // One of radius 10 keeps that, as the arc less the offset is smaller.
+    expect(cornerRadii(routes, [10, 10], [], { fixed, shaped })[1]?.[1]).toBe(10)
+    // Upright, the inner one keeps its radius and the outer grows around it.
+    expect(cornerRadii(routes, [6, 10]).map((list) => list[1])).toEqual([14, 10])
     // A moved corner nests with nothing.
-    expect(cornerInsets(routes, sizes, shaped)).toEqual([
+    expect(cornerOutsets(routes, [10, 4], sizes, shaped)).toEqual([
       [0, 0, 0],
       [0, 0, 0],
     ])
   })
 
-  test('the corners a nest sizes report how far inside its outermost one they sit', () => {
+  test('the corners a nest grows report how far outside its innermost one they sit', () => {
     const routes = nest(4, 4)
     const sizes = cornerRadii(routes, [10, 10, 10, 10])
-    expect(cornerInsets(routes, sizes).map((list) => list[1])).toEqual([0, 4, 8, 0])
-    // Too far apart to nest, nothing is inset.
+    expect(sizes.map((list) => list[1])).toEqual([22, 18, 14, 10])
+    expect(cornerOutsets(routes, [10, 10, 10, 10], sizes).map((list) => list[1])).toEqual([
+      12, 8, 4, 0,
+    ])
+    // Grown by less than the offset, where the growth tapers, the outset
+    // is the growth.
     const apart = nest(2, 12)
-    expect(cornerInsets(apart, cornerRadii(apart, [10, 10]))).toEqual([
-      [0, 0, 0],
+    expect(cornerOutsets(apart, [10, 10], cornerRadii(apart, [10, 10]))).toEqual([
+      [0, 8, 0],
       [0, 0, 0],
     ])
   })
 
-  test('an outer corner that shrinks around a small inner one still insets it', () => {
-    // The inner corner's short leg holds it to 3, and the outer one shrinks
-    // to wrap it about one center.
-    const outer = routed([0, 0], [30, 0], [30, 40])
-    const inner = routed([0, 4], [26, 4], [26, 7])
-    const sizes = cornerRadii([outer, inner], [10, 10])
-    expect(sizes.map((list) => list[1])).toEqual([7, 3])
-    expect(cornerInsets([outer, inner], sizes).map((list) => list[1])).toEqual([0, 4])
+  test('a corner its leg holds short of the grown size is outset by what it grew', () => {
+    // Drawn as the innermost corner moved out by that, it comes as near to
+    // the nest's center as its size allows.
+    const inner = routed([0, 4], [26, 4], [26, 40])
+    const short = routed([18, 0], [30, 0], [30, 40])
+    const exact = routed([16, 0], [30, 0], [30, 40])
+    const held = cornerRadii([short, inner], [10, 10])
+    expect(held.map((list) => list[1])).toEqual([12, 10])
+    expect(cornerOutsets([short, inner], [10, 10], held).map((list) => list[1])).toEqual([2, 0])
+    const fitted = cornerRadii([exact, inner], [10, 10])
+    expect(fitted.map((list) => list[1])).toEqual([14, 10])
+    expect(cornerOutsets([exact, inner], [10, 10], fitted).map((list) => list[1])).toEqual([4, 0])
+    // One no larger than the innermost corner is not outset.
+    const tiny = routed([25, 0], [30, 0], [30, 40])
+    const small = cornerRadii([tiny, inner], [10, 10])
+    expect(small.map((list) => list[1])).toEqual([5, 10])
+    expect(cornerOutsets([tiny, inner], [10, 10], small).map((list) => list[1])).toEqual([0, 0])
+  })
+
+  test('only the nests that size corners are outset', () => {
+    // Around a corner with no radius, or one past both radii together, a
+    // corner nests with nothing, whatever its size.
+    const routes = nest(2, 4)
+    const sizes = cornerRadii(routes, [10, 0])
+    expect(sizes.map((list) => list[1])).toEqual([10, 0])
+    expect(cornerOutsets(routes, [10, 0], sizes).map((list) => list[1])).toEqual([0, 0])
+    const far = nest(2, 20)
+    expect(cornerOutsets(far, [10, 10], cornerRadii(far, [10, 10])).map((list) => list[1])).toEqual(
+      [0, 0],
+    )
   })
 })
 
 // Straightens the first route's start, a port on the right side of `box`,
-// with a gap of 8 and corners that reach 8.
+// with a gap of 8 and corners that reach 8, and `pack` of the leg out of
+// the port taken by adornments.
 function straighten(
   routes: Array<Array<XY>>,
   box: Obstacle = { left: -40, right: 0, top: 0, bottom: 40 },
   others: Array<Array<XY>> = [],
+  pack = 0,
+  partners = false,
 ) {
+  const all = [...routes, ...others]
   return straightenPorts(
-    [...routes, ...others],
+    all,
     [
       [{ rect: box, own: 0, side: 1 }, undefined],
       ...others.map(() => [undefined, undefined] as const),
     ],
     [],
-    { gap: 8, reach: [8], thickness: [], anchors: [] },
+    {
+      gap: 8,
+      reach: [8],
+      thickness: [],
+      anchors: [],
+      packs: [[pack, 0]],
+      ...(partners ? { merges: all.map(() => [0, -1] as const), mergeGap: 2 } : {}),
+    },
   )[0]
 }
 
@@ -1082,6 +1248,16 @@ describe('straightenPorts', () => {
     expect(straighten([leaving(26)])).toEqual(leaving(26))
   })
 
+  test('a pack at the port leaves its corner less of the leg, so less of the jog is short', () => {
+    // With 16 of the 20 out of the port packed, the corner past the leg
+    // reaches 4 at most, so the two corners need 12 of the jog: one of 14
+    // stays, and one of 10 slides 6 * (12 - 10) / 6 = 2 of the way.
+    expect(straighten([leaving(24)], undefined, [], 16)).toEqual(leaving(24))
+    expect(straighten([leaving(20)], undefined, [], 16)).toEqual(
+      route([0, 12], [20, 12], [20, 20], [60, 20]),
+    )
+  })
+
   test('a port stops short of its side’s end by the gap', () => {
     const short = { left: -40, right: 0, top: 0, bottom: 24 }
     expect(straighten([leaving(18)], short)).toEqual(route([0, 16], [20, 16], [20, 18], [60, 18]))
@@ -1092,6 +1268,9 @@ describe('straightenPorts', () => {
     expect(straighten([leaving(14)], undefined, [other])).toEqual(
       route([0, 12], [20, 12], [20, 14], [60, 14]),
     )
+    // A route that shares a merge with it keeps only the merge gap, 2, so
+    // the jog slides away whole.
+    expect(straighten([leaving(14)], undefined, [other], 0, true)).toEqual(route([0, 14], [60, 14]))
   })
 
   test('a route across the leg does not hold the port back', () => {
@@ -1270,5 +1449,55 @@ describe('slantJogs', () => {
     expect(drawn.tangent[0]).toBeCloseTo(0.6, 9)
     expect(drawn.tangent[1]).toBeCloseTo(0.8, 9)
     expect(drawn.distance).toBeCloseTo(32, 9)
+  })
+})
+
+describe('tight ends', () => {
+  // b has a neighbor 10 apart on its right, so the obstacles grow 5 toward
+  // each other there, and a across the seam above.
+  const rects = {
+    a: Rect.make(125, 0, 40, 20),
+    b: Rect.make(100, 100, 40, 20),
+    c: Rect.make(150, 100, 40, 20),
+  }
+  const spec = Connector.make({ clearance: 10, gap: 4, bendCost: 20 })
+  const arrow = Adornment.make({
+    frame: Frame.make({ width: 8, height: 6, offsetLeft: 2 }),
+    at: 1,
+    orient: Adornment.orient.forward,
+  })
+  const problemOf = (input: Partial<Edge.EdgeInput<'a' | 'b' | 'c'>> = {}) =>
+    normalize(rects, [Edge.make({ source: 'a', target: 'b', ...input })], spec)
+
+  test('the room in front of a port runs to the nearest obstacle across its line', () => {
+    const problem = problemOf()
+    // Up to a's obstacle, to c's, and off the bottom and left.
+    expect(roomAt(problem, 1, 0, 120)).toBe(70)
+    expect(roomAt(problem, 1, 1, 110)).toBe(5)
+    expect(roomAt(problem, 1, 2, 120)).toBe(Number.POSITIVE_INFINITY)
+    expect(roomAt(problem, 1, 3, 110)).toBe(Number.POSITIVE_INFINITY)
+    // Along the top of b, past a's obstacle, nothing is in front.
+    expect(roomAt(problem, 1, 0, 105)).toBe(Number.POSITIVE_INFINITY)
+    // An obstacle whose edge is on the line does not block it.
+    expect(roomAt(problem, 1, 0, 115)).toBe(Number.POSITIVE_INFINITY)
+    // An avoided rect counts too, and one that covers the port leaves none.
+    expect(roomAt(problem, 1, 2, 120, [Rect.make(0, 150, 200, 10)])).toBe(30)
+    expect(roomAt(problem, 1, 2, 120, [Rect.make(0, 110, 200, 20)])).toBe(0)
+  })
+
+  test.each([
+    ['nothing', {}, 0],
+    ['a corner', { radius: 10 }, 20],
+    ['an arrowhead', { adornments: [arrow] }, 20],
+    ['both', { radius: 10, adornments: [arrow] }, 40],
+    ['a corner too large to lose', { radius: 20, adornments: [arrow] }, 40],
+    ['a corner with room to spare', { radius: 2 }, 0],
+  ])('an end that needs %s costs by its shortfall, up to twice a corner', (_, input, cost) => {
+    const problem = problemOf(input)
+    // 5 in front of the right side, which the arrowhead alone, 10, falls
+    // short of by half its length; the corner of 10 by half its radius.
+    expect(tightCostAt(problem, 0, 1, 1, 0.5)).toBe(cost)
+    expect(tightCostAt(problem, 0, 1, 0, 0.5)).toBe(0)
+    expect(tightCostAt(problem, 0, 0, 2, 0.5)).toBe(0)
   })
 })

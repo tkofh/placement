@@ -422,6 +422,39 @@ export function packLength(
   return longest
 }
 
+/**
+ * The length the flow adornments between the ports of an edge take on a
+ * run, gaps and margins included, at most over the two axes a run can
+ * take: what a stretch of a run must hold for them to sit on it, clear of
+ * other routes.
+ *
+ * @param adornments - The edge's adornments.
+ * @param gap - The distance between adornments next to each other.
+ * @returns The length of the fullest layer of them, `0` for none.
+ */
+export function betweenLength(adornments: ReadonlyArray<SolveAdornment>, gap: number): number {
+  let longest = 0
+  for (const axis of [0, 1] as const) {
+    const items = adornments.flatMap(
+      (adornment, index): Array<RunItem> =>
+        adornment.flow && !coincident(adornment.at, 0) && !coincident(adornment.at, 1)
+          ? [
+              {
+                index,
+                at: adornment.at,
+                layer: adornment.layer,
+                measured: measure(adornment, axis, 1, false),
+              },
+            ]
+          : [],
+    )
+    for (const layer of byLayer(items).values()) {
+      longest = Math.max(longest, extent(layer, gap))
+    }
+  }
+  return longest
+}
+
 // The length a group takes on a run, margins and the gaps between included.
 function extent(group: ReadonlyArray<RunItem>, gap: number): number {
   let total = 0

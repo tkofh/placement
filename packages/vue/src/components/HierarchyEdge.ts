@@ -26,16 +26,14 @@ export interface HierarchyEdgeProps extends PaintProps {
   /** The minimum number of ranks the edge spans. Defaults to `1`. */
   minLength?: number | `${number}`
   /**
-   * Rounds the route's corners to this radius where it has room. Corners
-   * shrink where a leg is short or an adornment sits close. Percentages
-   * resolve against the width of the layout's parent.
+   * Rounds the route's corners to at least this radius, which the layout
+   * keeps room for along the flow and out of each port. Corners grow where
+   * the edge turns outside others that turn with it, so that they nest
+   * about one center, and shrink only where a leg between nodes is too
+   * short or an adornment sits close. Percentages resolve against the
+   * width of the layout's parent.
    */
   r?: LengthPercentageInput
-  /**
-   * The least corner radius the layout keeps room for along the flow and
-   * out of each port, up to `r`. Defaults to `0`.
-   */
-  minR?: LengthPercentageInput
   /**
    * How much each rounded corner eases its curvature in, from `0`
    * (default, circular corners) to `1` (fully smoothed, squircle-like). A
@@ -51,7 +49,6 @@ export const HierarchyEdge = defineComponent(
     // because the radius sizes the layout itself.
     const basis = useHierarchyPercentBasis().width
     const radius = useLengthPercentage(() => props.r, 0, basis)
-    const minRadius = useLengthPercentage(() => props.minR, 0, basis)
     const smoothing = computed(() => resolveSmoothing(props.smoothing))
 
     const solution = useHierarchyEdge(
@@ -71,7 +68,6 @@ export const HierarchyEdge = defineComponent(
       },
       () => ({
         radius: radius.value,
-        minRadius: Math.min(minRadius.value, radius.value),
         smoothing: smoothing.value,
       }),
     )
@@ -90,7 +86,6 @@ export const HierarchyEdge = defineComponent(
       'weight',
       'minLength',
       'r',
-      'minR',
       'smoothing',
       ...PAINT_PROP_KEYS,
     ],

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import type * as AspectRatio from '../src/aspectRatio.ts'
 import * as Dimensions from '../src/dimensions.ts'
 
 describe('make', () => {
@@ -472,5 +473,60 @@ describe('equals', () => {
 describe('serialization', () => {
   test('toJSON emits width and height', () => {
     expect(JSON.parse(JSON.stringify(Dimensions.make(5, 10)))).toEqual({ width: 5, height: 10 })
+  })
+})
+
+describe('aspect ratio pairs', () => {
+  const r169: AspectRatio.AspectRatio = [16, 9]
+
+  test.each([
+    {
+      name: 'contain keeps the width',
+      self: Dimensions.make(160, 100),
+      expected: Dimensions.make(160, 90),
+    },
+    {
+      name: 'contain keeps the height',
+      self: Dimensions.make(400, 7),
+      expected: Dimensions.make(112 / 9, 7),
+    },
+  ])('$name', ({ self, expected }) => {
+    expect(Dimensions.contain(self, r169)).toEqual(expected)
+    expect(self.pipe(Dimensions.contain(r169))).toEqual(expected)
+  })
+
+  test.each([
+    {
+      name: 'cover grows the width',
+      self: Dimensions.make(1, 7),
+      expected: Dimensions.make(112 / 9, 7),
+    },
+    {
+      name: 'cover grows the height',
+      self: Dimensions.make(160, 1),
+      expected: Dimensions.make(160, 90),
+    },
+  ])('$name', ({ self, expected }) => {
+    expect(Dimensions.cover(self, r169)).toEqual(expected)
+    expect(self.pipe(Dimensions.cover(r169))).toEqual(expected)
+  })
+
+  test('setAspectRatio takes a pair in both forms', () => {
+    expect(Dimensions.setAspectRatio(Dimensions.make(160, 7), r169, 0)).toEqual(
+      Dimensions.make(160, 90),
+    )
+    expect(Dimensions.make(160, 7).pipe(Dimensions.setAspectRatio(r169, 1))).toEqual(
+      Dimensions.make(112 / 9, 7),
+    )
+  })
+
+  test('a ratio over 1 behaves as its number', () => {
+    const self = Dimensions.make(100, 7)
+    for (const ratio of [16 / 9, 0.3, 30]) {
+      const pair: AspectRatio.AspectRatio = [ratio, 1]
+      expect(Dimensions.contain(self, pair)).toEqual(Dimensions.contain(self, ratio))
+      expect(Dimensions.cover(self, pair)).toEqual(Dimensions.cover(self, ratio))
+      expect(Dimensions.setAspectRatio(self, pair)).toEqual(Dimensions.setAspectRatio(self, ratio))
+    }
   })
 })

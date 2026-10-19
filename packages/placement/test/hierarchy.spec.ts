@@ -884,7 +884,7 @@ describe('apply', () => {
       expect(layout.edges[0]?.radii).toEqual([0, 4, 4, 0])
     })
 
-    test('shrink where a leg is short', () => {
+    test('the layout lengthens the legs along the flow for the radius', () => {
       const layout = Hierarchy.apply(
         three,
         [
@@ -893,14 +893,16 @@ describe('apply', () => {
         ],
         spec,
       )
-      // The jog sits 20 below a and 20 above b, so each corner fits in 20.
+      // The jog sits 30 below a and 30 above b, room for the corners, but
+      // the run across the flow between them is 55 long, where the nodes
+      // sit, so its two corners split it.
       expect(points(layout.edges[0])).toEqual([
         [105, 40],
-        [105, 60],
-        [50, 60],
-        [50, 80],
+        [105, 70],
+        [50, 70],
+        [50, 100],
       ])
-      expect(layout.edges[0]?.radii).toEqual([0, 20, 20, 0])
+      expect(layout.edges[0]?.radii).toEqual([0, 27.5, 27.5, 0])
     })
 
     test('two corners on a short leg split it', () => {
@@ -918,11 +920,11 @@ describe('apply', () => {
       expect(route.radii).toEqual([0, jog / 2, jog / 2, 0])
     })
 
-    test('minRadius keeps room where layout sets the length', () => {
+    test('the radius keeps room where layout sets the length', () => {
       const layout = Hierarchy.apply(
         three,
         [
-          Edge.make({ source: 'a', target: 'b', radius: 30, minRadius: 25 }),
+          Edge.make({ source: 'a', target: 'b', radius: 25 }),
           Edge.make({ source: 'a', target: 'c' }),
         ],
         spec,
@@ -952,11 +954,13 @@ describe('apply', () => {
         ],
         spec,
       )
-      // The last leg runs 23 into b, and the arrow and its gap take 13.
+      // The last leg runs 43 into b: the arrow and its gap take 13, and the
+      // corner has its 30 past them, though the run across the flow, 55
+      // long between two corners, holds it at 27.5.
       const route = layout.edges[0] as Hierarchy.HierarchyRoute
-      expect(layout.nodes.b?.y).toBe(83)
-      expect(points(route)?.at(-2)).toEqual([50, 60])
-      expect(route.radii.at(-2)).toBe(10)
+      expect(layout.nodes.b?.y).toBe(113)
+      expect(points(route)?.at(-2)).toEqual([50, 70])
+      expect(route.radii.at(-2)).toBe(27.5)
     })
   })
 
@@ -1434,7 +1438,6 @@ function randomGraph(seed: number, nodeCount: number, edgeCount: number, sides =
         sourceSide: side(),
         targetSide: side(),
         radius,
-        minRadius: next() < 0.5 ? radius : 0,
       }),
     )
   }
@@ -1466,7 +1469,9 @@ function expectCorners(edge: Edge.Edge<string>, route: Hierarchy.HierarchyRoute)
   }
   for (const [k, radius] of radii.entries()) {
     expect(radius).toBeGreaterThanOrEqual(0)
-    expect(radius).toBeLessThanOrEqual(edge.radius + 1e-9)
+    if (!(edge.radius > 0)) {
+      expect(radius).toBe(0)
+    }
     if (k > 0) {
       const leg = (along[k] as number) - (along[k - 1] as number)
       expect(radius + (radii[k - 1] as number)).toBeLessThanOrEqual(leg + 1e-9)
@@ -1688,7 +1693,7 @@ describe('properties', () => {
     )
     const scaledEdges = edges.map((edge) =>
       Edge.setAdornments(
-        Edge.setRadius(edge, edge.radius * scale, edge.minRadius * scale),
+        Edge.setRadius(edge, edge.radius * scale),
         edge.adornments.map((adornment) =>
           Adornment.setFrame(
             adornment,

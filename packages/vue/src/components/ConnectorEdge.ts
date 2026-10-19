@@ -48,9 +48,10 @@ export interface ConnectorEdgeProps extends PaintProps {
    */
   jogAt?: RatioInput
   /**
-   * Rounds the route's corners to this radius where it has room. Corners
-   * shrink where a leg is short, a flow adornment sits close, or the edge
-   * turns inside another. Percentages resolve against the width of the
+   * Rounds the route's corners to at least this radius. Corners grow where
+   * the edge turns outside others that turn with it, so that they nest
+   * about one center, and shrink only where a leg is too short or a flow
+   * adornment sits close. Percentages resolve against the width of the
    * edge's parent.
    */
   r?: LengthPercentageInput

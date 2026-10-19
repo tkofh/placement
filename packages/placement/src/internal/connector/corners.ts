@@ -4,59 +4,52 @@ import { resolveRadii } from '../adornments.ts'
 import { type XY, positiveLength } from '../orient.ts'
 import type { Route } from './route.ts'
 
-// The sizes of the corners of orthogonal routes. Each corner reaches at most
-// its route's radius, never into a wall (a stretch that flow adornments
-// take), and no more of a leg than its share (see `resolveRadii`).
+// The sizes of the corners of orthogonal routes. A route's radius is the
+// least its corners turn: each reaches that far along its two legs unless
+// a leg is too short for it, never into a wall (a stretch that flow
+// adornments take), and no more of a leg than its share (see
+// `resolveRadii`). Nothing but its legs holds a corner smaller than its
+// radius, so it falls to routing to leave the legs long enough.
 //
 // Routes that turn together, nested a small distance apart, keep that
-// distance through the turn only when their corners share a center, like the
-// curves of lines on a metro map. Corners nest only where the routes run
-// alongside each other on both legs. Corners of one size drift apart at the
-// turn, and a large outer corner beside a small inner one, which short legs
-// can force, cuts across it. An inner corner sits back from its outer one by
-// `s` along the way in and over by `t` along the way out. While the larger
-// of the two is less than both routes' radii together, the inner corner is
-// at most the distance between the outer's size and it: the outer's size
-// less it, down to none, while the inner corner sits inside the outer's
-// center, and as much as it sits past the center beyond, so that no corner
-// jumps as the routes move. The outer one is at most the inner's size plus
-// it. With `s` and `t` equal, which nudging gives routes that share a bend,
-// the two corners share a center. Whether corners nest depends on the
-// radii and not on how far the outer corner reaches, so an inner corner
-// follows its outer one smoothly as a leg shortens.
-// Corners only shrink, so each stays within its route's radius. A nest
-// shrinks no corner below half its route's thickness, where the inside of
-// the stroke would fold over, unless its legs hold it smaller already.
+// distance through the turn only when their corners share a center, like
+// the curves of lines on a metro map. Corners nest only where the routes
+// run alongside each other on both legs. The innermost corner of a nest
+// keeps its radius, and each corner outside it grows: one that sits back
+// from the corner inside it by `s` along the way in and over by `t` along
+// the way out is larger than it by the larger of the two, so with `s` and
+// `t` equal, which nudging gives routes that share a bend, the two share a
+// center. A nest reaches less than both routes' radii together, and the
+// growth tapers off past the outer route's radius, down to none at that
+// reach, so that no corner jumps as routes drift apart. Where a leg is too
+// short for an outer corner's grown size and the corner at its other end,
+// that corner gives way, by no more than the leg has spare past the outer
+// corner's radius and its own want (see `resolveRadii`): the nest holds
+// together where its leg falls a little short, and lets go slowly where it
+// falls far short, the two corners drifting apart through the turn. An
+// inner corner never shrinks for the one outside it, and gives way to no
+// other corner either, or the nests would chase each other.
 //
 // Once the routes take their final shape, an outer corner that turns less
 // than a right angle, as at a slanted jog, draws an arc of radius its size
-// over `tan(theta / 2)` for a turn `theta`. Its inner corner is then bound
-// by that radius in place of the size, growing back as the turn flattens.
+// over `tan(theta / 2)` for a turn `theta`. The corners nested inside it
+// grow to that arc less how far they sit inside, where that is more than
+// their radius, so the nest keeps its center through the slant.
 
 /** What sizing the corners keeps as given, and the shape they end up in. */
 export interface CornerOptions {
   /**
-   * The corners whose size is set, by route and then point index. They take
-   * no part in nests.
+   * The corners whose size is set, by route and then point index. They
+   * never grow, though corners may grow around them.
    */
   readonly fixed?: ReadonlyArray<ReadonlyMap<number, number>> | undefined
   /**
    * The routes as they are drawn, point for point, where corners may have
    * moved off the orthogonal routes: an outer corner that moved, with a set
-   * size, bounds its inner one by the arc it draws, and an inner corner that
-   * moved leaves its nest.
+   * size, grows its inner ones to the arc it draws, and an inner corner
+   * that moved leaves its nest.
    */
   readonly shaped?: ReadonlyArray<Route> | undefined
-  /** How thick each route draws. */
-  readonly thickness?: ReadonlyArray<number> | undefined
-  /**
-   * The corners, by route, where a route parts from a bundle it ran with,
-   * which turn at most `turning`, or that plus the offsets of the parting
-   * corners nested inside them.
-   */
-  readonly exits?: ReadonlyArray<ReadonlySet<number>> | undefined
-  /** The tightest each route turns, for its parting corners. */
-  readonly turning?: ReadonlyArray<number> | undefined
 }
 
 interface Corner {
@@ -80,8 +73,6 @@ interface Link {
   readonly by: number
 }
 
-const key = (corner: Corner) => `${corner.route}:${corner.index}`
-
 // Whether a corner sits off its orthogonal route in the routes as drawn.
 const moved = (shaped: ReadonlyArray<Route> | undefined, corner: Corner): boolean => {
   const point = shaped?.[corner.route]?.points[corner.index]
@@ -92,7 +83,7 @@ const moved = (shaped: ReadonlyArray<Route> | undefined, corner: Corner): boolea
  * Sizes the corners of routes.
  *
  * @param routes - The orthogonal routes.
- * @param radii - The radius of each route.
+ * @param radii - The radius of each route, the least its corners turn.
  * @param walls - The stretches of each route that its flow adornments
  * take, as lengths along it.
  * @param options - The corners whose size is set, and the routes as drawn.
@@ -105,100 +96,97 @@ export function cornerRadii(
   walls: ReadonlyArray<ReadonlyArray<readonly [number, number]>> = [],
   options: CornerOptions = {},
 ): Array<Array<number>> {
-  const { fixed = [], shaped, thickness = [], exits = [], turning = [] } = options
+  const { fixed = [], shaped } = options
   const limits = routes.map((_, r) => positiveLength(radii[r]))
-  const sizes = routes.map((route, r) => {
-    const list = resolveRadii(route.points, route.cumulative, limits[r] as number, walls[r] ?? [])
+  const fixedAt = (route: number, index: number) => fixed[route]?.has(index) ?? false
+  const isFixed = (corner: Corner) => fixedAt(corner.route, corner.index)
+  // Every corner wants its radius, and a fixed one its size.
+  const floors = routes.map((route, r) => {
+    const list = route.points.map(() => limits[r] as number)
     for (const [index, size] of fixed[r] ?? []) {
       list[index] = size
     }
     return list
   })
-  // The least each corner shrinks to in a nest.
-  const floors = sizes.map((list, r) => {
-    const half = positiveLength(thickness[r]) / 2
-    return list.map((size) => Math.min(size, half))
-  })
-  const isFixed = (corner: Corner) => fixed[corner.route]?.has(corner.index) ?? false
+  // The corners that others nest around (filled in below) give way to no
+  // other, or the nests would chase each other; nor do fixed ones.
+  const inners = routes.map(() => new Set<number>())
+  // The corners at the sizes they want, as far as their legs allow, with a
+  // corner grown past its radius taking from the one at the other end of a
+  // leg too short for both.
+  const settle = (targets: ReadonlyArray<ReadonlyArray<number>>) =>
+    routes.map((route, r) => {
+      const list = resolveRadii(
+        route.points,
+        route.cumulative,
+        targets[r] as ReadonlyArray<number>,
+        walls[r] ?? [],
+        {
+          floors: floors[r] as ReadonlyArray<number>,
+          held: (index) => fixedAt(r, index) || (inners[r]?.has(index) ?? false),
+        },
+      )
+      for (const [index, size] of fixed[r] ?? []) {
+        list[index] = size
+      }
+      return list
+    })
+  let sizes = settle(floors)
 
-  // The nests: pairs whose offset is within the outer route's radius, that
-  // neither leaves. An outer corner that moved bounds its inner one by its
-  // arc; any other fixed corner takes no part.
-  const links: Array<Link & { readonly arc: number | undefined }> = []
-  for (const link of nestLinks(routes)) {
+  // The nests. An outer corner that moved grows the inner one to its arc
+  // instead of growing itself; an inner corner that moved, or a fixed
+  // outer one, nests with nothing, and a fixed inner one only has corners
+  // grow around it.
+  const links: Array<Link & { readonly arc: number | undefined; readonly grow: number }> = []
+  for (const link of nestsWithin(routes, limits)) {
     const { outer, inner, by } = link
-    // Past both radii, the inner corner's bound is past its own.
     const reach = (limits[outer.route] as number) + (limits[inner.route] as number)
-    if (!before(by, reach) || moved(shaped, inner) || isFixed(inner)) {
+    if (moved(shaped, inner)) {
       continue
     }
     if (moved(shaped, outer)) {
+      if (isFixed(inner)) {
+        continue
+      }
       const size = (sizes[outer.route] as Array<number>)[outer.index] as number
       const drawn = (shaped as ReadonlyArray<Route>)[outer.route] as Route
       const half = halfTurnTan(drawn.points, outer.index)
-      links.push({ ...link, arc: half > 0 ? size / half : Number.POSITIVE_INFINITY })
+      if (half > 0) {
+        links.push({ ...link, arc: size / half, grow: 0 })
+      }
     } else if (!isFixed(outer)) {
-      links.push({ ...link, arc: undefined })
+      links.push({ ...link, arc: undefined, grow: Math.min(by, reach - by) })
     }
+  }
+  if (links.length === 0) {
+    return sizes
+  }
+  for (const { inner } of links) {
+    inners[inner.route]?.add(inner.index)
   }
 
-  // Parting corners turn tight, and those nested around others grow out
-  // from the innermost by their offsets, so a nest that parts together
-  // keeps one center.
-  const isExit = (corner: Corner) =>
-    (exits[corner.route]?.has(corner.index) ?? false) && !isFixed(corner) && !moved(shaped, corner)
-  const caps = new Map<string, number>()
-  for (const [route, list] of exits.entries()) {
-    const tightest = positiveLength(turning[route])
-    for (const index of list) {
-      caps.set(`${route}:${index}`, tightest)
-    }
-  }
-  const outward = links.filter(({ outer, inner }) => isExit(outer) && isExit(inner))
-  for (let pass = 0; pass <= outward.length; pass++) {
-    let changed = false
-    for (const { outer, inner, by } of outward) {
-      const around = (caps.get(key(inner)) ?? 0) + by
-      if (before(caps.get(key(outer)) ?? 0, around)) {
-        caps.set(key(outer), around)
-        changed = true
-      }
-    }
-    if (!changed) {
-      break
-    }
-  }
-  for (const [route, list] of exits.entries()) {
-    const routeSizes = sizes[route] as Array<number>
-    for (const index of list) {
-      if (!(fixed[route]?.has(index) ?? false) && index > 0 && index < routeSizes.length - 1) {
-        const cap = caps.get(`${route}:${index}`) ?? 0
-        routeSizes[index] = Math.min(routeSizes[index] as number, cap)
-      }
-    }
-  }
-
-  // Shrink corners until every nested pair fits, which settles at least one
-  // more ring of a nest each pass.
+  // Grow the corners until every nest settles, from the innermost out,
+  // which takes one pass per ring of a nest. Each pass sizes every corner
+  // afresh from what the corners inside it came to, so that a corner held
+  // short by its legs holds back nothing but the growth around it.
   for (let pass = 0; pass <= links.length; pass++) {
-    let changed = false
-    for (const { outer, inner, by, arc } of links) {
-      const outerSizes = sizes[outer.route] as Array<number>
-      const innerSizes = sizes[inner.route] as Array<number>
-      const floor = (floors[inner.route] as Array<number>)[inner.index] as number
-      const base = arc ?? (outerSizes[outer.index] as number)
-      const fits = Math.max(floor, Math.abs(base - by))
-      if (fits < (innerSizes[inner.index] as number)) {
-        innerSizes[inner.index] = fits
-        changed = true
-      }
-      const around = (innerSizes[inner.index] as number) + by
-      if (arc === undefined && around < (outerSizes[outer.index] as number)) {
-        outerSizes[outer.index] = around
-        changed = true
+    const targets = floors.map((list) => list.slice())
+    for (const { outer, inner, by, arc, grow } of links) {
+      if (arc === undefined) {
+        const list = targets[outer.route] as Array<number>
+        const want = ((sizes[inner.route] as Array<number>)[inner.index] as number) + grow
+        list[outer.index] = Math.max(list[outer.index] as number, want)
+      } else {
+        const list = targets[inner.route] as Array<number>
+        list[inner.index] = Math.max(list[inner.index] as number, arc - by)
       }
     }
-    if (!changed) {
+    const next = settle(targets)
+    const same = next.every((list, r) =>
+      list.every((size, i) => coincident(size, (sizes[r] as Array<number>)[i] as number)),
+    )
+    sizes = next
+    if (same) {
       break
     }
   }
@@ -206,43 +194,44 @@ export function cornerRadii(
 }
 
 /**
- * How far inside the outermost corner of its nest each corner sits, for the
- * corners that a nest sized: those exactly the size of the corner outside
- * them less how far they sit inside it, where both keep their right angle.
- * A renderer that draws them as offsets of the outermost corner keeps the
- * nest about one center.
+ * How much larger than the innermost corner of its nest each corner is,
+ * for the corners of nests whose members keep their right angle: how far
+ * outside that corner it sits, where the nest keeps one center, and less
+ * where a leg holds it short of its grown size. A renderer that draws such
+ * a corner as the innermost one moved out by its outset keeps the nest
+ * about one center, and as near to it as a held corner's size allows.
  *
  * @param routes - The orthogonal routes, as given to `cornerRadii`.
+ * @param radii - The radius of each route, as given to `cornerRadii`.
  * @param sizes - Their corner sizes, from `cornerRadii`.
  * @param shaped - The routes as drawn, where corners that moved nest with
  * nothing.
- * @returns The inset of the corner at each point of each route, `0` for
- * one that does not nest or that its nest left alone.
+ * @returns The outset of the corner at each point of each route, `0` for
+ * one that does not nest, that is the innermost of its nest, or that is no
+ * larger than it.
  */
-export function cornerInsets(
+export function cornerOutsets(
   routes: ReadonlyArray<Route>,
+  radii: ReadonlyArray<number>,
   sizes: ReadonlyArray<ReadonlyArray<number>>,
   shaped?: ReadonlyArray<Route>,
 ): Array<Array<number>> {
-  const insets = routes.map(({ points }) => points.map(() => 0))
-  const tight = nestLinks(routes).filter(({ outer, inner, by }) => {
-    const outerSize = sizes[outer.route]?.[outer.index] ?? 0
-    const innerSize = sizes[inner.route]?.[inner.index] ?? 0
-    return (
-      !moved(shaped, outer) &&
-      !moved(shaped, inner) &&
-      before(by, outerSize) &&
-      coincident(innerSize, outerSize - by)
-    )
-  })
-  // Outer corners first, by settling one more ring of each nest per pass.
-  for (let pass = 0; pass <= tight.length; pass++) {
+  const outsets = routes.map(({ points }) => points.map(() => 0))
+  const limits = routes.map((_, r) => positiveLength(radii[r]))
+  const upright = nestsWithin(routes, limits).filter(
+    ({ outer, inner }) => !moved(shaped, outer) && !moved(shaped, inner),
+  )
+  // Inner corners first, by settling one more ring of each nest per pass.
+  for (let pass = 0; pass <= upright.length; pass++) {
     let changed = false
-    for (const { outer, inner, by } of tight) {
-      const inset = ((insets[outer.route] as Array<number>)[outer.index] as number) + by
-      const list = insets[inner.route] as Array<number>
-      if (!coincident(list[inner.index] as number, inset)) {
-        list[inner.index] = inset
+    for (const { outer, inner } of upright) {
+      const outerSize = sizes[outer.route]?.[outer.index] ?? 0
+      const innerSize = sizes[inner.route]?.[inner.index] ?? 0
+      const inside = (outsets[inner.route] as Array<number>)[inner.index] as number
+      const outset = Math.max(inside + outerSize - innerSize, 0)
+      const list = outsets[outer.route] as Array<number>
+      if (!coincident(list[outer.index] as number, outset)) {
+        list[outer.index] = outset
         changed = true
       }
     }
@@ -250,7 +239,7 @@ export function cornerInsets(
       break
     }
   }
-  return insets
+  return outsets
 }
 
 // The tangent of half the turn at a point of a route.
@@ -265,8 +254,20 @@ function halfTurnTan(points: ReadonlyArray<XY>, index: number): number {
 }
 
 // The nests of each set of routes, kept for the next pass over it: one set
-// has its corners sized twice and inset once, and the routes never change.
+// has its corners sized twice and outset once, and the routes never change.
 const nests = new WeakMap<ReadonlyArray<Route>, ReadonlyArray<Link>>()
+
+// The nests that size corners: pairs of routes with radii whose offset is
+// within both radii together.
+function nestsWithin(
+  routes: ReadonlyArray<Route>,
+  limits: ReadonlyArray<number>,
+): ReadonlyArray<Link> {
+  return nestLinks(routes).filter(({ outer, inner, by }) => {
+    const [outerLimit, innerLimit] = [limits[outer.route] as number, limits[inner.route] as number]
+    return outerLimit > 0 && innerLimit > 0 && before(by, outerLimit + innerLimit)
+  })
+}
 
 // Each corner's nearest inner corner among the others that turn the same
 // way, by the larger of how far it sits back and over.

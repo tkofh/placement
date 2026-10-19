@@ -30,8 +30,10 @@ export interface ConnectorLayoutProps extends RectProps {
   /**
    * The cost of each corner, as a length: a route takes a detour up to this
    * long to save a corner. It is the scale of every cost: a crossing costs
-   * two fifths of it, and a corner against an edge's preferred `turn` as
-   * much again. Omitted, it is twice the `clearance` and `gap` together.
+   * two fifths of it, a corner against an edge's preferred `turn` as much
+   * again, and a side with no room in front of its port for the end's
+   * adornments and corner up to twice it. Omitted, it is twice the
+   * `clearance` and `gap` together.
    */
   bendCost?: LengthPercentageInput
   /**

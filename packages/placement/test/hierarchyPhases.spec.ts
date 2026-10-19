@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { findReversed } from '../src/internal/graph/acyclic.ts'
+import { findReversed, preferredOrder } from '../src/internal/graph/acyclic.ts'
 import type { LayeredGraph, Segment } from '../src/internal/hierarchy/graph.ts'
 import { countCrossings, order } from '../src/internal/hierarchy/order.ts'
 import { rank } from '../src/internal/hierarchy/rank.ts'
@@ -64,6 +64,84 @@ describe('findReversed', () => {
   ] as const)('%s', (_, count, pairs, expected) => {
     const edges = pairs.map(([source, target]) => ({ source, target }))
     expect(findReversed(count, edges)).toEqual(expected)
+  })
+})
+
+describe('preferredOrder', () => {
+  const edges = (pairs: ReadonlyArray<readonly [number, number]>) =>
+    pairs.map(([source, target]) => ({ source, target }))
+
+  test('follows the preferences, and keeps input order among the rest', () => {
+    // The position of each item: 2 before 0 puts 1 first, then 2, then 0.
+    expect(preferredOrder(3, edges([[2, 0]]))).toEqual([2, 0, 1])
+    expect(preferredOrder(4, edges([[3, 1]]))).toEqual([0, 3, 1, 2])
+    expect(preferredOrder(3, [])).toEqual([0, 1, 2])
+  })
+
+  test('a cycle breaks at the edge that closes it, in input order', () => {
+    // 0 < 1 < 2 hold, and 2 < 0 is left out.
+    expect(
+      preferredOrder(
+        3,
+        edges([
+          [0, 1],
+          [1, 2],
+          [2, 0],
+        ]),
+      ),
+    ).toEqual([0, 1, 2])
+    expect(
+      preferredOrder(
+        3,
+        edges([
+          [2, 0],
+          [0, 1],
+          [1, 2],
+        ]),
+      ),
+    ).toEqual([1, 2, 0])
+  })
+
+  test('a cycle breaks at its lightest edge', () => {
+    // The heaviest edge, 2 < 0, holds, and the lighter 1 < 2 gives way.
+    expect(
+      preferredOrder(
+        3,
+        edges([
+          [0, 1],
+          [1, 2],
+          [2, 0],
+        ]),
+        [2, 1, 3],
+      ),
+    ).toEqual([1, 2, 0])
+    // Among equals, input order decides which gives way, and weights left
+    // out are the lightest: here the last edge, 0 < 1, closes the cycle.
+    expect(
+      preferredOrder(
+        3,
+        edges([
+          [1, 2],
+          [2, 0],
+          [0, 1],
+        ]),
+        [1],
+      ),
+    ).toEqual([2, 0, 1])
+  })
+
+  test('an edge that the others already imply is kept, and a loop is not', () => {
+    expect(
+      preferredOrder(
+        3,
+        edges([
+          [0, 1],
+          [1, 2],
+          [0, 2],
+          [1, 1],
+        ]),
+      ),
+    ).toEqual([0, 1, 2])
   })
 })
 

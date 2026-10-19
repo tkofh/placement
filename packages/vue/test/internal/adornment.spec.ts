@@ -29,7 +29,7 @@ describe('drawnLine', () => {
     })
   })
 
-  test('keeps the nest insets of the corners it keeps', () => {
+  test('keeps the nest outsets of the corners it keeps', () => {
     expect(drawnLine(ell, radii, { start: 0, end: 30 }, [0, 4, 0]).nests).toEqual([0, 4, 0])
     expect(drawnLine(ell, radii, { start: 0, end: 100 }, [0, 4, 0]).nests).toEqual([0, 0])
   })

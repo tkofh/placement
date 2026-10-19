@@ -18,17 +18,36 @@ routes cross trade places when that leaves fewer crossings. Routes are orthogona
 their ports straight out from the side, and report their corner `radii`.
 Gaps are between strokes: `Edge` gains a `thickness` (and
 `Edge.setThickness`), and routes sit their gap apart plus half of each
-thickness, keep half their thickness more off the rects they run along
-where they can, and keep inner corners at least half their thickness so
-the inside of the stroke never folds.
-Routes in a passage too narrow for the gap spread evenly across it, and
-routes that turn together get corners about one center, as on a metro map.
-An inner corner follows its outer one smoothly, down as a short leg holds
-the outer one in, back up past their shared center and as a slanted jog
-flattens it, and each
-route's `insets` say how far inside the outermost corner of its nest each
-corner sits.
-An auto side is the side of the cheapest route, and auto ports that share a
+thickness, and keep half their thickness more off the rects they run along
+where they can.
+Routes in a passage too narrow for the gap spread evenly across it.
+An edge's `radius` is the least its corners turn: every corner reaches
+that far unless a leg is too short for it, and `Edge.minRadius` is gone.
+The search prices a jog shorter than twice the radius, whose two corners
+could not both fit, at its two corners in proportion to its length, so
+that a route's cost varies smoothly as the rects move and no route flips
+to another over a jog of a pixel, and a route that comes onto another's
+line on one side of it and leaves on the other pays for the crossing that
+is. Nudging leaves the segment beside such a kink where it is rather than
+balance a staircase around it, and leaves a kink right past a port for
+the port to slide away.
+Routes that turn together get corners about one center, as on a metro
+map: the innermost corner keeps the radius and each corner outside it
+grows by how far it sits outside the one inside it, tapering off as the
+routes drift apart so that no corner jumps. Where a leg is too short for
+a grown corner and the corner at its other end, that corner gives way, by
+no more than the leg has spare past the two radii, so that a nest holds
+together where its leg falls a little short and lets go slowly where it
+falls far short. Each route's `outsets` say how much larger than the
+innermost corner of its nest each corner is, for a renderer to draw it as
+that corner moved out.
+Around a corner that a slanted jog flattens, the corners inside grow to
+its arc.
+An auto side is the side of the cheapest route, where a side with less
+room in front of its port than the end needs for its adornments and the
+corner past them costs up to twice the bend cost more, so an end comes in
+on a side with room where that costs less than the way around. Auto ports
+that share a
 side spread out in the order their routes part in, so that the routes nest
 instead of crossing at the rect. Ports sit on the rects, or on the shapes
 that `apply`'s `shapes` option gives them, as `Hierarchy.apply` takes
@@ -39,7 +58,16 @@ each with the way the route arrives there (`arriving`) and leaves
 gap from it; stay out of its own `avoid` rects; and prefer clockwise or
 counterclockwise turns. Nudging never takes a waypoint off its route, and
 a segment that moves takes the open side of one that stays put on the
-line of a wall. A jog, the rise of a Z-shaped route, sits at the
+line of a wall. Routes that run alongside each other sit in the order
+their ends ask for; two that must cross whichever way they sit take the
+sides that leave them where they want to be, and where the orders that
+pairs of routes ask for conflict, the pairs that must cross anyway give
+way first, so the lanes of a merge peel off in order. A route whose
+waypoints hold a run on the line of another route's port leg, which
+nudging can move neither of, goes around it instead, and so does a route
+that runs along or beside such a leg where nudging could not move it the
+gap off, in a strip between the leg and a rect's clearance too narrow for
+it: it crosses the other route, or goes around, rather than lie on it. A jog, the rise of a Z-shaped route, sits at the
 spec's `jogAt` of the run it shifts (the middle by default, or per edge),
 and passes routes that run alongside all of it, since that adds no
 crossing. A jog too short for its two corners slants into an S (two arcs
@@ -68,13 +96,24 @@ their jogs sit beside one another rather than at `jogAt`, so they turn
 together as one bundle with nested corners. Other routes never run inside
 a bundle: they go past it, and a route whose port leaves it among the lanes
 steps out past them once it clears its rect. A route parts from its bundle
-as far from the merge as its corners leave room for. Routes whose ends at one rect could
-merge pull each other along while sides are chosen, so they come in
-on one side and merge (a tenth less along a partner's route). Where a route goes
-on alone from a group that goes on without it, it turns as tight as the
-merge gap allows; a pair that parts leaves no group, and turns as usual.
+as far from the merge as its corners leave room for, and, where its run
+has the room, as leaves the flow adornments between its ports a stretch
+of their own past the bundle. Routes whose ends at one rect could merge
+pull each other along while sides are chosen: a stretch along a partner's
+route costs a quarter of its length, within the span of the route's own
+two rects, so that routes group up where a long run together pays for the
+bend and length it takes them to meet, and never go out of their way to
+join one. The search finds every route on its own first, without the
+pull, and then with it, so that each is drawn toward where its partners
+would go by themselves and no route's choice settles a tie for the next
+and holds it there. Where a route goes on alone from a group that goes on without
+it, its parting jog stays upright.
 A short jog right past an auto port slides the port along its side to
-straighten the route where it can, and a slanted jog keeps its curve the
+straighten the route where it can (short for what its two corners need,
+with the corner at the port given no more of the leg out of it than the
+adornments packed there leave; the port keeps the gap from the routes
+alongside, or the merge gap from those that share a merge with it), and a
+slanted jog keeps its curve the
 gap from the routes and rects beside it. Jogs in a bundle, or where a
 route leaves a group, stay upright. Merged lanes stop short of a far end
 that faces them close by, so no route has to turn back past them. `near` merges

@@ -10,20 +10,40 @@ import type { Graph, Obstacle } from './graph.ts'
 // add layers of that state: a path at its next waypoint moves to the next
 // layer at no cost, so one search finds the best route through all of them,
 // with the turns at the waypoints counted. The search is A*, with an
-// estimate of the remaining length that never exceeds it: the distance to
-// the next waypoint plus the distances between the rest, by the sum of the
-// axis distances on a graph whose edges are all horizontal or vertical, and
-// in a straight line otherwise.
+// estimate of the remaining cost that never exceeds it, and never drops by
+// more than a step costs: the distance to the next waypoint plus the
+// distances between the rest, by the sum of the axis distances on a graph
+// whose edges are all horizontal or vertical, and in a straight line
+// otherwise, plus the least the turns to the next waypoint can cost.
 //
 // Two edges run straight on when their cross product is within rounding of
 // zero, relative to their lengths, and their dot product is positive.
 //
+// With a corner radius, two turns one way and then the other around a run
+// shorter than twice the radius, a jog whose corners could not both fit, cost
+// in proportion to the run: nothing at no length, two turns at twice the
+// radius, so that the cost of a route varies smoothly as the rects move and
+// no route flips to another over a jog of a pixel. The search pays for a
+// turn as the run past it grows, by how much of twice the radius the run has
+// covered, and completes the payment when the run turns the same way again,
+// grows past that, or reaches the end; a turn the other way instead pays for
+// itself what the first has paid, so the pair costs its share and nothing
+// more. For that the state carries, along with the half-edge, where a run
+// shorter than twice the radius began and which way the turn there went,
+// which the search lays out once per graph and radius.
+//
 // A path may start at any of several endpoints and end at any of several,
-// each with the headings it allows, so one search can choose a port.
+// each with the headings it allows and a cost of its own, so one search can
+// choose a port, and weigh the ports against the paths to them. A path that
+// arrives at an end with a cost is not done: it moves to a final state that
+// costs that much more, and pops when nothing cheaper is left.
 //
 // A path that runs straight on through a node where other paths run
-// straight on the other way crosses them, at a cost each. The estimate
-// leaves crossings out, so it stays a lower bound.
+// straight on the other way crosses them, at a cost each, and so does a
+// path that jogs across a run that other paths run straight along at both
+// ends of the jog, since it comes onto their line from one side and leaves
+// to the other. The estimate leaves crossings out, so it stays a lower
+// bound.
 //
 // A path may also run along its partners' paths for less: their half-edges
 // cost a share less of their length, and the estimate takes that share off
@@ -40,6 +60,9 @@ export interface Endpoint {
   // The headings the path may leave or arrive with, as vectors of any
   // length. Any heading when omitted.
   readonly headings?: ReadonlyArray<PointLike> | undefined
+  // Added to the cost of a path that starts or ends here. Negative and
+  // non-finite values act as `0`, the default.
+  readonly cost?: number | undefined
 }
 
 export interface SearchOptions {
@@ -60,8 +83,9 @@ export interface SearchOptions {
   // edges.
   readonly avoid?: ReadonlyArray<Obstacle>
   // The cost of each crossing, where the path runs straight on through a
-  // node that other paths run straight on through the other way. Defaults
-  // to `0`.
+  // node that other paths run straight on through the other way, or jogs
+  // across a run that other paths run straight along at both ends of the
+  // jog (see `radius`). Defaults to `0`.
   readonly crossingCost?: number
   // How many other paths run straight on through each node, at `2 * node`
   // horizontally and `2 * node + 1` vertically, on a graph whose edges are
@@ -72,6 +96,13 @@ export interface SearchOptions {
   readonly partnerDiscount?: number
   // The half-edges that partner paths run along, each marked nonzero.
   readonly partners?: ArrayLike<number>
+  // The radius of the path's corners, on a graph whose edges are all
+  // horizontal or vertical. Two turns, one way and then the other, around a
+  // run shorter than twice the radius cost in proportion to the run, as the
+  // corners could not both fit on it: nothing for a run of no length, and
+  // two full turns for one of twice the radius. Defaults to `0`, where every
+  // turn costs in full.
+  readonly radius?: number
 }
 
 export interface Path {
@@ -94,8 +125,9 @@ export interface Path {
  * @param to - The end node, or the endpoints the path may end at.
  * @param options - The costs and constraints of the path.
  * @returns The cheapest path, or `undefined` when no path meets the
- * constraints. A path from a node to itself, through waypoints at that
- * node, is that node alone at no cost, when the end allows any heading.
+ * constraints. Its cost includes the costs of its endpoints. A path from a
+ * node to itself, through waypoints at that node, is that node alone, at
+ * the cost of its endpoints, when the end allows any heading.
  */
 export function shortestPath(
   graph: Graph,
@@ -136,6 +168,16 @@ export function shortestPath(
   const through = crossingCost > 0 ? options.through : undefined
   const discount = Math.min(positiveLength(options.partnerDiscount), 1)
   const partners = discount > 0 ? options.partners : undefined
+  const radius = graph.orthogonal ? positiveLength(options.radius) : 0
+  // A run shorter than this cannot hold the corners of the turns at its
+  // ends.
+  const reach = 2 * radius
+  const { stride, base, edgeOf, originStart, originNode, originRun } = layoutFor(graph, radius)
+  // How much of the cost of the turn onto a run the run has paid by
+  // `length`, only asked of runs shorter than the reach.
+  const share = (length: number) => Math.min(1, length / reach)
+  // What a turn costs, clockwise (`0`) or counterclockwise (`1`).
+  const costOfTurn = (way: number) => (way === 0 ? clockwiseCost : counterclockwiseCost)
   // What a unit of length costs at least.
   const least = graph.minWeight * (partners === undefined ? 1 : 1 - discount)
   // What half-edge `e` costs along its length.
@@ -162,17 +204,30 @@ export function shortestPath(
     }
     return next
   }
-  // The first end at `node` that allows arriving along (dx, dy), or -1.
-  const arrival = (node: number, dx: number, dy: number, length: number) =>
-    ends.findIndex((end) => end.node === node && matches(end.headings, dx, dy, length))
+  // Whether end `end` at `node` allows arriving along (dx, dy).
+  const arrives = (end: Resolved, node: number, dx: number, dy: number, length: number) =>
+    end.node === node && matches(end.headings, dx, dy, length)
 
+  // A start that is an end, with every waypoint there, is a path of one
+  // node: the cheapest such pair of endpoints, the first among ties.
+  let trivial: Path | undefined
   for (const [index, start] of starts.entries()) {
-    if (passed(0, start.node) === lastLeg) {
-      const end = ends.findIndex((e) => e.node === start.node && e.headings === undefined)
-      if (end !== -1) {
-        return { nodes: Int32Array.of(start.node), cost: 0, start: index, end }
+    if (passed(0, start.node) !== lastLeg) {
+      continue
+    }
+    for (const [end, e] of ends.entries()) {
+      const total = start.cost + e.cost
+      if (
+        e.node === start.node &&
+        e.headings === undefined &&
+        (trivial === undefined || before(total, trivial.cost))
+      ) {
+        trivial = { nodes: Int32Array.of(start.node), cost: total, start: index, end }
       }
     }
+  }
+  if (trivial !== undefined) {
+    return trivial
   }
 
   const distance = graph.orthogonal
@@ -188,23 +243,30 @@ export function shortestPath(
     }
     return nearest
   }
-  // The fewest turns from `node`, heading along (hx, hy), to `target`, on a
-  // graph whose edges are horizontal or vertical: none when the target lies
-  // straight ahead, one when it lies ahead or level off to one side, and two
-  // when it lies behind. Going straight never lowers the count, and a turn
-  // lowers it by at most one, so the estimate stays a lower bound that A*
-  // can trust. Within rounding, a target counts as aligned and ahead, the
-  // lower count.
+  // The least that the turns from `node`, heading along (hx, hy), to
+  // `target` can cost, in turns, on a graph whose edges are horizontal or
+  // vertical, with no turn part paid: none when the target lies straight
+  // ahead; when it lies ahead or level off to one side, one turn, or the two
+  // of a jog that far over where that costs less; and when it lies behind,
+  // one turn and the two of a jog that far back, since a path turns in full
+  // once to head across and may step back the rest of the way. Going
+  // straight never lowers the count, and a turn lowers it by no more than
+  // the turn costs, so the estimate stays a lower bound that A* can trust.
+  // Within rounding, a target counts as aligned and ahead, the lower count.
   const turnsTo = (node: number, target: number, hx: number, hy: number) => {
     const dx = (xs[target] as number) - (xs[node] as number)
     const dy = (ys[target] as number) - (ys[node] as number)
     const band = RELATIVE_TOLERANCE * (Math.abs(dx) + Math.abs(dy))
-    const ahead = dx * hx + dy * hy >= -band
-    if (Math.abs(dx * hy - dy * hx) <= band) {
-      return ahead ? 0 : 2
+    const forward = dx * hx + dy * hy
+    if (forward < -band) {
+      return 1 + jogTo(-forward)
     }
-    return ahead ? 1 : 2
+    const across = Math.abs(dx * hy - dy * hx)
+    return across <= band ? 0 : jogTo(across)
   }
+  // The least that stepping `offset` across costs, in turns: one, or the two
+  // turns of a jog that long where they cost less.
+  const jogTo = (offset: number) => (radius > 0 ? Math.min(1, offset / radius) : 1)
   const turnCost = graph.orthogonal ? bendCost : 0
   // What is left after reaching the waypoint of each leg.
   const rest = new Float64Array(legCount)
@@ -215,36 +277,57 @@ export function shortestPath(
         ? toEnd(at)
         : (rest[leg + 1] as number) + distance(at, via[leg + 1] as number)
   }
-  // A lower bound on the cost left from the state that arrived along `e`.
-  const estimate = (leg: number, e: number) => {
+  // A lower bound on the cost left from the state at `slot` of a leg. A
+  // state part way through paying for the turn onto its run either pays the
+  // rest, or turns back the way it came for what it has paid so far, so the
+  // least of those two ways bounds it.
+  const estimate = (leg: number, slot: number) => {
+    const e = edgeOf[slot] as number
     const node = targets[e] as number
     const hx = Math.sign(dxOf(e))
     const hy = Math.sign(dyOf(e))
     const turning = turnCost > 0 && (hx !== 0 || hy !== 0)
+    const way = slot - (base[e] as number)
+    const count = (originStart[e + 1] as number) - (originStart[e] as number)
+    // A state still paying for the turn onto its run: what it has paid, and
+    // the way it was heading before that turn.
+    const paying = way >= 3 && way <= 2 + 2 * count
+    let paid = 1
+    let gx = 0
+    let gy = 0
+    if (paying) {
+      paid = share(originRun[(originStart[e] as number) + ((way - 3) >> 1)] as number)
+      ;[gx, gy] = cameFrom((way - 3) & 1, hx, hy)
+    }
+    const turns = (target: number) => {
+      if (!turning) {
+        return 0
+      }
+      const onward = turnsTo(node, target, hx, hy)
+      return (
+        turnCost *
+        (paying ? Math.min(1 - paid + onward, paid + turnsTo(node, target, gx, gy)) : onward)
+      )
+    }
     if (leg < lastLeg) {
       const at = via[leg] as number
-      return (
-        least * (distance(node, at) + (rest[leg] as number)) +
-        (turning ? turnCost * turnsTo(node, at, hx, hy) : 0)
-      )
+      return least * (distance(node, at) + (rest[leg] as number)) + turns(at)
     }
     let best = Number.POSITIVE_INFINITY
     for (const end of ends) {
-      best = Math.min(
-        best,
-        least * distance(node, end.node) +
-          (turning ? turnCost * turnsTo(node, end.node, hx, hy) : 0),
-      )
+      best = Math.min(best, least * distance(node, end.node) + turns(end.node))
     }
     return best
   }
 
-  const edgeCount = targets.length
-  const { cost, bends, parent, seen, done, round, queue } = scratchFor(graph, legCount * edgeCount)
+  // The states past the last leg: one per end, which a path that arrives
+  // at an end with a cost moves to, for that cost more.
+  const final = legCount * stride
+  const { cost, bends, parent, seen, done, round, queue } = scratchFor(graph, final + ends.length)
   queue.clear()
 
   // Whether each half-edge may be used: 0 unknown, 1 open, 2 closed.
-  const usable = new Uint8Array(edgeCount)
+  const usable = new Uint8Array(targets.length)
   const open = (e: number) => {
     if (usable[e] === 0) {
       const weight = weightOf(e)
@@ -270,9 +353,36 @@ export function shortestPath(
       cost[state] = total
       bends[state] = turns
       parent[state] = from
-      const leg = Math.floor(state / edgeCount)
-      queue.push(total + estimate(leg, state - leg * edgeCount), turns, state)
+      if (state >= final) {
+        queue.push(total, turns, state)
+      } else {
+        const leg = Math.floor(state / stride)
+        queue.push(total + estimate(leg, state - leg * stride), turns, state)
+      }
     }
+  }
+
+  // The path that arrived in `state` at end `end`, at `total`. Its start is
+  // the cheapest of the starts that leave its first node its way, which is
+  // the one whose cost it carries.
+  const finish = (state: number, end: number, total: number): Path => {
+    const nodes = trace(state, parent, sources, targets, stride, edgeOf)
+    const first = nodes[0] as number
+    const leave = edgeOf[firstState(state, parent) % stride] as number
+    const dx = dxOf(leave)
+    const dy = dyOf(leave)
+    const length = lengthOf(dx, dy)
+    let start = -1
+    for (const [index, s] of starts.entries()) {
+      if (
+        s.node === first &&
+        matches(s.headings, dx, dy, length) &&
+        (start === -1 || before(s.cost, (starts[start] as Resolved).cost))
+      ) {
+        start = index
+      }
+    }
+    return { nodes, cost: total, start, end }
   }
 
   for (const start of starts) {
@@ -282,7 +392,7 @@ export function shortestPath(
       const dy = dyOf(e)
       const length = lengthOf(dx, dy)
       if (open(e) && matches(start.headings, dx, dy, length)) {
-        relax(leg * edgeCount + e, lengthCost(e, length), 0, -1)
+        relax(leg * stride + (base[e] as number), start.cost + lengthCost(e, length), 0, -1)
       }
     }
   }
@@ -293,14 +403,36 @@ export function shortestPath(
       continue
     }
     done[state] = round
-    const leg = Math.floor(state / edgeCount)
-    const e = state - leg * edgeCount
+    if (state >= final) {
+      // A path that has paid for its end, and nothing open costs less.
+      return finish(parent[state] as number, state - final, cost[state] as number)
+    }
+    const leg = Math.floor(state / stride)
+    const slot = state - leg * stride
+    const e = edgeOf[slot] as number
     const node = targets[e] as number
     const total = cost[state] as number
     const turns = bends[state] as number
     const ax = dxOf(e)
     const ay = dyOf(e)
     const la = lengthOf(ax, ay)
+    // Where the run along `e` began, if it began with a turn within the
+    // reach, which way that turn went, whether the turn was the second of a
+    // jog and so is settled, and otherwise what of it the run has paid so
+    // far and what is still owed.
+    const way = slot - (base[e] as number)
+    const count = (originStart[e + 1] as number) - (originStart[e] as number)
+    // A run past the reach that began with a turn where other paths ran
+    // straight along it keeps only that, and the way the turn went.
+    const sharedEntry = way === 1 || way === 2
+    const settled = way > 2 + 2 * count
+    const index = way < 3 ? -1 : (way - 3) % (2 * count)
+    const origin = index < 0 ? -1 : (originStart[e] as number) + (index >> 1)
+    const turnWay = index >= 0 ? index & 1 : way - 1
+    const paid = origin < 0 || settled ? 0 : share(originRun[origin] as number)
+    const owed = origin < 0 || settled ? 0 : costOfTurn(turnWay) * (1 - paid)
+    // The slot of the counts of paths running straight along the run.
+    const along = ay === 0 ? 0 : 1
 
     if (leg < lastLeg && node === via[leg]) {
       // A path that arrives at a waypoint any way but the one it holds
@@ -308,24 +440,25 @@ export function shortestPath(
       if (la > 0 && !alongVia(leg, ax, ay, la)) {
         continue
       }
-      relax(passed(leg, node) * edgeCount + e, total, turns, state)
+      relax(passed(leg, node) * stride + slot, total, turns, state)
       continue
     }
     // Off a waypoint that holds the way the path leaves it, the path heads
     // that way.
     const leaving = leg > 0 && via[leg - 1] === node ? viaLeavings[leg - 1] : undefined
     if (leg === lastLeg) {
-      const end = arrival(node, ax, ay, la)
-      if (end !== -1) {
-        const nodes = trace(state, parent, sources, targets, edgeCount)
-        const first = nodes[0] as number
-        const leave = firstState(state, parent) % edgeCount
-        const dx = dxOf(leave)
-        const dy = dyOf(leave)
-        const start = starts.findIndex(
-          (s) => s.node === first && matches(s.headings, dx, dy, lengthOf(dx, dy)),
-        )
-        return { nodes, cost: total, start, end }
+      // At an end that costs nothing, with nothing owed, the path is done:
+      // nothing open costs less. An end with a cost, or a turn still owed,
+      // is a step more, and the path goes on too, since another end past it
+      // may come out cheaper.
+      for (const [end, e] of ends.entries()) {
+        if (!arrives(e, node, ax, ay, la)) {
+          continue
+        }
+        if (e.cost === 0 && owed === 0) {
+          return finish(state, end, total)
+        }
+        relax(final + end, total + owed + e.cost, turns, state)
       }
     }
 
@@ -339,21 +472,106 @@ export function shortestPath(
       if (leaving !== undefined && !matches(leaving, bx, by, lb)) {
         continue
       }
-      let turn = 0
+      // What the step costs beyond its length, how many turns it makes, and
+      // the way of the run along `f`: `0` with no turn behind it that
+      // matters; `1` or `2` for a turn past the reach where other paths ran
+      // straight along the run, by its way; else three more than twice its
+      // origin's index, plus one for a counterclockwise turn there, and
+      // twice the count of origins more for a turn that is settled.
+      let extra = 0
       let turned = 0
+      let next = 0
+      const first = originStart[f] as number
+      const last = originStart[f + 1] as number
       if (la > 0 && lb > 0) {
         const cross = ax * by - ay * bx
         if (Math.abs(cross) > RELATIVE_TOLERANCE * la * lb) {
-          turn = cross > 0 ? clockwiseCost : counterclockwiseCost
+          const turning = cross > 0 ? 0 : 1
           turned = 1
+          // Whether the path came onto the run from one side and leaves it
+          // to the other, in which case it crosses the paths that run
+          // straight along the run at both of its ends.
+          const across = (origin >= 0 || sharedEntry) && turning !== turnWay
+          if (across && through !== undefined) {
+            const atEnd = through[2 * node + along] ?? 0
+            extra +=
+              crossingCost *
+              (origin >= 0
+                ? Math.min(through[2 * (originNode[origin] as number) + along] ?? 0, atEnd)
+                : Math.min(1, atEnd))
+          }
+          // Whether other paths run straight along the run from here.
+          const shared = through !== undefined && (through[2 * node + (by === 0 ? 0 : 1)] ?? 0) > 0
+          if (across && origin >= 0 && !settled) {
+            // The second turn of a jog pays what the first has paid, and
+            // the first owes nothing more. The run from here is settled,
+            // with where it began kept for the crossings it may make, as
+            // long as crossings count.
+            extra += costOfTurn(turning) * paid
+            if (through !== undefined) {
+              next = last > first ? 3 + 2 * (last - first) + turning : shared ? 1 + turning : 0
+            }
+          } else {
+            extra += owed
+            if (last > first) {
+              // The first turn onto a run within the reach pays by the
+              // run's first half-edge, and the rest as the run grows.
+              next = 3 + turning
+              extra += costOfTurn(turning) * share(originRun[first] as number)
+            } else {
+              extra += costOfTurn(turning)
+              if (shared) {
+                next = 1 + turning
+              }
+            }
+          }
         } else if (ax * bx + ay * by < 0) {
           continue
-        } else if (through !== undefined) {
+        } else {
           // Straight on, across the paths that run through the other way.
-          turn = crossingCost * (through[2 * node + (ay === 0 ? 1 : 0)] ?? 0)
+          if (through !== undefined) {
+            extra += crossingCost * (through[2 * node + (ay === 0 ? 1 : 0)] ?? 0)
+          }
+          if (sharedEntry) {
+            next = way
+          } else if (origin >= 0) {
+            // Straight on along the run: the turn onto it is paid by the
+            // run's growth, or paid off once the run is past the reach,
+            // where a settled turn pays nothing more, and the run keeps
+            // only whether other paths ran straight along it where it
+            // began.
+            const from = originNode[origin] as number
+            let found = -1
+            for (let k = first; k < last; k++) {
+              if (originNode[k] === from) {
+                found = k
+                break
+              }
+            }
+            if (found < 0) {
+              extra += owed
+              if (through !== undefined && (through[2 * from + along] ?? 0) > 0) {
+                next = 1 + turnWay
+              }
+            } else if (settled) {
+              next = 3 + 2 * (last - first) + 2 * (found - first) + turnWay
+            } else {
+              next = 3 + 2 * (found - first) + turnWay
+              extra += costOfTurn(turnWay) * (share(originRun[found] as number) - paid)
+            }
+          }
         }
+      } else {
+        // Across an edge of no length a turn is free, and the run's first
+        // turn is paid off.
+        extra += owed
       }
-      relax(leg * edgeCount + f, total + lengthCost(f, lb) + turn, turns + turned, state)
+      relax(
+        leg * stride + (base[f] as number) + next,
+        total + lengthCost(f, lb) + extra,
+        turns + turned,
+        state,
+      )
     }
   }
   return undefined
@@ -362,8 +580,9 @@ export function shortestPath(
 /**
  * Finds the paths of several routes on one graph, each among the others so
  * that it crosses as few of them as it can afford: first among the paths
- * found before it, then once more, for each path that crosses another, or
- * that `again` asks for, among all the others' latest paths.
+ * found before it, then once more in each later round, for each path that
+ * crosses another, or that `again` asks for, among all the others' latest
+ * paths.
  *
  * @param graph - The graph the paths run on, with horizontal and vertical
  * edges.
@@ -371,9 +590,13 @@ export function shortestPath(
  * @param crossingCost - The cost of each crossing. With none, crossings
  * leave the paths as they are.
  * @param find - Finds route `k`'s path, given how many other paths run
- * straight on through each node (see `SearchOptions.through`).
- * @param again - Whether route `k`'s path is found once more anyway, such
- * as when it depends on the others' paths. None are by default.
+ * straight on through each node (see `SearchOptions.through`) and the
+ * round: `0` the first, among the paths found before it, and `1` on among
+ * all the others.
+ * @param again - Whether route `k`'s path is found once more in each later
+ * round anyway, such as when it depends on the others' paths. None are by
+ * default.
+ * @param rounds - How many rounds follow the first. One by default.
  * @returns Each route's path, or `undefined` where it has none, and how
  * many of them run straight on through each node, or `undefined` with no
  * crossing cost.
@@ -382,32 +605,35 @@ export function searchAll(
   graph: Graph,
   count: number,
   crossingCost: number,
-  find: (k: number, through: ArrayLike<number> | undefined) => Path | undefined,
+  find: (k: number, through: ArrayLike<number> | undefined, round: number) => Path | undefined,
   again: (k: number) => boolean = () => false,
+  rounds = 1,
 ): { paths: Array<Path | undefined>; through: Int32Array | undefined } {
   const crossing = crossingCost > 0 && graph.orthogonal
   const through = crossing ? new Int32Array(2 * graph.xs.length) : undefined
   const paths: Array<Path | undefined> = []
   for (let k = 0; k < count; k++) {
-    const path = find(k, through)
+    const path = find(k, through, 0)
     if (through !== undefined) {
       markThrough(graph, through, path, 1)
     }
     paths.push(path)
   }
   // A path that crosses none of the others keeps its place.
-  for (let k = 0; k < count; k++) {
-    if (through === undefined) {
-      if (again(k)) {
-        paths[k] = find(k, undefined)
+  for (let round = 1; round <= rounds; round++) {
+    for (let k = 0; k < count; k++) {
+      if (through === undefined) {
+        if (again(k)) {
+          paths[k] = find(k, undefined, round)
+        }
+        continue
       }
-      continue
+      markThrough(graph, through, paths[k], -1)
+      if (again(k) || crossesThrough(graph, through, paths[k])) {
+        paths[k] = find(k, through, round)
+      }
+      markThrough(graph, through, paths[k], 1)
     }
-    markThrough(graph, through, paths[k], -1)
-    if (again(k) || crossesThrough(graph, through, paths[k])) {
-      paths[k] = find(k, through)
-    }
-    markThrough(graph, through, paths[k], 1)
   }
   return { paths, through }
 }
@@ -516,6 +742,109 @@ interface Scratch {
 
 const scratches = new WeakMap<Graph, Scratch>()
 const spans = new WeakMap<Graph, { dxs: Float64Array; dys: Float64Array }>()
+const layouts = new WeakMap<Graph, Map<number, Layout>>()
+
+// The states of one leg of a search on a graph with a corner radius, kept
+// with the graph for the next search with that radius. Each half-edge has
+// a state for a path whose run began nowhere that matters, two for a run
+// past the reach that began with a turn where other paths ran straight
+// along it, one per way the turn went, and four more for each node within
+// the reach behind it that a run through it could have begun at with a
+// turn: one per way the turn went, for a turn still being paid for, and
+// one per way for a turn that is settled, the second of a jog, kept only
+// for the crossings the run may make.
+interface Layout {
+  // How many states a leg has.
+  readonly stride: number
+  // The first state of each half-edge, and one past the last half-edge's.
+  readonly base: Int32Array
+  // The half-edge of each state.
+  readonly edgeOf: Int32Array
+  // The first of each half-edge's origins, and one past the last
+  // half-edge's. A half-edge shorter than the reach has its own source first.
+  readonly originStart: Int32Array
+  // The node of each origin, and how long a run from it through the
+  // half-edge is.
+  readonly originNode: Int32Array
+  readonly originRun: Float64Array
+}
+
+// The layout of the states of a search on `graph` with corners of `radius`.
+// With no radius, or on a graph with edges that run any way, a half-edge
+// has one state.
+function layoutFor(graph: Graph, radius: number): Layout {
+  let found = layouts.get(graph)
+  if (found === undefined) {
+    found = new Map()
+    layouts.set(graph, found)
+  }
+  let layout = found.get(radius)
+  if (layout === undefined) {
+    layout = layOut(graph, radius)
+    found.set(radius, layout)
+  }
+  return layout
+}
+
+function layOut(graph: Graph, radius: number): Layout {
+  const { xs, ys, offsets, sources, targets } = graph
+  const { dxs, dys } = spansOf(graph)
+  const edgeCount = targets.length
+  const reach = 2 * radius
+  const originStart = new Int32Array(edgeCount + 1)
+  const nodes: Array<number> = []
+  const runs: Array<number> = []
+  for (let e = 0; e < edgeCount; e++) {
+    const hx = Math.sign(dxs[e] as number)
+    const hy = Math.sign(dys[e] as number)
+    if (graph.orthogonal && reach > 0 && (hx !== 0 || hy !== 0)) {
+      // The nodes back along the line of `e` from its source, within the
+      // reach of its target, nearest first.
+      const to = targets[e] as number
+      const behind = [sources[e] as number]
+      for (let i = 0; i < behind.length; i++) {
+        const from = behind[i] as number
+        const run =
+          Math.abs((xs[from] as number) - (xs[to] as number)) +
+          Math.abs((ys[from] as number) - (ys[to] as number))
+        if (run >= reach) {
+          continue
+        }
+        nodes.push(from)
+        runs.push(run)
+        for (let g = offsets[from] as number; g < (offsets[from + 1] as number); g++) {
+          const back = targets[g] as number
+          if (
+            Math.sign(dxs[g] as number) === -hx &&
+            Math.sign(dys[g] as number) === -hy &&
+            !behind.includes(back)
+          ) {
+            behind.push(back)
+          }
+        }
+      }
+    }
+    originStart[e + 1] = nodes.length
+  }
+  const base = new Int32Array(edgeCount + 1)
+  for (let e = 0; e < edgeCount; e++) {
+    const origins = (originStart[e + 1] as number) - (originStart[e] as number)
+    base[e + 1] = (base[e] as number) + 3 + 4 * origins
+  }
+  const stride = base[edgeCount] as number
+  const edgeOf = new Int32Array(stride)
+  for (let e = 0; e < edgeCount; e++) {
+    edgeOf.fill(e, base[e] as number, base[e + 1] as number)
+  }
+  return {
+    stride,
+    base,
+    edgeOf,
+    originStart,
+    originNode: Int32Array.from(nodes),
+    originRun: Float64Array.from(runs),
+  }
+}
 
 // The axis distances that each half-edge of `graph` spans, kept with the
 // graph for the next search on it.
@@ -558,12 +887,17 @@ function scratchFor(graph: Graph, size: number): Scratch {
 interface Resolved {
   readonly node: number
   readonly headings: Array<Direction> | undefined
+  readonly cost: number
 }
 
 const endpoints = (value: number | ReadonlyArray<Endpoint>): Array<Resolved> =>
   typeof value === 'number'
-    ? [{ node: value, headings: undefined }]
-    : value.map(({ node, headings: list }) => ({ node, headings: headings(list) }))
+    ? [{ node: value, headings: undefined, cost: 0 }]
+    : value.map(({ node, headings: list, cost }) => ({
+        node,
+        headings: headings(list),
+        cost: positiveLength(cost),
+      }))
 
 // The state a path starts with: the first of its chain of parents.
 function firstState(state: number, parent: Int32Array): number {
@@ -577,6 +911,11 @@ function firstState(state: number, parent: Int32Array): number {
 // The length of a vector, exact when it is horizontal or vertical.
 const lengthOf = (dx: number, dy: number) =>
   dx === 0 ? Math.abs(dy) : dy === 0 ? Math.abs(dx) : Math.hypot(dx, dy)
+
+// The way a path heading along (hx, hy) was heading before a turn of `way`
+// onto it, clockwise (`0`) or counterclockwise (`1`).
+const cameFrom = (way: number, hx: number, hy: number): [number, number] =>
+  way === 0 ? [hy, -hx] : [-hy, hx]
 
 interface Direction extends PointLike {
   readonly length: number
@@ -659,20 +998,21 @@ function trace(
   parent: Int32Array,
   sources: Int32Array,
   targets: Int32Array,
-  edgeCount: number,
+  stride: number,
+  edgeOf: Int32Array,
 ): Int32Array {
   const nodes: Array<number> = []
   let current = state
   let first = state
   while (current !== -1) {
     const previous = parent[current] as number
-    if (previous === -1 || previous % edgeCount !== current % edgeCount) {
-      nodes.push(targets[current % edgeCount] as number)
+    if (previous === -1 || edgeOf[previous % stride] !== edgeOf[current % stride]) {
+      nodes.push(targets[edgeOf[current % stride] as number] as number)
     }
     first = current
     current = previous
   }
-  nodes.push(sources[first % edgeCount] as number)
+  nodes.push(sources[edgeOf[first % stride] as number] as number)
   return Int32Array.from(nodes.toReversed())
 }
 

@@ -56,25 +56,38 @@ the inputs into a `Problem` (rects grown into obstacles, the shapes their
 ports sit on, edges with their ends, waypoints with the ways a route
 arrives and leaves, costs, and resolved adornments), and `internal/connector/pipeline.ts`
 runs the phases, each a function of the problem and the phases before it:
-`sides.ts` picks the sides of auto ends by a trial search, `spread.ts`
+`sides.ts` picks the sides of auto ends by a trial search (a side with no
+room in front of its port for the end's adornments and corner costs more,
+and routes that could merge pull each other along within the span of
+their own rects, in rounds after a first one without the pull),
+`spread.ts`
 spreads auto ports along shared sides and groups the ends that merge,
 `merge.ts` plans the lanes and whisks of merges, `routing.ts` finds the
-routes and trades ends that cross, `nudge.ts` moves overlapping segments
+routes (a run that waypoints hold goes around the port legs of other
+routes, and so does a run along or beside one where a wall leaves nudging
+no room to move it off, and a run shared with an earlier route and left
+on its other side counts as the crossing it is) and trades ends that
+cross, `nudge.ts` moves overlapping segments
 apart (with `internal/separation.ts`, a 1D separation-constraint solver,
-VPSC) and keeps other routes out of merged bundles, `ports.ts` slides auto
+VPSC) and keeps other routes out of merged bundles (a segment beside a
+kink too short for its corners stays put, as does a kink a port will
+slide away), `ports.ts` slides auto
 ports to straighten short jogs, `adornments.ts` places adornments on the
-routes, `corners.ts` sizes corners, nesting those of routes that turn
-together about one center, and `slants.ts` turns jogs too short for their
-corners into S curves. `route.ts` is the polyline those passes read, with
+routes, `corners.ts` sizes corners (the edge's radius is the least a corner
+turns, and the corners of routes that turn together grow outward from the
+innermost to share a center), and `slants.ts` turns jogs too short for
+their corners into S curves. `route.ts` is the polyline those passes read, with
 its lengths, headings, and segment boxes worked out once. `locks.ts`
 carries what a pass decided to the
-passes after it (upright jogs, set corner sizes, parting corners), so the
+passes after it (upright jogs, set corner sizes), so the
 order of `solve` is the order in which decisions yield. The phases build
 on `internal/graph/` (not yet public): `graph.ts` stores graphs of points
 in flat arrays, `visibility.ts` builds the orthogonal visibility graph of
 obstacles and pins, `search.ts` finds the cheapest path for length, turns,
-and crossings (A\*), for less along partner paths, between sets of
-endpoints, and routes several paths among one another, `crossings.ts`
+and crossings (A\*; a jog shorter than twice the edge's radius costs its
+two turns in proportion, and a run left on the other side from where it
+was joined crosses the paths along it), for less along partner paths,
+between sets of endpoints, and routes several paths among one another, `crossings.ts`
 counts the crossings between two paths, shared runs included, and
 `acyclic.ts` breaks cycles and orders pairwise preferences for both
 routers. `internal/orient.ts` is the shared vocabulary of axes, sides, and
