@@ -6,7 +6,7 @@ import { type ComputedRef, type MaybeRefOrGetter, computed, toValue } from 'vue'
 import type { AspectRatioInput } from '../internal/props/aspectRatio.ts'
 import type { OriginInput } from '../internal/props/origin.ts'
 import { type Size1DInput, resolveSize1D } from '../internal/props/size1d.ts'
-import { useAspectRatio } from '../props/aspectRatio.ts'
+import { useAspectRatioInput } from '../props/aspectRatio.ts'
 import { useLengthPercentage } from '../props/lengthPercentage.ts'
 import { useOrigin } from '../props/origin.ts'
 import { useParentHeight, useParentWidth, useParentX, useParentY } from './useSizingContext.ts'
@@ -140,7 +140,7 @@ export function useRect(props: RectProps, options: UseRectOptions = {}): Compute
   // treats them as auto/unset (see `placement/box`).
   const width = useLengthPercentage(() => props.width, Number.NaN, 'width')
   const height = useLengthPercentage(() => props.height, Number.NaN, 'height')
-  const aspectRatio = useAspectRatio(() => props.aspectRatio, Number.NaN)
+  const aspectRatio = useAspectRatioInput(() => props.aspectRatio, Number.NaN)
   const minWidth = useLengthPercentage(() => props.minWidth, Number.NaN, 'width')
   const minHeight = useLengthPercentage(() => props.minHeight, Number.NaN, 'height')
   const maxWidth = useLengthPercentage(() => props.maxWidth, Number.NaN, 'width')

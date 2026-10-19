@@ -1,4 +1,5 @@
 import { Pipeable, dual } from 'curvy/utils'
+import type * as AspectRatio from './aspectRatio.ts'
 import { type NormalizedSizing, normalizeSizing, normalizeTRBL } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/frame')
@@ -10,14 +11,11 @@ const Raw: unique symbol = Symbol('placement/frame/raw')
 const Sizing: unique symbol = Symbol('placement/frame/sizing')
 
 type RawSizing = {
-  readonly [K in
-    | 'width'
-    | 'height'
-    | 'aspectRatio'
-    | 'minWidth'
-    | 'minHeight'
-    | 'maxWidth'
-    | 'maxHeight']: number | undefined
+  readonly [K in 'width' | 'height' | 'minWidth' | 'minHeight' | 'maxWidth' | 'maxHeight']:
+    | number
+    | undefined
+} & {
+  readonly aspectRatio: AspectRatio.AspectRatio | undefined
 }
 
 /**
@@ -79,11 +77,13 @@ export interface FrameInput<K extends string | undefined = string | undefined> {
    */
   readonly height?: number | undefined
   /**
-   * The width-to-height ratio (`width / height`). The frame uses it to
-   * derive whichever of `width` and `height` is unset. Non-positive and
-   * `NaN` ratios act as unset. If you omit it, the ratio is unset.
+   * The width-to-height ratio, as a number (`width / height`) or a
+   * `[width, height]` pair such as `[16, 9]` (see `placement/aspectRatio`).
+   * The frame uses it to derive whichever of `width` and `height` is
+   * unset. A pair derives it with one rounding. Ratios whose value is non-positive or `NaN` act as unset. If you omit it, the
+   * ratio is unset.
    */
-  readonly aspectRatio?: number | undefined
+  readonly aspectRatio?: AspectRatio.AspectRatio | undefined
   /**
    * The lower bound on the resolved width. Negative values clamp to `0`.
    * Defaults to `0`.
@@ -690,19 +690,20 @@ export const setHeight: {
  * data-last form omits `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param aspectRatio - The new ratio, as `width / height`.
+ * @param aspectRatio - The new ratio, as `width / height` or a `[width, height]` pair.
  * @returns A new frame with the ratio replaced.
  * @example
  * ```ts
  * Frame.setAspectRatio(Frame.make({ width: 100 }), 4).height // 25
+ * Frame.setAspectRatio(Frame.make({ height: 7 }), [16, 9]).width // 12.444444444444445
  * ```
  */
 export const setAspectRatio: {
-  <K extends string | undefined>(self: Frame<K>, aspectRatio: number): Frame<K>
-  (aspectRatio: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  <K extends string | undefined>(self: Frame<K>, aspectRatio: AspectRatio.AspectRatio): Frame<K>
+  (aspectRatio: AspectRatio.AspectRatio): <K extends string | undefined>(self: Frame<K>) => Frame<K>
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, aspectRatio: number) =>
+  <K extends string | undefined>(self: Frame<K>, aspectRatio: AspectRatio.AspectRatio) =>
     new Frame({ ...self.toJSON(), aspectRatio }),
 )
 

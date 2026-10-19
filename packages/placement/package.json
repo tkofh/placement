@@ -22,6 +22,10 @@
       "types": "./dist/adornment.d.mts",
       "import": "./dist/adornment.mjs"
     },
+    "./aspectRatio": {
+      "types": "./dist/aspectRatio.d.mts",
+      "import": "./dist/aspectRatio.mjs"
+    },
     "./box": {
       "types": "./dist/box.d.mts",
       "import": "./dist/box.mjs"
@@ -53,6 +57,10 @@
     "./interval": {
       "types": "./dist/interval.d.mts",
       "import": "./dist/interval.mjs"
+    },
+    "./length": {
+      "types": "./dist/length.d.mts",
+      "import": "./dist/length.mjs"
     },
     "./offset": {
       "types": "./dist/offset.d.mts",

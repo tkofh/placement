@@ -2,7 +2,7 @@ import type { FrameInput } from 'placement/frame'
 import { type ComputedRef, type MaybeRefOrGetter, computed } from 'vue'
 import { SIZE_PROP_KEYS, type SizeProps } from '../composables/useRect.ts'
 import { computedTRBLOffset } from '../data/offset.ts'
-import { useAspectRatio } from '../props/aspectRatio.ts'
+import { useAspectRatioInput } from '../props/aspectRatio.ts'
 import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
 import { type AlignSelfInput, resolveAlignSelf } from './props/alignSelf.ts'
 
@@ -27,8 +27,8 @@ export const FRAME_ITEM_PROP_KEYS = [
 // The prop resolvers mark an unset input with NaN. `Frame.make` wants such
 // fields omitted, because it reads a non-finite sizing input as a literal
 // infinite preference. That preference defeats an inherited stretch, for example.
-function unsetIfNaN(value: number): number | undefined {
-  return Number.isNaN(value) ? undefined : value
+function unsetIfNaN<T extends number | object>(value: T): T | undefined {
+  return typeof value === 'number' && Number.isNaN(value) ? undefined : value
 }
 
 /**
@@ -49,7 +49,7 @@ export function useFrameInput(
 
   const width = useLengthPercentage(() => props.width, Number.NaN, x)
   const height = useLengthPercentage(() => props.height, Number.NaN, y)
-  const aspectRatio = useAspectRatio(() => props.aspectRatio, Number.NaN)
+  const aspectRatio = useAspectRatioInput(() => props.aspectRatio, Number.NaN)
   const minWidth = useLengthPercentage(() => props.minWidth, Number.NaN, x)
   const minHeight = useLengthPercentage(() => props.minHeight, Number.NaN, y)
   const maxWidth = useLengthPercentage(() => props.maxWidth, Number.NaN, x)
