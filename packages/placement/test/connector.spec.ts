@@ -359,11 +359,14 @@ describe('apply', () => {
     // Three routes merge on the left of db and run back west as one bundle,
     // then turn north and peel off west one by one: auth first, then
     // billing, then orders. The routes from events down to the workers
-    // must cross all three, and billing's route to events must cross
-    // orders' route to db, so the segments on the shared column prefer
-    // orders in a cycle. The cycle breaks at those unavoidable crossings,
-    // not at the bundle's own order: auth's column sits west of billing's,
-    // and billing's west of orders', so none crosses another's lane.
+    // must cross auth's and billing's, which come from the west, but not
+    // orders', which comes down from above, so orders' column keeps east
+    // of them while the other two run as a bundle west of them. Billing's
+    // route to events must cross orders' route to db, so the segments on
+    // the shared column prefer orders in a cycle. The cycle breaks at those
+    // unavoidable crossings, not at the bundle's own order: auth's column
+    // sits west of billing's, and billing's west of orders', so none
+    // crosses another's lane.
     const rects = {
       orders: Rect.make(512, 96, 120, 40),
       billing: Rect.make(500, 260, 120, 40),
@@ -389,23 +392,28 @@ describe('apply', () => {
       edges,
       Connector.make({ clearance: 16, gap: 8, merge: Connector.merge.side, mergeGap: 4 }),
     )
-    // The column of each route to db: the x of its last vertical segment.
-    const column = (i: number) => {
+    // The x of each vertical segment of a route, from its source.
+    const columns = (i: number) => {
       const points = layout.edges[i]?.points ?? []
-      for (let k = points.length - 1; k > 0; k--) {
+      const found: Array<number> = []
+      for (let k = 1; k < points.length; k++) {
         const [a, b] = [points[k - 1] as Point.Point, points[k] as Point.Point]
         if (a.x === b.x && a.y !== b.y) {
-          return a.x
+          found.push(a.x)
         }
       }
-      return Number.NaN
+      return found
     }
-    const [auth, orders, billing] = [column(0), column(2), column(3)]
-    expect(auth).toBeLessThan(billing)
-    expect(billing).toBeLessThan(orders)
+    // The column of each route to db is its last, and of each route from
+    // events its first.
+    const [auth, orders, billing] = [columns(0).at(-1), columns(2).at(-1), columns(3).at(-1)]
+    const [mailer, indexer] = [columns(4)[0], columns(5)[0]]
+    expect(auth).toBeLessThan(billing as number)
+    expect(billing).toBeLessThan(mailer as number)
+    expect(mailer).toBeLessThan(indexer as number)
+    expect(indexer).toBeLessThan(orders as number)
     // The bundle keeps the merge gap, with the strokes 2 wide.
-    expect(billing - auth).toBeCloseTo(6, 9)
-    expect(orders - billing).toBeCloseTo(6, 9)
+    expect((billing as number) - (auth as number)).toBeCloseTo(6, 9)
   })
 
   test('an auto end comes in on a side with room for its corner and arrowhead', () => {
@@ -426,8 +434,11 @@ describe('apply', () => {
       [140, 110],
     ])
     // With a corner of 10 and an arrowhead of 10, the end needs 20, and
-    // falls short by its whole radius: twice the corner cost, 40. Round the
-    // top, the nudge gives the final leg room for both.
+    // falls short by its whole radius: twice the corner cost, 40. From the
+    // left of a, one corner reaches the top of b, with a jog of 5 onto the
+    // port that costs a quarter of its two corners in the search and that
+    // the port then slides away, so the end comes in there with room for
+    // both.
     const dressed = Edge.make({
       source: 'a',
       target: 'b',
@@ -436,12 +447,11 @@ describe('apply', () => {
     })
     const layout = Connector.apply(rects, [dressed], tight)
     expect(pointsOf(layout)).toEqual([
-      [145, 20],
-      [145, 60],
-      [120, 60],
-      [120, 100],
+      [125, 10],
+      [115, 10],
+      [115, 100],
     ])
-    expect(layout.edges[0]?.radii).toEqual([0, 10, 10, 0])
+    expect(layout.edges[0]?.radii).toEqual([0, 10, 0])
     // A given side has no rival.
     expect(routed(dressed.pipe(Edge.setTargetPort(Edge.side.right, 0.5)))).toEqual([
       [145, 20],
@@ -1595,5 +1605,37 @@ describe('held runs', () => {
       [798, 250],
     ])
     expect(layout.notes).toEqual([])
+  })
+})
+
+describe('jogs', () => {
+  test('a jog of a pixel costs a pixel, so a route does not flip over one', () => {
+    // From the hub's left, one corner reaches the worker: left along the
+    // top, then down the line that clears the block. With the block half a
+    // pixel wider, that line enters its clearance, and the route needs a
+    // jog of half a pixel to the port, which costs it a sixty-fourth of its
+    // two corners rather than both in full, so the left still beats the
+    // two corners round the bottom. The port then slides onto the line.
+    const route = (width: number) => {
+      const rects = {
+        hub: Rect.make(0, 0, 136, 40),
+        worker: Rect.make(-100, 200, 112, 36),
+        block: Rect.make(-100, 116, width, 8),
+      }
+      const edge = Edge.make({ source: 'hub', target: 'worker', radius: 16 })
+      const layout = Connector.apply(rects, [edge], Connector.make({ clearance: 16, gap: 8 }))
+      expect(layout.notes).toEqual([])
+      return pointsOf(layout)
+    }
+    expect(route(39.5)).toEqual([
+      [0, 20],
+      [-44, 20],
+      [-44, 200],
+    ])
+    expect(route(40.5)).toEqual([
+      [0, 20],
+      [-43.5, 20],
+      [-43.5, 200],
+    ])
   })
 })

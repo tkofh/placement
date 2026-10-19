@@ -27,7 +27,12 @@ import { type Separation, type Variable, placeSeparated } from '../separation.ts
 // segment wants to stay where it is, and moves no further than the obstacles
 // beside it allow. A jog wants its spot along the run it shifts, and may
 // first leap over the segments of other routes that run alongside all of
-// it, since that moves a crossing from one of its legs to the other. The
+// it, since that moves a crossing from one of its legs to the other. A jog
+// is the rise of a Z between two legs: a leg between two corners too short
+// for them, or for the gap, is a kink that a slant or a sliding port takes
+// care of, and the segment beside it stays put rather than balance the
+// route into a staircase around the kink; a kink right past a port that
+// may slide stays too, for the port to slide it away. The
 // segments at the ends of a route attach to its pins and stay put, and the
 // segment past each keeps to its side of the port, so the route still leaves
 // and enters straight. A jog that shares its line with another route leaps
@@ -81,6 +86,11 @@ export interface RouteConstraints {
   // what keeps the shape continuous (see `slants.ts`), which a parting jog
   // that slants keeps room for.
   readonly slant?: number | undefined
+  // Whether the port at each end may slide along its side afterward (see
+  // `ports.ts`). A jog right past such a port, too short for its two
+  // corners, stays where it is for the port to slide it away, rather than
+  // move along its run. Neither may by default.
+  readonly sliding?: readonly [source: boolean, target: boolean] | undefined
 }
 
 /**
@@ -1391,10 +1401,39 @@ function collect(
           held = [low, high]
           bounds = [floor, ceiling]
         }
-        if ((previous - at) * (after - at) < 0) {
+        // A jog is the rise of a Z between two legs. A leg between two
+        // corners too short for them, or for the gap, is a kink that a
+        // slant or a sliding port takes care of, not a leg: the segment
+        // beside it is part of an L, and stays put rather than move to
+        // balance the two sides of the kink into a Z with real legs.
+        const corner = Math.max(constraints[route]?.corner ?? 0, 0)
+        const kink = (leg: number, k: number) =>
+          k > 0 && k < last && before(leg, Math.max(2 * corner, keep))
+        if (
+          (previous - at) * (after - at) < 0 &&
+          !kink(Math.abs(at - previous), index - 1) &&
+          !kink(Math.abs(after - at), index + 1)
+        ) {
           const split = splits[route]?.get(index)
           if (split === undefined) {
-            desired = previous + jogAtOf(constraints[route]) * (after - previous)
+            // A jog right past a port that may slide, short enough for the
+            // port to slide it all the way out (see `ports.ts`: up to half
+            // of what its two corners need, the far one its reach and the
+            // near one what the leg out of the port leaves it past the pack
+            // there, or of the gap), stays for the port to do so.
+            const sliding = constraints[route]?.sliding
+            const stays = [previous, after].some((far, end) => {
+              if (!(end === 0 ? index === 1 : index === last - 1) || !sliding?.[end]) {
+                return false
+              }
+              const pack = Math.max(constraints[route]?.packs?.[end] ?? 0, 0)
+              const leg = Math.abs(far - at)
+              const short = Math.max(corner + Math.min(corner, Math.max(leg - pack, 0)), keep)
+              return atMost(Math.abs(b - a), short / 2)
+            })
+            if (!stays) {
+              desired = previous + jogAtOf(constraints[route]) * (after - previous)
+            }
           } else {
             // As far from the merge as leaves room for the corner past it,
             // or for the S of a short jog that slants, and for the

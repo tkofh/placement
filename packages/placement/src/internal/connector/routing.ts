@@ -1,6 +1,6 @@
 import { coincident } from 'curvy/number'
 import { atMost, before, overlaps, within } from '../../utils/tolerance.ts'
-import { crossingsBetween } from '../graph/crossings.ts'
+import { crossedRuns, crossingsBetween } from '../graph/crossings.ts'
 import type { Graph, Obstacle } from '../graph/graph.ts'
 import { type Path, markThrough, searchAll, shortestPath } from '../graph/search.ts'
 import { type Pin, visibilityGraph } from '../graph/visibility.ts'
@@ -31,6 +31,14 @@ import {
 // into that strip, the side its neighbors come from. The nodes there cost
 // such a route crossings too, so it crosses or goes around instead of
 // lying on the other route.
+//
+// Two routes may also share a run and cross on it, coming onto it on one
+// side of each other and leaving on the other, which the search counts
+// only where it remembers the turn the run began with. Where it did not,
+// the later route is found again with the nodes of the shared run counting
+// one crossing between them, so it pays for the crossing as it would for
+// running straight across. Routes that share a port are left alone there:
+// the runs out of it are their bundle, whose lanes the nudge orders.
 
 // How many crossings each node of a run that nudging cannot move, or of a
 // strip beside one, counts as for a route that could not be nudged off it:
@@ -103,7 +111,7 @@ export function routeAll(
   // The nodes of each edge's waypoints, and the held runs of others that
   // an edge's own held runs were found along, as crossing counts.
   const waypoints = edges.map((edge) => new Set(edge.viaPins.map((pin) => nodes[pin] as number)))
-  const shared = new Map<number, Int32Array>()
+  const shared = new Map<number, Float64Array>()
   const search = (i: number, counted: ArrayLike<number> | undefined) => {
     const edge = edges[i] as ProblemEdge
     const [source, target] = ports[i] as readonly [Port, Port]
@@ -111,7 +119,7 @@ export function routeAll(
     const extra = shared.get(i)
     let through = counted
     if (extra !== undefined && counted !== undefined) {
-      const sum = new Int32Array(extra.length)
+      const sum = new Float64Array(extra.length)
       for (let k = 0; k < sum.length; k++) {
         sum[k] = (counted[k] as number) + (extra[k] as number)
       }
@@ -127,6 +135,7 @@ export function routeAll(
       [{ node: nodes[end] as number, headings: [headingOf(target.side, -1)] }],
       {
         ...edge.costs,
+        radius: edge.radius,
         avoid: edge.avoid,
         via: edge.viaPins.map((pin) => nodes[pin] as number),
         viaArrivals: edge.viaArrivals,
@@ -147,6 +156,12 @@ export function routeAll(
     // The held runs of each path, with the room beside them, found when
     // first needed and again after the path is found again.
     const held: Array<Array<Held> | undefined> = []
+    const order = new Map(which.map((edge, k) => [edge, k]))
+    // Whether two edges leave from or arrive at one node, as merged ends do.
+    const sharePort = (i: number, j: number) => {
+      const [a, b] = [pinOfEnd[i] as [number, number], pinOfEnd[j] as [number, number]]
+      return a.some((pin) => b.some((other) => nodes[pin] === nodes[other]))
+    }
     const heldOf = (j: number) => {
       let list = held[j]
       if (list === undefined) {
@@ -170,12 +185,12 @@ export function routeAll(
         continue
       }
       const thickness = (edges[i] as ProblemEdge).thickness
-      const extra = new Int32Array(through.length)
-      const mark = (nodes: ReadonlyArray<number>, vertical: boolean) => {
+      const extra = new Float64Array(through.length)
+      const mark = (nodes: ReadonlyArray<number>, vertical: boolean, by = HELD_RUN) => {
         for (const node of nodes) {
           const slot = 2 * node + (vertical ? 0 : 1)
           const count = extra[slot] as number
-          extra[slot] = count + HELD_RUN
+          extra[slot] = count + by
         }
       }
       let along = false
@@ -184,6 +199,29 @@ export function routeAll(
       for (const [j, other] of paths.entries()) {
         if (j === i || other === undefined) {
           continue
+        }
+        // A path that crosses one found before it on a run they share,
+        // coming onto the run on one side of it and leaving on the other,
+        // which the search counted no crossing for, counts one, spread
+        // over the nodes of the run it runs straight through, so that
+        // riding the whole run costs what the crossing is. Not so for two
+        // paths that share a port: the runs out of it are their bundle,
+        // and a crossing on it is for the nudge to order.
+        if ((order.get(j) as number) < (order.get(i) as number) && !sharePort(i, j)) {
+          for (const [from, to] of crossedRuns(graph, path.nodes, other.nodes)) {
+            const nodes = straightOn(graph, path.nodes, from, to)
+            if (nodes.length > 0) {
+              along = true
+              mark(
+                nodes,
+                coincident(
+                  graph.xs[path.nodes[from] as number] as number,
+                  graph.xs[path.nodes[to] as number] as number,
+                ),
+                1 / nodes.length,
+              )
+            }
+          }
         }
         const need = problem.settings.gap + (thickness + (edges[j] as ProblemEdge).thickness) / 2
         for (const run of heldOf(j)) {
@@ -325,6 +363,24 @@ function runsOf(graph: Graph, path: Path): Array<Run> {
   return runs
 }
 
+// The nodes of the run of a path from index `from` to index `to` that the
+// path runs straight on through: none when it turns at both ends of a run
+// of one edge.
+function straightOn(graph: Graph, nodes: Int32Array, from: number, to: number): Array<number> {
+  const { xs, ys } = graph
+  const inLine = (a: number, b: number, c: number) =>
+    (coincident(xs[a] as number, xs[b] as number) &&
+      coincident(xs[b] as number, xs[c] as number)) ||
+    (coincident(ys[a] as number, ys[b] as number) && coincident(ys[b] as number, ys[c] as number))
+  const found: Array<number> = []
+  for (let k = Math.max(from, 1); k <= Math.min(to, nodes.length - 2); k++) {
+    if (inLine(nodes[k - 1] as number, nodes[k] as number, nodes[k + 1] as number)) {
+      found.push(nodes[k] as number)
+    }
+  }
+  return found
+}
+
 // The straight runs of a path that nudging cannot move: those through its
 // waypoints, and with `ports`, its first and last, out of its ports.
 function heldRuns(
@@ -456,7 +512,7 @@ function stuckAlong(
 
 // Whether a path runs straight on through a node that `counts` marks on
 // its own axis, the way the search reads them (see `SearchOptions.through`).
-function runsThrough(graph: Graph, path: Path, counts: Int32Array): boolean {
+function runsThrough(graph: Graph, path: Path, counts: ArrayLike<number>): boolean {
   const { xs, ys } = graph
   const { nodes } = path
   for (let k = 1; k + 1 < nodes.length; k++) {

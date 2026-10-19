@@ -23,6 +23,14 @@ where they can.
 Routes in a passage too narrow for the gap spread evenly across it.
 An edge's `radius` is the least its corners turn: every corner reaches
 that far unless a leg is too short for it, and `Edge.minRadius` is gone.
+The search prices a jog shorter than twice the radius, whose two corners
+could not both fit, at its two corners in proportion to its length, so
+that a route's cost varies smoothly as the rects move and no route flips
+to another over a jog of a pixel, and a route that comes onto another's
+line on one side of it and leaves on the other pays for the crossing that
+is. Nudging leaves the segment beside such a kink where it is rather than
+balance a staircase around it, and leaves a kink right past a port for
+the port to slide away.
 Routes that turn together get corners about one center, as on a metro
 map: the innermost corner keeps the radius and each corner outside it
 grows by how far it sits outside the one inside it, tapering off as the

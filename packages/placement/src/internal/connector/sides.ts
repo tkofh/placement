@@ -173,6 +173,7 @@ export function chooseSides(problem: Problem): Sides {
       const [starts, ends] = candidates[k] as [Array<Candidate>, Array<Candidate>]
       const path = shortestPath(graph, starts.map(endpoint), ends.map(endpoint), {
         ...edge.costs,
+        radius: edge.radius,
         avoid: edge.avoid,
         via: edge.viaPins.map((pin) => nodes[pin] as number),
         viaArrivals: edge.viaArrivals,

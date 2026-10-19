@@ -137,6 +137,13 @@ export function solve(problem: Problem): ConnectorLayout {
         packAt(problem, i, end, ((ports[i] as [Port, Port])[end] as Port).side),
       ) as [number, number],
   )
+  // Whether an end's port may slide along its side: an auto port that
+  // neither merges nor belongs to a loop.
+  const slides = (i: number, end: number) => {
+    const edge = edges[i] as ProblemEdge
+    const { at } = edge.ends[end] as ProblemEdge['ends'][number]
+    return at === undefined && !mergeOf.has(endId(i, end)) && !edge.loop
+  }
   const { routes: nudgedRoutes, crowded } = nudgeRoutes(
     found.map((i) => routes[i] as Array<XY>),
     blocks,
@@ -156,6 +163,7 @@ export function solve(problem: Problem): ConnectorLayout {
         slant: settings.jogSlant,
         packs: packs[k] as [number, number],
         flows: flowsOf(edge),
+        sliding: [slides(i, 0), slides(i, 1)],
       }
     }),
     mergeGap,
@@ -170,8 +178,8 @@ export function solve(problem: Problem): ConnectorLayout {
     found.map((i) => {
       const edge = edges[i] as ProblemEdge
       return [0, 1].map((end) => {
-        const { rect, at } = edge.ends[end] as ProblemEdge['ends'][number]
-        if (at !== undefined || mergeOf.has(endId(i, end)) || edge.loop) {
+        const { rect } = edge.ends[end] as ProblemEdge['ends'][number]
+        if (!slides(i, end)) {
           return undefined
         }
         return {

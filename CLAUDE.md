@@ -65,9 +65,13 @@ spreads auto ports along shared sides and groups the ends that merge,
 `merge.ts` plans the lanes and whisks of merges, `routing.ts` finds the
 routes (a run that waypoints hold goes around the port legs of other
 routes, and so does a run along or beside one where a wall leaves nudging
-no room to move it off) and trades ends that cross, `nudge.ts` moves overlapping segments
+no room to move it off, and a run shared with an earlier route and left
+on its other side counts as the crossing it is) and trades ends that
+cross, `nudge.ts` moves overlapping segments
 apart (with `internal/separation.ts`, a 1D separation-constraint solver,
-VPSC) and keeps other routes out of merged bundles, `ports.ts` slides auto
+VPSC) and keeps other routes out of merged bundles (a segment beside a
+kink too short for its corners stays put, as does a kink a port will
+slide away), `ports.ts` slides auto
 ports to straighten short jogs, `adornments.ts` places adornments on the
 routes, `corners.ts` sizes corners (the edge's radius is the least a corner
 turns, and the corners of routes that turn together grow outward from the
@@ -80,8 +84,10 @@ order of `solve` is the order in which decisions yield. The phases build
 on `internal/graph/` (not yet public): `graph.ts` stores graphs of points
 in flat arrays, `visibility.ts` builds the orthogonal visibility graph of
 obstacles and pins, `search.ts` finds the cheapest path for length, turns,
-and crossings (A\*), for less along partner paths, between sets of
-endpoints, and routes several paths among one another, `crossings.ts`
+and crossings (A\*; a jog shorter than twice the edge's radius costs its
+two turns in proportion, and a run left on the other side from where it
+was joined crosses the paths along it), for less along partner paths,
+between sets of endpoints, and routes several paths among one another, `crossings.ts`
 counts the crossings between two paths, shared runs included, and
 `acyclic.ts` breaks cycles and orders pairwise preferences for both
 routers. `internal/orient.ts` is the shared vocabulary of axes, sides, and

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { crossingsBetween } from '../src/internal/graph/crossings.ts'
+import { crossedRuns, crossingsBetween } from '../src/internal/graph/crossings.ts'
 import {
   type Graph,
   type GraphEdge,
@@ -356,6 +356,139 @@ function cheapest(
       }
     }
   }
+}
+
+// The cheapest route cost between two points of a graph given as adjacency,
+// for a cost of length plus `bend` per turn, where two turns one way and
+// then the other around a run shorter than `2 * radius` cost `bend * run /
+// radius` together (see `SearchOptions.radius`): a plain Dijkstra over the
+// node, the heading, the node a run that short began at with a turn, and
+// the way that turn went, to check the search against.
+function cheapestWithRadius(
+  xs: ArrayLike<number>,
+  ys: ArrayLike<number>,
+  neighbors: ArrayLike<number>,
+  from: number,
+  to: number,
+  bend: number,
+  radius: number,
+): number {
+  const count = xs.length
+  const reach = 2 * radius
+  const distance = (a: number, b: number) =>
+    Math.abs((xs[a] as number) - (xs[b] as number)) +
+    Math.abs((ys[a] as number) - (ys[b] as number))
+  const share = (length: number) => Math.min(1, length / reach)
+  // `count` as the origin means none.
+  const key = (node: number, d: number, origin: number, way: number) =>
+    ((node * 4 + d) * (count + 1) + origin) * 2 + way
+  const cost = new Map<number, number>()
+  const open: Array<[number, number]> = []
+  const relax = (k: number, total: number) => {
+    if (total < (cost.get(k) ?? Number.POSITIVE_INFINITY)) {
+      cost.set(k, total)
+      open.push([total, k])
+    }
+  }
+  for (let d = 0; d < 4; d++) {
+    relax(key(from, d, count, 0), 0)
+  }
+  let best = Number.POSITIVE_INFINITY
+  while (open.length > 0) {
+    let at = 0
+    for (const [i, entry] of open.entries()) {
+      if (entry[0] < (open[at] as [number, number])[0]) {
+        at = i
+      }
+    }
+    const [total, k] = open.splice(at, 1)[0] as [number, number]
+    if (total > (cost.get(k) as number) || total >= best) {
+      if (total >= best) {
+        break
+      }
+      continue
+    }
+    const way = k % 2
+    const origin = Math.floor(k / 2) % (count + 1)
+    const d = Math.floor(k / 2 / (count + 1)) % 4
+    const node = Math.floor(k / 2 / (count + 1) / 4)
+    const paid = origin === count ? 0 : share(distance(origin, node))
+    const owed = origin === count ? 0 : bend * (1 - paid)
+    if (node === to) {
+      best = Math.min(best, total + owed)
+    }
+    for (let next = 0; next < 4; next++) {
+      const j = neighbors[4 * node + next] as number
+      if (j === -1) {
+        continue
+      }
+      const length = distance(node, j)
+      if (node === from && total === 0) {
+        relax(key(j, next, count, 0), length)
+      } else if (next === d) {
+        if (origin !== count && distance(origin, j) < reach) {
+          relax(
+            key(j, next, origin, way),
+            total + length + bend * (share(distance(origin, j)) - paid),
+          )
+        } else {
+          relax(key(j, next, count, 0), total + length + owed)
+        }
+      } else if ((next - d + 4) % 4 !== 2) {
+        const turning = (next - d + 4) % 4 === 1 ? 0 : 1
+        if (origin !== count && turning !== way) {
+          relax(key(j, next, count, 0), total + length + bend * paid)
+        } else if (length < reach) {
+          relax(key(j, next, node, turning), total + length + owed + bend * share(length))
+        } else {
+          relax(key(j, next, count, 0), total + length + owed + bend)
+        }
+      }
+    }
+  }
+  return best
+}
+
+// What a path costs for its length plus `bend` per turn, where two turns one
+// way and then the other around a run shorter than `2 * radius` cost `bend *
+// run / radius` together, pairs taken from the start.
+function jogCost(
+  xs: ArrayLike<number>,
+  ys: ArrayLike<number>,
+  nodes: ArrayLike<number>,
+  bend: number,
+  radius: number,
+): number {
+  const reach = 2 * radius
+  const runs: Array<{ d: number; length: number }> = []
+  for (let i = 1; i < nodes.length; i++) {
+    const dx = (xs[nodes[i] as number] as number) - (xs[nodes[i - 1] as number] as number)
+    const dy = (ys[nodes[i] as number] as number) - (ys[nodes[i - 1] as number] as number)
+    const d = dx > 0 ? RIGHT : dx < 0 ? LEFT : dy > 0 ? DOWN : UP
+    const length = Math.abs(dx) + Math.abs(dy)
+    const last = runs.at(-1)
+    if (last !== undefined && last.d === d) {
+      last.length += length
+    } else {
+      runs.push({ d, length })
+    }
+  }
+  let total = runs.reduce((sum, run) => sum + run.length, 0)
+  const ways = runs
+    .slice(1)
+    .map((run, i) => ((run.d - (runs[i] as { d: number }).d + 4) % 4 === 1 ? 0 : 1) as number)
+  let i = 0
+  while (i < ways.length) {
+    const run = (runs[i + 1] as { length: number }).length
+    if (i + 1 < ways.length && ways[i] !== ways[i + 1] && run < reach) {
+      total += (2 * bend * run) / reach
+      i += 2
+    } else {
+      total += bend
+      i += 1
+    }
+  }
+  return total
 }
 
 // Every point on the grid of all obstacle and pin coordinates that lies
@@ -852,6 +985,238 @@ function grid(
   return graphOf(points, pairs)
 }
 
+describe('jogs', () => {
+  // A path that steps `d` down between two runs to the right.
+  const step = (d: number) =>
+    graphOf(
+      [
+        [0, 0],
+        [10, 0],
+        [10, d],
+        [20, d],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+      ],
+    )
+
+  test.each([0.5, 1, 2, 4, 8, 12])(
+    'a jog %f long costs its two turns by its share of twice the radius',
+    (d) => {
+      expect(route(step(d), 0, 3, { bendCost: 40, radius: 4 })).toEqual({
+        nodes: [0, 1, 2, 3],
+        cost: 20 + d + 80 * Math.min(1, d / 8),
+      })
+    },
+  )
+
+  test('a short jog beats a turn fewer where its share costs less', () => {
+    const graph = graphOf(
+      [
+        [0, 0],
+        [10, 0],
+        [10, 2],
+        [20, 2],
+        [0, 2],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [0, 4],
+        [4, 2],
+      ],
+    )
+    expect(route(graph, 0, 3, { bendCost: 40 })).toEqual({ nodes: [0, 4, 2, 3], cost: 62 })
+    expect(route(graph, 0, 3, { bendCost: 40, radius: 4 })).toEqual({
+      nodes: [0, 1, 2, 3],
+      cost: 42,
+    })
+  })
+
+  test('two turns the same way around a short run cost in full', () => {
+    const graph = graphOf(
+      [
+        [0, 0],
+        [10, 0],
+        [10, 2],
+        [0, 2],
+        [0, 10],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+      ],
+    )
+    expect(route(graph, 0, 4, { bendCost: 40, radius: 4 })).toEqual({
+      nodes: [0, 1, 2, 3, 4],
+      cost: 150,
+    })
+  })
+
+  test('a turn before a short last run costs in full at the end', () => {
+    const graph = graphOf(
+      [
+        [0, 0],
+        [10, 0],
+        [10, 2],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+      ],
+    )
+    expect(route(graph, 0, 2, { bendCost: 40, radius: 4 })).toEqual({
+      nodes: [0, 1, 2],
+      cost: 52,
+    })
+    expect(route(graph, 0, [{ node: 2, cost: 3 }], { bendCost: 40, radius: 4 })).toEqual({
+      nodes: [0, 1, 2],
+      cost: 55,
+    })
+  })
+
+  test('a jog keeps its share through a waypoint on it', () => {
+    const graph = graphOf(
+      [
+        [0, 0],
+        [10, 0],
+        [10, 1],
+        [10, 2],
+        [20, 2],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+      ],
+    )
+    expect(route(graph, 0, 4, { bendCost: 40, radius: 4, via: [2] })).toEqual({
+      nodes: [0, 1, 2, 3, 4],
+      cost: 42,
+    })
+  })
+
+  test('a jog across a run that another path runs along crosses it', () => {
+    // A path across, from 0 to 3, over the path down the middle, from 6 to
+    // 7. It could step onto that path's line at 1, ride it one unit to 4,
+    // and step off, which switches sides of that path without running
+    // straight through any node of it, and step back at 5 and 2: two cheap
+    // jogs instead of a crossing. The jog along the path counts as the
+    // crossing it is, so the path runs straight across instead.
+    //
+    //        6
+    //  0 --- 1 --- 2 --- 3
+    //        4 --- 5
+    //        7
+    const graph = graphOf(
+      [
+        [0, 0],
+        [10, 0],
+        [15, 0],
+        [20, 0],
+        [10, 1],
+        [15, 1],
+        [10, -10],
+        [10, 10],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [1, 4],
+        [4, 5],
+        [5, 2],
+        [6, 1],
+        [4, 7],
+      ],
+    )
+    const through = new Int32Array(2 * 8)
+    markThrough(graph, through, shortestPath(graph, 6, 7), 1)
+    const across = [{ x: 1, y: 0 }]
+    const options = { bendCost: 40, radius: 4, crossingCost: 50, through }
+    expect(route(graph, 0, [{ node: 3, headings: across }], options)).toEqual({
+      nodes: [0, 1, 2, 3],
+      cost: 70,
+    })
+    expect(route(graph, 0, [{ node: 3, headings: across }], { ...options, via: [4, 5] })).toEqual({
+      nodes: [0, 1, 4, 5, 2, 3],
+      cost: 92,
+    })
+  })
+
+  test('a long ride along another path, off on the far side, crosses it too', () => {
+    // From 0 to 5, arriving east, over the path down the middle from 6 to
+    // 7. Riding that path from 1 to 4, far longer than twice the radius,
+    // and stepping off east would switch sides of it for two turns and no
+    // crossing, where turning at 3 and running straight across at 4 costs
+    // a turn and a crossing. The ride counts as the crossing it is.
+    //
+    //        6
+    //  0 --- 1
+    //        |
+    //  3 --- 4 --- 5
+    //        7
+    const graph = graphOf(
+      [
+        [0, 0],
+        [10, 0],
+        [20, 0],
+        [0, 30],
+        [10, 30],
+        [20, 30],
+        [10, -50],
+        [10, 50],
+      ],
+      [
+        [0, 1],
+        [1, 4],
+        [4, 5],
+        [0, 3],
+        [3, 4],
+        [6, 1],
+        [4, 7],
+      ],
+    )
+    const through = new Int32Array(2 * 8)
+    markThrough(graph, through, shortestPath(graph, 6, 7), 1)
+    const east = [{ x: 1, y: 0 }]
+    const options = { bendCost: 40, radius: 4, crossingCost: 50, through }
+    expect(route(graph, 0, [{ node: 5, headings: east }], options)).toEqual({
+      nodes: [0, 3, 4, 5],
+      cost: 140,
+    })
+    expect(route(graph, 0, [{ node: 5, headings: east }], { ...options, via: [1, 4] })).toEqual({
+      nodes: [0, 1, 4, 5],
+      cost: 180,
+    })
+  })
+
+  test('a radius does nothing on a graph with edges that run any way', () => {
+    const graph = graphOf(
+      [
+        [0, 0],
+        [10, 0],
+        [10, 2],
+        [20, 2],
+        [30, 3],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+      ],
+    )
+    expect(route(graph, 0, 3, { bendCost: 40, radius: 4 })?.cost).toBe(102)
+  })
+})
+
 describe('crossings', () => {
   // 0 1 2
   // 3 4 5
@@ -933,6 +1298,14 @@ describe('crossings', () => {
   ] as const)('paths that %s cross %i times', (_, p, q, expected, graph) => {
     expect(crossingsBetween(graph, p, q)).toBe(expected)
     expect(crossingsBetween(graph, q, p)).toBe(expected)
+  })
+
+  test('the runs that paths share and cross on are found by index', () => {
+    expect(crossedRuns(wide, [4, 5, 6, 7], [1, 5, 6, 10])).toEqual([[1, 2]])
+    expect(crossedRuns(wide, [1, 5, 6, 10], [4, 5, 6, 7])).toEqual([[1, 2]])
+    expect(crossedRuns(wide, [4, 5, 6, 7], [1, 5, 6, 2])).toEqual([])
+    // A crossing at a node is not a run.
+    expect(crossedRuns(square, [3, 4, 5], [1, 4, 7])).toEqual([])
   })
 })
 
@@ -1058,6 +1431,61 @@ describe('routes on random scenes', () => {
               heading = next
             }
             expect(total).toBe(expected)
+          }
+        }
+      }
+    },
+  )
+})
+
+describe('routes with a radius on random scenes', () => {
+  test.each(Array.from({ length: 12 }, (_, i) => i + 1))(
+    'scene %i matches the cheapest route for its jogs on the graph and the full grid',
+    (seed) => {
+      const { obstacles, pins } = randomScene(seed, 12, 4)
+      const { graph, pins: pinNodes } = visibilityGraph(obstacles, pins)
+      const own = build(obstacles, pins)
+      const grid = fullGrid(obstacles, pins)
+      for (const bendCost of [7, 100]) {
+        for (const radius of [1, 3, 8]) {
+          for (let a = 0; a < pins.length; a++) {
+            for (let b = a + 1; b < pins.length; b++) {
+              const expected = cheapestWithRadius(
+                own.xs,
+                own.ys,
+                own.neighbors,
+                own.pins[a] as number,
+                own.pins[b] as number,
+                bendCost,
+                radius,
+              )
+              const path = shortestPath(graph, pinNodes[a] as number, pinNodes[b] as number, {
+                bendCost,
+                radius,
+              })
+              if (expected === Number.POSITIVE_INFINITY) {
+                expect(path).toBeUndefined()
+                continue
+              }
+              expect(path?.cost).toBeCloseTo(expected, 9)
+              // The path costs what it says, and the graph holds a route as
+              // cheap as any on the full grid.
+              expect(jogCost(graph.xs, graph.ys, path?.nodes ?? [], bendCost, radius)).toBeCloseTo(
+                expected,
+                9,
+              )
+              expect(
+                cheapestWithRadius(
+                  grid.xs,
+                  grid.ys,
+                  grid.neighbors,
+                  grid.pins[a] as number,
+                  grid.pins[b] as number,
+                  bendCost,
+                  radius,
+                ),
+              ).toBeCloseTo(expected, 9)
+            }
           }
         }
       }

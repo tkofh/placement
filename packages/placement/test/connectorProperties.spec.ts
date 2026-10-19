@@ -688,25 +688,9 @@ describe('tier 1 and 3: what a layout prefers, and says when it cannot', () => {
     }
   })
 
-  // The radius slides ports and sizes corners, which keeps crossings too,
-  // except with merging on: the steps of merged lanes turn on arcs of the
-  // merge gap only on edges with a radius, and square at the port without
-  // one, which can move a lane across a route beside the merge.
-  const unmerged = uprightCases.filter(
-    ({ variant }) => variant.input.merge === Connector.merge.none,
-  )
-  test.each(unmerged)('$label crosses the same with every radius', ({ seed, variant }) => {
-    const { rects, edges, options } = diagramOf(seed)
-    const counts = crossingsOf(layoutOf(seed, variant))
-    const spec = Connector.make(variant.input)
-    for (const radius of [0, 12]) {
-      const resized = edges.map((edge) => Edge.setRadius(edge, radius))
-      expect(
-        crossingsOf(Connector.apply(rects, resized, spec, options)),
-        `radius ${radius}`,
-      ).toEqual(counts)
-    }
-  })
+  // The radius is not cosmetic: a jog shorter than twice the radius costs
+  // the search less than two full corners, so the routes, and what they
+  // cross, may change with it.
 
   // Moving the whole diagram moves the routes with it, and changes nothing
   // else. Positions along sides are products that do not re-associate, so

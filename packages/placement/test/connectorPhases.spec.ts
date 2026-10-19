@@ -591,6 +591,27 @@ describe('nudge', () => {
     const inner = route([0, 10], [10, 10], [10, 20], [0, 20])
     expect(nudge([outer, inner], [], 0)).toEqual([outer, inner])
   })
+
+  test('the segment beside a kink stays put rather than balance a staircase', () => {
+    // A long leg down, then a step of half a pixel before the port. With
+    // corners of 16 the step is a kink, so the leg beside it is no rise of
+    // a Z to center between the port legs, which would make the step a jog
+    // of 22. The step itself centers along the leg.
+    const path = route([0, 20], [-43.5, 20], [-43.5, 184], [-44, 184], [-44, 200])
+    expect(nudgeRoutes([path], [], 8, [{ corner: 16 }]).routes).toEqual([
+      route([0, 20], [-43.5, 20], [-43.5, 110], [-44, 110], [-44, 200]),
+    ])
+    // Without a corner, the step is a leg, and the long leg centers.
+    expect(nudgeRoutes([path], [], 0, [{ corner: 0 }]).routes).toEqual([
+      route([0, 20], [-22, 20], [-22, 110], [-44, 110], [-44, 200]),
+    ])
+  })
+
+  test('a kink right past a port that may slide stays for the port', () => {
+    const path = route([0, 20], [-43.5, 20], [-43.5, 184], [-44, 184], [-44, 200])
+    const constraints = [{ corner: 16, sliding: [false, true] as [boolean, boolean] }]
+    expect(nudgeRoutes([path], [], 8, constraints).routes).toEqual([path])
+  })
 })
 
 const HEADINGS = [
