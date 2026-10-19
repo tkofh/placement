@@ -1,16 +1,20 @@
 import type * as Rect from '../../rect.ts'
 import { within } from '../../utils/tolerance.ts'
+import { channelsOf } from '../graph/channels.ts'
 import { type Endpoint, type Path, markAlong, searchAll, shortestPath } from '../graph/search.ts'
 import { type Pin, visibilityGraph } from '../graph/visibility.ts'
 import type { XY } from '../orient.ts'
 import {
+  PRESSURE_ROUNDS,
   type Problem,
   type ProblemEdge,
   facingSides,
   headingOf,
+  mergeIds,
   passage,
   pinOf,
   portOf,
+  pressureAt,
   rectAt,
   tightCostAt,
 } from './problem.ts'
@@ -32,9 +36,15 @@ import {
 // the first route pulled by nothing and the next pulled by it alone, the
 // first route's choice would settle a tie for the next, and the two would
 // then hold each other there against the rest. Two rounds with the pull
-// let the group settle. The search also yields a trial route, from the
-// middle of each side, for every edge with an auto position, which orders
-// the ports that share a side.
+// let the group settle. The trial routes also fill the channels between
+// the rects, as the routes do in the search phase (see `routeAll`): an
+// approach through a channel too narrow for the routes in it costs more
+// by how far over it is, at a pressure that grows over the rounds, so an
+// end comes in on a side with room where that costs less in all. The pull
+// and that price are costs of one search, so they weigh against each
+// other. The search also yields a trial route, from the middle of each
+// side, for every edge with an auto position, which orders the ports that
+// share a side.
 
 // How many rounds of the search pull the routes along their partners, after
 // the first, which pulls none.
@@ -129,12 +139,13 @@ export function chooseSides(problem: Problem): Sides {
       ),
     ),
   )
-  const pathOf: Array<Path | undefined> = edges.map(() => undefined)
+  // The place of each routed edge among the searched routes.
+  const placeOf = new Map(routed.map((i, k) => [i, k]))
   // The search options that pull route `k` along its partners' latest
   // paths, each the way it runs or back, within the span of the route's
   // own two rects, so that it never goes out of its way to join one. A
   // passage narrower than the gap holds one route, so it pulls none.
-  const pullAlong = (k: number) => {
+  const pullAlong = (k: number, paths: ReadonlyArray<Path | undefined>) => {
     const list = partners[k] as Array<Partner>
     if (pull === 0 || list.length === 0) {
       return {}
@@ -159,19 +170,22 @@ export function chooseSides(problem: Problem): Sides {
     }
     const marks = new Uint8Array(targets.length)
     for (const { edge, back } of list) {
-      markAlong(graph, marks, pathOf[edge], back, roomy)
+      markAlong(graph, marks, paths[placeOf.get(edge) as number], back, roomy)
     }
     return { partnerDiscount: pull, partners: marks }
   }
+  // The routes that could merge fill the channels as one bundle out of
+  // their shared port.
+  const merges = mergeIds(problem, routed)
   const { paths } = searchAll(
     graph,
     routed.length,
     crossingCost,
-    (k, through, round) => {
+    (k, { through, congestion, paths: latest, along }, round) => {
       const i = routed[k] as number
       const edge = edges[i] as ProblemEdge
       const [starts, ends] = candidates[k] as [Array<Candidate>, Array<Candidate>]
-      const path = shortestPath(graph, starts.map(endpoint), ends.map(endpoint), {
+      return shortestPath(graph, starts.map(endpoint), ends.map(endpoint), {
         ...edge.costs,
         radius: edge.radius,
         avoid: edge.avoid,
@@ -180,13 +194,22 @@ export function chooseSides(problem: Problem): Sides {
         viaLeavings: edge.viaLeavings,
         crossingCost: crossingCost,
         ...(through === undefined ? {} : { through }),
-        ...(round === 0 ? {} : pullAlong(k)),
+        ...(congestion === undefined ? {} : { congestion }),
+        ...(along === undefined ? {} : { along }),
+        ...(round === 0 ? {} : pullAlong(k, latest)),
       })
-      pathOf[i] = path
-      return path
     },
     (k) => pull > 0 && (partners[k] as Array<Partner>).length > 0,
     PULL_ROUNDS,
+    {
+      ...channelsOf(graph, obstacles),
+      stroke: (k) => (edges[routed[k] as number] as ProblemEdge).thickness,
+      merges: (k) => merges[k] as [number, number],
+      gap: settings.gap,
+      mergeGap: problem.mergeGap,
+      pressure: pressureAt,
+      rounds: PRESSURE_ROUNDS,
+    },
   )
   for (const [k, i] of routed.entries()) {
     const [starts, ends] = candidates[k] as [Array<Candidate>, Array<Candidate>]

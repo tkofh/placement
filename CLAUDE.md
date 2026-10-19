@@ -59,14 +59,18 @@ runs the phases, each a function of the problem and the phases before it:
 `sides.ts` picks the sides of auto ends by a trial search (a side with no
 room in front of its port for the end's adornments and corner costs more,
 and routes that could merge pull each other along within the span of
-their own rects, in rounds after a first one without the pull),
+their own rects, in rounds after a first one without the pull, against
+the price of channels over capacity, as in `routing.ts`),
 `spread.ts`
 spreads auto ports along shared sides and groups the ends that merge,
 `merge.ts` plans the lanes and whisks of merges, `routing.ts` finds the
 routes (a run that waypoints hold goes around the port legs of other
 routes, and so does a run along or beside one where a wall leaves nudging
 no room to move it off, and a run shared with an earlier route and left
-on its other side counts as the crossing it is) and trades ends that
+on its other side counts as the crossing it is; a channel too narrow for
+its routes costs more by how far over it is, in rounds of rising
+pressure that move the route that gains most first, so the routes with
+another way leave it) and trades ends that
 cross, `nudge.ts` moves overlapping segments
 apart (with `internal/separation.ts`, a 1D separation-constraint solver,
 VPSC) and keeps other routes out of merged bundles (a segment beside a
@@ -87,7 +91,12 @@ obstacles and pins, `search.ts` finds the cheapest path for length, turns,
 and crossings (A\*; a jog shorter than twice the edge's radius costs its
 two turns in proportion, and a run left on the other side from where it
 was joined crosses the paths along it), for less along partner paths,
-between sets of endpoints, and routes several paths among one another, `crossings.ts`
+for more through channels over capacity, between sets of endpoints, and
+routes several paths among one another, `channels.ts` groups the
+half-edges between one pair of walls into the slots those prices read
+and keeps what the routes fill of them, a merged bundle as one out of
+its shared port,
+`crossings.ts`
 counts the crossings between two paths, shared runs included, and
 `acyclic.ts` breaks cycles and orders pairwise preferences for both
 routers. `internal/orient.ts` is the shared vocabulary of axes, sides, and

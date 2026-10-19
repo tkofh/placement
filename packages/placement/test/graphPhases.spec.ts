@@ -1,4 +1,12 @@
 import { describe, expect, test } from 'vitest'
+import {
+  type RouteGroups,
+  channelsOf,
+  emptyFill,
+  fillPath,
+  groupsOf,
+  needAt,
+} from '../src/internal/graph/channels.ts'
 import { crossedRuns, crossingsBetween } from '../src/internal/graph/crossings.ts'
 import {
   type Graph,
@@ -8,6 +16,7 @@ import {
 } from '../src/internal/graph/graph.ts'
 import {
   type Endpoint,
+  type Path,
   type SearchOptions,
   markAlong,
   markThrough,
@@ -776,6 +785,18 @@ describe('random scenes', () => {
   )
 })
 
+// The half-edge of a graph from the node at (x1, y1) to the node at
+// (x2, y2), next to each other, or -1.
+function halfEdge(graph: Graph, x1: number, y1: number, x2: number, y2: number): number {
+  for (let e = 0; e < graph.targets.length; e++) {
+    const [a, b] = [graph.sources[e] as number, graph.targets[e] as number]
+    if (graph.xs[a] === x1 && graph.ys[a] === y1 && graph.xs[b] === x2 && graph.ys[b] === y2) {
+      return e
+    }
+  }
+  return -1
+}
+
 // A graph from a list of points and pairs of point indices.
 function graphOf(
   points: ReadonlyArray<readonly [number, number]>,
@@ -1491,7 +1512,7 @@ describe('crossings', () => {
       [[{ node: 5, headings: east }], [{ node: 7, headings: east }]],
     ] as const
     const find = (crossingCost: number) =>
-      searchAll(graph, 2, crossingCost, (k, through) => {
+      searchAll(graph, 2, crossingCost, (k, { through }) => {
         const [from, to] = ends[k] as readonly [number | Array<Endpoint>, number | Array<Endpoint>]
         return shortestPath(graph, from, to, {
           crossingCost,
@@ -1613,6 +1634,443 @@ describe('partners', () => {
       [0, 2],
       [2, 2],
     ])
+  })
+})
+
+describe('channels', () => {
+  // A corridor 10 high between `a` and `b`, split at x 20 by a pin in it,
+  // a pin above `a`, and a pin on `a` that leaves up through its owner.
+  //
+  //          *            y -10
+  //   +----|-----------+  y 0
+  //   | a  *           |
+  //   +----------------+  y 20
+  //   ---------*--------  y 25, the corridor
+  //   +----------------+  y 30
+  //   | b              |
+  //   +----------------+  y 50
+  const obstacles = [box(0, 0, 40, 20), box(0, 30, 40, 50)]
+  const { graph } = visibilityGraph(obstacles, [
+    free(20, 25),
+    free(20, -10),
+    { x: 10, y: 4, directions: 1 << UP, owner: 0 },
+  ])
+  const { slotOf, width } = channelsOf(graph, obstacles)
+  const slotAt = (x1: number, y1: number, x2: number, y2: number) =>
+    slotOf[halfEdge(graph, x1, y1, x2, y2)] as number
+
+  test('the lines across a corridor over one stretch share a slot as wide as the corridor', () => {
+    const slot = slotAt(0, 25, 20, 25)
+    expect(slot).toBeGreaterThanOrEqual(0)
+    expect(slotAt(0, 20, 20, 20)).toBe(slot)
+    expect(slotAt(0, 30, 20, 30)).toBe(slot)
+    expect(width[slot]).toBe(10)
+  })
+
+  test('a half-edge and its twin share a slot', () => {
+    expect(slotAt(20, 25, 0, 25)).toBe(slotAt(0, 25, 20, 25))
+    expect(slotAt(10, 0, 10, -10)).toBe(slotAt(10, -10, 10, 0))
+  })
+
+  test('two stretches between the same rects are different slots', () => {
+    const [left, right] = [slotAt(0, 25, 20, 25), slotAt(20, 25, 40, 25)]
+    expect(right).not.toBe(left)
+    expect(width[right]).toBe(10)
+  })
+
+  test.each([
+    ['above the upper rect', [0, -10, 10, -10]],
+    ['along the top of the upper rect', [0, 0, 10, 0]],
+    ['from the pin up to the upper rect', [20, -10, 20, 0]],
+  ] as const)('a half-edge %s, with no wall on one side, is unbounded', (_, [x1, y1, x2, y2]) => {
+    const slot = slotAt(x1, y1, x2, y2)
+    expect(slot).toBeGreaterThanOrEqual(0)
+    expect(width[slot]).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  test('the line out of a pin through its owner runs free', () => {
+    expect(slotAt(10, 4, 10, 0)).toBe(-1)
+    expect(slotAt(10, 0, 10, 4)).toBe(-1)
+  })
+
+  test('the channels are kept with the graph, by the obstacles', () => {
+    expect(channelsOf(graph, obstacles)).toBe(channelsOf(graph, obstacles))
+    expect(channelsOf(graph, [...obstacles])).not.toBe(channelsOf(graph, obstacles))
+  })
+})
+
+// Pins that lead a path east from x 0 and into x 100 heading west.
+const east = (y: number): Pin => ({ x: 0, y, directions: 1 << RIGHT })
+const west = (y: number): Pin => ({ x: 100, y, directions: 1 << LEFT })
+// The y at which a path runs from x 40 to x 60.
+const corridorOf = (graph: Graph, nodes: ArrayLike<number>) => {
+  for (let k = 1; k < nodes.length; k++) {
+    const [a, b] = [nodes[k - 1] as number, nodes[k] as number]
+    if (graph.xs[a] === 40 && graph.xs[b] === 60) {
+      return graph.ys[a]
+    }
+  }
+  return undefined
+}
+
+// A path through the nodes, at a cost.
+const pathOf = (nodes: ReadonlyArray<number>, cost = 0): Path => ({
+  nodes: Int32Array.from(nodes),
+  cost,
+  start: 0,
+  end: 0,
+})
+
+describe('congestion', () => {
+  // Three rects stacked at x 40 to 60, with a corridor 4 high between the
+  // upper two (y 10 to 14) and one between the lower two (y 24 to 28),
+  // which the paths pass through from the left to the right.
+  //
+  //   +--------+  y 0
+  //   +--------+  y 10
+  //               the far corridor
+  //   +--------+  y 14
+  //   +--------+  y 24
+  //               the near corridor
+  //   +--------+  y 28
+  //   +--------+  y 40
+  const stack = (low = 28) => [box(40, 0, 60, 10), box(40, 14, 60, 24), box(40, low, 60, 40)]
+  // A path from y 22 on the left to y 22 on the right steps down 2 into
+  // the near corridor, or up 8 into the far one: a detour of 12. Two other
+  // paths of stroke 1, each with a gap of 2, fill the near one's 4 so that
+  // a third is over by one route, at `pressure` per unit of its 20.
+  const obstacles = stack()
+  const { graph, pins } = visibilityGraph(obstacles, [east(22), west(22)])
+  const channels = channelsOf(graph, obstacles)
+  const near = channels.slotOf[halfEdge(graph, 40, 24, 60, 24)] as number
+  // The room each slot needs with a path of stroke 1 in it: `need` in the
+  // near corridor, and nothing to crowd elsewhere.
+  const needs = (need: number, elsewhere = Number.NEGATIVE_INFINITY) => {
+    const list = new Float64Array(channels.width.length).fill(elsewhere)
+    list[near] = need
+    return list
+  }
+  const congestion = (pressure: number, need = 7) => ({
+    ...channels,
+    need: needs(need),
+    unit: 3,
+    pressure,
+  })
+
+  test.each([
+    [0, 24, 144],
+    [0.5, 24, 154],
+    [0.5625, 24, 155.25],
+    [0.625, 14, 156],
+    [1, 14, 156],
+  ])('at a pressure of %f, the path runs at y %i for %f', (pressure, y, cost) => {
+    // The crossover is where the 20 of the near corridor, over by one
+    // route, costs the detour's 12 more: a pressure of 0.6.
+    const path = shortestPath(graph, pins[0] as number, pins[1] as number, {
+      bendCost: 10,
+      congestion: congestion(pressure),
+    })
+    expect(corridorOf(graph, path?.nodes ?? [])).toBe(y)
+    expect(path?.cost).toBe(cost)
+  })
+
+  test('a slot without a wall on each side, or with room to spare, costs nothing more', () => {
+    // The near corridor holds a path of 1 beside one of 1 with a gap of 2.
+    const path = shortestPath(graph, pins[0] as number, pins[1] as number, {
+      bendCost: 10,
+      congestion: { ...channels, need: needs(4, 1000), unit: 3, pressure: 4 },
+    })
+    expect(corridorOf(graph, path?.nodes ?? [])).toBe(24)
+    expect(path?.cost).toBe(144)
+  })
+
+  test('a path priced along its own half-edges costs what the search found it for', () => {
+    const options = { bendCost: 10, congestion: congestion(0.5) }
+    const path = shortestPath(graph, pins[0] as number, pins[1] as number, options)
+    const far = shortestPath(graph, pins[0] as number, pins[1] as number, {
+      ...options,
+      via: [graph.sources[halfEdge(graph, 40, 14, 60, 14)] as number],
+    })
+    expect(
+      shortestPath(graph, pins[0] as number, pins[1] as number, {
+        ...options,
+        ...(path === undefined ? {} : { along: path }),
+      })?.cost,
+    ).toBe(154)
+    // Kept to the far corridor, the path costs its 156, not the near one's
+    // 154.
+    const priced = shortestPath(graph, pins[0] as number, pins[1] as number, {
+      ...options,
+      ...(far === undefined ? {} : { along: far }),
+    })
+    expect(corridorOf(graph, priced?.nodes ?? [])).toBe(14)
+    expect(priced?.cost).toBe(156)
+  })
+
+  test('the price grows with the shortfall, never by more than its share per step', () => {
+    // One path of stroke 1 and gap 2 along a corridor that narrows from 8
+    // to nothing in steps of 0.5, along which a straight path stays.
+    const pressure = 2
+    const step = 0.5
+    const costs: Array<number> = []
+    for (let room = 8; room >= 0; room -= step) {
+      const blocks = [box(40, 0, 60, 24), box(40, 24 + room, 60, 50)]
+      const { graph, pins } = visibilityGraph(blocks, [east(24), west(24)])
+      const channels = channelsOf(graph, blocks)
+      const path = shortestPath(graph, pins[0] as number, pins[1] as number, {
+        bendCost: 1000,
+        congestion: {
+          ...channels,
+          need: new Float64Array(channels.width.length).fill(3 + 1),
+          unit: 3,
+          pressure,
+        },
+      })
+      expect([...(path?.nodes ?? [])].map((node) => graph.ys[node])).toEqual([24, 24, 24, 24])
+      expect(path?.cost).toBeCloseTo(100 + (pressure * 20 * Math.max(0, 3 + 1 - room)) / 3, 9)
+      costs.push(path?.cost ?? Number.NaN)
+    }
+    const most = (pressure * 20 * step) / 3
+    for (let k = 1; k < costs.length; k++) {
+      const change = (costs[k] as number) - (costs[k - 1] as number)
+      expect(change).toBeGreaterThanOrEqual(0)
+      expect(change).toBeLessThanOrEqual(most * (1 + 1e-12))
+    }
+  })
+
+  // Paths of stroke 1 and gap 2, each from the left to the right at its
+  // own y, through the near corridor, which holds two, or around through
+  // the far one, each found by the search.
+  const scene = (low: number, ys: ReadonlyArray<number>) => {
+    const blocks = stack(low)
+    const { graph, pins } = visibilityGraph(
+      blocks,
+      ys.flatMap((y) => [east(y), west(y)]),
+    )
+    const channels = channelsOf(graph, blocks)
+    const calls: Array<string> = []
+    const found = searchAll(
+      graph,
+      ys.length,
+      0,
+      (k, { congestion, along }, round) => {
+        calls.push(`${k} ${round}${along === undefined ? '' : ' price'}`)
+        return shortestPath(graph, pins[2 * k] as number, pins[2 * k + 1] as number, {
+          bendCost: 10,
+          ...(congestion === undefined ? {} : { congestion }),
+          ...(along === undefined ? {} : { along }),
+        })
+      },
+      undefined,
+      undefined,
+      {
+        ...channels,
+        stroke: () => 1,
+        merges: () => [-1, -1] as const,
+        gap: 2,
+        mergeGap: 2,
+        pressure: (round) => 0.5 * 2 ** round,
+        rounds: 3,
+      },
+    )
+    return {
+      corridors: found.paths.map((path) => corridorOf(graph, path?.nodes ?? [])),
+      calls,
+      load: (x1: number, y1: number, x2: number, y2: number) =>
+        found.fill?.load[channels.slotOf[halfEdge(graph, x1, y1, x2, y2)] as number],
+    }
+  }
+
+  // Two paths run straight through the near corridor at y 25 and 27, and
+  // the path from y 22 steps into it. Only that path has a detour that the
+  // pressure pays for before the corridor has room again, 12 through the
+  // far corridor, against 62 and 66 for the others.
+  test.each([
+    [0, [22, 25, 27], [14, 25, 27]],
+    [1, [25, 22, 27], [25, 14, 27]],
+    [2, [25, 27, 22], [25, 27, 14]],
+  ] as const)(
+    'with the cheap detour at %i, that path leaves the corridor too full for it',
+    (_, ys, corridors) => {
+      const found = scene(28, ys)
+      expect(found.corridors).toEqual(corridors)
+      // The first pass finds each path among those before it. The first
+      // round prices each path in a slot over capacity and finds it again,
+      // and moves the one that gains the most. Then no slot is over
+      // capacity, and the next round stops.
+      expect(found.calls).toEqual([
+        '0 0',
+        '1 0',
+        '2 0',
+        '0 1 price',
+        '0 1',
+        '1 1 price',
+        '1 1',
+        '2 1 price',
+        '2 1',
+      ])
+      // The load is what the paths take of each slot where they end up.
+      expect(found.load(40, 24, 60, 24)).toBe(6)
+      expect(found.load(40, 14, 60, 14)).toBe(3)
+    },
+  )
+
+  test('of two paths over capacity, the one with the cheaper way around leaves', () => {
+    // The paths from y 22 and y 20 both step into the near corridor beside
+    // the one at y 26, and at a pressure of 1 each would leave it in order:
+    // the first, 12 around for the 20 its share costs, would go. But the
+    // path from y 20 is only 4 around, and gains the most by leaving.
+    const found = scene(28, [22, 20, 26])
+    expect(found.corridors).toEqual([24, 14, 26])
+  })
+
+  test.each([0, 1, 2])(
+    'with room for all three, nothing moves and no round follows the first (%i)',
+    (cheap) => {
+      const ys = [25, 27]
+      ys.splice(cheap, 0, 22)
+      const found = scene(32, ys)
+      expect(found.corridors).toEqual(ys.map((y) => (y === 22 ? 24 : y)))
+      expect(found.calls).toEqual(['0 0', '1 0', '2 0'])
+    },
+  )
+
+  // A grid with one slot, the edge from 4 to 5, with no room in it.
+  //
+  //   0  1  2  3
+  //   4  5  6  7
+  //   8  9 10 11
+  //  12 13 14 15
+  const square = grid(4, 4)
+  const slotOf = new Int32Array(square.targets.length).fill(-1)
+  for (let e = 0; e < square.targets.length; e++) {
+    const pair = [square.sources[e], square.targets[e]].toSorted()
+    if (pair[0] === 4 && pair[1] === 5) {
+      slotOf[e] = 0
+    }
+  }
+  const tight = (rounds: number) => ({
+    slotOf,
+    width: Float64Array.of(0),
+    stroke: () => 1,
+    merges: () => [-1, -1] as const,
+    gap: 2,
+    mergeGap: 2,
+    pressure: () => 1,
+    rounds,
+  })
+
+  test('a path a full slot moved is found again where it crosses, and no other is', () => {
+    // Paths 0 and 1 share the slot, and path 2 runs down through 6 and 10.
+    // Path 0 moves to the row through 10, for less, where it crosses path
+    // 2. The round after, past the one round of crossings, path 0 is found
+    // again for the crossing, and path 2, which no slot moved, is not.
+    const first = [pathOf([4, 5, 9], 100), pathOf([0, 4, 5, 1], 100), pathOf([2, 6, 10, 14], 100)]
+    const calls: Array<string> = []
+    searchAll(
+      square,
+      3,
+      50,
+      (k, { paths, along }, round) => {
+        calls.push(`${k} ${round}${along === undefined ? '' : ' price'}`)
+        if (along !== undefined) {
+          return along
+        }
+        if (round === 0) {
+          return first[k]
+        }
+        return k === 0 ? pathOf([8, 9, 10, 11], 60) : paths[k]
+      },
+      undefined,
+      1,
+      tight(3),
+    )
+    expect(calls).toEqual(['0 0', '1 0', '2 0', '0 1 price', '0 1', '1 1 price', '1 1', '0 2'])
+  })
+
+  test.each([
+    ['moves no path skips the next', false, ['0 0', '1 0', '0 1', '1 1']],
+    ['moves a path runs the next', true, ['0 0', '1 0', '0 1', '1 1', '0 2', '1 2']],
+  ] as const)('with channels, a round of `again` that %s', (_, moves, expected) => {
+    // A round that moves nothing would find the same paths again, which is
+    // what lets the side search's pull rounds stop early.
+    const calls: Array<string> = []
+    searchAll(
+      square,
+      2,
+      0,
+      (k, _context, round) => {
+        calls.push(`${k} ${round}`)
+        return pathOf(moves && k === 0 && round === 1 ? [8, 9] : [12, 13], 10)
+      },
+      () => true,
+      2,
+      tight(0),
+    )
+    expect(calls).toEqual(expected)
+  })
+})
+
+describe('fill', () => {
+  // A square of nine nodes, each edge its own slot, numbered by its lower
+  // node and whether it runs down.
+  //
+  //   0  1  2
+  //   3  4  5
+  //   6  7  8
+  const square = grid(3, 3)
+  const slotOf = Int32Array.from(square.targets, (_, e) => {
+    const [a, b] = [square.sources[e] as number, square.targets[e] as number]
+    return 2 * Math.min(a, b) + (Math.abs(a - b) === 3 ? 1 : 0)
+  })
+  const slots = 18
+  const across = 0
+  const down = 2 * 4 + 1
+  // Three routes: routes 0 and 1 merge at their source, the merge with id
+  // `0`, and route 2 merges with none.
+  const groups = [groupsOf(3, 0, [0, -1]), groupsOf(3, 1, [0, -1]), groupsOf(3, 2, [-1, -1])]
+
+  test('a merge fills a slot as one bundle along the runs out of its port', () => {
+    const fill = emptyFill(slots, 9, 8, 4)
+    // Route 0 runs straight on, a single run out of the port.
+    fillPath(square, slotOf, fill, pathOf([0, 1, 2]), groups[0] as RouteGroups, 2, 1)
+    // Route 1 runs out of the port beside it, then turns down on its own
+    // and runs beside route 2 from 4 to 7.
+    fillPath(square, slotOf, fill, pathOf([0, 1, 4, 7]), groups[1] as RouteGroups, 2, 1)
+    fillPath(square, slotOf, fill, pathOf([3, 4, 7]), groups[2] as RouteGroups, 1, 1)
+    // Out of the port, the bundle's strokes, one gap, and a merge gap.
+    expect(fill.load[across]).toBe(2 + 8 + 2 + 4)
+    expect(fill.groups[across]).toBe(1)
+    // Past its first turn, route 1 is a route of its own, a full gap from
+    // route 2.
+    expect(fill.load[down]).toBe(2 + 8 + 1 + 8)
+    expect(fill.groups[down]).toBe(2)
+    // A route of the merge searched there counts as a lane of the bundle
+    // out of the port, and on its own beside the others elsewhere.
+    expect(needAt(fill, across, groups[0]?.source as number, 2)).toBe(Number.NEGATIVE_INFINITY)
+    expect(needAt(fill, down, groups[0]?.own as number, 2)).toBe(19 + 2)
+  })
+
+  test('counting paths out undoes counting them in, in any order', () => {
+    const fill = emptyFill(slots, 9, 8, 4)
+    const steps = [
+      [[0, 1, 2], 0, 2],
+      [[0, 1, 4, 7], 1, 2],
+      [[3, 4, 7], 2, 1],
+    ] as const
+    for (const [nodes, k, stroke] of steps) {
+      fillPath(square, slotOf, fill, pathOf(nodes), groups[k] as RouteGroups, stroke, 1)
+    }
+    for (const [nodes, k, stroke] of [steps[1], steps[2], steps[0]]) {
+      fillPath(square, slotOf, fill, pathOf(nodes), groups[k] as RouteGroups, stroke, -1)
+    }
+    expect([...fill.load]).toEqual(Array.from({ length: slots }, () => 0))
+    expect([...fill.groups]).toEqual(Array.from({ length: slots }, () => 0))
+    expect(fill.members.size).toBe(0)
+  })
+
+  test('a slot that only its own group runs through never crowds a path', () => {
+    expect(needAt(emptyFill(1, 1, 8, 4), 0, 0, 2)).toBe(Number.NEGATIVE_INFINITY)
   })
 })
 

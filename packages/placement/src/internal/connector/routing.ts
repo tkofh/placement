@@ -1,8 +1,15 @@
 import { coincident } from 'curvy/number'
 import { atMost, before, overlaps, within } from '../../utils/tolerance.ts'
+import { type Fill, channelsOf, congestionFor, fillPath, groupsOf } from '../graph/channels.ts'
 import { crossedRuns, crossingsBetween } from '../graph/crossings.ts'
 import type { Graph, Obstacle } from '../graph/graph.ts'
-import { type Path, markThrough, searchAll, shortestPath } from '../graph/search.ts'
+import {
+  type Congestion,
+  type Path,
+  markThrough,
+  searchAll,
+  shortestPath,
+} from '../graph/search.ts'
 import { type Pin, visibilityGraph } from '../graph/visibility.ts'
 import { type Axis, type XY, hi, lo, other, outward } from '../orient.ts'
 import {
@@ -10,8 +17,11 @@ import {
   type Port,
   type Problem,
   type ProblemEdge,
+  PRESSURE_ROUNDS,
   headingOf,
+  mergeIds,
   pinOf,
+  pressureAt,
 } from './problem.ts'
 
 // The search phase: the routes of edges between given ports, on the
@@ -48,6 +58,17 @@ import {
 // one crossing between them, so it pays for the crossing as it would for
 // running straight across. Routes that share a port are left alone there:
 // the runs out of it are their bundle, whose lanes the nudge orders.
+//
+// The routes also fill the channels between the obstacles, each with its
+// stroke and the gap, or the merge gap beside the other lanes of its
+// merge on the run out of their shared port, and a channel too narrow for the routes in it costs
+// more per unit of length for each route it is over by, at a pressure
+// that doubles over the rounds of the search (see `searchAll`): a route
+// with another way leaves the channel, and one without stays and is
+// squeezed by the nudge. Congestion adds to the crossings and marks above
+// and changes none of them. The searches after the rounds, for the rules
+// above and the trades, see the channels as full as the others leave them,
+// at the last round's pressure.
 
 // How many crossings each node of a run that nudging cannot move, or of a
 // strip beside one, counts as for a route that could not be nudged off it:
@@ -97,6 +118,9 @@ export interface Routed {
  * @param which - The edges to route.
  * @param blocks - The obstacles, the problem's by default.
  * @param trades - The pairs of ends that may trade ports.
+ * @param merged - The ends of each planned merge, whose routes fill the
+ * channels as one bundle, or none yet planned, where the ends that could
+ * merge do.
  * @returns The routes, by edge, and the trades made.
  */
 export function routeAll(
@@ -105,6 +129,7 @@ export function routeAll(
   which: ReadonlyArray<number>,
   blocks: ReadonlyArray<Obstacle> = problem.obstacles,
   trades: ReadonlyArray<readonly [EdgeEnd, EdgeEnd]> = [],
+  merged?: ReadonlyArray<ReadonlyArray<EdgeEnd>>,
 ): Routed {
   const { edges, extraPins, crossingCost } = problem
   const pins: Array<Pin> = [...extraPins]
@@ -121,7 +146,23 @@ export function routeAll(
   // an edge's own held runs were found along, as crossing counts.
   const waypoints = edges.map((edge) => new Set(edge.viaPins.map((pin) => nodes[pin] as number)))
   const shared = new Map<number, Float64Array>()
-  const search = (i: number, counted: ArrayLike<number> | undefined) => {
+  // The channels between the blocks, which each route fills with its stroke
+  // and a gap, or a merge gap beside the others of its merge.
+  const channels = channelsOf(graph, blocks)
+  const { gap } = problem.settings
+  const strokeOf = (i: number) => (edges[i] as ProblemEdge).thickness
+  const placeOf = new Map(which.map((edge, k) => [edge, k]))
+  const merges = mergeIds(problem, which, merged)
+  const groupOf = (i: number) => {
+    const k = placeOf.get(i) as number
+    return groupsOf(which.length, k, merges[k] as [number, number])
+  }
+  const search = (
+    i: number,
+    counted: ArrayLike<number> | undefined,
+    congestion: Congestion | undefined,
+    along?: Path,
+  ) => {
     const edge = edges[i] as ProblemEdge
     const [source, target] = ports[i] as readonly [Port, Port]
     const [start, end] = pinOfEnd[i] as [number, number]
@@ -151,16 +192,43 @@ export function routeAll(
         viaLeavings: edge.viaLeavings,
         crossingCost: crossingCost,
         ...(through === undefined ? {} : { through }),
+        ...(congestion === undefined ? {} : { congestion }),
+        ...(along === undefined ? {} : { along }),
       },
     )
   }
-  const found = searchAll(graph, which.length, crossingCost, (k, through) =>
-    search(which[k] as number, through),
+  const found = searchAll(
+    graph,
+    which.length,
+    crossingCost,
+    (k, { through, congestion, along }) => search(which[k] as number, through, congestion, along),
+    undefined,
+    undefined,
+    {
+      slotOf: channels.slotOf,
+      width: channels.width,
+      stroke: (k) => strokeOf(which[k] as number),
+      merges: (k) => merges[k] as [number, number],
+      gap,
+      mergeGap: problem.mergeGap,
+      pressure: pressureAt,
+      rounds: PRESSURE_ROUNDS,
+    },
   )
   for (const [k, i] of which.entries()) {
     paths[i] = found.paths[k]
   }
   const through = found.through
+  const fill = found.fill as Fill
+  // The searches after the rounds find a route among all the others, as
+  // full as the channels are, with the last round's pressure.
+  const congestionOf = (i: number): Congestion =>
+    congestionFor(channels, fill, groupOf(i), strokeOf(i), pressureAt(PRESSURE_ROUNDS))
+  // Counts route `i`'s path into, or out of, the crossings and the fill.
+  const place = (counts: Int32Array, i: number, path: Path | undefined, by: 1 | -1) => {
+    markThrough(graph, counts, path, by)
+    fillPath(graph, channels.slotOf, fill, path, groupOf(i), strokeOf(i), by)
+  }
   if (through !== undefined) {
     // The held runs of each path, with the room beside them, found when
     // first needed and again after the path is found again.
@@ -277,9 +345,9 @@ export function routeAll(
       }
       if (along || runsThrough(graph, path, extra)) {
         shared.set(i, extra)
-        markThrough(graph, through, path, -1)
-        paths[i] = search(i, through)
-        markThrough(graph, through, paths[i], 1)
+        place(through, i, path, -1)
+        paths[i] = search(i, through, congestionOf(i))
+        place(through, i, paths[i], 1)
         held[i] = undefined
       }
     }
@@ -329,11 +397,11 @@ export function routeAll(
       ;(ends[1] as Array<number>)[b.end] = pin
     }
     swap()
-    markThrough(graph, through, held[0], -1)
-    markThrough(graph, through, held[1], -1)
+    place(through, a.edge, held[0], -1)
+    place(through, b.edge, held[1], -1)
     for (const i of [a.edge, b.edge]) {
-      paths[i] = search(i, through)
-      markThrough(graph, through, paths[i], 1)
+      paths[i] = search(i, through, congestionOf(i))
+      place(through, i, paths[i], 1)
       routes[i] = pointsOf(paths[i])
     }
     if (
@@ -346,9 +414,9 @@ export function routeAll(
     }
     swap()
     for (const [k, i] of [a.edge, b.edge].entries()) {
-      markThrough(graph, through, paths[i], -1)
+      place(through, i, paths[i], -1)
       paths[i] = held[k]
-      markThrough(graph, through, paths[i], 1)
+      place(through, i, paths[i], 1)
       routes[i] = pointsOf(paths[i])
     }
   }

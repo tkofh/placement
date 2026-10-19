@@ -62,6 +62,30 @@ const TURN_SHARE = 1
 const MERGE_PULL = 0.75
 const TIGHT_SHARE = 2
 
+/**
+ * How much more a unit of length costs, per route a channel is over
+ * capacity by, in the first round of a search among routes (see
+ * `searchAll`). Each round after it presses twice as hard: 0.5, 1, 2, and
+ * 4. At the last, a route too many over a channel 50 px long costs about
+ * 200, some four corners at the auto bend cost of 48, which is
+ * `2 * (clearance + gap)` at a clearance of 16 and a gap of 8, so a route
+ * with a way around of up to a few corners leaves the channel, and one
+ * without stays and is squeezed.
+ */
+export const PRESSURE = 0.5
+
+/** How many rounds of a search among routes follow the first. */
+export const PRESSURE_ROUNDS = 3
+
+/**
+ * How much more a unit of length costs, per route a channel is over
+ * capacity by, in a round of a search among routes.
+ *
+ * @param round - The round, `0` the first.
+ * @returns The pressure.
+ */
+export const pressureAt = (round: number): number => PRESSURE * 2 ** round
+
 /** The turn encodings of `placement/connector`. */
 export const CLOCKWISE = 1
 export const COUNTERCLOCKWISE = 2
@@ -312,6 +336,65 @@ export function normalize(
  */
 export const rectAt = (edge: ProblemEdge, end: number): number =>
   end === 0 ? edge.source : edge.target
+
+/**
+ * The merges at the ends of the edges `which`, for the channels their
+ * routes fill (see `fillPath`). With `merged`, the merges planned; without,
+ * the ends that could merge: two or more at one rect with one merge key.
+ *
+ * @param problem - The problem.
+ * @param which - The edges, by index.
+ * @param merged - The ends of each planned merge, if planned.
+ * @returns The ids of the merges at the source and target of each of
+ * `which`, by its place there, from `0` to one less than twice the count,
+ * or `-1` for an end that does not merge.
+ */
+export function mergeIds(
+  problem: Problem,
+  which: ReadonlyArray<number>,
+  merged?: ReadonlyArray<ReadonlyArray<EdgeEnd>>,
+): Array<[number, number]> {
+  const ids = which.map((): [number, number] => [-1, -1])
+  const place = new Map(which.map((edge, k) => [edge, k]))
+  // The ends of each merge, as places and ends.
+  const merges: Array<Array<readonly [number, number]>> = []
+  const add = (ends: ReadonlyArray<EdgeEnd>) => {
+    const kept = ends.flatMap(({ edge, end }) => {
+      const k = place.get(edge)
+      return k === undefined ? [] : [[k, end] as const]
+    })
+    if (kept.length > 1) {
+      merges.push(kept)
+    }
+  }
+  if (merged !== undefined) {
+    for (const ends of merged) {
+      add(ends)
+    }
+  } else {
+    const byKey = new Map<string, Array<EdgeEnd>>()
+    for (const i of which) {
+      const edge = problem.edges[i] as ProblemEdge
+      for (const [end, { key }] of edge.ends.entries()) {
+        if (key !== undefined) {
+          const id = `${rectAt(edge, end)} ${key}`
+          const list = byKey.get(id) ?? []
+          list.push({ edge: i, end })
+          byKey.set(id, list)
+        }
+      }
+    }
+    for (const ends of byKey.values()) {
+      add(ends)
+    }
+  }
+  for (const [id, ends] of merges.entries()) {
+    for (const [k, end] of ends) {
+      ;(ids[k] as [number, number])[end] = id
+    }
+  }
+  return ids
+}
 
 /**
  * The length the adornments at an end of an edge pack into at a port on

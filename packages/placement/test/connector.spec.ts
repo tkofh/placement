@@ -1388,6 +1388,47 @@ describe('merging', () => {
   })
 })
 
+// Two edges from left to right past two rects with a slit between them,
+// and a way around for each, 32 longer with as many corners.
+function slit(room: number): Connector.ConnectorLayout {
+  const rects = {
+    a: Rect.make(0, 20, 40, 20),
+    b: Rect.make(0, 60, 40, 20),
+    c: Rect.make(260, 20, 40, 20),
+    d: Rect.make(260, 60, 40, 20),
+    n: Rect.make(100, 0, 100, 44),
+    s: Rect.make(100, 44 + room, 100, 44),
+  }
+  const edges = (
+    [
+      ['a', 'c'],
+      ['b', 'd'],
+    ] as const
+  ).map(([source, target]) =>
+    Edge.make({ source, target, sourceSide: 1, targetSide: 3, sourceAt: 0.5, targetAt: 0.5 }),
+  )
+  return Connector.apply(rects, edges, Connector.make({ clearance: 4, gap: 8 }))
+}
+
+// Two edges into `d` from the left, one into its left side and one into
+// whichever side it chooses, past two rects with a slit between them in
+// front of `d`'s left side.
+function sideSlit(room: number): Connector.ConnectorLayout {
+  const middle = 40 + (room - 12) / 2
+  const rects = {
+    a: Rect.make(0, middle, 40, 20),
+    b: Rect.make(0, 60, 40, 20),
+    d: Rect.make(240, middle, 40, 20),
+    n: Rect.make(100, 0, 100, 44),
+    s: Rect.make(100, 44 + room, 100, 44),
+  }
+  const edges = [
+    Edge.make({ source: 'a', target: 'd', sourceSide: 1, targetSide: 3 }),
+    Edge.make({ source: 'b', target: 'd', sourceSide: 1, sourceAt: 0.5 }),
+  ]
+  return Connector.apply(rects, edges, Connector.make({ clearance: 4, gap: 8 }))
+}
+
 describe('notes', () => {
   test('an edge without a route is noted', () => {
     const rects = {
@@ -1433,6 +1474,129 @@ describe('notes', () => {
       return points[k]?.x
     })
     expect(xs).toEqual([40, 45, 50])
+  })
+
+  test('a route with a way around leaves a channel too narrow for both', () => {
+    // A slit of 12 leaves 4 between the rects grown by the clearance: room
+    // for one route, not two at the gap of 8. The first goes around.
+    const layout = slit(12)
+    expect(pointsOf(layout, 0)).toEqual([
+      [40, 30],
+      [96, 30],
+      [96, -4],
+      [204, -4],
+      [204, 30],
+      [260, 30],
+    ])
+    expect(pointsOf(layout, 1)).toEqual([
+      [40, 70],
+      [96, 70],
+      [96, 52],
+      [204, 52],
+      [204, 70],
+      [260, 70],
+    ])
+    expect(layout.notes).toEqual([])
+  })
+
+  test('routes stay in a channel with room for them', () => {
+    // A slit of 20 leaves 12, room for both at the gap.
+    const layout = slit(20)
+    expect(pointsOf(layout, 0)).toEqual([
+      [40, 30],
+      [96, 30],
+      [96, 48],
+      [204, 48],
+      [204, 30],
+      [260, 30],
+    ])
+    expect(pointsOf(layout, 1)).toEqual([
+      [40, 70],
+      [96, 70],
+      [96, 60],
+      [204, 60],
+      [204, 70],
+      [260, 70],
+    ])
+    expect(layout.notes).toEqual([])
+  })
+
+  test('an end takes a side whose approach has room over one through a full channel', () => {
+    // The slit of 12 holds the route from `a`, so the route from `b` comes
+    // in from below, around `s`, rather than through the slit to the left.
+    const layout = sideSlit(12)
+    expect(pointsOf(layout, 1)).toEqual([
+      [40, 70],
+      [96, 70],
+      [96, 104],
+      [260, 104],
+      [260, 60],
+    ])
+    expect(layout.notes).toEqual([])
+  })
+
+  test('an end takes the direct side where its approach has room', () => {
+    // The slit of 20 holds both routes, so both come in on the left, at a
+    // third and two thirds of its height.
+    const layout = sideSlit(20)
+    const points = pointsOf(layout, 1) ?? []
+    const expected = [
+      [40, 70],
+      [96, 70],
+      [96, 44 + 40 / 3],
+      [240, 44 + 40 / 3],
+    ]
+    expect(points).toHaveLength(expected.length)
+    for (const [k, [x, y]] of expected.entries()) {
+      expect(points[k]?.[0]).toBeCloseTo(x as number, 9)
+      expect(points[k]?.[1]).toBeCloseTo(y as number, 9)
+    }
+    expect(layout.notes).toEqual([])
+  })
+
+  test('routes that merge fill a channel as one bundle', () => {
+    // Three routes of stroke 2 merge into `t` through a slit 24 wide, 16
+    // between the rects grown by the clearance. Apart, at the gap of 8,
+    // they would need 22 there, but merged they are one bundle, which a
+    // slot never prices alone, so all three take the slit, as before
+    // channels were priced.
+    const rects = {
+      a: Rect.make(0, 0, 40, 20),
+      b: Rect.make(0, 50, 40, 20),
+      c: Rect.make(0, 100, 40, 20),
+      n: Rect.make(150, -100, 100, 150),
+      s: Rect.make(150, 74, 100, 150),
+      t: Rect.make(300, 40, 40, 40),
+    }
+    const edges = (['a', 'b', 'c'] as const).map((source) =>
+      Edge.make({ source, target: 't', sourceSide: 1, targetSide: 3, thickness: 2 }),
+    )
+    const layout = Connector.apply(
+      rects,
+      edges,
+      Connector.make({ clearance: 4, gap: 8, merge: Connector.merge.side }),
+    )
+    expect(layout.edges.map((route) => route?.points.map(({ x, y }) => [x, y]))).toEqual([
+      [
+        [40, 10],
+        [45, 10],
+        [45, 70],
+        [65, 70],
+        [65, 60],
+        [300, 60],
+      ],
+      [
+        [40, 60],
+        [300, 60],
+      ],
+      [
+        [40, 110],
+        [55, 110],
+        [55, 60],
+        [300, 60],
+      ],
+    ])
+    expect(layout.notes).toEqual([])
   })
 
   test('a merge without room for its lanes is noted', () => {

@@ -99,6 +99,7 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
     edges.map((_, i) => i),
     blocks,
     trades,
+    merged,
   )
   for (const [a, b] of traded) {
     const [p, q] = [ports[a.edge] as [Port, Port], ports[b.edge] as [Port, Port]]

@@ -2,6 +2,15 @@ import { RELATIVE_TOLERANCE, coincident } from 'curvy/number'
 import type { PointLike } from '../../point.ts'
 import { before } from '../../utils/tolerance.ts'
 import { positiveLength } from '../orient.ts'
+import {
+  type Fill,
+  congestionFor,
+  emptyFill,
+  fillPath,
+  forEachGroupSlot,
+  groupsOf,
+  needAt,
+} from './channels.ts'
 import type { Graph, Obstacle } from './graph.ts'
 
 // Shortest paths on a graph of points, for a cost of weighted length plus a
@@ -61,6 +70,23 @@ import type { Graph, Obstacle } from './graph.ts'
 // cost a share less of their length, and the estimate takes that share off
 // every length, so it stays a lower bound.
 //
+// And a path may pay for the room it takes. With congestion, a half-edge
+// costs more along its length by how far its channel (see `channelsOf`)
+// would be over capacity with the path in it, in routes of a stroke and a
+// gap each (merged routes fill it as one bundle out of their shared port,
+// see `fillPath`), times a pressure. The price grows with the pixels missing, with
+// no step at a whole route, so a path leaves a channel only once the
+// squeeze is worth more than its way around. It only ever adds to a length,
+// so the estimate's least cost per unit of length still bounds it.
+// `searchAll` raises the pressure over rounds and moves the paths out of
+// channels over capacity, the one that gains most first, so the ones with
+// the cheapest way around leave and the rest stay for the nudge to
+// squeeze: negotiated congestion (PathFinder, McMurchie & Ebeling 1995)
+// without its history term. A path that left a
+// channel is found again only when its new path is over capacity too or
+// crosses another, so paths do not trade places back and forth; a history
+// of the channels each path left is what to add if they ever do.
+//
 // Costs are float sums, so comparing them uses `coincident`. A path replaces
 // another only when it is cheaper beyond rounding, or as cheap with fewer
 // turns, and the queue pops equal costs in the order they were pushed, so
@@ -116,6 +142,36 @@ export interface SearchOptions {
   // two full turns for one of twice the radius. Defaults to `0`, where every
   // turn costs in full.
   readonly radius?: number
+  // The channels the other paths fill, which price the length of a
+  // half-edge by how far over capacity its slot would be with the path in
+  // it. None by default.
+  readonly congestion?: Congestion
+  // A path to price rather than to find: the search keeps to its
+  // half-edges, from its start to its end by their indices, and returns it
+  // with its cost under the other options. A path that passes a node twice
+  // may come back shorter, and cheaper. None by default.
+  readonly along?: Path
+}
+
+/**
+ * How full each channel of a graph would be with this path in it (see
+ * `channelsOf` and `needsOf`). A slot of width `W` that needs `N` for its
+ * paths and this one, with the gaps between them, is `N - W` short of
+ * room where that is positive, and each `unit` it is short is a route too
+ * many, which costs `pressure` more per unit of length.
+ */
+export interface Congestion {
+  // The slot of each half-edge, or `-1` where it runs free.
+  readonly slotOf: Int32Array
+  // The room across each slot, or `Infinity` with no wall on one side.
+  readonly width: Float64Array
+  // The room each slot needs with this path in it, or `-Infinity` where
+  // it would never be short.
+  readonly need: ArrayLike<number>
+  // What a route takes of a slot's room: this path's stroke and a gap.
+  readonly unit: number
+  // How much more a unit of length costs per route a slot is over by.
+  readonly pressure: number
 }
 
 export interface Path {
@@ -191,13 +247,15 @@ export function shortestPath(
   const share = (length: number) => Math.min(1, length / reach)
   // What a turn costs, clockwise (`0`) or counterclockwise (`1`).
   const costOfTurn = (way: number) => (way === 0 ? clockwiseCost : counterclockwiseCost)
-  // What a unit of length costs at least.
+  // What a unit of length costs at least. Congestion only ever adds to it.
   const least = graph.minWeight * (partners === undefined ? 1 : 1 - discount)
+  const crowding = priceOf(options.congestion)
   // What half-edge `e` costs along its length.
   const lengthCost = (e: number, length: number) =>
     length *
     weightOf(e) *
-    (partners !== undefined && (partners[e] as number) !== 0 ? 1 - discount : 1)
+    (partners !== undefined && (partners[e] as number) !== 0 ? 1 - discount : 1) *
+    (crowding === undefined ? 1 : crowding(e))
   const avoid = (options.avoid ?? []).filter(
     (r) =>
       Number.isFinite(r.left) &&
@@ -220,17 +278,33 @@ export function shortestPath(
   // Whether end `end` at `node` allows arriving along (dx, dy).
   const arrives = (end: Resolved, node: number, dx: number, dy: number, length: number) =>
     end.node === node && matches(end.headings, dx, dy, length)
+  // A path to price keeps to its own endpoints and half-edges.
+  const pricing = options.along
+  const startsAt = (index: number) => pricing === undefined || index === pricing.start
+  const endsAt = (index: number) => pricing === undefined || index === pricing.end
+  const kept = pricing === undefined ? undefined : new Uint8Array(targets.length)
+  if (pricing !== undefined && kept !== undefined) {
+    for (let k = 1; k < pricing.nodes.length; k++) {
+      const [a, b] = [pricing.nodes[k - 1] as number, pricing.nodes[k] as number]
+      for (let e = offsets[a] as number; e < (offsets[a + 1] as number); e++) {
+        if (targets[e] === b) {
+          kept[e] = 1
+        }
+      }
+    }
+  }
 
   // A start that is an end, with every waypoint there, is a path of one
   // node: the cheapest such pair of endpoints, the first among ties.
   let trivial: Path | undefined
   for (const [index, start] of starts.entries()) {
-    if (passed(0, start.node) !== lastLeg) {
+    if (passed(0, start.node) !== lastLeg || !startsAt(index)) {
       continue
     }
     for (const [end, e] of ends.entries()) {
       const total = start.cost + e.cost
       if (
+        endsAt(end) &&
         e.node === start.node &&
         e.headings === undefined &&
         (trivial === undefined || before(total, trivial.cost))
@@ -348,6 +422,7 @@ export function shortestPath(
       const b = targets[e] as number
       const blocked =
         weight === Number.POSITIVE_INFINITY ||
+        (kept !== undefined && kept[e] !== 1) ||
         avoid.some((region) =>
           crosses(region, xs[a] as number, ys[a] as number, xs[b] as number, ys[b] as number),
         )
@@ -509,6 +584,7 @@ export function shortestPath(
     let start = -1
     for (const [index, s] of starts.entries()) {
       if (
+        startsAt(index) &&
         s.node === first &&
         matches(s.headings, dx, dy, length) &&
         (start === -1 || before(s.cost, (starts[start] as Resolved).cost))
@@ -519,7 +595,10 @@ export function shortestPath(
     return { nodes, cost: total, start, end }
   }
 
-  for (const start of starts) {
+  for (const [index, start] of starts.entries()) {
+    if (!startsAt(index)) {
+      continue
+    }
     const leg = passed(0, start.node)
     for (let e = offsets[start.node] as number; e < (offsets[start.node + 1] as number); e++) {
       const dx = dxOf(e)
@@ -586,7 +665,7 @@ export function shortestPath(
       // is a step more, and the path goes on too, since another end past it
       // may come out cheaper.
       for (const [end, e] of ends.entries()) {
-        if (!arrives(e, node, ax, ay, la)) {
+        if (!endsAt(end) || !arrives(e, node, ax, ay, la)) {
           continue
         }
         if (e.cost === 0 && owed === 0) {
@@ -712,6 +791,44 @@ export function shortestPath(
   return undefined
 }
 
+/** What `searchAll` gives the search for one route. */
+export interface SearchContext {
+  // How many other paths run straight on through each node (see
+  // `SearchOptions.through`), or `undefined` with no crossing cost.
+  readonly through: ArrayLike<number> | undefined
+  // How full the channels would be with this path in them (see
+  // `SearchOptions.congestion`), or `undefined` without channels.
+  readonly congestion: Congestion | undefined
+  // Each route's latest path, by route, where it has one yet. The route's
+  // own is the one being replaced or priced.
+  readonly paths: ReadonlyArray<Path | undefined>
+  // The route's own path, to price rather than to find (see
+  // `SearchOptions.along`), when given.
+  readonly along?: Path
+}
+
+/** The channels that `searchAll` fills, and how hard it presses on them. */
+export interface ChannelSearch {
+  // The slot of each half-edge and the width of each slot (see
+  // `channelsOf`).
+  readonly slotOf: Int32Array
+  readonly width: Float64Array
+  // The stroke of route `k`, and the ids of the merges at its source and
+  // target, from `0` to one less than twice the count of routes, or `-1`
+  // for an end that does not merge (see `groupsOf`).
+  readonly stroke: (k: number) => number
+  readonly merges: (k: number) => readonly [number, number]
+  // The gap between routes, and between the lanes of a merge.
+  readonly gap: number
+  readonly mergeGap: number
+  // How much more a unit of length costs per route a slot is over by, in
+  // each round, `0` the first.
+  readonly pressure: (round: number) => number
+  // How many rounds after the first move the routes out of slots over
+  // capacity.
+  readonly rounds: number
+}
+
 /**
  * Finds the paths of several routes on one graph, each among the others so
  * that it crosses as few of them as it can afford: first among the paths
@@ -719,58 +836,172 @@ export function shortestPath(
  * crosses another, or that `again` asks for, among all the others' latest
  * paths.
  *
+ * With channels, each path also fills the slots it runs through (see
+ * `fillPath`), and a slot over capacity costs the paths that would run
+ * through it more per unit of length. Each of the channels' rounds, after
+ * the crossings, then moves the paths out of slots over capacity at the
+ * round's pressure, one at a time, best first: of the paths in a slot over
+ * capacity, each is found again among all the others as they stand, and
+ * the one that gains the most, its path's cost there less its new path's,
+ * moves, the first among ties, until none gains. So the path with the
+ * cheapest way around leaves, whatever its place in the order, and the
+ * rest stay. A path that a slot moved is found again in the rounds after
+ * that when it crosses another, as every crossing path is in the first
+ * `rounds`. The rounds stop early once one moves no path and leaves no
+ * slot over capacity.
+ *
  * @param graph - The graph the paths run on, with horizontal and vertical
  * edges.
  * @param count - How many routes there are.
  * @param crossingCost - The cost of each crossing. With none, crossings
  * leave the paths as they are.
- * @param find - Finds route `k`'s path, given how many other paths run
- * straight on through each node (see `SearchOptions.through`) and the
- * round: `0` the first, among the paths found before it, and `1` on among
- * all the others.
+ * @param find - Finds route `k`'s path in the context it is given, or
+ * prices the path given as `along` there, in the round: `0` the first,
+ * among the paths found before it, and `1` on among all the others.
  * @param again - Whether route `k`'s path is found once more in each later
  * round anyway, such as when it depends on the others' paths. None are by
  * default.
- * @param rounds - How many rounds follow the first. One by default.
- * @returns Each route's path, or `undefined` where it has none, and how
- * many of them run straight on through each node, or `undefined` with no
- * crossing cost.
+ * @param rounds - How many rounds follow the first for the crossings and
+ * `again`. One by default.
+ * @param channels - The channels the paths fill, none by default.
+ * @returns Each route's path, or `undefined` where it has none, how many
+ * of them run straight on through each node, or `undefined` with no
+ * crossing cost, and the fill of the slots, or `undefined` without
+ * channels.
  */
 export function searchAll(
   graph: Graph,
   count: number,
   crossingCost: number,
-  find: (k: number, through: ArrayLike<number> | undefined, round: number) => Path | undefined,
+  find: (k: number, context: SearchContext, round: number) => Path | undefined,
   again: (k: number) => boolean = () => false,
   rounds = 1,
-): { paths: Array<Path | undefined>; through: Int32Array | undefined } {
+  channels?: ChannelSearch,
+): {
+  paths: Array<Path | undefined>
+  through: Int32Array | undefined
+  fill: Fill | undefined
+} {
   const crossing = crossingCost > 0 && graph.orthogonal
   const through = crossing ? new Int32Array(2 * graph.xs.length) : undefined
+  const fill =
+    channels === undefined
+      ? undefined
+      : emptyFill(
+          channels.width.length,
+          3 * count,
+          positiveLength(channels.gap),
+          positiveLength(channels.mergeGap),
+        )
+  const strokeOf = (k: number) => positiveLength(channels?.stroke(k))
+  const groupsFor = (k: number) => groupsOf(count, k, channels?.merges(k) ?? [-1, -1])
   const paths: Array<Path | undefined> = []
-  for (let k = 0; k < count; k++) {
-    const path = find(k, through, 0)
+  const contextFor = (k: number, round: number): SearchContext => ({
+    through,
+    congestion:
+      channels === undefined || fill === undefined
+        ? undefined
+        : congestionFor(channels, fill, groupsFor(k), strokeOf(k), channels.pressure(round)),
+    paths,
+  })
+  const place = (k: number, path: Path | undefined, by: 1 | -1) => {
     if (through !== undefined) {
-      markThrough(graph, through, path, 1)
+      markThrough(graph, through, path, by)
     }
+    if (channels !== undefined && fill !== undefined) {
+      fillPath(graph, channels.slotOf, fill, path, groupsFor(k), strokeOf(k), by)
+    }
+  }
+  // Whether route `k`'s path, counted out of the fill, runs through a slot
+  // that has no room for it beside the others.
+  const crowded = (k: number) => {
+    if (channels === undefined || fill === undefined) {
+      return false
+    }
+    const stroke = strokeOf(k)
+    let over = false
+    forEachGroupSlot(graph, channels.slotOf, paths[k], groupsFor(k), (slot, group) => {
+      over ||= before(
+        Math.max(channels.width[slot] as number, 0),
+        needAt(fill, slot, group, stroke),
+      )
+    })
+    return over
+  }
+  for (let k = 0; k < count; k++) {
+    const path = find(k, contextFor(k, 0), 0)
+    place(k, path, 1)
     paths.push(path)
   }
-  // A path that crosses none of the others keeps its place.
-  for (let round = 1; round <= rounds; round++) {
+  // The paths that a slot over capacity moved, which the rounds past
+  // `rounds` find again when they cross another.
+  const pushed = new Uint8Array(count)
+  const crowding = channels?.rounds ?? 0
+  const last = Math.max(rounds, crowding)
+  // A path that crosses none of the others, and leaves no slot over
+  // capacity, keeps its place.
+  for (let round = 1; round <= last; round++) {
+    let moved = false
     for (let k = 0; k < count; k++) {
-      if (through === undefined) {
-        if (again(k)) {
-          paths[k] = find(k, undefined, round)
+      const path = paths[k]
+      place(k, path, -1)
+      const crosses = through !== undefined && crossesThrough(graph, through, path)
+      if ((round <= rounds && (again(k) || crosses)) || (crosses && pushed[k] === 1)) {
+        paths[k] = find(k, contextFor(k, round), round)
+        moved ||= !sameNodes(path, paths[k])
+      }
+      place(k, paths[k], 1)
+    }
+    let pressed = false
+    // At most one move per route, best first, in the channels' rounds.
+    const moves = round <= crowding ? count : 0
+    for (let move = 0; move < moves; move++) {
+      let best = -1
+      let bestGain = 0
+      let bestPath: Path | undefined
+      for (let k = 0; k < count; k++) {
+        const path = paths[k]
+        place(k, path, -1)
+        if (path !== undefined && crowded(k)) {
+          pressed = true
+          const context = contextFor(k, round)
+          const now = find(k, { ...context, along: path }, round)
+          const next = find(k, context, round)
+          if (now !== undefined && next !== undefined && before(next.cost, now.cost)) {
+            const gain = now.cost - next.cost
+            if (best < 0 || (gain > bestGain && !coincident(gain, bestGain))) {
+              best = k
+              bestGain = gain
+              bestPath = next
+            }
+          }
         }
-        continue
+        place(k, path, 1)
       }
-      markThrough(graph, through, paths[k], -1)
-      if (again(k) || crossesThrough(graph, through, paths[k])) {
-        paths[k] = find(k, through, round)
+      if (best < 0) {
+        break
       }
-      markThrough(graph, through, paths[k], 1)
+      place(best, paths[best], -1)
+      paths[best] = bestPath
+      place(best, bestPath, 1)
+      pushed[best] = 1
+      moved = true
+    }
+    // A round that moved nothing leaves the next the same paths to find,
+    // and with no slot over capacity, a higher pressure changes nothing.
+    if (channels !== undefined && !moved && !pressed) {
+      break
     }
   }
-  return { paths, through }
+  return { paths, through, fill }
+}
+
+// Whether two paths run through the same nodes, or are both missing.
+function sameNodes(a: Path | undefined, b: Path | undefined): boolean {
+  if (a === undefined || b === undefined) {
+    return a === b
+  }
+  return a.nodes.length === b.nodes.length && a.nodes.every((node, k) => node === b.nodes[k])
 }
 
 /**
@@ -887,6 +1118,37 @@ function endsOn(graph: Graph, path: Path | undefined, visit: (slot: number) => v
     } else if (dx === 0 && dy !== 0) {
       visit(2 * end + 1)
     }
+  }
+}
+
+// What a unit of length costs along each half-edge, as a factor of its
+// weight, for the congestion of its slot: `pressure` more for each route
+// the slot is over by with the path in it, in proportion to the pixels
+// missing, so that the price grows smoothly as a channel narrows and has no
+// step at a whole number of routes. A slot without a wall on each side is
+// never over, and one whose walls overlap has no room. `undefined` when
+// nothing is priced.
+function priceOf(congestion: Congestion | undefined): ((e: number) => number) | undefined {
+  if (congestion === undefined) {
+    return undefined
+  }
+  const { slotOf, width, need } = congestion
+  const unit = positiveLength(congestion.unit)
+  const pressure = positiveLength(congestion.pressure)
+  if (pressure === 0 || unit === 0) {
+    return undefined
+  }
+  const factors = new Float64Array(width.length)
+  for (let slot = 0; slot < width.length; slot++) {
+    const room = width[slot] as number
+    const shortfall = Number.isFinite(room)
+      ? (need[slot] ?? Number.NEGATIVE_INFINITY) - Math.max(room, 0)
+      : 0
+    factors[slot] = 1 + (pressure * Math.max(shortfall, 0)) / unit
+  }
+  return (e) => {
+    const slot = slotOf[e] ?? -1
+    return slot < 0 ? 1 : (factors[slot] as number)
   }
 }
 
