@@ -169,7 +169,7 @@ Vue keeps the component-API concerns and hands the model ordered arrays. `useChi
 | Prop parsing (`'50%'`, gap and align strings) | Vue: `internal/props/*`          | Parses to values; percentages stay unresolved (see the paragraph below)                                                 |
 | Percent resolution against the parent         | Model                            | Must move, or vue reads a parent rect just to write a child prop                                                        |
 | Box, flex, hierarchy, connector solves        | Model                            | Replaces `useRect`, `useFlex`, `useHierarchy`, `useConnector`                                                           |
-| Bad-id filtering and problems list            | Model                            | Now in `useHierarchy.ts:114` and `useConnector.ts:84`                                                                   |
+| Bad-id filtering and problems list            | Model                            | Core's `Hierarchy.applyTolerant` and `Connector.applyTolerant` (rollout step 2), which vue calls today                  |
 | Edge to adornment two-phase solve             | Model                            | Now in `internal/edge.ts`                                                                                               |
 | Node shape from a filling child graphic       | Vue: `useOutlineCollector`       | Model takes an explicit `shape`; vue keeps the inference and writes it                                                  |
 | Root size and text size                       | Vue: `useDomRect`, `useTextRect` | Written into the model as root rect and intrinsic size; no measure hook in core                                         |
@@ -217,7 +217,7 @@ These need settling before code; each states the recommendation.
 Each step ships on its own and leaves vue working.
 
 1. Add `placement/length` to core and resolve vue's percentages through `Length.resolve`, with no behavior change.
-2. Extract the tolerant `solve` adapters from `useHierarchy.ts` and `useConnector.ts` into core.
+2. Extract the tolerant `solve` adapters from `useHierarchy.ts` and `useConnector.ts` into core. Built as `Hierarchy.applyTolerant` and `Connector.applyTolerant`, public exports beside each `apply`. Each takes nodes as a list whose ids may be missing or repeated, returns rects and routes in input order with `undefined` for what it left out, and reports typed problems (`problem.anonymous`, `duplicate`, `dangling`, one encoding shared by both modules) for nodes and edges it left out. An edge with no route stays a note, not a problem. Notes and a route's `merged` name edges by their input index, and a crowded note's `rects` lists only nodes with ids. Vue's two composables call them, format the same warning strings from the problems, and keep the `drawn` flags for merged adornments, which are paint.
 3. Ship `placement/unstable/model` with root, box/group and flex nodes, paths, `get`/`subscribe`/`Model.mutate`, and the alien-signals dependency. Type tests cover every rejection in the type index list, with `expectTypeOf` and `@ts-expect-error` under vitest's typecheck mode.
 4. Port `GraphicRoot`, `GraphicGroup`, `FlexLayout` and `FlexItem` onto the model. The existing component tests are the parity check.
 5. Add hierarchy nodes and edges with typed route outputs, then port the vue hierarchy components.

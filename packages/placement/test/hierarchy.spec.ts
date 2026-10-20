@@ -1,6 +1,7 @@
 import { coincident } from 'curvy/number'
 import { describe, expect, test } from 'vitest'
 import * as Adornment from '../src/adornment.ts'
+import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
 import * as Hierarchy from '../src/hierarchy.ts'
@@ -1829,5 +1830,114 @@ describe('properties', () => {
         }
       }
     }
+  })
+})
+
+describe('applyTolerant', () => {
+  test('lays out a clean graph as apply does', () => {
+    const diamond = Polygon.make({ phase: 0.5 })
+    const edges = [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'c' })]
+    const layout = Hierarchy.applyTolerant(
+      [
+        { id: 'a', frame: box },
+        { id: 'b', frame: box, shape: diamond },
+        { id: 'c', frame: small },
+      ],
+      edges,
+      spec,
+    )
+    const expected = Hierarchy.apply({ a: box, b: box, c: small }, edges, spec, {
+      shapes: { b: diamond },
+    })
+    expect(layout).toEqual({
+      nodes: [expected.nodes.a, expected.nodes.b, expected.nodes.c],
+      edges: expected.edges,
+      bounds: expected.bounds,
+      notes: expected.notes,
+      problems: [],
+    })
+  })
+
+  test('a node without an id is left out, and a problem', () => {
+    const edges = [Edge.make({ source: 'a', target: 'b' })]
+    const layout = Hierarchy.applyTolerant(
+      [{ id: 'a', frame: box }, { frame: small }, { id: 'b', frame: box }],
+      edges,
+      spec,
+    )
+    const expected = Hierarchy.apply(withIds(['a', 'b']), edges, spec)
+    expect(layout.nodes).toEqual([expected.nodes['a'], undefined, expected.nodes['b']])
+    expect(layout.bounds).toEqual(expected.bounds)
+    expect(layout.problems).toEqual([{ kind: Hierarchy.problem.anonymous, node: 1 }])
+  })
+
+  test('a node whose id an earlier node took is left out, and a problem', () => {
+    const edges = [Edge.make({ source: 'a', target: 'b' })]
+    const layout = Hierarchy.applyTolerant(
+      [
+        { id: 'a', frame: box },
+        { id: 'b', frame: box },
+        { id: 'a', frame: small },
+      ],
+      edges,
+      spec,
+    )
+    const expected = Hierarchy.apply(withIds(['a', 'b']), edges, spec)
+    expect(layout.nodes).toEqual([expected.nodes['a'], expected.nodes['b'], undefined])
+    expect(layout.edges).toEqual(expected.edges)
+    expect(layout.problems).toEqual([{ kind: Hierarchy.problem.duplicate, node: 2, id: 'a' }])
+  })
+
+  test('an edge that names an id no node has is left out, and a problem', () => {
+    const kept = Edge.make({ source: 'a', target: 'b' })
+    const layout = Hierarchy.applyTolerant(
+      [
+        { id: 'a', frame: box },
+        { id: 'b', frame: box },
+      ],
+      [Edge.make({ source: 'z', target: 'b' }), kept, Edge.make({ source: 'a', target: 'y' })],
+      spec,
+    )
+    const expected = Hierarchy.apply(withIds(['a', 'b']), [kept], spec)
+    expect(layout.edges).toEqual([undefined, expected.edges[0], undefined])
+    expect(layout.problems).toEqual([
+      { kind: Hierarchy.problem.dangling, edge: 0 },
+      { kind: Hierarchy.problem.dangling, edge: 2 },
+    ])
+  })
+
+  test('problems list the nodes, then the edges', () => {
+    const layout = Hierarchy.applyTolerant(
+      [{ id: 'a', frame: box }, { frame: box }, { id: 'a', frame: box }],
+      [Edge.make({ source: 'a', target: 'b' })],
+      spec,
+    )
+    expect(layout.problems).toEqual([
+      { kind: Hierarchy.problem.anonymous, node: 1 },
+      { kind: Hierarchy.problem.duplicate, node: 2, id: 'a' },
+      { kind: Hierarchy.problem.dangling, edge: 0 },
+    ])
+  })
+
+  test('a graph with no nodes left has empty bounds', () => {
+    const layout = Hierarchy.applyTolerant(
+      [{ frame: box }],
+      [Edge.make({ source: 'a', target: 'b' })],
+      spec,
+    )
+    expect(layout).toEqual({
+      nodes: [undefined],
+      edges: [undefined],
+      bounds: Rect.make(),
+      notes: [],
+      problems: [
+        { kind: Hierarchy.problem.anonymous, node: 0 },
+        { kind: Hierarchy.problem.dangling, edge: 0 },
+      ],
+    })
+  })
+
+  test('shares its problem encoding with the connector', () => {
+    expect(Hierarchy.problem).toBe(Connector.problem)
   })
 })

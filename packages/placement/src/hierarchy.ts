@@ -23,6 +23,7 @@ import {
   place,
 } from './internal/hierarchy/layout.ts'
 import { SizingOf } from './internal/sizing.ts'
+import { remapNotes } from './internal/tolerant.ts'
 import * as Interval from './interval.ts'
 import * as Point from './point.ts'
 import type { Polygon } from './polygon.ts'
@@ -649,6 +650,161 @@ export function apply<const K extends string>(
     }),
     bounds: Rect.make(0, 0, maxX - minX, maxY - minY),
     notes: routed.notes as ReadonlyArray<Connector.ConnectorNote<K>>,
+  }
+}
+
+/**
+ * The kinds of problem that `applyTolerant` reports, encoded as numbers:
+ * `anonymous` is `0`, `duplicate` is `1`, `dangling` is `2`. The same
+ * object as `problem` in `placement/connector`.
+ */
+export const problem = Connector.problem
+
+/**
+ * Input that `applyTolerant` left out of the layout, and why.
+ *
+ * - `anonymous`: the node at index `node` has no id.
+ * - `duplicate`: the node at index `node` has the id `id`, which an
+ *   earlier node took. Edges that name the id connect to the earlier node.
+ * - `dangling`: the edge at index `edge` names an id that no node has.
+ */
+export type HierarchyProblem =
+  | {
+      readonly kind: typeof problem.anonymous
+      readonly node: number
+    }
+  | {
+      readonly kind: typeof problem.duplicate
+      readonly node: number
+      readonly id: string
+    }
+  | {
+      readonly kind: typeof problem.dangling
+      readonly edge: number
+    }
+
+/**
+ * A node of `applyTolerant`: its id, which edges reference, its frame, and
+ * its shape (see `shapes` in `HierarchyApplyOptions`).
+ */
+export interface HierarchyTolerantNode {
+  /** The id that edges reference. A node without one is left out. */
+  readonly id?: string | undefined
+  /** The node's frame. */
+  readonly frame: Frame
+  /** The polygon that the node's ports sit on, or none for its rect. */
+  readonly shape?: Polygon | undefined
+}
+
+/**
+ * The result of `applyTolerant`.
+ *
+ * - `nodes`: one rect per node, in input order, or `undefined` for a node
+ *   left out of the layout.
+ * - `edges`: one route per edge, in input order, or `undefined` for an edge
+ *   left out of the layout.
+ * - `bounds`: the rect enclosing the drawing, as `apply` gives it.
+ * - `notes`: what the routes gave up, as `apply` reports it (see
+ *   `HierarchyLayout`), with edges named by their index in the input.
+ * - `problems`: the input left out of the layout (see `HierarchyProblem`),
+ *   the nodes first, then the edges, each in input order.
+ */
+export interface HierarchyTolerantLayout {
+  /** One rect per node, in input order. */
+  readonly nodes: ReadonlyArray<Rect.Rect | undefined>
+  /** One route per edge, in input order. */
+  readonly edges: ReadonlyArray<HierarchyRoute | undefined>
+  /** The rect enclosing the whole drawing, with its origin at `(0, 0)`. */
+  readonly bounds: Rect.Rect
+  /** What the routes gave up. */
+  readonly notes: ReadonlyArray<Connector.ConnectorNote<string>>
+  /** The input left out of the layout. */
+  readonly problems: ReadonlyArray<HierarchyProblem>
+}
+
+/**
+ * Lays out a graph as `apply` does, but reports the input it cannot lay
+ * out instead of throwing on it. This suits a caller whose nodes and edges
+ * come and go one at a time, such as a component tree, where the graph is
+ * often briefly incomplete.
+ *
+ * Nodes come as a list, each with an optional id, so ids may be missing or
+ * repeated. A node without an id, or with one that an earlier node took, is
+ * left out, and so is an edge that names an id no node has. Each is a
+ * problem in the result's `problems`, which says which node or edge it is
+ * by its index (see `HierarchyProblem`). The rest are laid out together, by
+ * `apply`.
+ *
+ * Every input is deterministic, as for `apply`. Ties fall back to the order
+ * of the nodes, then of the edges.
+ *
+ * @param nodes - The nodes, in tie-breaking order.
+ * @param edges - The edge specs, referencing nodes by id.
+ * @param hierarchy - The layout specification.
+ * @returns The node rects, edge routes, bounds, notes, and problems.
+ * @example
+ * ```ts
+ * const nodes = [
+ *   { id: 'a', frame: Frame.make({ width: 100, height: 40 }) },
+ *   { id: 'b', frame: Frame.make({ width: 100, height: 40 }) },
+ *   { id: 'a', frame: Frame.make({ width: 100, height: 40 }) },
+ * ]
+ * const edges = [Edge.make({ source: 'a', target: 'b' })]
+ * const layout = Hierarchy.applyTolerant(nodes, edges, Hierarchy.make({ rankGap: 50 }))
+ * layout.nodes[1] // Rect [0, 90, 100, 40]
+ * layout.nodes[2] // undefined
+ * layout.problems // [{ kind: Hierarchy.problem.duplicate, node: 2, id: 'a' }]
+ * ```
+ */
+export function applyTolerant(
+  nodes: ReadonlyArray<HierarchyTolerantNode>,
+  edges: ReadonlyArray<Edge.Edge<string>>,
+  hierarchy: Hierarchy,
+): HierarchyTolerantLayout {
+  const problems: Array<HierarchyProblem> = []
+  const frames: Record<string, Frame> = Object.create(null)
+  const shapes: Record<string, Polygon> = Object.create(null)
+  const placed: Array<string | undefined> = []
+  const ids = new Set<string>()
+  for (const [i, { id, frame, shape }] of nodes.entries()) {
+    if (id === undefined) {
+      problems.push({ kind: problem.anonymous, node: i })
+      placed.push(undefined)
+    } else if (ids.has(id)) {
+      problems.push({ kind: problem.duplicate, node: i, id })
+      placed.push(undefined)
+    } else {
+      ids.add(id)
+      frames[id] = frame
+      placed.push(id)
+      if (shape !== undefined) {
+        shapes[id] = shape
+      }
+    }
+  }
+
+  const specs: Array<Edge.Edge<string>> = []
+  const routed: Array<number> = []
+  for (const [i, edge] of edges.entries()) {
+    if (!ids.has(edge.source) || !ids.has(edge.target)) {
+      problems.push({ kind: problem.dangling, edge: i })
+    } else {
+      specs.push(edge)
+      routed.push(i)
+    }
+  }
+
+  const layout = apply(frames, specs, hierarchy, { shapes })
+  const routes: Array<HierarchyRoute | undefined> = edges.map(() => undefined)
+  for (const [k, route] of layout.edges.entries()) {
+    routes[routed[k] as number] = route
+  }
+  return {
+    nodes: placed.map((id) => (id === undefined ? undefined : layout.nodes[id])),
+    edges: routes,
+    bounds: layout.bounds,
+    notes: remapNotes(layout.notes, routed, () => true),
+    problems,
   }
 }
 

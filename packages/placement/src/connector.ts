@@ -5,6 +5,7 @@ import type { Edge } from './edge.ts'
 import { solve } from './internal/connector/pipeline.ts'
 import { normalize } from './internal/connector/problem.ts'
 import { positiveLength } from './internal/orient.ts'
+import { remapMerged, remapNotes } from './internal/tolerant.ts'
 import type * as Point from './point.ts'
 import type { Polygon } from './polygon.ts'
 import type * as Rect from './rect.ts'
@@ -897,4 +898,189 @@ export function apply<const K extends string>(
   options: ConnectorApplyOptions<NoInfer<K>> = {},
 ): ConnectorLayout<K> {
   return solve(normalize(rects, edges, connector, options)) as ConnectorLayout<K>
+}
+
+/**
+ * The kinds of problem that `applyTolerant` reports, encoded as numbers:
+ * `anonymous` is `0`, `duplicate` is `1`, `dangling` is `2`. The hierarchy
+ * shares the encoding (see `problem` in `placement/hierarchy`). The
+ * connector never reports `anonymous`, because a node without an id is an
+ * obstacle.
+ */
+export const problem = {
+  anonymous: 0,
+  duplicate: 1,
+  dangling: 2,
+} as const
+
+/**
+ * Input that `applyTolerant` left out of the routing, and why.
+ *
+ * - `duplicate`: the node at index `node` has the id `id`, which an
+ *   earlier node took. It stays an obstacle, and edges that name the id
+ *   connect to the earlier node.
+ * - `dangling`: the edge at index `edge` names an id that no node has, so
+ *   it has no route.
+ */
+export type ConnectorProblem =
+  | {
+      readonly kind: typeof problem.duplicate
+      readonly node: number
+      readonly id: string
+    }
+  | {
+      readonly kind: typeof problem.dangling
+      readonly edge: number
+    }
+
+/**
+ * A node of `applyTolerant`: a rect that routes go around, its `id`, which
+ * edges reference, and its `shape` (see `shapes` in
+ * `ConnectorApplyOptions`). A node without an id is only an obstacle.
+ */
+export interface ConnectorTolerantNode {
+  /** The id that edges reference. */
+  readonly id?: string | undefined
+  /** Where the node is. */
+  readonly rect: Rect.Rect
+  /** The polygon that the node's ports sit on, or none for its rect. */
+  readonly shape?: Polygon | undefined
+}
+
+/**
+ * An edge of `applyTolerant`, with its route constraints.
+ */
+export interface ConnectorTolerantEdge {
+  /** The edge, referencing nodes by id. */
+  readonly edge: Edge<string>
+  /** The route constraints of the edge. */
+  readonly options?: ConnectorEdgeOptions | undefined
+}
+
+/**
+ * The result of `applyTolerant`.
+ *
+ * - `edges`: one route per edge, in input order, or `undefined` for an edge
+ *   that names an id no node has, or that no route connects.
+ * - `notes`: what the routes gave up, as `apply` reports it (see
+ *   `ConnectorNote`), with edges named by their index in the input. A
+ *   crowded channel's `rects` lists only nodes with ids.
+ * - `problems`: the input left out of the routing (see `ConnectorProblem`),
+ *   the nodes first, then the edges, each in input order.
+ *
+ * Each route's `merged` names edges by their index in the input too.
+ */
+export interface ConnectorTolerantLayout {
+  /** One route per edge, in input order. */
+  readonly edges: ReadonlyArray<ConnectorRoute | undefined>
+  /** What the routes gave up, and what would have fit them. */
+  readonly notes: ReadonlyArray<ConnectorNote<string>>
+  /** The input left out of the routing. */
+  readonly problems: ReadonlyArray<ConnectorProblem>
+}
+
+/**
+ * Routes edges as `apply` does, but reports the input it cannot route
+ * instead of throwing on it. This suits a caller whose nodes and edges
+ * come and go one at a time, such as a component tree, where the graph is
+ * often briefly incomplete.
+ *
+ * Nodes come as a list, each with an optional id, so ids may be missing or
+ * repeated. A node without an id, or with one that an earlier node took, is
+ * only an obstacle. An edge that names an id no node has gets no route.
+ * Each of these, except a node without an id, is a problem in the result's
+ * `problems`, which says which node or edge it is by its index (see
+ * `ConnectorProblem`). The edges left are routed together, by `apply`.
+ *
+ * Every input is deterministic, as for `apply`. Ties fall back to the order
+ * of the nodes, then of the edges.
+ *
+ * @param nodes - The placed nodes, in tie-breaking order.
+ * @param edges - The edges, referencing nodes by id, with their route constraints.
+ * @param connector - The routing spec.
+ * @returns One route per edge, the notes, and the problems.
+ * @example
+ * ```ts
+ * const nodes = [
+ *   { id: 'a', rect: Rect.make(0, 0, 40, 20) },
+ *   { id: 'b', rect: Rect.make(100, 40, 40, 20) },
+ * ]
+ * const edges = [
+ *   { edge: Edge.make({ source: 'a', target: 'b' }) },
+ *   { edge: Edge.make({ source: 'a', target: 'c' }) },
+ * ]
+ * const layout = Connector.applyTolerant(nodes, edges, Connector.make({ clearance: 10 }))
+ * layout.edges[0]?.points // [Point (40, 10), Point (120, 10), Point (120, 40)]
+ * layout.edges[1] // undefined
+ * layout.problems // [{ kind: Connector.problem.dangling, edge: 1 }]
+ * ```
+ */
+export function applyTolerant(
+  nodes: ReadonlyArray<ConnectorTolerantNode>,
+  edges: ReadonlyArray<ConnectorTolerantEdge>,
+  connector: Connector,
+): ConnectorTolerantLayout {
+  const problems: Array<ConnectorProblem> = []
+  const named = new Set<string>()
+  for (const { id } of nodes) {
+    if (id !== undefined) {
+      named.add(id)
+    }
+  }
+
+  // Obstacles take keys that no node's id has.
+  let anonymous = 0
+  const obstacle = (): string => {
+    let key: string
+    do {
+      key = `\0${anonymous++}`
+    } while (named.has(key))
+    return key
+  }
+
+  const ids = new Set<string>()
+  const rects: Record<string, Rect.Rect> = Object.create(null)
+  const shapes: Record<string, Polygon> = Object.create(null)
+  for (const [i, { id, rect, shape }] of nodes.entries()) {
+    let key: string
+    if (id === undefined) {
+      key = obstacle()
+    } else if (ids.has(id)) {
+      problems.push({ kind: problem.duplicate, node: i, id })
+      key = obstacle()
+    } else {
+      ids.add(id)
+      key = id
+    }
+    rects[key] = rect
+    if (shape !== undefined) {
+      shapes[key] = shape
+    }
+  }
+
+  const specs: Array<Edge<string>> = []
+  const options: Array<ConnectorEdgeOptions | undefined> = []
+  const routed: Array<number> = []
+  for (const [i, { edge, options: option }] of edges.entries()) {
+    if (!ids.has(edge.source) || !ids.has(edge.target)) {
+      problems.push({ kind: problem.dangling, edge: i })
+    } else {
+      specs.push(edge)
+      options.push(option)
+      routed.push(i)
+    }
+  }
+
+  const layout = apply(rects, specs, connector, { edges: options, shapes })
+  const routes: Array<ConnectorRoute | undefined> = edges.map(() => undefined)
+  for (const [k, route] of layout.edges.entries()) {
+    if (route !== undefined) {
+      routes[routed[k] as number] = { ...route, merged: remapMerged(route.merged, routed) }
+    }
+  }
+  return {
+    edges: routes,
+    notes: remapNotes(layout.notes, routed, (id) => ids.has(id)),
+    problems,
+  }
 }
