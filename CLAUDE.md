@@ -82,7 +82,8 @@ free space around the groups and lone ports, `routing.ts` finds the
 routes (a run that waypoints hold goes around the port legs of other
 routes, and so does a run along or beside one where a wall leaves nudging
 no room to move it off past the routes already there, and one that nudging
-would hold between two held runs, or one and a wall, too close for it, a
+would hold between two held runs, or one and a wall, too close for it,
+the legs of a route's own group counting past where they part, a
 held run reaching as far past its turn as nudging can stretch it, by the
 routes that cross it on the run it turns off, and a run shared with an earlier route and left
 on its other side counts as the crossing it is; a route found again for
@@ -117,8 +118,9 @@ on `internal/graph/` (not yet public): `graph.ts` stores graphs of points
 in flat arrays, `visibility.ts` builds the orthogonal visibility graph of
 obstacles and pins, `search.ts` finds the cheapest path for length, turns,
 and crossings (A\*; a jog shorter than twice the edge's radius costs its
-two turns in proportion, and a run left on the other side from where it
-was joined crosses the paths along it), for less along partner paths,
+two turns in proportion, a run left on the other side from where it
+was joined crosses the paths along it, and a run that turns onto a marked
+line and off it again pays the marks at its ends), for less along partner paths,
 for more through channels over capacity, between sets of endpoints, and
 routes several paths among one another, `channels.ts` groups the
 half-edges between one pair of walls into the slots those prices read

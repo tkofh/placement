@@ -1560,6 +1560,88 @@ describe('crossings', () => {
   })
 })
 
+// Marks at nodes of `graph` (see `SearchOptions.marked`), each as its node,
+// its slot, and its count.
+function marksOf(graph: Graph, marks: ReadonlyArray<readonly [number, 0 | 1, number]>) {
+  const marked = new Float64Array(2 * graph.xs.length)
+  for (const [node, slot, count] of marks) {
+    marked[2 * node + slot] = count
+  }
+  return marked
+}
+
+describe('marks', () => {
+  // 0 1 2
+  // 3 4 5
+  // 6 7 8
+  const square = grid(3, 3)
+
+  //  0  1  2
+  //  3  4  5
+  //  6  7  8
+  //  9 10 11
+  const tall = grid(3, 4)
+
+  const down = [{ x: 0, y: 1 }]
+
+  test.each([
+    [
+      'along it at both ends',
+      [
+        [3, 1, 2],
+        [4, 1, 3],
+      ],
+      20,
+    ],
+    ['along it at one end', [[3, 1, 2]], 0],
+    [
+      'across it at both ends',
+      [
+        [3, 0, 2],
+        [4, 0, 2],
+      ],
+      0,
+    ],
+  ] as const)('marks %s charge a run between two turns their lesser count', (_, marks, charge) => {
+    // Down from 0, right from 3 to 4, and down to 7: the run from 3 to 4
+    // turns at both ends, so it runs straight through no node.
+    const options = { bendCost: 5, crossingCost: 10, marked: marksOf(square, marks) }
+    const path = route(
+      square,
+      [{ node: 0, headings: down }],
+      [{ node: 7, headings: down }],
+      options,
+    )
+    expect(path).toEqual({ nodes: [0, 3, 4, 7], cost: 30 + 2 * 5 + charge })
+  })
+
+  test.each([
+    [3, 4, [0, 3, 6, 7, 10]],
+    [6, 7, [0, 3, 4, 7, 10]],
+  ])('a run between two turns keeps off marks along %i and %i', (a, b, expected) => {
+    // Down from 0 and down into 10: right along the middle row or the one
+    // below, the same length and turns either way.
+    const marked = marksOf(tall, [
+      [a, 1, 1],
+      [b, 1, 1],
+    ])
+    const options = { bendCost: 5, crossingCost: 50, marked }
+    const path = route(tall, [{ node: 0, headings: down }], [{ node: 10, headings: down }], options)
+    expect(path).toEqual({ nodes: expected, cost: 40 + 2 * 5 })
+  })
+
+  test('a path straight across marked nodes pays nothing for them', () => {
+    // Marks along the middle rows, and a path straight down across them.
+    const marked = marksOf(tall, [
+      [4, 1, 1],
+      [7, 1, 1],
+    ])
+    const options = { bendCost: 5, crossingCost: 50, marked }
+    const path = route(tall, [{ node: 1, headings: down }], [{ node: 10, headings: down }], options)
+    expect(path).toEqual({ nodes: [1, 4, 7, 10], cost: 30 })
+  })
+})
+
 describe('partners', () => {
   // 0 1 2
   // 3 4 5

@@ -53,7 +53,12 @@ import type { Graph, Obstacle } from './graph.ts'
 // or leaving the other way, since what that path leads to past its end
 // goes on its way. So does a path that jogs across a run that other paths
 // run straight along at both ends of the jog, since it comes onto their
-// line from one side and leaves to the other. A path that steps off its
+// line from one side and leaves to the other. Of the counts, those that
+// mark nodes rather than count paths (see `SearchOptions.marked`) also
+// charge a run that turns onto their line at one and off it at another,
+// which has no node between to run straight through: the turn off it pays
+// the lesser of its two ends, found by walking the path back to the turn
+// onto it. A path that steps off its
 // line by a jog shorter than twice the radius and back onto it by another
 // the other way pays, at the turn that brings it back, for the counts of
 // the nodes on the line from where it left to where it is back, as a path
@@ -130,6 +135,15 @@ export interface SearchOptions {
   // at `2 * node` horizontally and `2 * node + 1` vertically, on a graph
   // whose edges are all horizontal or vertical (see `markThrough`).
   readonly through?: ArrayLike<number>
+  // Of the counts in `through`, those that stand for no path but mark the
+  // nodes a path should not run along, in the same slots and read the same
+  // way: a path running horizontally pays for those at `2 * node + 1`, one
+  // running vertically for those at `2 * node`. A path that runs straight
+  // on through a marked node pays for it as for any count in `through`, and
+  // so does one whose run turns onto the line at a marked node and off it
+  // at another, for the lesser of the two: the run lies among the marks,
+  // however short it is. None by default.
+  readonly marked?: ArrayLike<number>
   // The share of its length that a half-edge costs less where `partners`
   // marks it, from `0` to `1`. Defaults to `0`.
   readonly partnerDiscount?: number
@@ -235,6 +249,7 @@ export function shortestPath(
   const counterclockwiseCost = bendCost + positiveLength(options.counterclockwiseCost)
   const crossingCost = graph.orthogonal ? positiveLength(options.crossingCost) : 0
   const through = crossingCost > 0 ? options.through : undefined
+  const marked = crossingCost > 0 ? options.marked : undefined
   const discount = Math.min(positiveLength(options.partnerDiscount), 1)
   const partners = discount > 0 ? options.partners : undefined
   const radius = graph.orthogonal ? positiveLength(options.radius) : 0
@@ -552,6 +567,35 @@ export function shortestPath(
     return Math.max(stay - paid, 0)
   }
 
+  // What the run of the path in `state`, heading along (hx, hy) into
+  // `node`, owes the marks as it turns off its line there (see
+  // `SearchOptions.marked`): the lesser of the marks here and where it
+  // turned onto the line, or nothing for a run from the path's start. Of
+  // two paths into one state the search keeps the cheaper, so the run is
+  // that path's.
+  const markedRun = (state: number, node: number, hx: number, hy: number): number => {
+    if (marked === undefined) {
+      return 0
+    }
+    const slot = hy === 0 ? 1 : 0
+    const here = marked[2 * node + slot] ?? 0
+    if (here <= 0) {
+      return 0
+    }
+    for (let current = state; current !== -1; current = parent[current] as number) {
+      const e = edgeOf[current % stride] as number
+      const ex = Math.sign(dxOf(e))
+      const ey = Math.sign(dyOf(e))
+      if (ex === 0 && ey === 0) {
+        continue
+      }
+      if (ex !== hx || ey !== hy) {
+        return Math.min(here, marked[2 * (targets[e] as number) + slot] ?? 0)
+      }
+    }
+    return 0
+  }
+
   const relax = (state: number, total: number, turns: number, from: number) => {
     const known = seen[state] === round ? (cost[state] as number) : Number.POSITIVE_INFINITY
     const better =
@@ -713,6 +757,8 @@ export function shortestPath(
                 ? Math.min(through[2 * (originNode[origin] as number) + along] ?? 0, atEnd)
                 : Math.min(1, atEnd))
           }
+          // A run between two marked nodes pays for them as it leaves.
+          extra += crossingCost * markedRun(state, node, Math.sign(ax), Math.sign(ay))
           // Whether other paths run straight along the run from here.
           const shared = through !== undefined && (through[2 * node + (by === 0 ? 0 : 1)] ?? 0) > 0
           if (across && origin >= 0 && !settled) {

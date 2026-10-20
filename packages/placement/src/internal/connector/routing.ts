@@ -54,7 +54,10 @@ import {
 // the gap and the strokes on both sides, since it moves the run as a whole:
 // such a route is found again with the nodes between them, and between any
 // other two held runs as close, costing crossings, so it crosses or goes
-// around instead of being squeezed onto them.
+// around instead of being squeezed onto them. The held runs of routes that
+// share a port or a group with it count too, all but those out of that
+// port or group, whose lanes the nudge orders at the merge gap: past where
+// the two part, a held run is like any other's.
 //
 // A held run reaches as far as the search found it, and further where it
 // turns off a run it shares with routes that cross it there: nudging
@@ -65,7 +68,11 @@ import {
 //
 // The search counts all of these marks the way it counts crossings, so a
 // route that steps off a marked line by a short jog and back onto it pays
-// for the nodes it stepped around, as it would for running through them.
+// for the nodes it stepped around, as it would for running through them,
+// and a run that turns onto a marked line and off it again pays for its
+// ends, the lesser of the two, as it would for running through one: a run
+// between two turns has no node to run straight through, however close to
+// the held run it lies.
 // A route found again is checked again, since its new path can lie beside
 // other held runs, with each search's marks added to those before, until
 // it comes back the same or none of these rules holds it, a few times at
@@ -122,10 +129,21 @@ interface Held {
   readonly lowStrip: ReadonlyArray<number>
   readonly highStrip: ReadonlyArray<number>
   readonly line: ReadonlyArray<number>
+  // The ends of the path whose ports the run leaves or arrives at: `0`
+  // for its first, `1` for its last, neither for a run between.
+  readonly ends: ReadonlyArray<0 | 1>
 }
 
 // A straight run of a path, as a range of indices into its nodes.
 type Run = readonly [number, number]
+
+// The marks a path was found again with, as crossing counts by node and
+// axis (see `SearchOptions.through`): all of them, and those of the rules
+// for held runs alone.
+interface Marks {
+  readonly extra: Float64Array
+  readonly ruled: Float64Array
+}
 
 /** The routes a search found, and the trades it made. */
 export interface Routed {
@@ -174,6 +192,10 @@ export function routeAll(
   // an edge's own held runs were found along, as crossing counts.
   const waypoints = edges.map((edge) => new Set(edge.viaPins.map((pin) => nodes[pin] as number)))
   const shared = new Map<number, Float64Array>()
+  // Of those, the marks of the rules for held runs, which also price a run
+  // that turns onto a marked line and off it again (see
+  // `SearchOptions.marked`).
+  const marks = new Map<number, Float64Array>()
   // The channels between the blocks, which each route fills with its stroke
   // and a gap, or a merge gap beside the others of its merge.
   const channels = channelsOf(graph, blocks)
@@ -195,6 +217,7 @@ export function routeAll(
     const [source, target] = ports[i] as readonly [Port, Port]
     const [start, end] = pinOfEnd[i] as [number, number]
     const extra = shared.get(i)
+    const marked = marks.get(i)
     let through = counted
     if (extra !== undefined && counted !== undefined) {
       const sum = new Float64Array(extra.length)
@@ -220,6 +243,7 @@ export function routeAll(
         viaLeavings: edge.viaLeavings,
         crossingCost: crossingCost,
         ...(through === undefined ? {} : { through }),
+        ...(marked === undefined ? {} : { marked }),
         ...(congestion === undefined ? {} : { congestion }),
         ...(along === undefined ? {} : { along }),
       },
@@ -271,12 +295,19 @@ export function routeAll(
       const [a, b] = [pinOfEnd[i] as [number, number], pinOfEnd[j] as [number, number]]
       return a.some((pin) => b.some((other) => nodes[pin] === nodes[other]))
     }
-    // Whether two edges run out of one port or one group, whose lanes the
-    // nudge orders at the merge gap.
-    const bundled = (i: number, j: number) => {
+    // The ends of edge `j` that run out of one port or one group with an
+    // end of edge `i`, whose lanes the nudge orders at the merge gap.
+    const bundledAt = (i: number, j: number): Array<0 | 1> => {
       const [a, b] = [merges[placeOf.get(i) as number], merges[placeOf.get(j) as number]]
-      return sharePort(i, j) || (a?.some((id) => id >= 0 && b?.includes(id)) ?? false)
+      const own = pinOfEnd[i] as [number, number]
+      return ([0, 1] as const).filter((end) => {
+        const pin = nodes[(pinOfEnd[j] as [number, number])[end]]
+        const id = b?.[end] ?? -1
+        return own.some((mine) => nodes[mine] === pin) || (id >= 0 && (a?.includes(id) ?? false))
+      })
     }
+    // Whether two edges run out of one port or one group at either end.
+    const bundled = (i: number, j: number) => bundledAt(i, j).length > 0
     const heldOf = (j: number) => {
       let list = held[j]
       if (list === undefined) {
@@ -380,7 +411,7 @@ export function routeAll(
       held.fill(undefined)
       runsOfPath.fill(undefined)
     }
-    const checkOnce = (i: number, carried: Float64Array | undefined) => {
+    const checkOnce = (i: number, carried: Marks | undefined): Marks | undefined => {
       const path = paths[i]
       if (path === undefined) {
         return undefined
@@ -414,8 +445,8 @@ export function routeAll(
       const runs = runsOf(graph, path)
       const ownHeld = heldRuns(graph, path, waypoints[i] as Set<number>, true)
       // The held runs of the routes that could pinch a run of this one: all
-      // but those of the routes it shares a port or a group with, whose
-      // lanes the nudge orders at the merge gap.
+      // but those out of a port or a group it shares, whose lanes the nudge
+      // orders at the merge gap.
       const pinching: Array<{ readonly run: Held; readonly need: number }> = []
       // The path runs out of its ports along the lines out of them however
       // it goes, so the strips of others' held runs leave those lines out:
@@ -455,8 +486,11 @@ export function routeAll(
           }
         }
         const need = problem.settings.gap + (thickness + (edges[j] as ProblemEdge).thickness) / 2
-        if (!bundled(i, j)) {
-          pinching.push(...heldOf(j).map((run) => ({ run, need })))
+        const bundle = bundledAt(i, j)
+        for (const run of heldOf(j)) {
+          if (!run.ends.some((end) => bundle.includes(end))) {
+            pinching.push({ run, need })
+          }
         }
         for (const run of heldOf(j)) {
           // The room a strip needs for this path past the routes already
@@ -526,16 +560,21 @@ export function routeAll(
       // runs: the crossings on the runs it shares were priced by then.
       const retry =
         carried === undefined
-          ? along || runsThrough(graph, path, extra)
-          : caught || runsThrough(graph, path, ruled)
+          ? along || runsThrough(graph, path, extra, ruled)
+          : caught || runsThrough(graph, path, ruled, ruled)
       if (retry) {
         if (carried !== undefined) {
-          for (const [k, count] of carried.entries()) {
+          for (const [k, count] of carried.extra.entries()) {
             const own = extra[k] as number
             extra[k] = own + count
           }
+          for (const [k, count] of carried.ruled.entries()) {
+            const own = ruled[k] as number
+            ruled[k] = own + count
+          }
         }
         shared.set(i, extra)
+        marks.set(i, ruled)
         place(through, i, path, -1)
         paths[i] = search(i, through, congestionOf(i))
         place(through, i, paths[i], 1)
@@ -544,12 +583,12 @@ export function routeAll(
         if (again !== undefined && samePath(again, path)) {
           return undefined
         }
-        return extra
+        return { extra, ruled }
       }
       return undefined
     }
     const recheck = (i: number) => {
-      let carried: Float64Array | undefined
+      let carried: Marks | undefined
       for (let round = 0; round < RECHECKS; round++) {
         carried = checkOnce(i, carried)
         if (carried === undefined) {
@@ -756,7 +795,9 @@ function heldBeside(
       highStrip.push(node)
     }
   }
-  return { vertical, at, a0, a1, low, high, lowStrip, highStrip, line }
+  const last = path.nodes.length - 1
+  const ends = ([0, 1] as const).filter((end) => (end === 0 ? from === 0 : to === last))
+  return { vertical, at, a0, a1, low, high, lowStrip, highStrip, line, ends }
 }
 
 // Where the run of a path from index `from` to index `to` lies in the strip
@@ -1047,10 +1088,25 @@ function onRay(graph: Graph, pin: number, out: XY, vertical: boolean, node: numb
 }
 
 // Whether a path runs straight on through a node that `counts` marks on
-// its own axis, the way the search reads them (see `SearchOptions.through`).
-function runsThrough(graph: Graph, path: Path, counts: ArrayLike<number>): boolean {
+// its own axis, or turns onto a line at a node that `marks` marks and off
+// it at another, the way the search reads them (see `SearchOptions.through`
+// and `SearchOptions.marked`).
+function runsThrough(
+  graph: Graph,
+  path: Path,
+  counts: ArrayLike<number>,
+  marks: ArrayLike<number>,
+): boolean {
   const { xs, ys } = graph
   const { nodes } = path
+  const runs = runsOf(graph, path)
+  for (const [from, to] of runs.slice(1, -1)) {
+    const [a, b] = [nodes[from] as number, nodes[to] as number]
+    const slot = (ys[a] as number) === (ys[b] as number) ? 1 : 0
+    if ((marks[2 * a + slot] as number) > 0 && (marks[2 * b + slot] as number) > 0) {
+      return true
+    }
+  }
   for (let k = 1; k + 1 < nodes.length; k++) {
     const [a, b, c] = [nodes[k - 1] as number, nodes[k] as number, nodes[k + 1] as number]
     const horizontal =

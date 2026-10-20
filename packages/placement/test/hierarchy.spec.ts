@@ -1611,8 +1611,11 @@ describe('properties', () => {
   // both run out of their ports on one line (the legs out of ports stay
   // where their ports put them), and a route that turns keeps its first and
   // last segments as long as the adornments at its ends. Corners and flow
-  // adornments keep clear of each other.
-  test.each([11, 12, 13, 14, 15, 16, 17, 18])('random graph %i with sides', (seed) => {
+  // adornments keep clear of each other. Seed 11 runs the whole
+  // `Hierarchy.apply` on all eight variants, which takes about five
+  // seconds.
+  const slow = { timeout: 15_000 }
+  test.each([11, 12, 13, 14, 15, 16, 17, 18])('random graph %i with sides', slow, (seed) => {
     const { nodes, edges } = randomGraph(seed, 12, 18, true)
     for (const backEdges of Object.values(Hierarchy.backEdges)) {
       for (const direction of Object.values(Hierarchy.direction)) {

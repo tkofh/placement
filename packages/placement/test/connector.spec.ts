@@ -1522,12 +1522,13 @@ describe('notes', () => {
 
   test('a channel too narrow for the gaps is noted, with the rects beside it', () => {
     // Three routes through a passage 10 wide between `a` and `b`, with
-    // gaps of 6: they need 12.
+    // gaps of 6: they need 12. The rects are wide enough that the way
+    // around them costs more than the squeeze.
     const rects = {
       n: Rect.make(30, -100, 30, 20),
       s: Rect.make(30, 100, 30, 20),
-      a: Rect.make(0, 0, 40, 40),
-      b: Rect.make(50, 0, 40, 40),
+      a: Rect.make(-40, 0, 80, 40),
+      b: Rect.make(50, 0, 80, 40),
     }
     const edges = Array.from({ length: 3 }, () => Edge.make({ source: 'n', target: 's' }))
     const layout = Connector.apply(rects, edges, Connector.make({ gap: 6 }))
@@ -1905,6 +1906,42 @@ describe('held runs beside groups', () => {
   })
 })
 
+describe('held runs after parting', () => {
+  test('a route that would part under the held leg of its group parts first', () => {
+    // The routes to auth and billing leave gateway's bottom as a group.
+    // The one to billing turns onto its held leg into billing, two above
+    // auth's clearance. Parting after it, the one to auth would turn
+    // below that leg, squeezed against the clearance, on a run between
+    // two turns, with no node to run straight through. It parts first
+    // instead, and crosses the leg on its way down.
+    const rects = {
+      gateway: Rect.make(264, 176, 124, 48),
+      auth: Rect.make(332, 326, 112, 40),
+      billing: Rect.make(512, 288, 120, 40),
+    }
+    const layout = Connector.apply(
+      rects,
+      [
+        Edge.make({ source: 'gateway', target: 'auth' }),
+        Edge.make({ source: 'gateway', target: 'billing' }),
+      ],
+      Connector.make({ clearance: 16, gap: 8, merge: Connector.merge.side, mergeGap: 4 }),
+    )
+    expect(pointsOf(layout, 0)).toEqual([
+      [328, 224],
+      [328, 304],
+      [388, 304],
+      [388, 326],
+    ])
+    expect(pointsOf(layout, 1)).toEqual([
+      [324, 224],
+      [324, 308],
+      [512, 308],
+    ])
+    expect(layout.notes).toEqual([])
+  })
+})
+
 describe('jogs', () => {
   test('a jog of a pixel costs a pixel, so a route does not flip over one', () => {
     // From the hub's left, one corner reaches the worker: left along the
@@ -2033,12 +2070,12 @@ describe('input order', () => {
 
   test('notes name the edges by their input index, in order', () => {
     // Three routes through a passage 10 wide between a and b, with gaps of
-    // 6, and one more that stays clear of it.
+    // 6, too wide to go around, and one more that stays clear of it.
     const passage = {
       n: Rect.make(30, -100, 30, 20),
       s: Rect.make(30, 100, 30, 20),
-      a: Rect.make(0, 0, 40, 40),
-      b: Rect.make(50, 0, 40, 40),
+      a: Rect.make(-40, 0, 80, 40),
+      b: Rect.make(50, 0, 80, 40),
       z: Rect.make(200, 0, 40, 40),
     }
     const edges = [
