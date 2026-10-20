@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import * as Alignment from '../src/alignment.ts'
+import { fields, fields2d } from '../src/internal/alignment.ts'
 
 describe('resolve', () => {
   test.each([
@@ -35,8 +36,8 @@ describe('two-axis alignment', () => {
 
 describe('fields', () => {
   test('every alignment field is a plain number', () => {
-    expect(Alignment.fields).toEqual({ align: 'number', stretch: 'number' })
-    expect(Alignment.fields2d).toEqual({
+    expect(fields).toEqual({ align: 'number', stretch: 'number' })
+    expect(fields2d).toEqual({
       alignX: 'number',
       alignY: 'number',
       stretchX: 'number',

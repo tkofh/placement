@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import { fields } from '../src/internal/sizing.ts'
 import * as Sizing from '../src/sizing.ts'
 
 const unset = Number.NaN
@@ -107,7 +108,7 @@ describe('resolve', () => {
 
 describe('fields', () => {
   test('names each field once, with its percentage axis', () => {
-    expect(Sizing.fields).toEqual({
+    expect(fields).toEqual({
       width: 'x',
       height: 'y',
       aspectRatio: 'ratio',

@@ -133,6 +133,23 @@ export const isLength = (value: unknown): value is Length => {
 }
 
 /**
+ * Checks if a value is a `LengthInput`: a number, read as pixels, or a
+ * `Length`. Any number passes, `NaN` and the infinities included, because
+ * each layout spec decides what a non-finite length means.
+ *
+ * @param value - The value to check.
+ * @returns `true` if the value is a number or a `Length`, `false` otherwise.
+ * @example
+ * ```ts
+ * Length.isLengthInput(10) // true
+ * Length.isLengthInput(Length.percent(50)) // true
+ * Length.isLengthInput('50%') // false
+ * ```
+ */
+export const isLengthInput = (value: unknown): value is LengthInput =>
+  typeof value === 'number' || isLength(value)
+
+/**
  * Checks if a length input is a percentage, the one kind that needs a basis
  * to resolve. Plain numbers and `'px'` lengths are absolute.
  *

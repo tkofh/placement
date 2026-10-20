@@ -14,6 +14,29 @@
 export type AspectRatio = number | readonly [width: number, height: number]
 
 /**
+ * Checks if a value is an `AspectRatio`: a number, or an array of exactly
+ * two numbers. It checks the shape only. A non-positive or non-finite ratio
+ * still passes, because each layout spec decides what it means.
+ *
+ * @param value - The value to check.
+ * @returns `true` if the value is a number or a `[width, height]` pair of
+ * numbers, `false` otherwise.
+ * @example
+ * ```ts
+ * AspectRatio.isAspectRatio(1.5) // true
+ * AspectRatio.isAspectRatio([16, 9]) // true
+ * AspectRatio.isAspectRatio([16]) // false
+ * AspectRatio.isAspectRatio('16 / 9') // false
+ * ```
+ */
+export const isAspectRatio = (value: unknown): value is AspectRatio =>
+  typeof value === 'number' ||
+  (Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === 'number' &&
+    typeof value[1] === 'number')
+
+/**
  * Returns a ratio as one number, `width / height`, by exact IEEE division.
  * A number comes back as it is. A pair with a zero height gives `Infinity`
  * (or `NaN` with a zero width too).

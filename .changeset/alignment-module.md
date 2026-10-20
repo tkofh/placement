@@ -8,8 +8,7 @@ flex, hierarchy, and adornments. `Align2dInput` is the two-axis flavor
 (`alignX`, `alignY`, `stretchX`, `stretchY`) for a layout that names none.
 `resolve` takes an item's alignment on one axis and its layout's default,
 and `x` and `y` read each axis of the two-axis flavor, so both flavors
-share one resolve. `inherit` is the `Infinity` sentinel, and `fields` and
-`fields2d` are the field tables. `FrameInput` extends `AlignInput`.
+share one resolve. `inherit` is the `Infinity` sentinel. `FrameInput` extends `AlignInput`.
 
 `Box` takes the two-axis flavor. `stretchX` is how much of the room its
 insets leave the box absorbs into its width, and `alignX` is where it sits

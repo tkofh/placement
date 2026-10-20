@@ -21,6 +21,7 @@ export default defineConfig({
     'src/rect.ts',
     'src/sizing.ts',
     'src/track.ts',
+    'src/unstable/model.ts',
     'src/unstable/utils.ts',
   ],
   format: 'esm',

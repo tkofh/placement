@@ -1,7 +1,4 @@
-import type { Field, FieldTable } from './internal/fields.ts'
 import { auto } from './utils/arguments.ts'
-
-export type { Field, FieldTable }
 
 /**
  * The inherit sentinel, `Number.POSITIVE_INFINITY`. An alignment field
@@ -65,34 +62,6 @@ export interface Align2dInput {
    */
   readonly stretchY?: number | undefined
 }
-
-/**
- * The field table of `AlignInput`: both fields are plain numbers.
- *
- * @example
- * ```ts
- * Alignment.fields.stretch // 'number'
- * ```
- */
-export const fields = {
-  align: 'number',
-  stretch: 'number',
-} as const satisfies FieldTable<AlignInput>
-
-/**
- * The field table of `Align2dInput`: every field is a plain number.
- *
- * @example
- * ```ts
- * Alignment.fields2d.alignY // 'number'
- * ```
- */
-export const fields2d = {
-  alignX: 'number',
-  alignY: 'number',
-  stretchX: 'number',
-  stretchY: 'number',
-} as const satisfies FieldTable<Align2dInput>
 
 /** A resolved alignment on one axis: both fractions finite. */
 export interface Alignment {

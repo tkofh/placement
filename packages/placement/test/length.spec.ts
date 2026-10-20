@@ -40,6 +40,19 @@ describe('guards', () => {
   })
 
   test.each([
+    { value: 1, expected: true },
+    { value: Number.NaN, expected: true },
+    { value: Length.px(1), expected: true },
+    { value: Length.percent(1), expected: true },
+    { value: '50%', expected: false },
+    { value: { value: 1, unit: 'px' }, expected: false },
+    { value: undefined, expected: false },
+    { value: null, expected: false },
+  ])('isLengthInput($value) is $expected', ({ value, expected }) => {
+    expect(Length.isLengthInput(value)).toBe(expected)
+  })
+
+  test.each([
     { input: Length.percent(50), expected: true },
     { input: Length.px(50), expected: false },
     { input: 50, expected: false },

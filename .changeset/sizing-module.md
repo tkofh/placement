@@ -5,7 +5,7 @@
 
 Add `placement/sizing`, the sizing inputs that every layout reads:
 `width`, `height`, `aspectRatio`, and the min/max bounds. `SizingInput`
-is the input type, and `fields` names each field's percentage axis.
+is the input type.
 `normalize` reads every non-finite size or bound as unset, and `resolve`
 gives an item its width and height from its sizing and from what its
 layout supplies: the size of an unset axis, and which axes the layout has
