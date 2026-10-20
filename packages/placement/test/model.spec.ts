@@ -238,6 +238,14 @@ describe('lengths', () => {
     expect(listener).toHaveBeenCalledTimes(2)
   })
 
+  test('a box input carries its two-axis alignment', () => {
+    const store = Model.store(
+      Model.group('g', { box: { width: pct(25), height: pct(10), alignX: 0.5, alignY: 1 } }),
+      { root },
+    )
+    expect(store.get('g')).toEqual(Rect.make(300, 540, 200, 60))
+  })
+
   test('a translation resolves against the rect it moves', () => {
     const store = Model.store(
       Model.group('g', {
@@ -261,38 +269,38 @@ describe('lengths', () => {
   })
 
   test('a frame resolves against its container content rect, and re-resolves with it', () => {
-    const frame = { width: pct(50), height: pct(25), offsetLeft: pct(25), offsetTop: pct(25) }
+    const frame = { width: pct(50), height: pct(25), marginLeft: pct(25), marginTop: pct(25) }
     const store = Model.store(
       Model.flex('t', { gutter: Offset.make(100) }, [Model.item('i', { frame })]),
       { root },
     )
     const content = Rect.make(100, 100, 600, 400)
-    const resolved = { width: 300, height: 100, offsetLeft: 150, offsetTop: 100 }
+    const resolved = { width: 300, height: 100, marginLeft: 150, marginTop: 100 }
     expect(store.get('t.i')).toEqual(solve(content, resolved))
 
     Model.mutate(store, (m) => m.update('t', { gutter: Offset.make(200) }))
     const smaller = Rect.make(200, 200, 400, 200)
     expect(store.get('t.i')).toEqual(
-      solve(smaller, { width: 200, height: 50, offsetLeft: 100, offsetTop: 50 }),
+      solve(smaller, { width: 200, height: 50, marginLeft: 100, marginTop: 50 }),
     )
 
     Model.mutate(store, (m) => m.update('t', { gutter: undefined }).setRoot(Rect.make(400, 400)))
     expect(store.get('t.i')).toEqual(
-      solve(Rect.make(400, 400), { width: 200, height: 100, offsetLeft: 100, offsetTop: 100 }),
+      solve(Rect.make(400, 400), { width: 200, height: 100, marginLeft: 100, marginTop: 100 }),
     )
   })
 
-  test('a frame size that resolves to NaN is unset, and a NaN margin stays auto', () => {
+  test('a frame size that is NaN is unset, and a NaN margin stays auto', () => {
     const store = Model.store(
       Model.group('g', {}, [
         Model.flex('t', {}, [Model.item('a', { frame: { grow: 1, maxWidth: Number.NaN } })]),
-        Model.flex('u', {}, [Model.item('b', { frame: { width: 100, offsetLeft: Number.NaN } })]),
+        Model.flex('u', {}, [Model.item('b', { frame: { width: 100, marginLeft: Number.NaN } })]),
       ]),
       { root },
     )
     expect(store.get('g.t.a')).toEqual(solve(root, { grow: 1 }))
     expect(store.get('g.t.a').width).toBe(800)
-    expect(store.get('g.u.b')).toEqual(solve(root, { width: 100, offsetLeft: Number.NaN }))
+    expect(store.get('g.u.b')).toEqual(solve(root, { width: 100, marginLeft: Number.NaN }))
     expect(store.get('g.u.b').x).toBe(700)
   })
 

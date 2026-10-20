@@ -92,15 +92,13 @@ export interface FlexProps extends GroupProps {
 export interface ItemProps {
   /**
    * The flex item that the parent's `Flexbox.apply` reads: a `Frame`, or
-   * its fields as a `FrameInput<undefined, LengthInput>`, whose
-   * percentages resolve against the parent's content rect. Horizontal
-   * margins and sizes resolve against its width and vertical ones against
-   * its height, which differs from CSS for vertical margins and matches
-   * `@placement/vue`. A size that resolves to `NaN` is unset. The input
-   * takes no `id`, because the path is the item's id. Defaults to
-   * `Frame.make({})`.
+   * its fields as a `FrameInput<LengthInput>`, whose percentages resolve
+   * against the parent's content rect. Horizontal margins and sizes
+   * resolve against its width and vertical ones against its height, which
+   * differs from CSS for vertical margins and matches `@placement/vue`.
+   * Defaults to `Frame.make({})`.
    */
-  readonly frame?: Frame | FrameInput<undefined, LengthInput> | undefined
+  readonly frame?: Frame | FrameInput<LengthInput> | undefined
 }
 
 /**

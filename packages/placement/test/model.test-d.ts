@@ -83,7 +83,7 @@ describe('lengths', () => {
       Box.Box | Box.BoxInput<Length.LengthInput> | undefined
     >()
     expectTypeOf<Model.ItemProps['frame']>().toEqualTypeOf<
-      Frame.Frame | Frame.FrameInput<undefined, Length.LengthInput> | undefined
+      Frame.Frame | Frame.FrameInput<Length.LengthInput> | undefined
     >()
     expectTypeOf<Model.FlexProps['gutter']>().toEqualTypeOf<
       Offset.Offset | Model.GutterInput | undefined
@@ -94,15 +94,14 @@ describe('lengths', () => {
     expectTypeOf<Box.BoxInput<Length.LengthInput>['width']>().toEqualTypeOf<
       Length.LengthInput | undefined
     >()
-    expectTypeOf<Frame.FrameInput<undefined, Length.LengthInput>['grow']>().toEqualTypeOf<
-      number | undefined
-    >()
+    expectTypeOf<Frame.FrameInput<Length.LengthInput>['grow']>().toEqualTypeOf<number | undefined>()
     expectTypeOf<Box.BoxInput['width']>().toEqualTypeOf<number | undefined>()
     expectTypeOf<Frame.FrameInput['width']>().toEqualTypeOf<number | undefined>()
 
     Model.group('g', { box: { width: pct(50), top: 10, aspectRatio: [16, 9] } })
+    Model.group('g', { box: { width: pct(50), alignX: 0.5, stretchY: 0 } })
     Model.flex('t', { gutter: { left: pct(5) }, translate: { x: pct(-50) } }, [
-      Model.item({ frame: { width: pct(25), offsetTop: Length.px(4), grow: 1 } }),
+      Model.item({ frame: { width: pct(25), marginTop: Length.px(4), grow: 1 } }),
     ])
     Model.mutate(toolbar, (m) => m.update('toolbar.b', { frame: { width: pct(50) } }))
   })

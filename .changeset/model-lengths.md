@@ -3,7 +3,7 @@
 ---
 
 `placement/unstable/model` props take percentages. `box` accepts a
-`Box.BoxInput<LengthInput>`, `frame` a `Frame.FrameInput<undefined, LengthInput>`,
+`Box.BoxInput<LengthInput>`, `frame` a `Frame.FrameInput<LengthInput>`,
 `gutter` a `Model.GutterInput`, and `translate` a `Model.TranslateInput`,
 whose lengths are numbers or `Length`s from `placement/length`, besides the
 built `Box`, `Frame`, `Offset`, or `Point`. Each node resolves a percentage

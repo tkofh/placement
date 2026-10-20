@@ -11,14 +11,19 @@
 // hands each function its basis once and never sees a `Length`.
 //
 // Each plain input has one table that says what each of its fields is, and
-// its check and its resolution both read it.
+// its check and its resolution both read it. The tables compose the field
+// tables that core's input concepts export, so a field a concept adds
+// reaches the model without an edit here.
+import * as Alignment from '../../alignment.ts'
 import * as AspectRatio from '../../aspectRatio.ts'
 import * as Box from '../../box.ts'
 import * as Frame from '../../frame.ts'
 import * as Length from '../../length.ts'
+import * as Margin from '../../margin.ts'
 import * as Offset from '../../offset.ts'
 import * as Point from '../../point.ts'
 import * as Rect from '../../rect.ts'
+import * as Sizing from '../../sizing.ts'
 import { isPlainRecord } from '../../utils/object.ts'
 import * as Flexbox from '../flexbox.ts'
 import type {
@@ -34,98 +39,58 @@ import type {
 /** The props of any node. */
 export type NodeProps = GroupProps | FlexProps | ItemProps
 
-// What a field is: a length on an axis, a size on an axis, a ratio, a
-// plain number, or a field that must stay unset. A size that resolves to `NaN` is unset, because a frame
-// reads a `NaN` size literally and a `NaN` bound poisons the solve, as
-// `@placement/vue` has it. A box reads `NaN` as unset anyway. A margin, a
-// gutter side, or a translation keeps its `NaN`, so a `NaN` margin stays
-// auto.
-type Field = 'x' | 'y' | 'width' | 'height' | 'ratio' | 'number' | 'none'
+type Field = Sizing.Field
 
 type Table = { readonly [field: string]: Field }
-
-// A table for the input `I` names each of its fields once.
-type TableOf<I> = { readonly [K in keyof I]-?: Field }
 
 const BOX = {
   top: 'y',
   right: 'x',
   bottom: 'y',
   left: 'x',
-  width: 'width',
-  height: 'height',
-  aspectRatio: 'ratio',
-  minWidth: 'width',
-  minHeight: 'height',
-  maxWidth: 'width',
-  maxHeight: 'height',
-} as const satisfies TableOf<Box.BoxInput<Length.LengthInput>>
+  ...Sizing.fields,
+  ...Alignment.fields2d,
+} as const satisfies Sizing.FieldTable<Box.BoxInput<Length.LengthInput>>
 
 const FRAME = {
-  id: 'none',
-  offsetTop: 'y',
-  offsetRight: 'x',
-  offsetBottom: 'y',
-  offsetLeft: 'x',
-  width: 'width',
-  height: 'height',
-  aspectRatio: 'ratio',
-  minWidth: 'width',
-  minHeight: 'height',
-  maxWidth: 'width',
-  maxHeight: 'height',
+  ...Sizing.fields,
+  ...Margin.fields,
+  ...Alignment.fields,
   grow: 'number',
   shrink: 'number',
-  align: 'number',
-  stretch: 'number',
-} as const satisfies TableOf<Frame.FrameInput<undefined, Length.LengthInput>>
+} as const satisfies Sizing.FieldTable<Frame.FrameInput<Length.LengthInput>>
 
 const GUTTER = {
   top: 'y',
   right: 'x',
   bottom: 'y',
   left: 'x',
-} as const satisfies TableOf<GutterInput>
+} as const satisfies Sizing.FieldTable<GutterInput>
 
-const TRANSLATE = { x: 'x', y: 'y' } as const satisfies TableOf<TranslateInput>
+const TRANSLATE = { x: 'x', y: 'y' } as const satisfies Sizing.FieldTable<TranslateInput>
 
 const CHECKS: { readonly [F in Field]: (value: unknown) => boolean } = {
   x: Length.isLengthInput,
   y: Length.isLengthInput,
-  width: Length.isLengthInput,
-  height: Length.isLengthInput,
   ratio: AspectRatio.isAspectRatio,
   number: (value) => typeof value === 'number',
-  // An item's path is its id, so its frame input takes none.
-  none: () => false,
 }
 
 // An input with its lengths resolved: what the spec's own input takes.
 type Resolved<T extends Table> = {
-  -readonly [K in keyof T]?: T[K] extends 'ratio'
-    ? AspectRatio.AspectRatio
-    : T[K] extends 'none'
-      ? undefined
-      : number
+  -readonly [K in keyof T]?: T[K] extends 'ratio' ? AspectRatio.AspectRatio : number
 }
 
+// A length that resolves to `NaN` passes through: `Box`, `Frame`, and the
+// margins each read it as unset or auto.
 function resolveField(field: Field, value: unknown, basis: Rect.Rect): unknown {
   switch (field) {
     case 'x':
       return Length.resolve(value as Length.LengthInput, basis.width)
     case 'y':
       return Length.resolve(value as Length.LengthInput, basis.height)
-    case 'width':
-    case 'height': {
-      const size = Length.resolve(
-        value as Length.LengthInput,
-        field === 'width' ? basis.width : basis.height,
-      )
-      return Number.isNaN(size) ? undefined : size
-    }
     case 'ratio':
     case 'number':
-    case 'none':
       return value
   }
 }
