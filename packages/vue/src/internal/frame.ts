@@ -24,17 +24,11 @@ export const FRAME_ITEM_PROP_KEYS = [
   'alignSelf',
 ] as const
 
-// The prop resolvers mark an unset input with NaN. `Frame.make` wants such
-// fields omitted, because it reads a non-finite sizing input as a literal
-// infinite preference. That preference defeats an inherited stretch, for example.
-function unsetIfNaN<T extends number | object>(value: T): T | undefined {
-  return typeof value === 'number' && Number.isNaN(value) ? undefined : value
-}
-
 /**
  * Resolves the shared item props into `Frame.make` input. Each axis
  * resolves raw: the core owns the width/height/ratio interaction and the
- * min/max clamping (see `placement/frame`).
+ * min/max clamping (see `placement/frame`). An unset prop resolves to `NaN`,
+ * which the core reads as unset.
  */
 export function useFrameInput(
   props: FrameItemProps,
@@ -63,13 +57,13 @@ export function useFrameInput(
   const margin = computedTRBLOffset(marginTop, marginRight, marginBottom, marginLeft)
 
   return computed(() => ({
-    width: unsetIfNaN(width.value),
-    height: unsetIfNaN(height.value),
-    aspectRatio: unsetIfNaN(aspectRatio.value),
-    minWidth: unsetIfNaN(minWidth.value),
-    minHeight: unsetIfNaN(minHeight.value),
-    maxWidth: unsetIfNaN(maxWidth.value),
-    maxHeight: unsetIfNaN(maxHeight.value),
+    width: width.value,
+    height: height.value,
+    aspectRatio: aspectRatio.value,
+    minWidth: minWidth.value,
+    minHeight: minHeight.value,
+    maxWidth: maxWidth.value,
+    maxHeight: maxHeight.value,
     marginTop: margin.value.top,
     marginRight: margin.value.right,
     marginBottom: margin.value.bottom,

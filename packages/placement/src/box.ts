@@ -1,7 +1,9 @@
-import { clamp } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import * as AspectRatio from './aspectRatio.ts'
+import { SizingOf } from './internal/sizing.ts'
+import type { LengthInput } from './length.ts'
 import * as Rect from './rect.ts'
+import * as Sizing from './sizing.ts'
 import { normalizeTRBL } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/box')
@@ -11,94 +13,53 @@ type TypeBrand = typeof TypeBrand
 // fields, so reads still work through a `Proxy` (Vue's `ref`/`reactive`).
 const Raw: unique symbol = Symbol('placement/box/raw')
 
-type RawInput = {
-  readonly [K in Exclude<keyof BoxInput, 'aspectRatio'>]-?: number | undefined
-} & { readonly aspectRatio: AspectRatio.AspectRatio | undefined }
+type RawInput = { readonly [K in keyof BoxInput]-?: BoxInput[K] }
 
 /**
  * The construction input for `make`. Every field is optional, and passing
  * `undefined` is the same as omitting the field. Any non-finite value acts
- * as unset. This differs from `Frame`, where a non-finite size is a literal
- * infinite preference.
+ * as unset.
  *
  * Unset means a different thing in each group. An unset inset is auto: it
- * does not anchor or shrink its axis. Unset sizing fields stay unset until
- * `apply` resolves them against a parent (see `apply` for the resolution
- * order). Unset constraints default to `0` (minimums) and `Infinity`
- * (maximums).
+ * does not anchor or shrink its axis. The sizing fields (see
+ * `placement/sizing`) stay unset until `apply` resolves them against a
+ * parent (see `apply` for the resolution order). Unset bounds default to
+ * `0` (minimums) and `Infinity` (maximums).
+ *
+ * The type parameter `L` is the type of the length fields: the insets, the
+ * sizes, and the bounds. `make` takes numbers, the default. A layer that
+ * knows the basis of a percentage can take `BoxInput<LengthInput>` (see
+ * `placement/length`) and resolve its lengths before it calls `make`.
  */
-export interface BoxInput {
+export interface BoxInput<L extends LengthInput = number> extends Sizing.SizingInput<L> {
   /**
    * The gap between the parent's top edge and the box, as `top` in CSS
    * absolute positioning. When set, it anchors the vertical position.
    * Together with `bottom`, it also determines an unset height. It is unset
    * when omitted or non-finite.
    */
-  readonly top?: number | undefined
+  readonly top?: L | undefined
   /**
    * The gap between the box and the parent's right edge, as `right` in CSS
    * absolute positioning. When it is set and `left` is unset, the box
    * anchors to the right edge. Together with `left`, it also determines an
    * unset width. It is unset when omitted or non-finite.
    */
-  readonly right?: number | undefined
+  readonly right?: L | undefined
   /**
    * The gap between the box and the parent's bottom edge, as `bottom` in
    * CSS absolute positioning. When it is set and `top` is unset, the box
    * anchors to the bottom edge. Together with `top`, it also determines an
    * unset height. It is unset when omitted or non-finite.
    */
-  readonly bottom?: number | undefined
+  readonly bottom?: L | undefined
   /**
    * The gap between the parent's left edge and the box, as `left` in CSS
    * absolute positioning. When set, it anchors the horizontal position.
    * Together with `right`, it also determines an unset width. It is unset
    * when omitted or non-finite.
    */
-  readonly left?: number | undefined
-  /**
-   * The preferred width. It is unset when omitted or non-finite. The
-   * resolved width then derives from the horizontal insets, from the height
-   * and `aspectRatio`, or fills the parent (see `apply`).
-   */
-  readonly width?: number | undefined
-  /**
-   * The preferred height. It is unset when omitted or non-finite. The
-   * resolved height then derives from the vertical insets, from the width
-   * and `aspectRatio`, or fills the parent (see `apply`).
-   */
-  readonly height?: number | undefined
-  /**
-   * The width-to-height ratio, as a number (`width / height`) or a
-   * `[width, height]` pair such as `[16, 9]` (see `placement/aspectRatio`).
-   * It derives the dimension that no explicit size or pair of insets
-   * determines. A pair derives it with one rounding. Ratios whose value is
-   * non-positive or non-finite act as unset. It is unset when
-   * omitted.
-   */
-  readonly aspectRatio?: AspectRatio.AspectRatio | undefined
-  /**
-   * The lower bound on the resolved width. Negative values clamp to `0`.
-   * The default is `0`. Non-finite values act as unset.
-   */
-  readonly minWidth?: number | undefined
-  /**
-   * The lower bound on the resolved height. Negative values clamp to `0`.
-   * The default is `0`. Non-finite values act as unset.
-   */
-  readonly minHeight?: number | undefined
-  /**
-   * The upper bound on the resolved width. Negative values clamp to `0`.
-   * If the bounds cross, `minWidth` wins, as in CSS `clamp()`. The default
-   * is `Infinity` (unconstrained). Non-finite values act as unset.
-   */
-  readonly maxWidth?: number | undefined
-  /**
-   * The upper bound on the resolved height. Negative values clamp to `0`.
-   * If the bounds cross, `minHeight` wins, as in CSS `clamp()`. The default
-   * is `Infinity` (unconstrained). Non-finite values act as unset.
-   */
-  readonly maxHeight?: number | undefined
+  readonly left?: L | undefined
 }
 
 /**
@@ -118,6 +79,7 @@ class Box extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
   readonly [Raw]: RawInput
+  readonly [SizingOf]: Sizing.Sizing
 
   constructor(input: BoxInput) {
     super()
@@ -136,6 +98,7 @@ class Box extends Pipeable {
       maxWidth: input.maxWidth ?? undefined,
       maxHeight: input.maxHeight ?? undefined,
     }
+    this[SizingOf] = Sizing.normalize(this[Raw])
   }
 
   /**
@@ -200,8 +163,7 @@ class Box extends Pipeable {
    * clamped to `>= 0`, or `0` when unset or non-finite.
    */
   get minWidth(): number {
-    const raw = this[Raw].minWidth ?? 0
-    return Number.isFinite(raw) ? Math.max(raw, 0) : 0
+    return this[SizingOf].minWidth
   }
 
   /**
@@ -209,8 +171,7 @@ class Box extends Pipeable {
    * clamped to `>= 0`, or `0` when unset or non-finite.
    */
   get minHeight(): number {
-    const raw = this[Raw].minHeight ?? 0
-    return Number.isFinite(raw) ? Math.max(raw, 0) : 0
+    return this[SizingOf].minHeight
   }
 
   /**
@@ -219,8 +180,7 @@ class Box extends Pipeable {
    * cross, it rises to `minWidth`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxWidth(): number {
-    const raw = this[Raw].maxWidth ?? Number.POSITIVE_INFINITY
-    return Number.isFinite(raw) ? Math.max(raw, this.minWidth) : Number.POSITIVE_INFINITY
+    return this[SizingOf].maxWidth
   }
 
   /**
@@ -229,8 +189,7 @@ class Box extends Pipeable {
    * cross, it rises to `minHeight`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxHeight(): number {
-    const raw = this[Raw].maxHeight ?? Number.POSITIVE_INFINITY
-    return Number.isFinite(raw) ? Math.max(raw, this.minHeight) : Number.POSITIVE_INFINITY
+    return this[SizingOf].maxHeight
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
@@ -324,53 +283,30 @@ export const apply: {
   (self: Box, parent: Rect.Rect): Rect.Rect
   (parent: Rect.Rect): (self: Box) => Rect.Rect
 } = dual(2, (self: Box, parent: Rect.Rect): Rect.Rect => {
-  const { top, right, bottom, left, minWidth, minHeight, maxWidth, maxHeight } = self
+  const { top, right, bottom, left } = self
+  const sizing = self[SizingOf]
 
   const topIsSet = Number.isFinite(top)
   const rightIsSet = Number.isFinite(right)
   const bottomIsSet = Number.isFinite(bottom)
   const leftIsSet = Number.isFinite(left)
 
-  // The value gates the derivation, and the ratio as given derives the
-  // extent, so a pair rounds once.
-  const aspectRatio = self[Raw].aspectRatio ?? Number.NaN
-  const ratio = AspectRatio.toNumber(aspectRatio)
+  // An inset pair fixes its axis unless an explicit size overrides it.
+  // Otherwise the box fills the room its insets leave, unless the ratio
+  // sizes the axis from the other one, which an explicit size or an inset
+  // pair has sized.
+  const widthIsSet = !Number.isNaN(sizing.width)
+  const heightIsSet = !Number.isNaN(sizing.height)
+  const widthIsSized = widthIsSet || (leftIsSet && rightIsSet)
+  const heightIsSized = heightIsSet || (topIsSet && bottomIsSet)
+  const hasRatio = sizing.aspectRatio !== undefined
 
-  let width = Number.isFinite(self.width)
-    ? clamp(self.width, minWidth, maxWidth)
-    : leftIsSet && rightIsSet
-      ? clamp(parent.width - left - right, minWidth, maxWidth)
-      : Number.NaN
-
-  let height = Number.isFinite(self.height)
-    ? clamp(self.height, minHeight, maxHeight)
-    : topIsSet && bottomIsSet
-      ? clamp(parent.height - top - bottom, minHeight, maxHeight)
-      : Number.NaN
-
-  if (Number.isFinite(ratio) && ratio > 0) {
-    if (Number.isNaN(width) && !Number.isNaN(height)) {
-      width = clamp(AspectRatio.widthFor(aspectRatio, height), minWidth, maxWidth)
-    } else if (Number.isNaN(height) && !Number.isNaN(width)) {
-      height = clamp(AspectRatio.heightFor(aspectRatio, width), minHeight, maxHeight)
-    }
-  }
-
-  if (Number.isNaN(width)) {
-    width = clamp(
-      parent.width - (leftIsSet ? left : 0) - (rightIsSet ? right : 0),
-      minWidth,
-      maxWidth,
-    )
-  }
-
-  if (Number.isNaN(height)) {
-    height = clamp(
-      parent.height - (topIsSet ? top : 0) - (bottomIsSet ? bottom : 0),
-      minHeight,
-      maxHeight,
-    )
-  }
+  const { width, height } = Sizing.resolve(sizing, {
+    width: parent.width - (leftIsSet ? left : 0) - (rightIsSet ? right : 0),
+    height: parent.height - (topIsSet ? top : 0) - (bottomIsSet ? bottom : 0),
+    definiteWidth: !widthIsSet && (widthIsSized || !(hasRatio && heightIsSized)),
+    definiteHeight: !heightIsSet && (heightIsSized || !(hasRatio && widthIsSized)),
+  })
 
   const x = leftIsSet
     ? parent.x + left

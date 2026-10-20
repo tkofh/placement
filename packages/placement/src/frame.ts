@@ -1,99 +1,64 @@
 import { Pipeable, dual } from 'curvy/utils'
 import type * as AspectRatio from './aspectRatio.ts'
-import { type NormalizedSizing, normalizeSizing, normalizeTRBL } from './utils/arguments.ts'
+import { SizingOf } from './internal/sizing.ts'
+import type { LengthInput } from './length.ts'
+import * as Sizing from './sizing.ts'
+import { normalizeTRBL } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/frame')
 type TypeBrand = typeof TypeBrand
 
-// Sizing state uses module-private symbols, not `#private` fields, so reads
-// still work through a `Proxy` (Vue's `ref`/`reactive`).
+// Sizing state uses symbols, not `#private` fields, so reads still work
+// through a `Proxy` (Vue's `ref`/`reactive`).
 const Raw: unique symbol = Symbol('placement/frame/raw')
-const Sizing: unique symbol = Symbol('placement/frame/sizing')
+const Size: unique symbol = Symbol('placement/frame/size')
 
-type RawSizing = {
-  readonly [K in 'width' | 'height' | 'minWidth' | 'minHeight' | 'maxWidth' | 'maxHeight']:
-    | number
-    | undefined
-} & {
-  readonly aspectRatio: AspectRatio.AspectRatio | undefined
-}
+type RawSizing = { readonly [K in keyof Sizing.SizingInput]-?: Sizing.SizingInput[K] }
 
 /**
  * The construction input for `make`. Every field is optional. Passing
  * `undefined` is the same as omitting the field.
  *
- * Each group of fields treats omission differently. Margins, `grow`, and
- * `shrink` default to `0`. The fields `align` and `stretch` default to the
- * inherit sentinel (`Number.POSITIVE_INFINITY`). The sizing fields stay
- * unset and get no default. These are `width`, `height`, `aspectRatio`, and
- * the min/max constraints. The frame derives them from the fields that are
- * set (see `Frame`).
+ * Each group of fields treats omission differently:
+ *
+ * - Margins, `grow`, and `shrink` default to `0`.
+ * - `align` and `stretch` default to the inherit sentinel
+ *   (`Number.POSITIVE_INFINITY`).
+ * - The sizing fields (see `placement/sizing`) stay unset, and so does any
+ *   non-finite size or bound. An unset width or height derives through
+ *   `aspectRatio` or takes the size its layout supplies, which is `0` for
+ *   the frame's own `width` and `height` (see `Frame`).
+ *
+ * The type parameter `L` is the type of the length fields: the margins,
+ * the sizes, and the bounds. `make` takes numbers, the default. A layer
+ * that knows the basis of a percentage can take `FrameInput<LengthInput>`
+ * (see `placement/length`) and resolve its lengths before it calls `make`.
  */
-export interface FrameInput {
+export interface FrameInput<L extends LengthInput = number> extends Sizing.SizingInput<L> {
   /**
    * The space reserved above the frame in its container. A non-finite value
    * requests an auto margin. Layout then gives the edge an equal share of
    * the free space on its axis. Defaults to `0`.
    */
-  readonly marginTop?: number | undefined
+  readonly marginTop?: L | undefined
   /**
    * The space reserved to the right of the frame. A non-finite value
    * requests an auto margin. Layout then gives the edge an equal share of
    * the free space on its axis. Defaults to `0`.
    */
-  readonly marginRight?: number | undefined
+  readonly marginRight?: L | undefined
   /**
    * The space reserved below the frame. A non-finite value requests an auto
    * margin. Layout then gives the edge an equal share of the free space on
    * its axis. Defaults to `0`.
    */
-  readonly marginBottom?: number | undefined
+  readonly marginBottom?: L | undefined
   /**
    * The space reserved to the left of the frame. A non-finite value
    * requests an auto margin. Layout then gives the edge an equal share of
    * the free space on its axis. Defaults to `0`.
    */
-  readonly marginLeft?: number | undefined
-  /**
-   * The preferred width. If you omit it, the width is unset. The resolved
-   * width then derives from the height and `aspectRatio`, or falls back to
-   * `0`.
-   */
-  readonly width?: number | undefined
-  /**
-   * The preferred height. If you omit it, the height is unset. The resolved
-   * height then derives from the width and `aspectRatio`, or falls back to
-   * `0`.
-   */
-  readonly height?: number | undefined
-  /**
-   * The width-to-height ratio, as a number (`width / height`) or a
-   * `[width, height]` pair such as `[16, 9]` (see `placement/aspectRatio`).
-   * The frame uses it to derive whichever of `width` and `height` is
-   * unset. A pair derives it with one rounding. Ratios whose value is non-positive or `NaN` act as unset. If you omit it, the
-   * ratio is unset.
-   */
-  readonly aspectRatio?: AspectRatio.AspectRatio | undefined
-  /**
-   * The lower bound on the resolved width. Negative values clamp to `0`.
-   * Defaults to `0`.
-   */
-  readonly minWidth?: number | undefined
-  /**
-   * The lower bound on the resolved height. Negative values clamp to `0`.
-   * Defaults to `0`.
-   */
-  readonly minHeight?: number | undefined
-  /**
-   * The upper bound on the resolved width. Negative values clamp to `0`.
-   * Defaults to `Infinity` (unconstrained).
-   */
-  readonly maxWidth?: number | undefined
-  /**
-   * The upper bound on the resolved height. Negative values clamp to `0`.
-   * Defaults to `Infinity` (unconstrained).
-   */
-  readonly maxHeight?: number | undefined
+  readonly marginLeft?: L | undefined
   /**
    * The flex grow factor: the frame's share of positive free space along
    * the container's main axis, in proportion to the other items' factors.
@@ -134,13 +99,20 @@ export interface FrameInput {
  * getters resolve from whatever is set. The setters rebuild from the raw
  * inputs, so a derived dimension keeps re-deriving after any setter.
  *
- * Width and height resolve in this order:
+ * Width and height resolve as `resolve` in `placement/sizing` resolves
+ * them, with `0` for an unset size:
+ *
  * - If both are set, each clamps to its own min/max constraints.
- * - If one is set and `aspectRatio` is positive, the set dimension clamps.
- *   The other derives from it through the ratio, then clamps.
+ * - If one is set and `aspectRatio` is set, the set dimension clamps. The
+ *   other derives from it through the ratio, then clamps.
  * - If only `aspectRatio` is set, the ratio applies against the clamped `0`
  *   fallbacks. A positive minimum on one axis then drives the other.
  * - If nothing is set, both dimensions fall back to `0`, clamped.
+ *
+ * Layouts resolve the sizing again where they fix an axis. A frame
+ * stretched into known space takes the stretched size on that axis, and an
+ * unset size on the other axis follows it through the ratio (see
+ * `Flexbox.apply` and `Hierarchy.apply`).
  *
  * The resolution arithmetic is exact IEEE 754 (see PRECISION.md).
  *
@@ -205,10 +177,11 @@ class Frame extends Pipeable {
   readonly stretch: number
 
   // The frame stores sizing inputs raw (undefined means unset) so that
-  // unset-ness survives setter round trips. It resolves them once at
-  // construction.
+  // unset-ness survives setter round trips. It normalizes them, and
+  // resolves its own size, once at construction.
   readonly [Raw]: RawSizing
-  readonly [Sizing]: NormalizedSizing
+  readonly [SizingOf]: Sizing.Sizing
+  readonly [Size]: Sizing.Size
 
   constructor(input: FrameInput) {
     super()
@@ -232,15 +205,8 @@ class Frame extends Pipeable {
       maxHeight: input.maxHeight,
     }
     this[Raw] = raw
-    this[Sizing] = normalizeSizing(
-      raw.aspectRatio ?? 0,
-      raw.width ?? Number.NaN,
-      raw.height ?? Number.NaN,
-      raw.minWidth ?? 0,
-      raw.minHeight ?? 0,
-      raw.maxWidth ?? Number.POSITIVE_INFINITY,
-      raw.maxHeight ?? Number.POSITIVE_INFINITY,
-    )
+    this[SizingOf] = Sizing.normalize(raw)
+    this[Size] = Sizing.resolve(this[SizingOf], { width: 0, height: 0 })
   }
 
   /**
@@ -248,13 +214,13 @@ class Frame extends Pipeable {
    * `maxWidth`, and it is never negative. If the constraints conflict, the
    * minimum wins.
    *
-   * If the raw width is unset, it derives from the height through
-   * `aspectRatio` where possible (`Frame.make({ height: 50, aspectRatio: 2 })`
-   * resolves to `100`). Otherwise it falls back to `0`, which `minWidth` can
-   * raise.
+   * If the raw width is unset or non-finite, it derives from the height
+   * through `aspectRatio` where possible
+   * (`Frame.make({ height: 50, aspectRatio: 2 })` resolves to `100`).
+   * Otherwise it falls back to `0`, which `minWidth` can raise.
    */
   get width(): number {
-    return this[Sizing].width
+    return this[Size].width
   }
 
   /**
@@ -262,13 +228,13 @@ class Frame extends Pipeable {
    * `maxHeight`, and it is never negative. If the constraints conflict, the
    * minimum wins.
    *
-   * If the raw height is unset, it derives from the width through
-   * `aspectRatio` where possible (`Frame.make({ width: 100, aspectRatio: 2 })`
-   * resolves to `50`). Otherwise it falls back to `0`, which `minHeight` can
-   * raise.
+   * If the raw height is unset or non-finite, it derives from the width
+   * through `aspectRatio` where possible
+   * (`Frame.make({ width: 100, aspectRatio: 2 })` resolves to `50`).
+   * Otherwise it falls back to `0`, which `minHeight` can raise.
    */
   get height(): number {
-    return this[Sizing].height
+    return this[Size].height
   }
 
   /**
@@ -279,41 +245,41 @@ class Frame extends Pipeable {
    * for `0` over `0` (the empty `Frame.make({})`).
    */
   get aspectRatio(): number {
-    return this[Sizing].aspectRatio
+    return this[Size].width / this[Size].height
   }
 
   /**
    * The effective lower bound on `width`: the raw input clamped to
-   * `>= 0`, and `0` when unset.
+   * `>= 0`, and `0` when unset or non-finite.
    */
   get minWidth(): number {
-    return this[Sizing].minWidth
+    return this[SizingOf].minWidth
   }
 
   /**
    * The effective lower bound on `height`: the raw input clamped to
-   * `>= 0`, and `0` when unset.
+   * `>= 0`, and `0` when unset or non-finite.
    */
   get minHeight(): number {
-    return this[Sizing].minHeight
+    return this[SizingOf].minHeight
   }
 
   /**
    * The effective upper bound on `width`: the raw input clamped to
-   * `>= 0`, and `Infinity` when unset. If the bounds cross, it rises to
-   * `minWidth`, so the minimum wins, as in CSS `clamp()`.
+   * `>= 0`, and `Infinity` when unset or non-finite. If the bounds cross,
+   * it rises to `minWidth`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxWidth(): number {
-    return this[Sizing].maxWidth
+    return this[SizingOf].maxWidth
   }
 
   /**
    * The effective upper bound on `height`: the raw input clamped to
-   * `>= 0`, and `Infinity` when unset. If the bounds cross, it rises to
-   * `minHeight`, so the minimum wins, as in CSS `clamp()`.
+   * `>= 0`, and `Infinity` when unset or non-finite. If the bounds cross,
+   * it rises to `minHeight`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxHeight(): number {
-    return this[Sizing].maxHeight
+    return this[SizingOf].maxHeight
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
@@ -596,7 +562,7 @@ export const setHeight: {
 
 /**
  * Sets the width-to-height ratio. The frame uses it to derive whichever
- * dimension is unset. Non-positive and `NaN` ratios act as unset. The
+ * dimension is unset. Non-positive and non-finite ratios act as unset. The
  * data-last form omits `self` and returns a function of it.
  *
  * @param self - The frame to update.

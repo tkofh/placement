@@ -580,6 +580,37 @@ describe('apply', () => {
       expect(layout.nodes.end).toMatchObject({ y: 40, height: 20 })
     })
 
+    test('a stretched node with a ratio takes its width from its stretched height', () => {
+      const layout = Hierarchy.apply(
+        {
+          root: box,
+          tall: nodes.tall,
+          wide: Frame.make({ height: 20, aspectRatio: 2, stretch: 1 }),
+        },
+        [
+          Edge.make({ source: 'root', target: 'tall' }),
+          Edge.make({ source: 'root', target: 'wide' }),
+        ],
+        spec,
+      )
+      expect(layout.nodes.wide).toMatchObject({ height: 60, width: 120 })
+      // The rank spaces the node by its derived width.
+      const [left, right] = [layout.nodes.tall, layout.nodes.wide].toSorted((p, q) => p.x - q.x)
+      expect((right as Rect.Rect).x - (left as Rect.Rect).right).toBe(20)
+    })
+
+    test('a ratio node keeps its width when it does not stretch', () => {
+      const layout = Hierarchy.apply(
+        { root: box, tall: nodes.tall, wide: Frame.make({ height: 20, aspectRatio: 2 }) },
+        [
+          Edge.make({ source: 'root', target: 'tall' }),
+          Edge.make({ source: 'root', target: 'wide' }),
+        ],
+        spec,
+      )
+      expect(layout.nodes.wide).toMatchObject({ height: 20, width: 40 })
+    })
+
     test('auto margins along the flow position a node like auto margins', () => {
       const layout = Hierarchy.apply(
         {

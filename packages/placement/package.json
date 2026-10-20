@@ -78,6 +78,10 @@
       "types": "./dist/rect.d.mts",
       "import": "./dist/rect.mjs"
     },
+    "./sizing": {
+      "types": "./dist/sizing.d.mts",
+      "import": "./dist/sizing.mjs"
+    },
     "./track": {
       "types": "./dist/track.d.mts",
       "import": "./dist/track.mjs"

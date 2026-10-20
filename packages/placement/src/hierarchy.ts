@@ -21,10 +21,12 @@ import {
   noGrowth,
   place,
 } from './internal/hierarchy/layout.ts'
+import { SizingOf } from './internal/sizing.ts'
 import * as Interval from './interval.ts'
 import * as Point from './point.ts'
 import type { Polygon } from './polygon.ts'
 import * as Rect from './rect.ts'
+import * as Sizing from './sizing.ts'
 import { auto } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/hierarchy')
@@ -331,7 +333,9 @@ const ROUNDS = 3
  * 4. It positions nodes across the flow by Brandes-Köpf, which keeps long
  *    edges straight.
  * 5. It stacks each rank's nodes inside the rank's thickness with the
- *    frames' `align` and `stretch`.
+ *    frames' `align` and `stretch`. A stretched node with an
+ *    `aspectRatio` and no size of its own across the flow takes that size
+ *    from its stretched size along the flow, before step 4 spaces it.
  * 6. It routes the edges with `Connector.apply` (see `placement/connector`)
  *    around the placed nodes, through the slots between nodes that step 3
  *    ordered each long edge through, from and to the faces of the nodes
@@ -420,6 +424,20 @@ export function apply<const K extends string>(
       ? [frame.marginTop, frame.marginBottom]
       : [frame.marginLeft, frame.marginRight]
     const placeAt = auto(frame.align, hierarchy.alignItems)
+    // An unset order-axis size follows a stretched rank-axis size through
+    // the ratio.
+    const sizing = frame[SizingOf]
+    const oDimension = vertical ? 'width' : 'height'
+    const oFor =
+      sizing.aspectRatio !== undefined && Number.isNaN(sizing[oDimension])
+        ? (rSize: number): number =>
+            Sizing.resolve(
+              sizing,
+              vertical
+                ? { width: 0, height: rSize, definiteHeight: true }
+                : { width: rSize, height: 0, definiteWidth: true },
+            )[oDimension]
+        : undefined
     return {
       oSize: vertical ? frame.width : frame.height,
       rSize: vertical ? frame.height : frame.width,
@@ -431,6 +449,7 @@ export function apply<const K extends string>(
       rEnd: reverse ? rLeading : rTrailing,
       place: reverse ? 1 - placeAt : placeAt,
       stretch: auto(frame.stretch, hierarchy.stretchItems),
+      oFor,
     }
   })
 

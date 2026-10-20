@@ -778,3 +778,139 @@ describe('margins are physical in reversed flows (regression)', () => {
     ).toEqual([Rect.make(0, 0, 100)])
   })
 })
+
+describe('aspect ratio', () => {
+  const row = Flexbox.make({})
+
+  test('an unset cross size follows the grown main size', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ width: 100, aspectRatio: 2, grow: 1 })],
+        row,
+        Rect.make(300, 400),
+      ),
+    ).toEqual([Rect.make(0, 0, 300, 150)])
+  })
+
+  test('an unset cross size follows the shrunk main size', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ width: 400, aspectRatio: 2, shrink: 1 })],
+        row,
+        Rect.make(200, 400),
+      ),
+    ).toEqual([Rect.make(0, 0, 200, 100)])
+  })
+
+  test('a set cross size ignores the grown main size', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ width: 100, height: 20, aspectRatio: 2, grow: 1 })],
+        row,
+        Rect.make(300, 400),
+      ),
+    ).toEqual([Rect.make(0, 0, 300, 20)])
+  })
+
+  test('the followed cross size sizes a wrapped line', () => {
+    const rects = Flexbox.apply(
+      [Frame.make({ width: 50, aspectRatio: 1, grow: 1 }), rectangle(250, 10)],
+      Flexbox.make({ wrap: Flexbox.wrap.wrap }),
+      Rect.make(200, 400),
+    )
+    expect(rects).toEqual([Rect.make(0, 0, 200, 200), Rect.make(0, 200, 250, 10)])
+  })
+
+  test('an unset main size follows a stretch into a lone line', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ aspectRatio: 2 }), rectangle(50, 10)],
+        Flexbox.make({ stretchItems: 1 }),
+        Rect.make(300, 60),
+      ),
+    ).toEqual([Rect.make(0, 0, 120, 60), Rect.make(120, 0, 50, 60)])
+  })
+
+  test('a partial stretch fixes the cross size too', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ height: 20, aspectRatio: 2, stretch: 0.5 })],
+        row,
+        Rect.make(300, 60),
+      ),
+    ).toEqual([Rect.make(0, 0, 80, 40)])
+  })
+
+  test('a set main size ignores the stretch', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ width: 30, aspectRatio: 2, stretch: 1 })],
+        row,
+        Rect.make(300, 60),
+      ),
+    ).toEqual([Rect.make(0, 0, 30, 60)])
+  })
+
+  test('a stretched cross size wins over the grown main size', () => {
+    expect(
+      Flexbox.apply([Frame.make({ aspectRatio: 2, stretch: 1, grow: 1 })], row, Rect.make(300, 60)),
+    ).toEqual([Rect.make(0, 0, 300, 60)])
+  })
+
+  test('auto cross margins keep the ratio from following the line', () => {
+    expect(
+      Flexbox.apply(
+        [
+          Frame.make({
+            height: 20,
+            aspectRatio: 2,
+            stretch: 1,
+            marginTop: Number.POSITIVE_INFINITY,
+          }),
+        ],
+        row,
+        Rect.make(300, 60),
+      ),
+    ).toEqual([Rect.make(0, 40, 40, 20)])
+  })
+
+  test('a stretch in a wrapped line follows the line, which keeps its size', () => {
+    const rects = Flexbox.apply(
+      [
+        Frame.make({ height: 10, aspectRatio: 2, stretch: 1 }),
+        rectangle(50, 40),
+        rectangle(280, 20),
+      ],
+      Flexbox.make({ wrap: Flexbox.wrap.wrap }),
+      Rect.make(300, 200),
+    )
+    expect(rects).toEqual([
+      Rect.make(0, 0, 80, 40),
+      Rect.make(80, 0, 50, 40),
+      Rect.make(0, 40, 280, 20),
+    ])
+  })
+
+  test('a stretched width drives the height in a column', () => {
+    expect(
+      Flexbox.apply(
+        [square(100)],
+        Flexbox.make({ direction: Flexbox.direction.column, stretchItems: 1 }),
+        Rect.make(200, 400),
+      ),
+    ).toEqual([Rect.make(0, 0, 200, 200)])
+  })
+
+  test('a followed main size that overflows a wrapped line stays on it', () => {
+    const rects = Flexbox.apply(
+      [
+        Frame.make({ height: 10, aspectRatio: 4, stretch: 1 }),
+        rectangle(150, 40),
+        rectangle(300, 5),
+      ],
+      Flexbox.make({ wrap: Flexbox.wrap.wrap }),
+      Rect.make(200, 200),
+    )
+    expect(rects.slice(0, 2)).toEqual([Rect.make(0, 0, 160, 40), Rect.make(160, 0, 150, 40)])
+  })
+})

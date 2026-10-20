@@ -101,6 +101,34 @@ describe('sizing resolves lazily from raw inputs', () => {
     expect(Frame.setWidth(Frame.make({ maxWidth: 150 }), 200).width).toBe(150)
   })
 
+  test.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'a size or bound of %f is unset',
+    (value) => {
+      const frame = Frame.make({
+        height: 10,
+        aspectRatio: 2,
+        width: value,
+        minWidth: value,
+        maxWidth: value,
+        minHeight: value,
+        maxHeight: value,
+      })
+      expect([frame.width, frame.height]).toEqual([20, 10])
+      expect([frame.minWidth, frame.maxWidth, frame.minHeight, frame.maxHeight]).toEqual([
+        0,
+        Number.POSITIVE_INFINITY,
+        0,
+        Number.POSITIVE_INFINITY,
+      ])
+      // The raw input survives for the setters.
+      expect(frame.toJSON().width).toBe(value)
+    },
+  )
+
+  test('a non-finite ratio is unset', () => {
+    expect(Frame.make({ width: 10, aspectRatio: Number.POSITIVE_INFINITY }).height).toBe(0)
+  })
+
   test('setters chain without leaking resolved values', () => {
     const result = Frame.make({ aspectRatio: 2 }).pipe(Frame.setWidth(100), Frame.setMinHeight(60))
     expect(result.width).toBe(100)

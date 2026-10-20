@@ -17,6 +17,7 @@ export default defineConfig({
     'src/point.ts',
     'src/polygon.ts',
     'src/rect.ts',
+    'src/sizing.ts',
     'src/track.ts',
     'src/unstable/utils.ts',
   ],
