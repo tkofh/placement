@@ -3,10 +3,17 @@ import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
+import { restore, route, routeInOrder } from '../src/internal/connector/canonical.ts'
 import * as Interval from '../src/interval.ts'
 import * as Point from '../src/point.ts'
 import * as Rect from '../src/rect.ts'
 import { sceneOf } from './fixtures/judgements.ts'
+
+// One solve in canonical order, without the other orders and the network
+// moves that `Connector.apply` tries: for tests of what a phase of one
+// solve draws, which a network moved to another side can leave with
+// nothing to show.
+const solveOnce = route
 
 const pointsOf = (layout: Connector.ConnectorLayout, i = 0) =>
   layout.edges[i]?.points.map(({ x, y }) => [x, y])
@@ -1061,33 +1068,41 @@ describe('merging', () => {
   const merging = (value: number) => spec.pipe(Connector.setMerge(value))
 
   test('a route that could merge is pulled along the route it could merge with', () => {
-    // From b, the top and the left of t cost the same. Pulled along a's
-    // route, a tenth cheaper, b comes in on the left too, and groups with
-    // it: b's port sits above a's, the gap of 4 between them.
+    // t's network comes from up and to the left of it as far, so its top
+    // and its left face the network alike, and the way the ends face
+    // settles nothing between them. From b, t's top is a corner nearer by
+    // b's right than by its bottom, but by its bottom b runs beside a's
+    // route for 38, which the pull pays more for than the corner costs: b
+    // leaves its bottom and groups with a, its port right of a's, the gap
+    // of 4 between them.
     const rects = {
-      a: Rect.make(0, 120, 40, 40),
-      b: Rect.make(60, 0, 40, 40),
+      a: Rect.make(0, 80, 40, 40),
+      b: Rect.make(100, -20, 40, 40),
       t: Rect.make(140, 120, 40, 40),
     }
     const edges = [Edge.make({ source: 'a', target: 't' }), Edge.make({ source: 'b', target: 't' })]
     const pulled = Connector.make({ clearance: 10, gap: 4, bendCost: 20, merge: 1 })
     const layout = Connector.apply(rects, edges, pulled)
     expect(pointsOf(layout, 1)).toEqual([
-      [80, 40],
-      [80, 138],
-      [140, 138],
+      [120, 20],
+      [120, 96],
+      [162, 96],
+      [162, 120],
     ])
     expect(pointsOf(layout, 0)).toEqual([
-      [40, 142],
-      [140, 142],
+      [40, 100],
+      [158, 100],
+      [158, 120],
     ])
-    // With merging off, nothing pulls.
+    // With merging off, nothing pulls: b leaves its right, straight for
+    // t's top.
     const apart = Connector.apply(rects, edges, pulled.pipe(Connector.setMerge(0)))
-    expect(pointsOf(apart, 1)).toEqual([
-      [100, 20],
-      [160, 20],
-      [160, 120],
-    ])
+    const [first, corner, last] = pointsOf(apart, 1) as Array<[number, number]>
+    expect(first).toEqual([140, 0])
+    expect(corner?.[1]).toBe(0)
+    expect(last?.[1]).toBe(120)
+    expect(corner?.[0]).toBe(last?.[0])
+    expect(apart.edges[1]?.points).toHaveLength(3)
     expect(apart.edges[1]?.merged).toEqual([-1, -1])
   })
 
@@ -1106,7 +1121,7 @@ describe('merging', () => {
       Edge.make({ source: 's', target: 'u', sourceSide: Edge.side.bottom }),
     ]
     const spec = Connector.make({ clearance: 10, gap: 4, bendCost: 0, merge: 1 })
-    const layout = Connector.apply(rects, edges, spec)
+    const layout = solveOnce(rects, edges, spec)
     expect(layout.edges[0]?.points.every((point) => point.y <= 140)).toBe(true)
     expect(layout.edges[0]?.points).toHaveLength(3)
     expect(layout.edges[0]?.merged).toEqual([-1, -1])
@@ -1149,7 +1164,7 @@ describe('merging', () => {
   })
 
   test('ends on one side with the same adornments group on ports next to each other', () => {
-    const layout = Connector.apply(rects, [into('a'), into('b')], merging(Connector.merge.side))
+    const layout = solveOnce(rects, [into('a'), into('b')], merging(Connector.merge.side))
     // The ports sit the gap of 4 apart about the middle of the side, in the
     // order the routes part in, so they run straight in. They part as far
     // back from the group as they can, the clearance from their sources,
@@ -1196,7 +1211,7 @@ describe('merging', () => {
   })
 
   test('with a radius, the routes of a group that part keep their radius', () => {
-    const layout = Connector.apply(
+    const layout = solveOnce(
       rects,
       [into('a', { radius: 8 }), into('b', { radius: 8 })],
       merging(Connector.merge.side),
@@ -1225,7 +1240,7 @@ describe('merging', () => {
   })
 
   test('the merge gap sets the ports apart', () => {
-    const layout = Connector.apply(
+    const layout = solveOnce(
       rects,
       [into('a'), into('b')],
       merging(Connector.merge.side).pipe(Connector.setMergeGap(2)),
@@ -1241,7 +1256,7 @@ describe('merging', () => {
   })
 
   test('the merge gap is between the strokes', () => {
-    const layout = Connector.apply(
+    const layout = solveOnce(
       rects,
       [into('a', { thickness: 2 }), into('b', { thickness: 2 })],
       merging(Connector.merge.side).pipe(Connector.setMergeGap(2)),
@@ -1301,7 +1316,7 @@ describe('merging', () => {
   })
 
   test('near groups routes that come from the same way, nested', () => {
-    const layout = Connector.apply(rects, [into('a'), into('c')], merging(Connector.merge.near))
+    const layout = solveOnce(rects, [into('a'), into('c')], merging(Connector.merge.near))
     // The route from farther up takes the upper port and the outer bend.
     expect(pointsAt(layout, 0)).toEqual([
       [40, -30],
@@ -1321,7 +1336,7 @@ describe('merging', () => {
     // Four ends with one arrowhead: two routes come down from above and two
     // up from below, so they form two groups, each two ports the gap
     // apart, with a third of the free space, 12, between and around them.
-    const layout = Connector.apply(
+    const layout = solveOnce(
       { ...rects, d: Rect.make(0, 120, 40, 20), t: Rect.make(200, 0, 40, 44) },
       (['a', 'b', 'c', 'd'] as const).map((source) =>
         Edge.make({ source, target: 't', targetSide: Edge.side.left, adornments: [head] }),
@@ -1335,7 +1350,7 @@ describe('merging', () => {
     // c and a group, 4 wide, and b, with no arrowhead, is alone: the 36
     // the side has left over sits a third before the group, a third
     // between, and a third after b.
-    const layout = Connector.apply(
+    const layout = solveOnce(
       rects,
       [into('a'), into('b', { adornments: [] }), into('c')],
       merging(Connector.merge.side),
@@ -1499,7 +1514,7 @@ function sideSlit(room: number): Connector.ConnectorLayout {
     Edge.make({ source: 'a', target: 'd', sourceSide: 1, targetSide: 3 }),
     Edge.make({ source: 'b', target: 'd', sourceSide: 1, sourceAt: 0.5 }),
   ]
-  return Connector.apply(rects, edges, Connector.make({ clearance: 4, gap: 8 }))
+  return solveOnce(rects, edges, Connector.make({ clearance: 4, gap: 8 }))
 }
 
 describe('notes', () => {
@@ -1979,9 +1994,12 @@ describe('slanted corners', () => {
     // auth->db (5) jogs 6.46 into db and slants gently, its arc 130 wide.
     // billing->db (9) turns into db 5.75 inside it, and keeps its radius,
     // grown only for the nest it makes with orders->db (8), within both
-    // radii together; its corner out of billing keeps its radius too.
+    // radii together; its corner out of billing keeps its radius too. The
+    // layout `apply` keeps no longer slants, so this routes the scene in
+    // the promoted order that drew it.
     const { rects, edges, spec: settings } = sceneOf('wild')
-    const layout = Connector.apply(rects, edges, settings)
+    const order = [7, 9, 4, 3, 8, 6, 5, 12, 11, 10, 2, 1, 0]
+    const layout = restore(routeInOrder(rects, edges, settings, {}, order).layout, order)
     const slant = layout.edges[5]?.points.map(({ x, y }) => [x, y]) ?? []
     expect(
       slant.some(([x, y], i) => i > 0 && x !== slant[i - 1]?.[0] && y !== slant[i - 1]?.[1]),

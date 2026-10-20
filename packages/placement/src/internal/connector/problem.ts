@@ -62,6 +62,14 @@ const TURN_SHARE = 1
 const MERGE_PULL = 0.75
 const TIGHT_SHARE = 2
 
+// The most an auto end costs, as a share of a corner, for a side that
+// faces away from where its network comes from (see `facingCosts` in
+// `sides.ts`). It settles near-ties between sides, so that a network's
+// ends come in on the side that faces it, and stays well under what a
+// corner or a real difference in length costs, so that it never turns a
+// route the long way round.
+const COM_SHARE = 0.25
+
 /**
  * How much more a unit of length costs, per route a channel is over
  * capacity by, in the first round of a search among routes (see
@@ -204,6 +212,11 @@ export interface Problem {
   readonly tightCost: number
   /** The partner discount while sides are chosen, `0` with merging off. */
   readonly pull: number
+  /**
+   * The most an auto end costs for a side that faces away from where its
+   * network comes from (see `facingCosts`).
+   */
+  readonly facingCost: number
   /** The rects, by index. */
   readonly boxes: ReadonlyArray<Rect.Rect>
   /** The rects grown by the clearance, by index. */
@@ -329,6 +342,7 @@ export function normalize(
     crossingCost: CROSSING_SHARE * bendCost,
     tightCost: TIGHT_SHARE * bendCost,
     pull: merging ? MERGE_PULL : 0,
+    facingCost: COM_SHARE * bendCost,
     boxes,
     obstacles,
     edges: problemEdges,
@@ -403,6 +417,90 @@ export function mergeIds(
     }
   }
   return ids
+}
+
+/**
+ * The ends of other edges that may merge with an end of an edge: those at
+ * the same rect with the same merge key, the partners whose routes pull
+ * each other along while sides are chosen.
+ *
+ * @param problem - The problem.
+ * @param edge - The edge index.
+ * @param end - The end, `0` or `1`.
+ * @returns The partners' ends, in edge order.
+ */
+export function partnersAt(problem: Problem, edge: number, end: number): Array<EdgeEnd> {
+  const own = problem.edges[edge] as ProblemEdge
+  const key = own.ends[end]?.key
+  if (key === undefined) {
+    return []
+  }
+  const rect = rectAt(own, end)
+  return problem.edges.flatMap((other, j) =>
+    j === edge
+      ? []
+      : ([0, 1] as const).flatMap(
+          (far): Array<EdgeEnd> =>
+            rectAt(other, far) === rect && other.ends[far]?.key === key
+              ? [{ edge: j, end: far }]
+              : [],
+        ),
+  )
+}
+
+// The nearer of two offsets along an axis that point the same way, or
+// nothing.
+const overlap = (s: number, t: number): number =>
+  (before(0, s) && before(0, t)) || (before(s, 0) && before(t, 0))
+    ? Math.min(Math.abs(s), Math.abs(t))
+    : 0
+
+/**
+ * How far the routes of two ends at one rect could run together, by the
+ * way their networks lie: the overlap of two monotone staircases out of
+ * the rect's center, one to the center of each route's far-end rect. On
+ * each axis that both far ends lie the same way along, the pair could
+ * share the nearer of the two offsets, and on an axis where they part, or
+ * where one lies level with the rect, nothing: the L1 analogue of a dot
+ * product, as in force-directed edge bundling, where edges bundle by how
+ * far their directions agree. The routes leave the rect by one side,
+ * though, so along the axis they leave by they share from its edge, not
+ * its center: that axis's overlap loses the rect's half-size there, on
+ * whichever axis they agree along loses least, and two routes to one
+ * rect lose its half-size the same way at the other end, where they
+ * enter it together. Two ends held to different sides share nothing, nor
+ * do two routes to opposite sides, and two routes to one rect side by side
+ * share the whole gap between the rects. No pair shares more than either
+ * route's Manhattan distance between the centers.
+ *
+ * @param problem - The problem.
+ * @param a - One end.
+ * @param b - The other, at the same rect.
+ * @returns The length the two routes could share.
+ */
+export function shareBudget(problem: Problem, a: EdgeEnd, b: EdgeEnd): number {
+  const { boxes, edges } = problem
+  const [p, q] = [edges[a.edge] as ProblemEdge, edges[b.edge] as ProblemEdge]
+  // Two ends held to different sides cannot leave together.
+  const [side, other] = [p.ends[a.end]?.side, q.ends[b.end]?.side]
+  if (side !== undefined && other !== undefined && side !== other) {
+    return 0
+  }
+  const hub = boxes[rectAt(p, a.end)] as Rect.Rect
+  const [u, v] = [
+    boxes[rectAt(p, 1 - a.end)] as Rect.Rect,
+    boxes[rectAt(q, 1 - b.end)] as Rect.Rect,
+  ]
+  const x = overlap(u.centerX - hub.centerX, v.centerX - hub.centerX)
+  const y = overlap(u.centerY - hub.centerY, v.centerY - hub.centerY)
+  // What the overlap loses inside a rect the two leave or enter by one
+  // side: its half-size along the axis they agree along that loses least.
+  const lost = (box: Rect.Rect) => {
+    const [inX, inY] = [Math.min(x, box.width / 2), Math.min(y, box.height / 2)]
+    return x > 0 && y > 0 ? Math.min(inX, inY) : x > 0 ? inX : inY
+  }
+  const far = rectAt(p, 1 - a.end) === rectAt(q, 1 - b.end) ? lost(u) : 0
+  return Math.max(0, x + y - lost(hub) - far)
 }
 
 /**

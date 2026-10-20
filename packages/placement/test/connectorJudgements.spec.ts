@@ -9,7 +9,7 @@ import { type RenderName, type SceneName, layoutOf, sceneOf } from './fixtures/j
 // weights do not bend to win it back.
 
 interface Judgement {
-  readonly id: number
+  readonly id: number | string
   readonly scene: SceneName
   readonly better: RenderName
   readonly worse: RenderName
@@ -87,6 +87,55 @@ const judgements: ReadonlyArray<Judgement> = [
     worse: 'v2c-after/case2',
     why: 'the steps of pair 3 come back',
   },
+  {
+    id: 'C1',
+    scene: 'case1',
+    better: 'facing/case1',
+    worse: 'partner/case1',
+    why: 'web and mobile come into gateway by its top and its bottom, apart, rather than together into its left side, which faces them',
+  },
+  {
+    id: 'C3',
+    scene: 'case3',
+    better: 'facing/case3',
+    worse: 'partner/case3',
+    why: "web and mobile come into gateway apart, gateway's egress leaves by its top and its bottom, and gateway->auth hooks round auth's corner into its left side",
+  },
+  {
+    id: 'C4',
+    scene: 'case4',
+    better: 'facing/case4',
+    worse: 'partner/case4',
+    why: "web and mobile come into gateway apart, gateway's egress leaves by its top and its bottom, and gateway->auth hooks round into auth's left side",
+  },
+  {
+    id: 'Id',
+    scene: 'diabolical',
+    better: 'ideal/diabolical',
+    worse: 'facing/diabolical',
+    why: "events->mailer and events->indexer leave events' left and cut down through the routes into db, and events->exporter leaves alone",
+  },
+  {
+    id: 'I4',
+    scene: 'case4',
+    better: 'ideal/case4',
+    worse: 'facing/case4',
+    why: "events->mailer and events->indexer leave events' left and cut down through the routes into db, and events->exporter leaves alone",
+  },
+  {
+    id: 'Bf',
+    scene: 'fan',
+    better: 'bundles/fan',
+    worse: 'legs/fan',
+    why: "bus's egress leaves its right side as five routes, each turning off on its own, and mailer alone out of its bottom, rather than as a group out of its right and a group out of its bottom",
+  },
+  {
+    id: 'Bt',
+    scene: 'tree',
+    better: 'bundles/tree',
+    worse: 'legs/tree',
+    why: 'root->api and root->jobs leave root apart, by its left and its right, rather than out of its bottom as one bundle, and jobs->queue leaves jobs by its left, apart from jobs->cron',
+  },
 ]
 
 const scoreOf = (scene: SceneName, render: RenderName) => {
@@ -112,5 +161,18 @@ describe('the score agrees with the eye', () => {
     const grouping = scoreOf('case3', 'group-final/case3')
     const canonical = scoreOf('case3', 'canon/case3')
     expect(grouping.terms.unrouted + canonical.terms.unrouted).toBe(0)
+  })
+
+  // Pair Cd is judged, but not asserted. Facing networks draws diabolical
+  // better as a whole: events' egress no longer splits, and gateway's
+  // egress leaves by one side. But its events->mailer takes two kinks,
+  // tight corners round a step that the partner render does not need,
+  // and the score charges those more than it credits the bundle. The
+  // ideal render (pair Id) has the bundle without the kinks, so the pair
+  // stays to show what a change to the score does to it.
+  test('pair Cd, diabolical: facing/diabolical against partner/diabolical, kinks against a bundle', () => {
+    const facing = scoreOf('diabolical', 'facing/diabolical')
+    const partner = scoreOf('diabolical', 'partner/diabolical')
+    expect(facing.terms.unrouted + partner.terms.unrouted).toBe(0)
   })
 })

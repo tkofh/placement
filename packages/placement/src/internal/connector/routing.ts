@@ -1,7 +1,7 @@
 import { coincident } from 'curvy/number'
 import { atMost, before, overlaps, within } from '../../utils/tolerance.ts'
 import { type Fill, channelsOf, congestionFor, fillPath, groupsOf } from '../graph/channels.ts'
-import { crossedRuns, crossingsBetween } from '../graph/crossings.ts'
+import { crossedRuns, crossingsBetween, markCrossedRuns } from '../graph/crossings.ts'
 import type { Graph, Obstacle } from '../graph/graph.ts'
 import {
   type Congestion,
@@ -468,22 +468,12 @@ export function routeAll(
         // riding the whole run costs what the crossing is. Not so for two
         // paths that share a port: the runs out of it are their bundle,
         // and a crossing on it is for the nudge to order.
-        if ((order.get(j) as number) < (order.get(i) as number) && !sharePort(i, j)) {
-          for (const [from, to] of crossedRuns(graph, path.nodes, other.nodes)) {
-            const nodes = straightOn(graph, path.nodes, from, to)
-            if (nodes.length > 0) {
-              along = true
-              mark(
-                nodes,
-                coincident(
-                  graph.xs[path.nodes[from] as number] as number,
-                  graph.xs[path.nodes[to] as number] as number,
-                ),
-                1 / nodes.length,
-                false,
-              )
-            }
-          }
+        if (
+          (order.get(j) as number) < (order.get(i) as number) &&
+          !sharePort(i, j) &&
+          markCrossedRuns(graph, path.nodes, other.nodes, extra)
+        ) {
+          along = true
         }
         const need = problem.settings.gap + (thickness + (edges[j] as ProblemEdge).thickness) / 2
         const bundle = bundledAt(i, j)
@@ -707,24 +697,6 @@ function runsOf(graph: Graph, path: Path): Array<Run> {
     start = k
   }
   return runs
-}
-
-// The nodes of the run of a path from index `from` to index `to` that the
-// path runs straight on through: none when it turns at both ends of a run
-// of one edge.
-function straightOn(graph: Graph, nodes: Int32Array, from: number, to: number): Array<number> {
-  const { xs, ys } = graph
-  const inLine = (a: number, b: number, c: number) =>
-    (coincident(xs[a] as number, xs[b] as number) &&
-      coincident(xs[b] as number, xs[c] as number)) ||
-    (coincident(ys[a] as number, ys[b] as number) && coincident(ys[b] as number, ys[c] as number))
-  const found: Array<number> = []
-  for (let k = Math.max(from, 1); k <= Math.min(to, nodes.length - 2); k++) {
-    if (inLine(nodes[k - 1] as number, nodes[k] as number, nodes[k + 1] as number)) {
-      found.push(nodes[k] as number)
-    }
-  }
-  return found
 }
 
 // The straight runs of a path that nudging cannot move: those through its

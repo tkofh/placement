@@ -341,8 +341,10 @@ export function restore(layout: ConnectorLayout, order: ReadonlyArray<number>): 
  * @param options - The route constraints of each edge, and the shapes.
  * @param order - The input index of the edge to route at each position.
  * @param trace - Hears the routes after each phase, by input index.
- * @returns The problem, its edges in `order`, and the layout that solves
- *   it, in the same order (see `restore`).
+ * @param solved - The problem the pipeline solves, from the problem of the
+ *   inputs: the inputs' own by default.
+ * @returns The problem of the inputs, its edges in `order`, and the layout
+ *   that solves it, in the same order (see `restore`).
  */
 export function routeInOrder(
   rects: Readonly<Record<string, Rect.Rect>>,
@@ -351,6 +353,7 @@ export function routeInOrder(
   options: ConnectorApplyOptions,
   order: ReadonlyArray<number>,
   trace?: Trace,
+  solved: (problem: Problem) => Problem = (problem) => problem,
 ): { readonly problem: Problem; readonly layout: ConnectorLayout } {
   const given = options.edges
   const listed: ConnectorApplyOptions = {
@@ -373,7 +376,7 @@ export function routeInOrder(
           }
           trace(phase, byInput)
         }
-  return { problem, layout: solve(problem, heard) }
+  return { problem, layout: solve(solved(problem), heard) }
 }
 
 /**

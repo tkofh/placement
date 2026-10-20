@@ -1,9 +1,9 @@
 import { coincident } from 'curvy/number'
 import type { ConnectorLayout } from '../../connector.ts'
 import type * as Rect from '../../rect.ts'
-import { before, inside } from '../../utils/tolerance.ts'
+import { atMost, before, inside } from '../../utils/tolerance.ts'
 import type { Axis, XY } from '../orient.ts'
-import type { Problem, ProblemEdge } from './problem.ts'
+import { type EdgeEnd, type Problem, type ProblemEdge, partnersAt, shareBudget } from './problem.ts'
 
 // The score of a finished layout: what the routes cost as drawn, after
 // nudging, port slides, slants, and corners, on the search's own cost
@@ -27,12 +27,27 @@ import type { Problem, ProblemEdge } from './problem.ts'
 //   without room for its corner.
 // - `crossings`: each crossing between two routes, at the problem's
 //   `crossingCost`.
+// - `fan`: each crossing near a route's port, out of or into it, up to
+//   `FAN_SHARE - 1` crossings more: all of that at the port, falling in
+//   proportion to none at `FAN_FADE` of the route's length from it, and
+//   paid for each of the two routes whose port it is near. A route that
+//   cuts into the fan of a node's ports tangles that node's network with
+//   its own. Partners crossing in their own group out of a port cross no
+//   fan.
 // - `squeeze`: each stretch where two routes run alongside each other
 //   closer than the gap and their strokes allow (the merge gap, for
 //   partners of a group), by how much of that room they lack and how long
 //   they run so, read from the routes as drawn rather than from the notes,
 //   so a squeeze nudging could not undo, and did not report, costs too.
 //   Slanted segments are left out.
+// - `unshared`: each end of a route with merge partners there, by the
+//   length it could share with one, as their far ends lie (see
+//   `shareBudget`), that it does not run in one bundle with any, at
+//   `UNSHARED_SHARE` per pixel: routes that travel apart where their
+//   directions agree draw two lines where one bundle would do. Sharing
+//   more than that earns nothing, so no layout gains by a detour to ride
+//   a partner, and a network that bundles as far as its geometry calls
+//   for pays nothing.
 // - `crowding`: the `need` of each `shared` and `overflow` note, a bend
 //   for each gap and stroke of it.
 // - `unrouted`: each edge without a route, more than any route it could
@@ -92,13 +107,51 @@ export const UNROUTED_LAPS = 2
  */
 export const UNROUTED_BENDS = 10
 
+/**
+ * How many crossings a crossing at a route's port, out of or into it,
+ * costs in all: a route that cuts through the fan of a node's ports
+ * tangles that node's network with its own, and the eye, which reads a
+ * node by the routes into it, has to stop and untangle them there, where
+ * a crossing out between the nodes reads at a glance. The price past one
+ * crossing fades along the route (see `FAN_FADE`), and a crossing near
+ * the ports of both its routes pays it for each. At three, a crossing at
+ * a fan costs a corner and a fifth, so a layout whose route goes round a
+ * node's fan for a corner or so more scores better.
+ */
+export const FAN_SHARE = 3
+
+/**
+ * How far from a route's port, as a share of the route's length, a
+ * crossing on the route pays any of the fan price (see `FAN_SHARE`): all
+ * of it at the port, falling in proportion to none this far out. A run out
+ * of a port is often most of its route, so it does not mark where the fan
+ * ends, and a share of the length holds at any scale, as a distance does
+ * not. A fifth keeps the price near the node. A third gives the judged
+ * pairs a wider worst margin, by less than a third of a crossing, but
+ * charges most crossings again, and a tenth lets a route cut through the
+ * routes that converge on a node almost for free.
+ */
+export const FAN_FADE = 0.2
+
+/**
+ * What each pixel costs, of the length a route could share with a merge
+ * partner and runs apart from it instead, as a share of a pixel of
+ * length: routes that travel apart where their directions agree draw two
+ * lines where one bundle would do. It matches the pull of the side search
+ * (`MERGE_PULL`), so that a pixel ridden saves the search what a pixel
+ * missed costs the score.
+ */
+export const UNSHARED_SHARE = 0.75
+
 /** The terms of a score. */
 export type Term =
   | 'length'
   | 'turning'
   | 'tight'
   | 'crossings'
+  | 'fan'
   | 'squeeze'
+  | 'unshared'
   | 'crowding'
   | 'unrouted'
 
@@ -107,7 +160,9 @@ const TERMS: ReadonlyArray<Term> = [
   'turning',
   'tight',
   'crossings',
+  'fan',
   'squeeze',
+  'unshared',
   'crowding',
   'unrouted',
 ]
@@ -199,6 +254,138 @@ export function crossingsOf(p: ReadonlyArray<XY>, q: ReadonlyArray<XY>): number 
   return count + throughCorners(p, q) + throughCorners(q, p)
 }
 
+// How far along a line each of its points lies from its first, the last
+// being its length.
+function distancesOf(line: ReadonlyArray<XY>): Array<number> {
+  const distances = [0]
+  for (let k = 1; k < line.length; k++) {
+    const [a, b] = [line[k - 1] as XY, line[k] as XY]
+    distances.push((distances[k - 1] as number) + Math.hypot(b[0] - a[0], b[1] - a[1]))
+  }
+  return distances
+}
+
+// How far from `a`, along the segment from `a` to `b`, the segment meets
+// the line through `c` and `d`: its length times the share of it before
+// the meeting point, which the cross products of the legs give, multiplied
+// before dividing so that a dyadic meeting point comes out exact.
+function meeting(a: XY, b: XY, c: XY, d: XY): number {
+  const [ux, uy] = [b[0] - a[0], b[1] - a[1]]
+  const [wx, wy] = [d[0] - c[0], d[1] - c[1]]
+  const cross = (c[0] - a[0]) * wy - (c[1] - a[1]) * wx
+  return (cross * Math.hypot(ux, uy)) / (ux * wy - uy * wx)
+}
+
+/**
+ * How much of the fan price a crossing on a route pays for being near its
+ * port, as a share of `FAN_SHARE - 1` crossings: all of it at the port,
+ * falling in proportion to none at `FAN_FADE` of the route's length from
+ * it, by the port it is nearer.
+ *
+ * @param along - How far along the route from its source the crossing lies.
+ * @param length - The route's length.
+ * @returns The share, from `0` to `1`.
+ */
+export function fanFade(along: number, length: number): number {
+  return Math.max(0, 1 - Math.min(along, length - along) / (FAN_FADE * length))
+}
+
+// The crossings of two polylines (see `crossingsOf`), each as what it pays
+// of the fan price: the sum of its `fanFade` on both, by where it lies
+// along each, at the meeting of segments of both or at a corner of one
+// inside a segment of the other. `pd` and `qd` are the lines'
+// `distancesOf`.
+function crossingsAt(
+  p: ReadonlyArray<XY>,
+  q: ReadonlyArray<XY>,
+  pd: ReadonlyArray<number>,
+  qd: ReadonlyArray<number>,
+): Array<number> {
+  const fans: Array<number> = []
+  const [pLength, qLength] = [pd[pd.length - 1] as number, qd[qd.length - 1] as number]
+  for (let i = 1; i < p.length; i++) {
+    const [a, b] = [p[i - 1] as XY, p[i] as XY]
+    for (let j = 1; j < q.length; j++) {
+      const [c, d] = [q[j - 1] as XY, q[j] as XY]
+      if (sideOf(a, b, c) * sideOf(a, b, d) < 0 && sideOf(c, d, a) * sideOf(c, d, b) < 0) {
+        const onP = (pd[i - 1] as number) + meeting(a, b, c, d)
+        const onQ = (qd[j - 1] as number) + meeting(c, d, a, b)
+        fans.push(fanFade(onP, pLength) + fanFade(onQ, qLength))
+      }
+    }
+  }
+  const corners = (
+    p: ReadonlyArray<XY>,
+    q: ReadonlyArray<XY>,
+    pd: ReadonlyArray<number>,
+    qd: ReadonlyArray<number>,
+  ) => {
+    const [pLength, qLength] = [pd[pd.length - 1] as number, qd[qd.length - 1] as number]
+    for (let k = 1; k + 1 < q.length; k++) {
+      const corner = q[k] as XY
+      for (let i = 1; i < p.length; i++) {
+        const [a, b] = [p[i - 1] as XY, p[i] as XY]
+        if (
+          sideOf(a, b, corner) === 0 &&
+          between(a, b, corner) &&
+          sideOf(a, b, q[k - 1] as XY) * sideOf(a, b, q[k + 1] as XY) < 0
+        ) {
+          const onP = (pd[i - 1] as number) + Math.hypot(corner[0] - a[0], corner[1] - a[1])
+          fans.push(fanFade(onP, pLength) + fanFade(qd[k] as number, qLength))
+        }
+      }
+    }
+  }
+  corners(p, q, pd, qd)
+  corners(q, p, qd, pd)
+  return fans
+}
+
+// How far a route runs in one bundle with its partners: the length of its
+// segments that runs of the partners lie beside, on its axis and no
+// further from its line than their `need` apart, each reaching that far
+// again past its ends, where a partner nested inside or outside a corner
+// turns, or parts. Slants run beside nothing.
+function sharedAlong(
+  line: ReadonlyArray<XY>,
+  partners: ReadonlyArray<{ readonly runs: ReadonlyArray<Run>; readonly need: number }>,
+): number {
+  let shared = 0
+  for (const own of runsOf(line)) {
+    // The stretches of the run that partners lie beside.
+    const stretches: Array<readonly [number, number]> = []
+    for (const { runs, need } of partners) {
+      for (const run of runs) {
+        if (run.axis === own.axis && atMost(Math.abs(run.at - own.at), need)) {
+          const [low, high] = [
+            Math.max(own.low, run.low - need),
+            Math.min(own.high, run.high + need),
+          ]
+          if (before(low, high)) {
+            stretches.push([low, high])
+          }
+        }
+      }
+    }
+    stretches.sort(([s], [t]) => s - t)
+    const [first] = stretches
+    if (first === undefined) {
+      continue
+    }
+    let [from, to] = first
+    for (const [low, high] of stretches) {
+      if (before(to, low)) {
+        shared += to - from
+        ;[from, to] = [low, high]
+      } else {
+        to = Math.max(to, high)
+      }
+    }
+    shared += to - from
+  }
+  return shared
+}
+
 /**
  * Scores a finished layout (see the module comment for the terms).
  *
@@ -215,7 +402,9 @@ export function scoreLayout(problem: Problem, layout: ConnectorLayout): Score {
     turning: [],
     tight: [],
     crossings: [],
+    fan: [],
     squeeze: [],
+    unshared: [],
     crowding: [],
     unrouted: [],
   }
@@ -266,12 +455,25 @@ export function scoreLayout(problem: Problem, layout: ConnectorLayout): Score {
     }
   }
 
+  const distances = lines.map((line) => (line === undefined ? [] : distancesOf(line)))
   for (let i = 0; i < lines.length; i++) {
     for (let j = i + 1; j < lines.length; j++) {
       const [p, q] = [lines[i], lines[j]]
-      const count = p === undefined || q === undefined ? 0 : crossingsOf(p, q)
-      if (count > 0) {
-        charge('crossings', count * crossingCost, [i, j])
+      if (p === undefined || q === undefined) {
+        continue
+      }
+      const fans = crossingsAt(p, q, distances[i] as Array<number>, distances[j] as Array<number>)
+      if (fans.length > 0) {
+        charge('crossings', fans.length * crossingCost, [i, j])
+      }
+      // Partners crossing in their own bundle out of a port cross no
+      // other network's fan.
+      if (fans.length > 0 && !partners(problem, layout, i, j)) {
+        for (const fan of fans) {
+          if (fan > 0) {
+            charge('fan', fan * (FAN_SHARE - 1) * crossingCost, [i, j])
+          }
+        }
       }
     }
   }
@@ -300,6 +502,14 @@ export function scoreLayout(problem: Problem, layout: ConnectorLayout): Score {
     }
   }
 
+  for (const [i, ends] of sharingOf(problem, layout).entries()) {
+    for (const sharing of ends) {
+      if (sharing !== undefined && before(sharing.shared, sharing.budget)) {
+        charge('unshared', UNSHARED_SHARE * (sharing.budget - sharing.shared), [i])
+      }
+    }
+  }
+
   for (const note of layout.notes) {
     if (note.kind !== 2 && note.kind !== 3) {
       continue
@@ -321,6 +531,62 @@ export function scoreLayout(problem: Problem, layout: ConnectorLayout): Score {
     terms,
     byEdge: Float64Array.from(shares, sumOf),
   }
+}
+
+/** What a route could share with its partners out of one end, and what it does. */
+export interface Sharing {
+  /**
+   * The most it could share with any partner there, by the way their far
+   * ends lie (see `shareBudget`).
+   */
+  readonly budget: number
+  /** How far it runs in one bundle with its partners, as drawn. */
+  readonly shared: number
+}
+
+/**
+ * What each route of a layout could share with its merge partners out of
+ * each end, and how far it runs with them as drawn: in one bundle with a
+ * partner, its line no further from theirs than the merge gap and their
+ * strokes. The length counts wherever it lies along the route, not only
+ * out from the port: a given position can hold two partners' ports apart
+ * by more than that, and the routes then bundle from just past them.
+ *
+ * @param problem - The problem the layout solves.
+ * @param layout - The layout.
+ * @returns The sharing at the source and target of each edge, or
+ * `undefined` for an end with no partner with a route, or with nothing to
+ * share with one.
+ */
+export function sharingOf(
+  problem: Problem,
+  layout: ConnectorLayout,
+): Array<[Sharing | undefined, Sharing | undefined]> {
+  const { edges } = problem
+  const lines = layout.edges.map((route) => route?.points.map(({ x, y }): XY => [x, y]))
+  const runs = lines.map((line) => (line === undefined ? [] : runsOf(line)))
+  return edges.map((edge, i) => {
+    const line = lines[i]
+    return [0, 1].map((end) => {
+      if (line === undefined) {
+        return undefined
+      }
+      const mates = partnersAt(problem, i, end).filter(({ edge: j }) => lines[j] !== undefined)
+      const own: EdgeEnd = { edge: i, end }
+      let budget = 0
+      for (const mate of mates) {
+        budget = Math.max(budget, shareBudget(problem, own, mate))
+      }
+      if (!(budget > 0)) {
+        return undefined
+      }
+      const beside = mates.map(({ edge: j }) => ({
+        runs: runs[j] as Array<Run>,
+        need: problem.mergeGap + (stroke(edge) + stroke(edges[j] as ProblemEdge)) / 2,
+      }))
+      return { budget, shared: sharedAlong(line, beside) }
+    }) as [Sharing | undefined, Sharing | undefined]
+  })
 }
 
 // The corner of a route at point `k`: how far it turns, in right angles,

@@ -5,7 +5,7 @@ import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
-import { type Routed, type Try, routeBest } from '../src/internal/connector/orders.ts'
+import { type Move, type Routed, type Try, routeBest } from '../src/internal/connector/orders.ts'
 import type { XY } from '../src/internal/orient.ts'
 import * as Polygon from '../src/polygon.ts'
 import * as Rect from '../src/rect.ts'
@@ -403,9 +403,24 @@ const scoreLine = ({ tries, kept }: Routed, name: (k: number) => string): string
     .join(', ')}`
 }
 
-// A try by its kind, and a promotion by the edge it moved up.
-const tryName = ({ kind, order }: Try, name: (k: number) => string): string =>
-  kind === 'promotion' ? `${name(order[0] as number)} first` : kind
+// A try by its kind, a promotion by the edge it moved up, and a network
+// move by the network it moved, with any it held from moves kept before.
+const tryName = ({ kind, order, moves, move }: Try, name: (k: number) => string): string => {
+  if (kind === 'promotion') {
+    return `${name(order[0] as number)} first`
+  }
+  if (move === undefined) {
+    return kind
+  }
+  const held = moves.filter((other) => other !== move).map(moveName)
+  return `move ${moveName(move)}${held.length > 0 ? ` (holding ${held.join(', ')})` : ''}`
+}
+
+const SIDES = ['top', 'right', 'bottom', 'left'] as const
+
+// A network move: the network, and the side it went to.
+const moveName = ({ rect, end, side }: Move): string =>
+  `${rect} ${end === 0 ? 'egress' : 'ingress'} ${SIDES[side] as string}`
 
 // Every try's total, in the order they ran.
 const triesLine = ({ tries }: Routed, name: (k: number) => string): string =>

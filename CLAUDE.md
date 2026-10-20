@@ -58,12 +58,21 @@ the edges in several orders and keeps the layout that `score.ts` likes
 best: the canonical order first (so ties keep it), its reverse, then
 promotions (the edge with the largest share of the best layout's score
 moved to the front of its order), up to `SOLVES` solves or until a pass
-of promotions improves nothing. Each solve is `routeInOrder` in
-`internal/connector/canonical.ts`, which runs `solve(normalize(...))`
-with the edges in the given order, and `route` there is one solve in
+of promotions improves nothing, then network moves (a network, the auto
+ends at one rect of the edges that leave it or of those that enter it,
+held to one side in the best layout's order, the network with the
+largest share first, to each side but the one all its ends take, in the
+order its center of mass faces them; a move kept holds in the tries
+after it), up to `MOVES` solves or until a pass improves nothing. A
+move is scored against the problem as given, its ends auto. Each solve
+is `routeInOrder` in `internal/connector/canonical.ts`, which runs
+`solve(normalize(...))` with the edges in the given order (and, for a
+move, the problem's ends held to their sides), and `route` there is one
+solve in
 the canonical order (center first by the eccentricity of their rects,
 then ids, then the rest of the spec, then index), mapped back to the
-input order. Every order comes from the canonical one, so no layout
+input order. Every order comes from the canonical one, and every
+network from the rects' ids, so no layout
 depends on the order of the edges or of the rects' keys (`normalize`
 indexes the rects by id): `internal/connector/problem.ts` turns
 the inputs into a `Problem` (rects grown into obstacles, the shapes their
@@ -72,9 +81,13 @@ arrives and leaves, costs, and resolved adornments), and `internal/connector/pip
 runs the phases, each a function of the problem and the phases before it:
 `sides.ts` picks the sides of auto ends by a trial search (a side with no
 room in front of its port for the end's adornments and corner costs more,
-and routes that could merge pull each other along within the span of
-their own rects, in rounds after a first one without the pull, against
-the price of channels over capacity, as in `routing.ts`),
+and so, a little, does one that faces away from where the end's network
+comes from, the centers of the rects at the far ends of the edges into
+or out of its rect, and routes that could merge pull each other along
+within the span of their own rects, in rounds after a first one without
+the pull, against the price of channels over capacity, as in
+`routing.ts`, and a route that crosses another on a run they share is
+found again with that crossing priced, as in `routing.ts`),
 `spread.ts`
 spreads auto ports along shared sides, with the ends that merge grouped
 on ports next to each other a merge gap apart in parting order, and equal
@@ -107,11 +120,14 @@ carries what a pass decided to the
 passes after it (upright jogs), so the
 order of `solve` is the order in which decisions yield. `score.ts`
 scores a finished layout on the search's cost scale (length, turning,
-corners drawn under their radius, crossings, routes drawn closer than the
-gap or merge gap, measured on the routes, the `need` of `shared` and
-`overflow` notes, and unrouted edges), to compare layouts and judge
-changes; the pipeline does not read it, and `orders.ts` keeps the layout
-it likes best.
+corners drawn under their radius, crossings, up to three times over near
+a port and fading along the route, routes drawn closer than the gap or
+merge gap, measured on the routes, the length routes that could merge
+travel apart, up to what the way their far ends lie says they could share
+(`shareBudget` in `problem.ts`), the `need` of `shared` and `overflow`
+notes, and unrouted edges), to compare layouts and judge changes; the
+pipeline does not read it, and `orders.ts` keeps the layout it likes
+best.
 `test/connectorJudgements.spec.ts` holds it to layouts judged by eye
 (`test/fixtures/judgements.ts`). The phases build
 on `internal/graph/` (not yet public): `graph.ts` stores graphs of points
@@ -127,7 +143,8 @@ half-edges between one pair of walls into the slots those prices read
 and keeps what the routes fill of them, a merged bundle as one out of
 its ports,
 `crossings.ts`
-counts the crossings between two paths, shared runs included, and
+counts the crossings between two paths, shared runs included, and prices
+a crossing on a shared run for a path found again, and
 `acyclic.ts` breaks cycles and orders pairwise preferences for both
 routers. `internal/orient.ts` is the shared vocabulary of axes, sides, and
 segments (`XY`, `Axis`, `lo`/`hi` of a box on an axis, `segmentBox`,

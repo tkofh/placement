@@ -22,11 +22,17 @@ import {
   nudgeRoutes,
 } from '../src/internal/connector/nudge.ts'
 import { straightenPorts } from '../src/internal/connector/ports.ts'
-import { normalize, roomAt, tightCostAt } from '../src/internal/connector/problem.ts'
+import {
+  normalize,
+  partnersAt,
+  roomAt,
+  shareBudget,
+  tightCostAt,
+} from '../src/internal/connector/problem.ts'
 import { type Route, routeOf } from '../src/internal/connector/route.ts'
 import { routeAll } from '../src/internal/connector/routing.ts'
 import { scoreLayout } from '../src/internal/connector/score.ts'
-import { chooseSides } from '../src/internal/connector/sides.ts'
+import { chooseSides, facingCosts } from '../src/internal/connector/sides.ts'
 import { type SlantedRoute, slantJogs } from '../src/internal/connector/slants.ts'
 import { placePorts } from '../src/internal/connector/spread.ts'
 import type { Obstacle } from '../src/internal/graph/graph.ts'
@@ -2003,5 +2009,227 @@ describe('held runs the search sees', () => {
       expect(scoreLayout(normalize(rects, edges, spec), layout).terms.squeeze).toBe(0)
       expect(layout.notes).toEqual([])
     })
+  })
+})
+
+describe('facing networks', () => {
+  // t at the right, its center at (120, 20), with rects around it.
+  const box = (x: number, y: number) => Rect.make(x, y, 40, 40)
+  const spec = Connector.make({ clearance: 8, gap: 4, bendCost: 16 })
+  const link = (source: string, target: string, input: Partial<Edge.EdgeInput<string>> = {}) =>
+    Edge.make({ source, target, ...input })
+
+  test('a side costs by how far it turns from the center of mass', () => {
+    // t's ingress comes from l above and m below, a mean straight left of
+    // its center, and t's egress goes to r, straight right.
+    const problem = normalize(
+      { l: box(0, -40), m: box(0, 40), r: box(200, 0), t: box(100, 0) },
+      [link('l', 't'), link('m', 't'), link('t', 'r')],
+      spec,
+    )
+    const all = problem.facingCost
+    const costs = facingCosts(problem)
+    // Top, right, bottom, left.
+    expect(costs[0]?.[1]).toEqual([all / 2, all, all / 2, 0])
+    expect(costs[1]?.[1]).toEqual([all / 2, all, all / 2, 0])
+    expect(costs[2]?.[0]).toEqual([all / 2, 0, all / 2, all])
+  })
+
+  test("a center of mass on the rect's center, a loop, and a given side cost nothing", () => {
+    const problem = normalize(
+      { l: box(0, 0), r: box(200, 0), t: box(100, 0) },
+      [
+        link('l', 't'),
+        link('r', 't'),
+        link('t', 't'),
+        link('t', 'r', { sourceSide: Edge.side.top }),
+        link('l', 'r'),
+      ],
+      spec,
+    )
+    const none = [0, 0, 0, 0]
+    const costs = facingCosts(problem)
+    expect(costs[0]?.[1]).toEqual(none)
+    expect(costs[1]?.[1]).toEqual(none)
+    expect(costs[2]).toEqual([none, none])
+    expect(costs[3]?.[0]).toEqual(none)
+    // The loop adds nothing to t's networks, and r's ingress, from l and
+    // t, lies straight left of it.
+    expect(costs[3]?.[1]).toEqual([
+      problem.facingCost / 2,
+      problem.facingCost,
+      problem.facingCost / 2,
+      0,
+    ])
+  })
+
+  // a below and b above t's center line, as far each way, so that t's
+  // ingress comes from straight left. Each route alone ties between
+  // hooking round into t's near side and coming in on its left.
+  const rects = {
+    a: Rect.make(0, 0, 40, 40),
+    b: Rect.make(0, -80, 40, 40),
+    t: Rect.make(160, -40, 40, 40),
+  }
+  const edges = [link('a', 't'), link('b', 't')]
+
+  test('the ends of a network split by a near-tie share the side that faces it', () => {
+    const { sides } = chooseSides(normalize(rects, edges, spec))
+    expect(sides.map(([, target]) => target)).toEqual([Edge.side.left, Edge.side.left])
+  })
+
+  test('the routes of the network come in on that side', () => {
+    const layout = routeCanonical(rects, edges, spec)
+    for (const route of layout.edges) {
+      const points = route?.points as ReadonlyArray<Point.Point>
+      const [last, before] = [points.at(-1), points.at(-2)] as [Point.Point, Point.Point]
+      expect(last.x).toBe(160)
+      expect(before.y).toBe(last.y)
+      expect(before.x).toBeLessThan(160)
+    }
+  })
+})
+
+describe('share budgets', () => {
+  // h at the origin, 40 square, its center at (20, 20), and far rects
+  // around it, each 40 square, named for where their centers lie from h's.
+  const box = (cx: number, cy: number) => Rect.make(cx - 20, cy - 20, 40, 40)
+  const rects = {
+    h: box(20, 20),
+    southeast: box(220, 140),
+    southsoutheast: box(140, 220),
+    southwest: box(-180, 140),
+    northwest: box(-180, -100),
+    east: box(220, 20),
+  }
+  type Id = keyof typeof rects
+  const merging = Connector.make({ clearance: 8, gap: 4, merge: Connector.merge.side })
+  const budgetOf = (far: Id, other: Id, input: Partial<Edge.EdgeInput<Id>> = {}) => {
+    const problem = normalize(
+      rects,
+      [
+        Edge.make({ source: 'h', target: far, ...input }),
+        Edge.make({ source: 'h', target: other }),
+      ],
+      merging,
+    )
+    return shareBudget(problem, { edge: 0, end: 0 }, { edge: 1, end: 0 })
+  }
+
+  test.each<[string, Id, Id, number]>([
+    // 200 and 120 east, 120 and 200 south: the nearer of each, less h's
+    // half-size of 20 along the axis they leave by.
+    ['in one quadrant share the nearer offset on each axis', 'southeast', 'southsoutheast', 220],
+    // East and west part; both lie 120 south.
+    ['split across x share only the axis they agree along', 'southeast', 'southwest', 100],
+    ['on opposite sides share nothing', 'southeast', 'northwest', 0],
+    // East of h, level with it: 200 east, and nothing south.
+    ['one level with the rect shares only the other axis', 'southeast', 'east', 180],
+    // Both to one rect: they enter it by one side too, and lose its
+    // half-size there.
+    ['to one rect share the gap between the rects', 'east', 'east', 160],
+  ])('two routes %s', (_, far, other, budget) => {
+    expect(budgetOf(far, other)).toBe(budget)
+    expect(budgetOf(other, far)).toBe(budget)
+  })
+
+  test('two ends held to different sides share nothing', () => {
+    expect(budgetOf('southeast', 'southsoutheast', { sourceSide: Edge.side.top })).toBe(220)
+    const problem = normalize(
+      rects,
+      [
+        Edge.make({ source: 'h', target: 'southeast', sourceSide: Edge.side.right }),
+        Edge.make({ source: 'h', target: 'southsoutheast', sourceSide: Edge.side.bottom }),
+      ],
+      merging,
+    )
+    expect(shareBudget(problem, { edge: 0, end: 0 }, { edge: 1, end: 0 })).toBe(0)
+  })
+
+  test('a route with no partner has none to share with', () => {
+    const problem = normalize(rects, [Edge.make({ source: 'h', target: 'east' })], merging)
+    expect(partnersAt(problem, 0, 0)).toEqual([])
+    expect(partnersAt(problem, 0, 1)).toEqual([])
+    // Nor does any route with merging off.
+    const apart = normalize(
+      rects,
+      [Edge.make({ source: 'h', target: 'east' }), Edge.make({ source: 'h', target: 'east' })],
+      merging.pipe(Connector.setMerge(Connector.merge.none)),
+    )
+    expect(partnersAt(apart, 0, 0)).toEqual([])
+  })
+
+  test('partners are the ends at one rect with one merge key, either way', () => {
+    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1 })
+    const problem = normalize(
+      rects,
+      [
+        Edge.make({ source: 'h', target: 'east' }),
+        Edge.make({ source: 'east', target: 'h' }),
+        Edge.make({ source: 'h', target: 'southeast', adornments: [head] }),
+        Edge.make({ source: 'southwest', target: 'h', adornments: [head] }),
+      ],
+      merging,
+    )
+    // At h, edge 0's source has no adornment; so does edge 1's target,
+    // and edge 2's source, its head at its target.
+    expect(partnersAt(problem, 0, 0)).toEqual([
+      { edge: 1, end: 1 },
+      { edge: 2, end: 0 },
+    ])
+    // Edge 3's target carries a head, which no other end at h does.
+    expect(partnersAt(problem, 3, 1)).toEqual([])
+  })
+})
+
+describe('the side trial’s crossings on shared runs', () => {
+  // a sits over b, half a pixel left of its center, so a's trial route
+  // down into b's top steps right by a pixel just above it. c lies up and
+  // to the right, d down and to the left, and e and f stand between.
+  const rects = {
+    a: Rect.make(214, 102, 34, 52),
+    b: Rect.make(212, 300, 40, 40),
+    c: Rect.make(306, 4, 46, 44),
+    d: Rect.make(116, 328, 44, 48),
+    e: Rect.make(128, 204, 32, 52),
+    f: Rect.make(316, 312, 38, 44),
+  }
+  const edges = [
+    Edge.make({ source: 'a', target: 'b', thickness: 1 }),
+    Edge.make({ source: 'c', target: 'd', thickness: 1 }),
+  ]
+  const spec = Connector.make({
+    clearance: 6,
+    gap: 3,
+    adornmentGap: 2,
+    merge: Connector.merge.side,
+  })
+
+  test('a route that would cross another on the run they share takes the side that does not', () => {
+    // c's route could leave c's bottom, run down and then west along the
+    // line of a's step, over the step and on into d's top. It shares the
+    // step with a's route, coming onto it from one side of a's route and
+    // leaving to the other, a crossing the search counts nowhere, since
+    // neither runs straight across the other. Found again with the step
+    // costing that crossing, it leaves c's left instead and comes into
+    // d's right, clear of a's route.
+    const { sides, trial } = chooseSides(normalize(rects, edges, spec))
+    expect(sides).toEqual([
+      [Edge.side.bottom, Edge.side.top],
+      [Edge.side.left, Edge.side.right],
+    ])
+    const [own, other] = trial as [Array<XY>, Array<XY>]
+    // a's route steps from x = 231 to 232 at y = 294; c's keeps off it.
+    const onStep = ([x, y]: XY) => y === 294 && x >= 231 && x <= 232
+    expect(own.filter(onStep)).toEqual([
+      [231, 294],
+      [232, 294],
+    ])
+    expect(other.some(onStep)).toBe(false)
+  })
+
+  test('the routes then cross nothing', () => {
+    const layout = routeCanonical(rects, edges, spec)
+    expect(scoreLayout(normalize(rects, edges, spec), layout).terms.crossings).toBe(0)
   })
 })

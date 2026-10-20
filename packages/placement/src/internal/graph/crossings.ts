@@ -1,3 +1,4 @@
+import { coincident } from 'curvy/number'
 import { turnOf } from '../orient.ts'
 import type { Graph } from './graph.ts'
 
@@ -57,6 +58,64 @@ export function crossedRuns(
     },
   )
   return runs
+}
+
+/**
+ * Prices the runs that one path shares with another and crosses it on (see
+ * `crossedRuns`) for a search that counts crossings only where paths run
+ * straight on across each other: each node of such a run that `p` runs
+ * straight on through counts an equal share of one crossing, in the slot
+ * of the search's counts that a path along the run pays for (see
+ * `SearchOptions.through`), so that riding the whole run costs what
+ * running straight across it does.
+ *
+ * @param graph - The graph the paths run on, with horizontal and vertical
+ * edges.
+ * @param p - The path to price, by its nodes.
+ * @param q - The path it shares runs with.
+ * @param marks - The counts, at `2 * node` horizontally and `2 * node + 1`
+ * vertically, which this adds to.
+ * @returns Whether it marked any node.
+ */
+export function markCrossedRuns(
+  graph: Graph,
+  p: Int32Array,
+  q: ArrayLike<number>,
+  marks: Float64Array,
+): boolean {
+  let marked = false
+  for (const [from, to] of crossedRuns(graph, p, q)) {
+    const nodes = straightOn(graph, p, from, to)
+    const vertical = coincident(
+      graph.xs[p[from] as number] as number,
+      graph.xs[p[to] as number] as number,
+    )
+    for (const node of nodes) {
+      const slot = 2 * node + (vertical ? 0 : 1)
+      const count = marks[slot] as number
+      marks[slot] = count + 1 / nodes.length
+      marked = true
+    }
+  }
+  return marked
+}
+
+// The nodes of the run of a path from index `from` to index `to` that the
+// path runs straight on through: none when it turns at both ends of a run
+// of one edge.
+function straightOn(graph: Graph, nodes: Int32Array, from: number, to: number): Array<number> {
+  const { xs, ys } = graph
+  const inLine = (a: number, b: number, c: number) =>
+    (coincident(xs[a] as number, xs[b] as number) &&
+      coincident(xs[b] as number, xs[c] as number)) ||
+    (coincident(ys[a] as number, ys[b] as number) && coincident(ys[b] as number, ys[c] as number))
+  const found: Array<number> = []
+  for (let k = Math.max(from, 1); k <= Math.min(to, nodes.length - 2); k++) {
+    if (inLine(nodes[k - 1] as number, nodes[k] as number, nodes[k + 1] as number)) {
+      found.push(nodes[k] as number)
+    }
+  }
+  return found
 }
 
 // Walks `p` past the nodes and runs it shares with `q`, calling `atNode`

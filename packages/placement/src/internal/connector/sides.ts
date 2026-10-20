@@ -1,9 +1,19 @@
+import { coincident } from 'curvy/number'
 import type * as Rect from '../../rect.ts'
 import { within } from '../../utils/tolerance.ts'
-import { channelsOf } from '../graph/channels.ts'
-import { type Endpoint, type Path, markAlong, searchAll, shortestPath } from '../graph/search.ts'
+import { channelsOf, congestionFor, fillPath, groupsOf } from '../graph/channels.ts'
+import { markCrossedRuns } from '../graph/crossings.ts'
+import {
+  type Endpoint,
+  type Path,
+  type SearchContext,
+  markAlong,
+  markThrough,
+  searchAll,
+  shortestPath,
+} from '../graph/search.ts'
 import { type Pin, visibilityGraph } from '../graph/visibility.ts'
-import type { XY } from '../orient.ts'
+import { type XY, outward } from '../orient.ts'
 import {
   PRESSURE_ROUNDS,
   type Problem,
@@ -24,7 +34,10 @@ import {
 // of every candidate side (or at the given position). A candidate with less
 // room in front of its port than the end needs for its adornments and
 // corner costs more (see `tightCostAt`), so an end comes in on a side with
-// room where that costs less than the way around. With merging on, the
+// room where that costs less than the way around, and so, a little, does
+// one that faces away from where the end's network comes from (see
+// `facingCosts`), which settles near-ties so that the routes of a network
+// come in, or leave, on the side that faces it. With merging on, the
 // routes whose ends at one rect could merge pull each other along: a
 // stretch along a partner's route costs a share of its length, so that
 // routes group up where a long run together pays for the bend and length
@@ -42,7 +55,12 @@ import {
 // by how far over it is, at a pressure that grows over the rounds, so an
 // end comes in on a side with room where that costs less in all. The pull
 // and that price are costs of one search, so they weigh against each
-// other. The search also yields a trial route, from the middle of each
+// other. As in `routeAll`, a route that crosses one found before it on a
+// run they share, coming onto the run on one side of it and leaving on
+// the other, a crossing the search counts nowhere, is found again with
+// the nodes of that run costing the crossing, so that no end takes a side
+// for a route that rides over another on a shared line, unseen. The
+// search also yields a trial route, from the middle of each
 // side, for every edge with an auto position, which orders the ports that
 // share a side.
 
@@ -99,6 +117,7 @@ export function chooseSides(problem: Problem): Sides {
     auto.has(i) || edge.ends[0].at === undefined || edge.ends[1].at === undefined ? [i] : [],
   )
   const pins: Array<Pin> = [...extraPins]
+  const facing = facingCosts(problem)
   const candidates = routed.map((i) => {
     const edge = edges[i] as ProblemEdge
     const [source, target] = sides[i] as [number | undefined, number | undefined]
@@ -110,8 +129,13 @@ export function chooseSides(problem: Problem): Sides {
       (side === undefined ? [0, 1, 2, 3] : [side]).map((s): Candidate => {
         const port = portOf(problem, owner, s, at ?? 0.5)
         pins.push(pinOf(port, owner))
-        // A given side has no rival, so its room weighs nothing.
-        const cost = side === undefined ? tightCostAt(problem, i, end, s, at ?? 0.5) : 0
+        // A given side has no rival, so its room and the way it faces
+        // weigh nothing.
+        const cost =
+          side === undefined
+            ? tightCostAt(problem, i, end, s, at ?? 0.5) +
+              ((facing[i] as Facing)[end] as ReadonlyArray<number>)[s]!
+            : 0
         return { side: s, pin: pins.length - 1, outward, cost }
       }),
     )
@@ -177,33 +201,40 @@ export function chooseSides(problem: Problem): Sides {
   // The routes that could merge fill the channels as one bundle out of
   // their shared port.
   const merges = mergeIds(problem, routed)
-  const { paths } = searchAll(
+  const find = (
+    k: number,
+    { through, congestion, paths: latest, along }: SearchContext,
+    round: number,
+  ) => {
+    const i = routed[k] as number
+    const edge = edges[i] as ProblemEdge
+    const [starts, ends] = candidates[k] as [Array<Candidate>, Array<Candidate>]
+    return shortestPath(graph, starts.map(endpoint), ends.map(endpoint), {
+      ...edge.costs,
+      radius: edge.radius,
+      avoid: edge.avoid,
+      via: edge.viaPins.map((pin) => nodes[pin] as number),
+      viaArrivals: edge.viaArrivals,
+      viaLeavings: edge.viaLeavings,
+      crossingCost: crossingCost,
+      ...(through === undefined ? {} : { through }),
+      ...(congestion === undefined ? {} : { congestion }),
+      ...(along === undefined ? {} : { along }),
+      ...(round === 0 ? {} : pullAlong(k, latest)),
+    })
+  }
+  const channels = channelsOf(graph, obstacles)
+  const strokeOf = (k: number) => (edges[routed[k] as number] as ProblemEdge).thickness
+  const { paths, through, fill } = searchAll(
     graph,
     routed.length,
     crossingCost,
-    (k, { through, congestion, paths: latest, along }, round) => {
-      const i = routed[k] as number
-      const edge = edges[i] as ProblemEdge
-      const [starts, ends] = candidates[k] as [Array<Candidate>, Array<Candidate>]
-      return shortestPath(graph, starts.map(endpoint), ends.map(endpoint), {
-        ...edge.costs,
-        radius: edge.radius,
-        avoid: edge.avoid,
-        via: edge.viaPins.map((pin) => nodes[pin] as number),
-        viaArrivals: edge.viaArrivals,
-        viaLeavings: edge.viaLeavings,
-        crossingCost: crossingCost,
-        ...(through === undefined ? {} : { through }),
-        ...(congestion === undefined ? {} : { congestion }),
-        ...(along === undefined ? {} : { along }),
-        ...(round === 0 ? {} : pullAlong(k, latest)),
-      })
-    },
+    find,
     (k) => pull > 0 && (partners[k] as Array<Partner>).length > 0,
     PULL_ROUNDS,
     {
-      ...channelsOf(graph, obstacles),
-      stroke: (k) => (edges[routed[k] as number] as ProblemEdge).thickness,
+      ...channels,
+      stroke: strokeOf,
       merges: (k) => merges[k] as [number, number],
       gap: settings.gap,
       mergeGap: problem.mergeGap,
@@ -211,6 +242,46 @@ export function chooseSides(problem: Problem): Sides {
       rounds: PRESSURE_ROUNDS,
     },
   )
+  // A route that crosses one found before it on a run they share, which
+  // the search counted no crossing for, is found again with the nodes of
+  // that run counting the crossing between them, as `routeAll` does. Not
+  // so for two that leave or arrive at one port: the runs out of it are
+  // their bundle.
+  if (through !== undefined && fill !== undefined) {
+    for (const [k, path] of paths.entries()) {
+      if (path === undefined) {
+        continue
+      }
+      const extra = new Float64Array(through.length)
+      let crossed = false
+      for (let j = 0; j < k; j++) {
+        const other = paths[j]
+        if (other !== undefined && !sharePort(path, other)) {
+          crossed = markCrossedRuns(graph, path.nodes, other.nodes, extra) || crossed
+        }
+      }
+      if (!crossed) {
+        continue
+      }
+      const groups = groupsOf(routed.length, k, merges[k] as [number, number])
+      markThrough(graph, through, path, -1)
+      fillPath(graph, channels.slotOf, fill, path, groups, strokeOf(k), -1)
+      for (const [slot, count] of through.entries()) {
+        const marked = extra[slot] as number
+        extra[slot] = marked + count
+      }
+      const congestion = congestionFor(
+        channels,
+        fill,
+        groups,
+        strokeOf(k),
+        pressureAt(PRESSURE_ROUNDS),
+      )
+      paths[k] = find(k, { through: extra, congestion, paths }, PULL_ROUNDS)
+      markThrough(graph, through, paths[k], 1)
+      fillPath(graph, channels.slotOf, fill, paths[k], groups, strokeOf(k), 1)
+    }
+  }
   for (const [k, i] of routed.entries()) {
     const [starts, ends] = candidates[k] as [Array<Candidate>, Array<Candidate>]
     const path = paths[k]
@@ -224,11 +295,79 @@ export function chooseSides(problem: Problem): Sides {
       continue
     }
     const edge = edges[i] as ProblemEdge
-    const facing = facingSides(boxes[edge.source] as Rect.Rect, boxes[edge.target] as Rect.Rect)
+    const fallback = facingSides(boxes[edge.source] as Rect.Rect, boxes[edge.target] as Rect.Rect)
     sides[i] = [
-      path === undefined ? facing[0] : (starts[path.start] as Candidate).side,
-      path === undefined ? facing[1] : (ends[path.end] as Candidate).side,
+      path === undefined ? fallback[0] : (starts[path.start] as Candidate).side,
+      path === undefined ? fallback[1] : (ends[path.end] as Candidate).side,
     ]
   }
   return { sides: sides as Array<[number, number]>, trial, tried }
+}
+
+// Whether two paths leave from or arrive at one node.
+const sharePort = (p: Path, q: Path): boolean =>
+  [p.nodes[0], p.nodes.at(-1)].some((node) => node === q.nodes[0] || node === q.nodes.at(-1))
+
+/** What an end costs on each side, by side encoding, for the way it faces. */
+export type Facing = readonly [source: ReadonlyArray<number>, target: ReadonlyArray<number>]
+
+const FACES_ANY: ReadonlyArray<number> = [0, 0, 0, 0]
+
+/**
+ * What each auto end costs on each side for facing away from its network.
+ * The network of an end is the edges with an end at its rect the same way:
+ * the rect's ingress at a target end, its egress at a source end, loops
+ * aside. It comes from the network's center of mass, the mean of the
+ * centers of its far-end rects, one per edge. A side costs the problem's
+ * `facingCost` times `(1 - n.d) / 2`, where `n` is the side's outward
+ * normal and `d` the unit vector from the rect's center to the center of
+ * mass: nothing for a side that points straight at it, half for a side at
+ * right angles, all of it for the side opposite. A center of mass on the
+ * rect's center, and a given side, cost nothing.
+ *
+ * @param problem - The problem.
+ * @returns The cost of each side at the source and target of each edge.
+ */
+export function facingCosts(problem: Problem): ReadonlyArray<Facing> {
+  const { edges, boxes, facingCost } = problem
+  // The sums of the far-end centers, and their count, at each rect, for
+  // its egress and its ingress.
+  const sums = boxes.map(() => [
+    [0, 0, 0],
+    [0, 0, 0],
+  ])
+  for (const edge of edges) {
+    if (edge.loop) {
+      continue
+    }
+    for (const end of [0, 1]) {
+      const far = boxes[rectAt(edge, 1 - end)] as Rect.Rect
+      const sum = (sums[rectAt(edge, end)] as Array<Array<number>>)[end] as Array<number>
+      const [x, y, count] = sum as [number, number, number]
+      sum[0] = x + far.centerX
+      sum[1] = y + far.centerY
+      sum[2] = count + 1
+    }
+  }
+  return edges.map((edge) => {
+    const [source, target] = [0, 1].map((end) => {
+      if (edge.loop || edge.ends[end]?.side !== undefined) {
+        return FACES_ANY
+      }
+      const rect = rectAt(edge, end)
+      const box = boxes[rect] as Rect.Rect
+      const [x, y, count] = (sums[rect] as Array<Array<number>>)[end] as [number, number, number]
+      const [cx, cy] = [x / count, y / count]
+      if (coincident(cx, box.centerX) && coincident(cy, box.centerY)) {
+        return FACES_ANY
+      }
+      const [dx, dy] = [cx - box.centerX, cy - box.centerY]
+      const length = Math.hypot(dx, dy)
+      return [0, 1, 2, 3].map((side) => {
+        const [nx, ny] = outward(side)
+        return (facingCost * (1 - (nx * dx + ny * dy) / length)) / 2
+      })
+    }) as [ReadonlyArray<number>, ReadonlyArray<number>]
+    return [source, target]
+  })
 }

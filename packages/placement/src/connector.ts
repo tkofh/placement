@@ -894,7 +894,12 @@ export interface ConnectorLayout<K extends string = string> {
  * where every order draws a layout that costs the same, the first order's
  * layout is kept. The others are that order reversed, and the order of the
  * best layout so far with the edge that costs the most in it moved to the
- * front, one edge at a time.
+ * front, one edge at a time. Then, since each auto end takes its side as
+ * its own route does best, `apply` also moves whole networks: the auto
+ * ends at one rect of the edges that leave it, or of those that enter it,
+ * held together to one side, in the order of the best layout so far, the
+ * network that costs the most first. A network moved in the layout kept
+ * stays on its side in the moves after it.
  *
  * Every input is deterministic: the same rects and edges always produce the
  * same routes, and the routes do not depend on the order of the edges (with

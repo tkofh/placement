@@ -16,8 +16,10 @@ runs TypeScript directly, against the workspace source rather than `dist`.
   (`final`), then the layout's notes and its score: the total, which try
   won and how many solves ran, each term of it (see
   `src/internal/connector/score.ts`), and the total of every try, in the
-  order they ran (see `src/internal/connector/orders.ts`). The phases are
-  those of the try that won.
+  order they ran (see `src/internal/connector/orders.ts`). A promotion
+  reads as the edge it moved to the front, and a network move as
+  `move <rect> egress|ingress <side>`, with the networks it holds from
+  moves kept before it. The phases are those of the try that won.
 
 ```sh
 pnpm --filter placement scene state.json
