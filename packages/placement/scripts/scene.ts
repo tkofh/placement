@@ -5,7 +5,7 @@ import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
-import { route } from '../src/internal/connector/canonical.ts'
+import { type Routed, type Try, routeBest } from '../src/internal/connector/orders.ts'
 import type { XY } from '../src/internal/orient.ts'
 import * as Polygon from '../src/polygon.ts'
 import * as Rect from '../src/rect.ts'
@@ -392,6 +392,25 @@ function dump(
   return lines
 }
 
+// The score of the layout kept as one line: its total, which try it came
+// from and how many ran, then each term.
+const scoreLine = ({ tries, kept }: Routed, name: (k: number) => string): string => {
+  const { score } = tries[kept] as Try
+  return `score ${fmt(score.total)} (try ${kept + 1} of ${tries.length}, ${tryName(tries[kept] as Try, name)}): ${Object.entries(
+    score.terms,
+  )
+    .map(([term, value]) => `${term} ${fmt(value)}`)
+    .join(', ')}`
+}
+
+// A try by its kind, and a promotion by the edge it moved up.
+const tryName = ({ kind, order }: Try, name: (k: number) => string): string =>
+  kind === 'promotion' ? `${name(order[0] as number)} first` : kind
+
+// Every try's total, in the order they ran.
+const triesLine = ({ tries }: Routed, name: (k: number) => string): string =>
+  `tries: ${tries.map((one) => `${tryName(one, name)} ${fmt(one.score.total)}`).join(', ')}`
+
 const COLORS = ['#8fb8ff', '#ffb38f', '#a8ff8f', '#ff8fd6', '#fff28f', '#8ffff2', '#d68fff']
 
 // Ids as SVG text. Nodes without an id have keys that start with `\0`.
@@ -605,7 +624,7 @@ function main(): void {
   const built = build(scene, args.keep)
   const shown = (i: number) => args.edges === undefined || args.edges.has(i)
   const phases: Array<string> = []
-  const layout = route(built.rects, built.edges, built.spec, built.options, (phase, routes) => {
+  const routed = routeBest(built.rects, built.edges, built.spec, built.options, (phase, routes) => {
     phases.push(`== ${phase}`)
     for (const [k, points] of routes.entries()) {
       const i = built.indices[k] as number
@@ -615,7 +634,10 @@ function main(): void {
       }
     }
   })
-  const final = dump(built, layout, shown)
+  const { layout } = routed
+  const name = (k: number) =>
+    `${built.indices[k] as number} ${nameOf(built.edges[k] as Edge.Edge<string>)}`
+  const final = [...dump(built, layout, shown), scoreLine(routed, name), triesLine(routed, name)]
 
   const outDir = resolve(cwd, args.out ?? (stdin ? '.' : dirname(path)))
   const base = `${outDir}/${stdin ? 'scene' : basename(path).replace(/\.json$/, '')}`

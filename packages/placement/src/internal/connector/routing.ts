@@ -35,10 +35,12 @@ import {
 // on such a run of another is found again with that run's nodes costing
 // crossings, so it goes around instead. Nor can nudging move a route off a
 // held run when a wall pens it in: a route that runs alongside a held run
-// in the strip between it and an obstacle too narrow for the gap and the
-// two strokes could only be moved into the obstacle or across the held
-// run, and so could one on the held run's line that nudging would move
-// into that strip, the side its neighbors come from. The nodes there cost
+// in the strip between it and an obstacle, too narrow for the routes
+// already in it and this one, with the gap and the strokes between each
+// two and half a stroke from the obstacle, could only be moved into the
+// obstacle or across the held run, and so could one on the held run's
+// line that nudging would move into that strip, the side its neighbors
+// come from. The nodes there cost
 // such a route crossings too, so it crosses or goes around instead of
 // lying on the other route. A route leaves and arrives along the lines out
 // of its own ports however it goes, so those lines cost it nothing in the
@@ -54,9 +56,21 @@ import {
 // other two held runs as close, costing crossings, so it crosses or goes
 // around instead of being squeezed onto them.
 //
+// A held run reaches as far as the search found it, and further where it
+// turns off a run it shares with routes that cross it there: nudging
+// orders them across that run's line, and those it puts past the turn
+// stretch the held run with it, by the room they take. So a route that
+// leaves the shared run the other way, on the held run's line, lies
+// beside it, as nudging will draw it.
+//
 // The search counts all of these marks the way it counts crossings, so a
 // route that steps off a marked line by a short jog and back onto it pays
 // for the nodes it stepped around, as it would for running through them.
+// A route found again is checked again, since its new path can lie beside
+// other held runs, with each search's marks added to those before, until
+// it comes back the same or none of these rules holds it, a few times at
+// most: the crossings on shared runs it is found again for once are priced
+// by then. The two routes of a trade are checked as well.
 //
 // Two routes may also share a run and cross on it, coming onto it on one
 // side of each other and leaving on the other, which the search counts
@@ -85,13 +99,20 @@ import {
 // comes on at.
 const HELD_RUN = 6
 
+// How many times a path is found again for the held runs of others at
+// most: each search can move it into the room beside another held run, so
+// it is checked again until it comes back the same, which few paths need
+// more than a handful of searches for.
+const RECHECKS = 6
+
 // A run that nudging cannot move, with the room beside it: the nearest
 // obstacle on either side of it, among those beside it, and the nodes in
 // the strip between the run's line and each, and on the line itself, within
 // the run's extent.
 interface Held {
   readonly vertical: boolean
-  // The line's coordinate across it, and the run's extent along it.
+  // The line's coordinate across it, and the run's extent along it, as
+  // far as nudging may stretch it.
   readonly at: number
   readonly a0: number
   readonly a1: number
@@ -236,6 +257,10 @@ export function routeAll(
     markThrough(graph, counts, path, by)
     fillPath(graph, channels.slotOf, fill, path, groupOf(i), strokeOf(i), by)
   }
+  // Finds a path again, a few times at most, while it lies along or beside
+  // the held runs of others in a way nudging could not undo, and forgets
+  // what was found of the paths, for when one changes otherwise.
+  let rules: { readonly recheck: (i: number) => void; readonly forget: () => void } | undefined
   if (through !== undefined) {
     // The held runs of each path, with the room beside them, found when
     // first needed and again after the path is found again.
@@ -260,31 +285,132 @@ export function routeAll(
           path === undefined
             ? []
             : heldRuns(graph, path, waypoints[j] as Set<number>, true).map((run) =>
-                heldBeside(graph, path, run, blocks),
+                heldBeside(graph, path, run, blocks, [spreadAt(j, run, 0), spreadAt(j, run, 1)]),
               )
         held[j] = list
       }
       return list
     }
+    // How far the held run `run` of `j`'s path may stretch past its end
+    // `side` (`0` for its first node, `1` for its last), where the path
+    // turns off a run it shares with others: the gap and stroke of each
+    // that crosses it on that run, or the merge gap where it runs with
+    // `j`. Nudging orders the routes on a shared run so that each crosses
+    // the others once, and those it puts on the far side of `j`'s turn
+    // move the turn away from the held run, which grows with it. Routes
+    // that do not cross `j` there keep to the side their ends lie on, and
+    // move the turn toward the held run, if anywhere. Nothing at an end of
+    // the path.
+    const spreadAt = (j: number, run: Run, side: 0 | 1) => {
+      const path = paths[j] as Path
+      const end = run[side]
+      const next = path.nodes[side === 0 ? end - 1 : end + 1]
+      if (next === undefined) {
+        return 0
+      }
+      const node = path.nodes[end] as number
+      // The half-edge of the run the path turns onto, by its indices.
+      const [from, to] = side === 0 ? [end - 1, end] : [end, end + 1]
+      let spread = 0
+      for (const [k, other] of paths.entries()) {
+        if (k === j || other === undefined) {
+          continue
+        }
+        const shares = other.nodes.some(
+          (n, at) => n === node && (other.nodes[at - 1] === next || other.nodes[at + 1] === next),
+        )
+        if (
+          shares &&
+          crossedRuns(graph, path.nodes, other.nodes).some(([f, l]) => f <= from && to <= l)
+        ) {
+          spread += (bundled(k, j) ? problem.mergeGap : gap) + (edges[k] as ProblemEdge).thickness
+        }
+      }
+      return spread
+    }
+    // The straight runs of each path, found when first needed and again
+    // after the path is found again.
+    const runsOfPath: Array<Array<Run> | undefined> = []
+    const runsOfEdge = (k: number) => {
+      let list = runsOfPath[k]
+      if (list === undefined) {
+        const path = paths[k]
+        list = path === undefined ? [] : runsOf(graph, path)
+        runsOfPath[k] = list
+      }
+      return list
+    }
+    // The room the routes other than `i` and `j` take in the strip on one
+    // side of a held run of `j`, between its line and the wall, beside
+    // `i`'s own runs there: the gap and stroke of each that runs alongside
+    // the held run where `i` does, or the merge gap where it runs with `i`
+    // or `j`. Routes that pass through the strip at different stretches of
+    // it leave each other the whole of it.
+    const takenIn = (i: number, j: number, run: Held, side: -1 | 1) => {
+      const wall = side < 0 ? run.low : run.high
+      if (!Number.isFinite(wall)) {
+        return 0
+      }
+      const spansOf = (k: number) =>
+        runsOfEdge(k).flatMap(([from, to]) => {
+          const span = inStrip(graph, paths[k] as Path, from, to, run, side, wall)
+          return span === undefined ? [] : [span]
+        })
+      const own = spansOf(i)
+      if (own.length === 0) {
+        return 0
+      }
+      let taken = 0
+      for (const [k, other] of paths.entries()) {
+        if (k === i || k === j || other === undefined) {
+          continue
+        }
+        const beside = spansOf(k).some(([p, q]) => own.some(([a, b]) => overlaps(p, q, a, b)))
+        if (beside) {
+          const apart = bundled(k, i) || bundled(k, j) ? problem.mergeGap : gap
+          taken += apart + (edges[k] as ProblemEdge).thickness
+        }
+      }
+      return taken
+    }
     // A path whose waypoints hold a run along a held run of another's, or
     // that runs along or beside a held run of another's where nudging
     // could not move it off, goes around instead.
-    for (const i of which) {
+    const forget = () => {
+      held.fill(undefined)
+      runsOfPath.fill(undefined)
+    }
+    const checkOnce = (i: number, carried: Float64Array | undefined) => {
       const path = paths[i]
       if (path === undefined) {
-        continue
+        return undefined
       }
       const edge = edges[i] as ProblemEdge
       const { thickness } = edge
       const extra = new Float64Array(through.length)
-      const mark = (nodes: ReadonlyArray<number>, vertical: boolean, by = HELD_RUN) => {
+      // The marks of the rules for held runs alone, without the crossings
+      // on shared runs.
+      const ruled = new Float64Array(through.length)
+      const mark = (
+        nodes: ReadonlyArray<number>,
+        vertical: boolean,
+        by = HELD_RUN,
+        rule = true,
+      ) => {
         for (const node of nodes) {
           const slot = 2 * node + (vertical ? 0 : 1)
           const count = extra[slot] as number
           extra[slot] = count + by
+          if (rule) {
+            const own = ruled[slot] as number
+            ruled[slot] = own + by
+          }
         }
       }
       let along = false
+      // Whether a rule for held runs, rather than a crossing on a shared
+      // run, caught the path.
+      let caught = false
       const runs = runsOf(graph, path)
       const ownHeld = heldRuns(graph, path, waypoints[i] as Set<number>, true)
       // The held runs of the routes that could pinch a run of this one: all
@@ -323,6 +449,7 @@ export function routeAll(
                   graph.xs[path.nodes[to] as number] as number,
                 ),
                 1 / nodes.length,
+                false,
               )
             }
           }
@@ -332,10 +459,14 @@ export function routeAll(
           pinching.push(...heldOf(j).map((run) => ({ run, need })))
         }
         for (const run of heldOf(j)) {
-          if (before(run.at - run.low, need)) {
+          // The room a strip needs for this path past the routes already
+          // in it: the gap and both strokes from the held run, or from the
+          // last of those routes, and half its stroke from the wall.
+          const room = (side: -1 | 1) => need + thickness / 2 + takenIn(i, j, run, side)
+          if (before(run.at - run.low, room(-1))) {
             mark(strip(run.lowStrip, run.vertical), run.vertical)
           }
-          if (before(run.high - run.at, need)) {
+          if (before(run.high - run.at, room(1))) {
             mark(strip(run.highStrip, run.vertical), run.vertical)
           }
           if (
@@ -344,6 +475,7 @@ export function routeAll(
             )
           ) {
             along = true
+            caught = true
             mark(run.line, run.vertical)
           }
         }
@@ -355,6 +487,7 @@ export function routeAll(
             runsAlong(path, heldRuns(graph, path, waypoints[i] as Set<number>, false), other, run)
           ) {
             along = true
+            caught = true
             const [from, to] = run
             const vertical = coincident(
               graph.xs[other.nodes[from] as number] as number,
@@ -382,20 +515,52 @@ export function routeAll(
       }
       if (bands.length > 0) {
         along = true
+        caught = true
         bands.push(...narrowGaps(pinching))
         for (const vertical of [false, true]) {
           const list = bands.filter((band) => band.vertical === vertical)
           mark(strip(inBands(graph, list), vertical), vertical)
         }
       }
-      if (along || runsThrough(graph, path, extra)) {
+      // A path found again is checked again only for the rules for held
+      // runs: the crossings on the runs it shares were priced by then.
+      const retry =
+        carried === undefined
+          ? along || runsThrough(graph, path, extra)
+          : caught || runsThrough(graph, path, ruled)
+      if (retry) {
+        if (carried !== undefined) {
+          for (const [k, count] of carried.entries()) {
+            const own = extra[k] as number
+            extra[k] = own + count
+          }
+        }
         shared.set(i, extra)
         place(through, i, path, -1)
         paths[i] = search(i, through, congestionOf(i))
         place(through, i, paths[i], 1)
-        held[i] = undefined
+        forget()
+        const again = paths[i]
+        if (again !== undefined && samePath(again, path)) {
+          return undefined
+        }
+        return extra
+      }
+      return undefined
+    }
+    const recheck = (i: number) => {
+      let carried: Float64Array | undefined
+      for (let round = 0; round < RECHECKS; round++) {
+        carried = checkOnce(i, carried)
+        if (carried === undefined) {
+          break
+        }
       }
     }
+    for (const i of which) {
+      recheck(i)
+    }
+    rules = { recheck, forget }
   }
   const pointsOf = (path: Path | undefined) =>
     path === undefined
@@ -455,6 +620,12 @@ export function routeAll(
       crossingsOf(a.edge, b.edge) < before
     ) {
       traded.push(pair)
+      // The traded routes answer to the held runs of the others too.
+      rules?.forget()
+      for (const i of [a.edge, b.edge]) {
+        rules?.recheck(i)
+        routes[i] = pointsOf(paths[i])
+      }
       continue
     }
     swap()
@@ -466,6 +637,11 @@ export function routeAll(
     }
   }
   return { routes, traded }
+}
+
+// Whether two paths run through the same nodes.
+function samePath(p: Path, q: Path): boolean {
+  return p.nodes.length === q.nodes.length && p.nodes.every((node, k) => node === q.nodes[k])
 }
 
 // The straight runs of a path, as ranges of indices into its nodes.
@@ -531,13 +707,16 @@ function heldRuns(
 // The room beside the run `[from, to]` of a path that nudging cannot move:
 // the nearest obstacle on either side of its line, among the obstacles
 // beside the run, and the nodes in the strip between the line and each,
-// and on the line, within the run's extent. An obstacle the line runs
-// through, such as the one the run's own port sits on, is on neither side.
+// and on the line, within the run's extent, stretched past its first and
+// last nodes by `stretch` (see `spreadAt` in `routeAll`). An obstacle the
+// line runs through, such as the one the run's own port sits on, is on
+// neither side.
 function heldBeside(
   graph: Graph,
   path: Path,
   [from, to]: Run,
   obstacles: ReadonlyArray<Obstacle>,
+  [stretchFrom, stretchTo]: readonly [number, number],
 ): Held {
   const { xs, ys } = graph
   const [a, b] = [path.nodes[from] as number, path.nodes[to] as number]
@@ -545,9 +724,9 @@ function heldBeside(
   const across: Axis = vertical ? 0 : 1
   const along = other(across)
   const at = vertical ? (xs[a] as number) : (ys[a] as number)
-  const [a0, a1] = vertical
-    ? [Math.min(ys[a] as number, ys[b] as number), Math.max(ys[a] as number, ys[b] as number)]
-    : [Math.min(xs[a] as number, xs[b] as number), Math.max(xs[a] as number, xs[b] as number)]
+  // The run's ends along it, each stretched away from the other.
+  const [p, q] = vertical ? [ys[a] as number, ys[b] as number] : [xs[a] as number, xs[b] as number]
+  const [a0, a1] = p <= q ? [p - stretchFrom, q + stretchTo] : [q - stretchTo, p + stretchFrom]
   let low = Number.NEGATIVE_INFINITY
   let high = Number.POSITIVE_INFINITY
   for (const o of obstacles) {
@@ -578,6 +757,35 @@ function heldBeside(
     }
   }
   return { vertical, at, a0, a1, low, high, lowStrip, highStrip, line }
+}
+
+// Where the run of a path from index `from` to index `to` lies in the strip
+// on one side of a held run, between its line and the wall there, as its
+// stretch along the held run: parallel to it, off its line toward the wall
+// and no further than the wall, and beside it over more than a point. Or
+// `undefined` for a run that does not.
+function inStrip(
+  graph: Graph,
+  path: Path,
+  from: number,
+  to: number,
+  held: Held,
+  side: -1 | 1,
+  wall: number,
+): readonly [number, number] | undefined {
+  const { xs, ys } = graph
+  const [a, b] = [path.nodes[from] as number, path.nodes[to] as number]
+  const vertical = coincident(xs[a] as number, xs[b] as number)
+  const [c, p, q] = vertical
+    ? [xs[a] as number, ys[a] as number, ys[b] as number]
+    : [ys[a] as number, xs[a] as number, xs[b] as number]
+  if (vertical !== held.vertical || coincident(p, q)) {
+    return undefined
+  }
+  const off =
+    side < 0 ? before(c, held.at) && atMost(wall, c) : before(held.at, c) && atMost(c, wall)
+  const [low, high] = [Math.max(Math.min(p, q), held.a0), Math.min(Math.max(p, q), held.a1)]
+  return off && before(low, high) ? [low, high] : undefined
 }
 
 // Whether run `r` of a path lies along a held run of another path where

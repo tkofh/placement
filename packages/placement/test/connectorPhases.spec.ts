@@ -4,7 +4,13 @@ import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
 import { lengths, pointOnDrawn } from '../src/internal/adornments.ts'
-import { canonicalOrder, eccentricities, restore } from '../src/internal/connector/canonical.ts'
+import {
+  canonicalOrder,
+  eccentricities,
+  restore,
+  route as routeCanonical,
+  routeInOrder,
+} from '../src/internal/connector/canonical.ts'
 import { cornerOutsets, cornerRadii } from '../src/internal/connector/corners.ts'
 import {
   type XY,
@@ -19,6 +25,7 @@ import { straightenPorts } from '../src/internal/connector/ports.ts'
 import { normalize, roomAt, tightCostAt } from '../src/internal/connector/problem.ts'
 import { type Route, routeOf } from '../src/internal/connector/route.ts'
 import { routeAll } from '../src/internal/connector/routing.ts'
+import { scoreLayout } from '../src/internal/connector/score.ts'
 import { chooseSides } from '../src/internal/connector/sides.ts'
 import { type SlantedRoute, slantJogs } from '../src/internal/connector/slants.ts'
 import { placePorts } from '../src/internal/connector/spread.ts'
@@ -28,6 +35,7 @@ import { type Pin, visibilityGraph } from '../src/internal/graph/visibility.ts'
 import { type Separation, type Variable, placeSeparated } from '../src/internal/separation.ts'
 import * as Point from '../src/point.ts'
 import * as Rect from '../src/rect.ts'
+import { sceneOf } from './fixtures/judgements.ts'
 
 const place = (variables: ReadonlyArray<Variable>, constraints: ReadonlyArray<Separation>) => {
   const { positions, conflicts } = placeSeparated(variables, constraints)
@@ -1137,6 +1145,75 @@ describe('cornerRadii', () => {
     ])
   })
 
+  // A route that jogs 10 down at x 100, and one that turns down into a
+  // corner 6 inside the jog's lower corner, after a leg of `leg` from
+  // the corner before it. The jog's corners are fixed at `size`, and it
+  // slants by moving them `run` apart along their legs.
+  const slanted = (size: number, run: number, leg = 64) => {
+    const outer = routed([0, 60], [100, 60], [100, 70], [200, 70])
+    const inner = routed([80, 64 - leg], [106, 64 - leg], [106, 64], [200, 64])
+    const drawn = routed([0, 60], [100 - run, 60], [100 + run, 70], [200, 70])
+    const fixed = [
+      new Map([
+        [1, size],
+        [2, size],
+      ]),
+      new Map<number, number>(),
+    ]
+    const sizes = cornerRadii([outer, inner], [16, 16], [], { fixed, shaped: [drawn, inner] })
+    // The radius of the arc the slanted corner draws, from its turn.
+    const arc = size / Math.tan(Math.atan2(10, 2 * run) / 2)
+    return { inner: sizes[1] as Array<number>, arc }
+  }
+
+  test('a corner inside a gentle slant keeps its radius, and so does the one before it', () => {
+    // The slant turns 14 degrees: its arc, 130 wide, lies far past both
+    // radii together, 32, and the corner inside keeps its radius rather
+    // than sweep a right angle 124 wide, which its leg of 64 would take
+    // from the corner before it.
+    const { inner, arc } = slanted(16, 20)
+    expect(arc).toBeGreaterThan(128)
+    expect(inner).toEqual([0, 16, 16, 0])
+  })
+
+  test('a corner inside a slant within reach grows to share its center', () => {
+    // A slant that turns 45 degrees with corners of 12 draws an arc 29
+    // wide: the corner 6 inside it grows to 23.
+    const { inner, arc } = slanted(12, 5)
+    expect(arc).toBeCloseTo(12 / Math.tan(Math.PI / 8), 9)
+    expect(inner[2]).toBeCloseTo(arc - 6, 9)
+    expect(inner[1]).toBe(16)
+  })
+
+  test('the growth toward an arc tapers, with no jump as the slant changes', () => {
+    // As the slant lengthens, its arc widens from 10 to 128: the corner
+    // inside grows from its radius, by at most half both radii together,
+    // and falls back to it, never moving more than the arc does.
+    let last: { size: number; arc: number } | undefined
+    let most = 0
+    for (let run = 1; run <= 40; run += 1 / 16) {
+      const { inner, arc } = slanted(8, run)
+      const size = inner[2] as number
+      if (last !== undefined) {
+        expect(Math.abs(size - last.size)).toBeLessThanOrEqual(Math.abs(arc - last.arc) + 1e-9)
+      }
+      expect(size).toBeLessThanOrEqual(32 + 1e-9)
+      most = Math.max(most, size)
+      last = { size, arc }
+    }
+    expect(most).toBeGreaterThan(31)
+    expect(last?.size).toBe(16)
+    expect(slanted(8, 1).inner[2]).toBe(16)
+  })
+
+  test('a corner growing toward an arc leaves the one before it its radius', () => {
+    // The corner inside would grow to 23 on a leg of 36, which holds the
+    // corner before it at 16 and 20 of growth: it grows to 20.
+    expect(slanted(12, 5, 36).inner).toEqual([0, 16, 20, 0])
+    // On a leg of 32 it keeps its radius, and so does the one before it.
+    expect(slanted(12, 5, 32).inner).toEqual([0, 16, 16, 0])
+  })
+
   test('the corners a nest grows report how far outside its innermost one they sit', () => {
     const routes = nest(4, 4)
     const sizes = cornerRadii(routes, [10, 10, 10, 10])
@@ -1755,6 +1832,176 @@ describe('canonical order', () => {
         { kind: 3, edge: 1, adornment: 0, need: 4 },
         { kind: 3, edge: 2, adornment: 1, need: 5 },
       ],
+    })
+  })
+})
+
+// The routes the search finds, with the ports the spread places, for the
+// edges listed in canonical order, as the canonical solve lists them,
+// back in the order given.
+const searched = <Id extends string>(
+  rects: Readonly<Record<Id, Rect.Rect>>,
+  edges: ReadonlyArray<Edge.Edge<Id>>,
+  spec: Connector.Connector,
+) => {
+  const order = canonicalOrder(rects, edges, {})
+  const problem = normalize(
+    rects,
+    order.map((i) => edges[i] as Edge.Edge<Id>),
+    spec,
+  )
+  const { routes } = routeAll(
+    problem,
+    placePorts(problem, chooseSides(problem)).ports,
+    problem.edges.map((_, i) => i),
+  )
+  const byInput: Array<Array<XY>> = []
+  for (const [k, i] of order.entries()) {
+    byInput[i] = routes[k] as Array<XY>
+  }
+  return byInput
+}
+
+// The straight runs of a route: the line each lies on, its axis, and its
+// extent along it.
+const runsOfRoute = (points: ReadonlyArray<XY>) => {
+  const runs: Array<{ vertical: boolean; at: number; from: number; to: number }> = []
+  for (let k = 1; k < points.length; k++) {
+    const [a, b] = [points[k - 1] as XY, points[k] as XY]
+    const vertical = a[0] === b[0]
+    const [at, p, q] = vertical ? [a[0], a[1], b[1]] : [a[1], a[0], b[0]]
+    const last = runs.at(-1)
+    if (last !== undefined && last.vertical === vertical && last.at === at) {
+      last.from = Math.min(last.from, p, q)
+      last.to = Math.max(last.to, p, q)
+    } else {
+      runs.push({ vertical, at, from: Math.min(p, q), to: Math.max(p, q) })
+    }
+  }
+  return runs
+}
+
+describe('held runs the search sees', () => {
+  describe('a held run that turns off a shared run', () => {
+    // The auth sweep's crowded corner, cut down. The routes from orders
+    // and billing come down one line beside db and turn right into it,
+    // and the route from events to mailer comes down that line too, and
+    // crosses them on it. The route from auth runs into db from the left,
+    // above the leg into db from orders. Leaving the shared line at the
+    // turn into that leg, left along its line, the route to mailer lies
+    // beside the leg once nudging spreads the shared line and stretches
+    // the leg under it, and between it and the route from auth, too close
+    // for both.
+    const head = Adornment.make({
+      frame: Frame.make({ width: 9, height: 8, offsetLeft: 4 }),
+      at: 1,
+      orient: Adornment.orient.forward,
+    })
+    const label = Adornment.make({ frame: Frame.make({ width: 40, height: 16 }), at: 0.5 })
+    const rects = {
+      auth: Rect.make(370, 340, 112, 40),
+      billing: Rect.make(512, 288, 120, 40),
+      db: Rect.make(784, 360, 120, 40),
+      events: Rect.make(784, 176, 136, 40),
+      indexer: Rect.make(692, 540, 112, 36),
+      mailer: Rect.make(557, 540, 112, 36),
+      orders: Rect.make(512, 96, 120, 40),
+    }
+    type Id = keyof typeof rects
+    const edge = (source: Id, target: Id, input: Partial<Edge.EdgeInput<Id>> = {}) =>
+      Edge.make<Id>({ source, target, thickness: 1, adornments: [head], ...input })
+    const edges = [
+      edge('auth', 'db', { adornments: [head, label] }),
+      edge('billing', 'events'),
+      edge('orders', 'db', { radius: 16 }),
+      edge('billing', 'db'),
+      edge('events', 'mailer', { adornments: [] }),
+      edge('events', 'indexer', { radius: 16, adornments: [] }),
+    ]
+    const spec = Connector.make({ clearance: 16, gap: 8, merge: Connector.merge.side, mergeGap: 4 })
+
+    test('the search leaves the shared run off the line of the leg', () => {
+      const routes = searched(rects, edges, spec)
+      // The leg into db from orders, and the run into db from auth.
+      const leg = runsOfRoute(routes[2] as Array<XY>).at(-1)
+      const entry = runsOfRoute(routes[0] as Array<XY>)[0]
+      expect(leg?.vertical).toBe(false)
+      expect(entry?.vertical).toBe(false)
+      const low = Math.min(leg?.at as number, entry?.at as number)
+      const high = Math.max(leg?.at as number, entry?.at as number)
+      const between = runsOfRoute(routes[4] as Array<XY>).filter(
+        (run) => !run.vertical && low <= run.at && run.at <= high,
+      )
+      expect(between).toEqual([])
+    })
+
+    test('the canonical solve squeezes no route', () => {
+      const layout = routeCanonical(rects, edges, spec)
+      expect(scoreLayout(normalize(rects, edges, spec), layout).terms.squeeze).toBe(0)
+      expect(layout.notes).toEqual([])
+    })
+  })
+
+  test('routes that trade ports answer to the held runs of the others', () => {
+    // The architecture diagram with auth moved below and right of gateway,
+    // its edges routed in the order listed. The routes from orders to
+    // events and to db trade their ports, and the route to db, found again
+    // for the trade, turns into the strip between the leg into indexer
+    // and the wall of events and db, beside the routes already in it, too
+    // narrow for them all. Checked again for the held runs of the others,
+    // it keeps out of the strip, and nothing is crowded.
+    const { rects, edges, spec } = sceneOf('default')
+    rects.auth = Rect.make(370, 350, 112, 40)
+    const order = edges.map((_, i) => i)
+    expect(routeInOrder(rects, edges, spec, {}, order).layout.notes).toEqual([])
+  })
+
+  describe('a strip with a route in it already', () => {
+    // The route from b to c leaves the top of b up a leg past a, 5.5 from
+    // the wall of a's clearance: room beside the leg for one route, the
+    // gap and the strokes from it and half a stroke from the wall, but not
+    // for two. The loop on a runs in that strip, and the route from e into
+    // the top of a would run down it too.
+    const rects = {
+      a: Rect.make(0, 126, 33, 35),
+      b: Rect.make(23, 212, 43, 52),
+      c: Rect.make(117, 100, 48, 53),
+      d: Rect.make(226, 220, 54, 48),
+      e: Rect.make(326, 211, 34, 39),
+    }
+    type Id = keyof typeof rects
+    const edges = [
+      Edge.make<Id>({ source: 'b', target: 'c', thickness: 1 }),
+      Edge.make<Id>({ source: 'a', target: 'a', thickness: 1 }),
+      Edge.make<Id>({ source: 'e', target: 'a', targetSide: Edge.side.top, thickness: 1 }),
+    ]
+    const spec = Connector.make({ clearance: 6, gap: 3, adornmentGap: 2 })
+
+    test('the search puts one route in the strip', () => {
+      const routes = searched(rects, edges, spec)
+      // The leg up out of b, and the wall at the right of a's clearance.
+      const leg = runsOfRoute(routes[0] as Array<XY>)[0]
+      expect(leg).toMatchObject({ vertical: true, at: 44.5 })
+      const wall = 33 + 6
+      const inStrip = routes
+        .slice(1)
+        .filter((points) =>
+          runsOfRoute(points).some(
+            (run) =>
+              run.vertical &&
+              wall <= run.at &&
+              run.at < (leg?.at as number) &&
+              run.from < (leg?.to as number) &&
+              (leg?.from as number) < run.to,
+          ),
+        )
+      expect(inStrip).toHaveLength(1)
+    })
+
+    test('the canonical solve squeezes no route', () => {
+      const layout = routeCanonical(rects, edges, spec)
+      expect(scoreLayout(normalize(rects, edges, spec), layout).terms.squeeze).toBe(0)
+      expect(layout.notes).toEqual([])
     })
   })
 })

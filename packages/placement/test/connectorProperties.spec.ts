@@ -4,7 +4,7 @@ import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
-import { restore } from '../src/internal/connector/canonical.ts'
+import { restore, route } from '../src/internal/connector/canonical.ts'
 import type * as Point from '../src/point.ts'
 import * as Rect from '../src/rect.ts'
 
@@ -131,6 +131,19 @@ const diagramOf = (seed: number): Diagram => {
   return found
 }
 
+// The properties hold for every layout, so most seeds route once, in the
+// canonical order, rather than in the several orders `Connector.apply`
+// tries and keeps the best of. Seeds 6 and 7, whose best layouts come from
+// other orders, run the whole `Connector.apply`, so the layout it keeps is
+// held to every tier too.
+type Solver = (
+  rects: Readonly<Record<string, Rect.Rect>>,
+  edges: ReadonlyArray<Edge.Edge<string>>,
+  spec: Connector.Connector,
+  options: Connector.ConnectorApplyOptions,
+) => Connector.ConnectorLayout
+const solverOf = (seed: number): Solver => (seed === 6 || seed === 7 ? Connector.apply : route)
+
 const layouts = new Map<string, Connector.ConnectorLayout>()
 const layoutOf = (
   seed: number,
@@ -141,7 +154,7 @@ const layoutOf = (
   let found = layouts.get(key)
   if (found === undefined) {
     const { rects, edges, options } = diagramOf(seed)
-    found = Connector.apply(rects, edges, Connector.make({ ...variant.input, ...extra }), options)
+    found = solverOf(seed)(rects, edges, Connector.make({ ...variant.input, ...extra }), options)
     layouts.set(key, found)
   }
   return found
@@ -340,7 +353,7 @@ const permutation = (n: number, seed: number): Array<number> => {
 describe('tier 0: what a layout never does', () => {
   test.each(cases)('$label is deterministic', ({ seed, variant }) => {
     const { rects, edges, options } = diagramOf(seed)
-    const again = Connector.apply(rects, edges, Connector.make(variant.input), options)
+    const again = solverOf(seed)(rects, edges, Connector.make(variant.input), options)
     expect(again).toEqual(layoutOf(seed, variant))
   })
 
@@ -398,7 +411,7 @@ describe('tier 0: what a layout never does', () => {
       ]
       for (const [name, permuted, keys] of listings) {
         const input = relisted(seed, permuted, keys)
-        const layout = Connector.apply(
+        const layout = solverOf(seed)(
           input.rects,
           input.edges,
           Connector.make(variant.input),
@@ -659,7 +672,10 @@ describe('tier 1 and 3: what a layout prefers, and says when it cannot', () => {
 
   // The passes after nudging move corners and ports but never a route
   // across another: slanting jogs, laying out adornments, and sizing
-  // corners leave every pair's crossings as they were.
+  // corners leave every pair's crossings as they were. That holds for a
+  // solve in one order; `apply` may keep another order's layout once a
+  // cosmetic change moves the scores, so this reads one solve, in the
+  // canonical order.
   const cosmetic: Array<[name: string, extra: Connector.ConnectorInput]> = [
     ['jog slant', { jogSlant: 1 }],
     ['adornment justification', { justifyAdornments: 1, justifyAdornmentsSpace: 1 }],
@@ -668,10 +684,14 @@ describe('tier 1 and 3: what a layout prefers, and says when it cannot', () => {
   const uprightCases = seeds.flatMap((seed) =>
     upright.map((variant) => ({ seed, variant, label: `seed ${seed}, ${variant.label}` })),
   )
+  const solvedOf = (seed: number, variant: Variant, extra: Connector.ConnectorInput = {}) => {
+    const { rects, edges, options } = diagramOf(seed)
+    return route(rects, edges, Connector.make({ ...variant.input, ...extra }), options)
+  }
   test.each(uprightCases)('$label crosses the same with cosmetic changes', ({ seed, variant }) => {
-    const counts = crossingsOf(layoutOf(seed, variant))
+    const counts = crossingsOf(solvedOf(seed, variant))
     for (const [name, extra] of cosmetic) {
-      expect(crossingsOf(layoutOf(seed, variant, extra)), name).toEqual(counts)
+      expect(crossingsOf(solvedOf(seed, variant, extra)), name).toEqual(counts)
     }
   })
 
@@ -702,7 +722,7 @@ describe('tier 1 and 3: what a layout prefers, and says when it cannot', () => {
             },
       ),
     }
-    const moved = Connector.apply(movedRects, edges, Connector.make(variant.input), movedOptions)
+    const moved = solverOf(seed)(movedRects, edges, Connector.make(variant.input), movedOptions)
     // Notes name what they name exactly, with lengths that are close.
     expect(moved.notes.length, label).toBe(layout.notes.length)
     for (const [k, note] of layout.notes.entries()) {

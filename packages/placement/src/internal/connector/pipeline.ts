@@ -294,7 +294,7 @@ export function solve(problem: Problem, trace?: Trace): ConnectorLayout {
   // Then the corners settle on the routes as drawn. A slanted corner keeps
   // its size, and so do the corners at the far ends of its legs, which the
   // slant made room beside; the corners nested inside a slanted one grow
-  // to its arc.
+  // toward its arc, where it is within reach.
   const shaped = slanted.map(({ route }) => route)
   report(
     'slants',

@@ -42,8 +42,10 @@ through the phases in `internal/hierarchy/`: acyclic
 (`internal/graph/acyclic.ts`), rank (network simplex), order, position
 (Brandes-Köpf), and `place` (bands, channels, ports, the straight runs out
 of ports, and the waypoints through the slots that ordering reserved).
-`hierarchy.ts` then routes the edges with `Connector.apply`, reads its
-`notes`, grows the channels and the room between nodes they name
+`internal/hierarchy/solve.ts` (the body of `Hierarchy.apply`, with the
+router passed in: `Connector.apply`, or one canonical solve in tests that
+check properties rather than route quality) then routes the edges, reads
+their `notes`, grows the channels and the room between nodes they name
 (`Growth`), and places again, up to three rounds. `internal/adornments.ts`
 (shared with the connector) measures adornments and sizes corners. `Polygon` is a regular or star polygon that fills a rect, and
 `Polygon.apply` places it, growing a rounded one so that its rounded
@@ -51,12 +53,19 @@ outline fills the rect (`internal/polygon.ts`, shared with the hierarchy
 ports). `Connector` is a routing spec, and `Connector.apply` routes `Edge`s
 between rects that are already placed, keyed by id, around the others, and
 reports in `notes` what the routes gave up and what would have fit them.
-`apply` is `route` in `internal/connector/canonical.ts`, which sorts the
-edges into a canonical order (center first by the eccentricity of their
-rects, then ids, then the rest of the spec, then index), runs
-`solve(normalize(...))`, and maps the routes and notes back to the input
-order, so no layout depends on the order of the edges or of the rects'
-keys (`normalize` indexes the rects by id): `internal/connector/problem.ts` turns
+`apply` is `routeBest` in `internal/connector/orders.ts`, which routes
+the edges in several orders and keeps the layout that `score.ts` likes
+best: the canonical order first (so ties keep it), its reverse, then
+promotions (the edge with the largest share of the best layout's score
+moved to the front of its order), up to `SOLVES` solves or until a pass
+of promotions improves nothing. Each solve is `routeInOrder` in
+`internal/connector/canonical.ts`, which runs `solve(normalize(...))`
+with the edges in the given order, and `route` there is one solve in
+the canonical order (center first by the eccentricity of their rects,
+then ids, then the rest of the spec, then index), mapped back to the
+input order. Every order comes from the canonical one, so no layout
+depends on the order of the edges or of the rects' keys (`normalize`
+indexes the rects by id): `internal/connector/problem.ts` turns
 the inputs into a `Problem` (rects grown into obstacles, the shapes their
 ports sit on, edges with their ends, waypoints with the ways a route
 arrives and leaves, costs, and resolved adornments), and `internal/connector/pipeline.ts`
@@ -72,9 +81,12 @@ on ports next to each other a merge gap apart in parting order, and equal
 free space around the groups and lone ports, `routing.ts` finds the
 routes (a run that waypoints hold goes around the port legs of other
 routes, and so does a run along or beside one where a wall leaves nudging
-no room to move it off, and one that nudging would hold between two held
-runs, or one and a wall, too close for it, and a run shared with an earlier route and left
-on its other side counts as the crossing it is; a channel too narrow for
+no room to move it off past the routes already there, and one that nudging
+would hold between two held runs, or one and a wall, too close for it, a
+held run reaching as far past its turn as nudging can stretch it, by the
+routes that cross it on the run it turns off, and a run shared with an earlier route and left
+on its other side counts as the crossing it is; a route found again for
+these, or traded, is checked again until it comes back the same; a channel too narrow for
 its routes costs more by how far over it is, in rounds of rising
 pressure that move the route that gains most first, so the routes with
 another way leave it) and trades ends that
@@ -92,7 +104,15 @@ their corners into S curves. `route.ts` is the polyline those passes read, with
 its lengths, headings, and segment boxes worked out once. `locks.ts`
 carries what a pass decided to the
 passes after it (upright jogs), so the
-order of `solve` is the order in which decisions yield. The phases build
+order of `solve` is the order in which decisions yield. `score.ts`
+scores a finished layout on the search's cost scale (length, turning,
+corners drawn under their radius, crossings, routes drawn closer than the
+gap or merge gap, measured on the routes, the `need` of `shared` and
+`overflow` notes, and unrouted edges), to compare layouts and judge
+changes; the pipeline does not read it, and `orders.ts` keeps the layout
+it likes best.
+`test/connectorJudgements.spec.ts` holds it to layouts judged by eye
+(`test/fixtures/judgements.ts`). The phases build
 on `internal/graph/` (not yet public): `graph.ts` stores graphs of points
 in flat arrays, `visibility.ts` builds the orthogonal visibility graph of
 obstacles and pins, `search.ts` finds the cheapest path for length, turns,

@@ -4,6 +4,8 @@ import * as Adornment from '../src/adornment.ts'
 import * as Edge from '../src/edge.ts'
 import * as Frame from '../src/frame.ts'
 import * as Hierarchy from '../src/hierarchy.ts'
+import { route } from '../src/internal/connector/canonical.ts'
+import { solveHierarchy } from '../src/internal/hierarchy/solve.ts'
 import { type XY, cornerArcs, onArc } from '../src/internal/polygon.ts'
 import * as Interval from '../src/interval.ts'
 import * as Point from '../src/point.ts'
@@ -1498,15 +1500,26 @@ function expectCorners(edge: Edge.Edge<string>, route: Hierarchy.HierarchyRoute)
   }
 }
 
+// These check what every layout holds, not how good its routes are, so
+// most seeds route each round once, in the canonical order, rather than
+// in the several orders `Connector.apply` tries. The first seed of each
+// kind runs the whole `Hierarchy.apply`.
+const applyOf =
+  (seed: number): typeof Hierarchy.apply =>
+  (nodes, edges, hierarchy, options = {}) =>
+    [1, 11, 21].includes(seed)
+      ? Hierarchy.apply(nodes, edges, hierarchy, options)
+      : solveHierarchy(nodes, edges, hierarchy, options, route)
+
 describe('properties', () => {
   test.each([1, 2, 3, 4, 5, 6])('random graph %i', (seed) => {
     const { nodes, edges } = randomGraph(seed, 14, 20)
     for (const direction of Object.values(Hierarchy.direction)) {
       const hierarchy = Hierarchy.make({ rankGap: 30, nodeGap: 20, edgeGap: 8, direction })
-      const layout = Hierarchy.apply(nodes, edges, hierarchy)
+      const layout = applyOf(seed)(nodes, edges, hierarchy)
 
       // Deterministic.
-      expect(Hierarchy.apply(nodes, edges, hierarchy)).toEqual(layout)
+      expect(applyOf(seed)(nodes, edges, hierarchy)).toEqual(layout)
 
       // Node sizes are the frame sizes.
       for (const frame of nodes) {
@@ -1610,8 +1623,8 @@ describe('properties', () => {
           direction,
           backEdges,
         })
-        const layout = Hierarchy.apply(nodes, edges, hierarchy)
-        expect(Hierarchy.apply(nodes, edges, hierarchy)).toEqual(layout)
+        const layout = applyOf(seed)(nodes, edges, hierarchy)
+        expect(applyOf(seed)(nodes, edges, hierarchy)).toEqual(layout)
 
         const rects = Object.values<Rect.Rect>(layout.nodes)
         const lines: Array<
@@ -1777,8 +1790,8 @@ describe('properties', () => {
           direction,
           backEdges,
         })
-        const shaped = Hierarchy.apply(nodes, edges, hierarchy, { shapes })
-        expect(Hierarchy.apply(nodes, edges, hierarchy, { shapes })).toEqual(shaped)
+        const shaped = applyOf(seed)(nodes, edges, hierarchy, { shapes })
+        expect(applyOf(seed)(nodes, edges, hierarchy, { shapes })).toEqual(shaped)
         for (const frame of nodes) {
           const rect = shaped.nodes[frame.id] as Rect.Rect
           expect([rect.width, rect.height]).toEqual([frame.width, frame.height])

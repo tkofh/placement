@@ -13,7 +13,11 @@ runs TypeScript directly, against the workspace source rather than `dist`.
   `qlmanage` and `sips`).
 - `<name>.txt`, every route after each traced phase of the solve
   (`search`, `nudge`, `ports`, `slants`) and as returned
-  (`final`), then the layout's notes.
+  (`final`), then the layout's notes and its score: the total, which try
+  won and how many solves ran, each term of it (see
+  `src/internal/connector/score.ts`), and the total of every try, in the
+  order they ran (see `src/internal/connector/orders.ts`). The phases are
+  those of the try that won.
 
 ```sh
 pnpm --filter placement scene state.json

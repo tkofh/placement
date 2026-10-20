@@ -11,7 +11,7 @@ import type { Edge } from '../../edge.ts'
 import type * as Point from '../../point.ts'
 import type * as Rect from '../../rect.ts'
 import { type Trace, solve } from './pipeline.ts'
-import { type Settings, compareIds, normalize } from './problem.ts'
+import { type Problem, type Settings, compareIds, normalize } from './problem.ts'
 
 // The canonical order of a routing problem. Every phase breaks its ties by
 // the index of a rect or an edge. `normalize` indexes the rects in the
@@ -331,8 +331,55 @@ export function restore(layout: ConnectorLayout, order: ReadonlyArray<number>): 
 }
 
 /**
- * Routes edges in canonical order: sorts the rects and edges, solves, and
- * maps the layout, and the routes `trace` hears, back to the input order.
+ * Routes edges in a given order: solves the problem of the rects and the
+ * edges listed in that order, and maps the routes `trace` hears back to
+ * the input order.
+ *
+ * @param rects - The placed rects, keyed by id.
+ * @param edges - The edges, referencing rects by id.
+ * @param settings - The routing spec.
+ * @param options - The route constraints of each edge, and the shapes.
+ * @param order - The input index of the edge to route at each position.
+ * @param trace - Hears the routes after each phase, by input index.
+ * @returns The problem, its edges in `order`, and the layout that solves
+ *   it, in the same order (see `restore`).
+ */
+export function routeInOrder(
+  rects: Readonly<Record<string, Rect.Rect>>,
+  edges: ReadonlyArray<Edge<string>>,
+  settings: Settings,
+  options: ConnectorApplyOptions,
+  order: ReadonlyArray<number>,
+  trace?: Trace,
+): { readonly problem: Problem; readonly layout: ConnectorLayout } {
+  const given = options.edges
+  const listed: ConnectorApplyOptions = {
+    ...options,
+    edges: given === undefined ? undefined : order.map((i) => given[i]),
+  }
+  const problem = normalize(
+    rects,
+    order.map((i) => edges[i] as Edge<string>),
+    settings,
+    listed,
+  )
+  const heard: Trace | undefined =
+    trace === undefined
+      ? undefined
+      : (phase, routes) => {
+          const byInput: Array<(typeof routes)[number]> = order.map(() => undefined)
+          for (const [k, points] of routes.entries()) {
+            byInput[order[k] as number] = points
+          }
+          trace(phase, byInput)
+        }
+  return { problem, layout: solve(problem, heard) }
+}
+
+/**
+ * Routes edges in canonical order: sorts the rects and edges, solves once,
+ * and maps the layout, and the routes `trace` hears, back to the input
+ * order.
  *
  * @param rects - The placed rects, keyed by id.
  * @param edges - The edges, referencing rects by id.
@@ -349,26 +396,5 @@ export function route(
   trace?: Trace,
 ): ConnectorLayout {
   const order = canonicalOrder(rects, edges, options)
-  const given = options.edges
-  const canonical: ConnectorApplyOptions = {
-    ...options,
-    edges: given === undefined ? undefined : order.map((i) => given[i]),
-  }
-  const problem = normalize(
-    rects,
-    order.map((i) => edges[i] as Edge<string>),
-    settings,
-    canonical,
-  )
-  const heard: Trace | undefined =
-    trace === undefined
-      ? undefined
-      : (phase, routes) => {
-          const byInput: Array<(typeof routes)[number]> = order.map(() => undefined)
-          for (const [k, points] of routes.entries()) {
-            byInput[order[k] as number] = points
-          }
-          trace(phase, byInput)
-        }
-  return restore(solve(problem, heard), order)
+  return restore(routeInOrder(rects, edges, settings, options, order, trace).layout, order)
 }

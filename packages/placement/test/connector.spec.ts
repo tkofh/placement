@@ -6,6 +6,7 @@ import * as Frame from '../src/frame.ts'
 import * as Interval from '../src/interval.ts'
 import * as Point from '../src/point.ts'
 import * as Rect from '../src/rect.ts'
+import { sceneOf } from './fixtures/judgements.ts'
 
 const pointsOf = (layout: Connector.ConnectorLayout, i = 0) =>
   layout.edges[i]?.points.map(({ x, y }) => [x, y])
@@ -1933,6 +1934,26 @@ describe('jogs', () => {
       [-43.5, 20],
       [-43.5, 200],
     ])
+  })
+})
+
+describe('slanted corners', () => {
+  test('a corner inside a gentle slant keeps its radius, and so does the one before it', () => {
+    // auth->db (5) jogs 6.46 into db and slants gently, its arc 130 wide.
+    // billing->db (9) turns into db 5.75 inside it, and keeps its radius,
+    // grown only for the nest it makes with orders->db (8), within both
+    // radii together; its corner out of billing keeps its radius too.
+    const { rects, edges, spec: settings } = sceneOf('wild')
+    const layout = Connector.apply(rects, edges, settings)
+    const slant = layout.edges[5]?.points.map(({ x, y }) => [x, y]) ?? []
+    expect(
+      slant.some(([x, y], i) => i > 0 && x !== slant[i - 1]?.[0] && y !== slant[i - 1]?.[1]),
+    ).toBe(true)
+    const radii = layout.edges[9]?.radii ?? []
+    for (const size of radii.slice(1, -1)) {
+      expect(size).toBeGreaterThanOrEqual(16)
+    }
+    expect(radii.at(-2)).toBeLessThanOrEqual(32)
   })
 })
 

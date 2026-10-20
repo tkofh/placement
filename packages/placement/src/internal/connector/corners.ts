@@ -32,9 +32,18 @@ import type { Route } from './route.ts'
 //
 // Once the routes take their final shape, an outer corner that turns less
 // than a right angle, as at a slanted jog, draws an arc of radius its size
-// over `tan(theta / 2)` for a turn `theta`. The corners nested inside it
-// grow to that arc less how far they sit inside, where that is more than
-// their radius, so the nest keeps its center through the slant.
+// over `tan(theta / 2)` for a turn `theta`. A corner nested inside it
+// shares its center at the arc less how far it sits inside, and grows
+// toward that size by `g` past its radius, tapered as a nest's growth is:
+// by no more than the reach less `g`, nor the reach less how far it sits
+// inside. The growth peaks at half the reach and falls to none at the
+// reach. So a corner keeps the center through a slant that turns well, and
+// keeps its radius through a gentle one, whose arc runs far wider than the
+// reach and would sweep a right-angled corner across the routes beside it,
+// with no jump between the two as the slant changes. That growth is the
+// corner's own, not one the nest asks of the corners around it, so it
+// takes no more of a leg than the corner at its other end leaves, at the
+// size that corner comes to without it.
 
 /** What sizing the corners keeps as given, and the shape they end up in. */
 export interface CornerOptions {
@@ -137,7 +146,9 @@ export function cornerRadii(
   // instead of growing itself; an inner corner that moved, or a fixed
   // outer one, nests with nothing, and a fixed inner one only has corners
   // grow around it.
-  const links: Array<Link & { readonly arc: number | undefined; readonly grow: number }> = []
+  // Each link grows its outer corner by `grow` past the inner one, or,
+  // around a corner that moved, its inner corner to `size`.
+  const links: Array<Link & { readonly size: number | undefined; readonly grow: number }> = []
   for (const link of nestsWithin(routes, limits)) {
     const { outer, inner, by } = link
     const reach = (limits[outer.route] as number) + (limits[inner.route] as number)
@@ -152,10 +163,20 @@ export function cornerRadii(
       const drawn = (shaped as ReadonlyArray<Route>)[outer.route] as Route
       const half = halfTurnTan(drawn.points, outer.index)
       if (half > 0) {
-        links.push({ ...link, arc: size / half, grow: 0 })
+        // The growth that shares the arc's center, tapered, and held to
+        // what its legs leave the corners at their other ends.
+        const radius = limits[inner.route] as number
+        const want = size / half - by - radius
+        const grow = Math.max(Math.min(want, reach - want, reach - by), 0)
+        const room = legRoom(
+          routes[inner.route] as Route,
+          sizes[inner.route] as Array<number>,
+          inner.index,
+        )
+        links.push({ ...link, size: Math.min(radius + grow, room), grow: 0 })
       }
     } else if (!isFixed(outer)) {
-      links.push({ ...link, arc: undefined, grow: Math.min(by, reach - by) })
+      links.push({ ...link, size: undefined, grow: Math.min(by, reach - by) })
     }
   }
   if (links.length === 0) {
@@ -171,14 +192,14 @@ export function cornerRadii(
   // short by its legs holds back nothing but the growth around it.
   for (let pass = 0; pass <= links.length; pass++) {
     const targets = floors.map((list) => list.slice())
-    for (const { outer, inner, by, arc, grow } of links) {
-      if (arc === undefined) {
+    for (const { outer, inner, size, grow } of links) {
+      if (size === undefined) {
         const list = targets[outer.route] as Array<number>
         const want = ((sizes[inner.route] as Array<number>)[inner.index] as number) + grow
         list[outer.index] = Math.max(list[outer.index] as number, want)
       } else {
         const list = targets[inner.route] as Array<number>
-        list[inner.index] = Math.max(list[inner.index] as number, arc - by)
+        list[inner.index] = Math.max(list[inner.index] as number, size)
       }
     }
     const next = settle(targets)
@@ -240,6 +261,20 @@ export function cornerOutsets(
     }
   }
   return outsets
+}
+
+// The most a corner may take of its legs and leave the corners at their
+// other ends their sizes: an end leg holds no other corner.
+function legRoom(route: Route, sizes: ReadonlyArray<number>, index: number): number {
+  const { points, cumulative } = route
+  let room = Infinity
+  for (const other of [index - 1, index + 1]) {
+    if (other > 0 && other + 1 < points.length) {
+      const length = Math.abs((cumulative[index] as number) - (cumulative[other] as number))
+      room = Math.min(room, length - (sizes[other] as number))
+    }
+  }
+  return room
 }
 
 // The tangent of half the turn at a point of a route.

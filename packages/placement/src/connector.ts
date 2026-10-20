@@ -2,7 +2,7 @@ import { clamp } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
 import type { AdornmentPlacement } from './adornment.ts'
 import type { Edge } from './edge.ts'
-import { route } from './internal/connector/canonical.ts'
+import { routeBest } from './internal/connector/orders.ts'
 import { positiveLength } from './internal/orient.ts'
 import type * as Point from './point.ts'
 import type { Polygon } from './polygon.ts'
@@ -582,8 +582,10 @@ export interface ConnectorApplyOptions<K extends string = string> {
  *   evenly spaced, as on a metro map. The growth tapers off as the routes
  *   drift apart, down to none at both radii together, so no corner jumps.
  *   Around a corner that a slanted jog turns less than a right angle, the
- *   corners inside grow to the radius of its arc less how far they sit
- *   inside, where that is more than their own. A renderer that rounds
+ *   corners inside grow toward the radius of its arc less how far they sit
+ *   inside, where that is more than their own, by less as that growth
+ *   nears both radii together and by none past it, and never into the
+ *   radius of the corner at the other end of a leg. A renderer that rounds
  *   corners draws circular corners that reach these lengths, or any corner
  *   that reaches no farther, though a slanted jog drawn with smaller
  *   corners shows a straight between them.
@@ -880,13 +882,27 @@ export interface ConnectorLayout<K extends string = string> {
  * no route at all. A layout that places the rects can read them and move
  * the rects apart.
  *
+ * The routes found first shape the routes found after them, so `apply`
+ * routes the edges in several orders and keeps the layout that costs least
+ * as drawn: its length, its corners by how far they turn and by how much
+ * smaller than the edge's `radius` they are drawn, its crossings, how far
+ * and how long its routes run closer together than the gap (the merge gap,
+ * for merged ends), the room its notes of merged ends and adornments say
+ * they lacked, and its edges without a route, each weighed against a
+ * corner as the search weighs it. The first order is one of its own
+ * (below), and a layout replaces the one kept only when it costs less, so
+ * where every order draws a layout that costs the same, the first order's
+ * layout is kept. The others are that order reversed, and the order of the
+ * best layout so far with the edge that costs the most in it moved to the
+ * front, one edge at a time.
+ *
  * Every input is deterministic: the same rects and edges always produce the
  * same routes, and the routes do not depend on the order of the edges (with
  * their `options.edges`) or of the rects' keys: an edge removed and added
- * back at the end routes as before. Ties between edges fall back to an
- * order of their own: the edges between the rects nearest the middle of the
- * graph first (by eccentricity: the most hops from a rect to any rect it
- * reaches along the edges, either way along each), then by the ids of
+ * back at the end routes as before. The orders it routes in all come from
+ * an order of its own: the edges between the rects nearest the middle of
+ * the graph first (by eccentricity: the most hops from a rect to any rect
+ * it reaches along the edges, either way along each), then by the ids of
  * their rects, then by the rest of their specs and options, so parallel
  * edges that differ keep their own routes. Edges equal in all of that keep
  * their input order among themselves. Ties between rects fall back to the
@@ -916,5 +932,5 @@ export function apply<const K extends string>(
   connector: Connector,
   options: ConnectorApplyOptions<NoInfer<K>> = {},
 ): ConnectorLayout<K> {
-  return route(rects, edges, connector, options) as ConnectorLayout<K>
+  return routeBest(rects, edges, connector, options).layout as ConnectorLayout<K>
 }
