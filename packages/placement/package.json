@@ -62,6 +62,10 @@
       "types": "./dist/length.d.mts",
       "import": "./dist/length.mjs"
     },
+    "./margin": {
+      "types": "./dist/margin.d.mts",
+      "import": "./dist/margin.mjs"
+    },
     "./offset": {
       "types": "./dist/offset.d.mts",
       "import": "./dist/offset.mjs"

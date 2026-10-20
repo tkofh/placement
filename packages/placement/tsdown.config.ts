@@ -13,6 +13,7 @@ export default defineConfig({
     'src/hierarchy.ts',
     'src/interval.ts',
     'src/length.ts',
+    'src/margin.ts',
     'src/offset.ts',
     'src/point.ts',
     'src/polygon.ts',

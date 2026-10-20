@@ -2,6 +2,7 @@ import { Pipeable, dual } from 'curvy/utils'
 import type * as AspectRatio from './aspectRatio.ts'
 import { SizingOf } from './internal/sizing.ts'
 import type { LengthInput } from './length.ts'
+import * as Margin from './margin.ts'
 import * as Sizing from './sizing.ts'
 import { normalizeTRBL } from './utils/arguments.ts'
 
@@ -21,7 +22,7 @@ type RawSizing = { readonly [K in keyof Sizing.SizingInput]-?: Sizing.SizingInpu
  *
  * Each group of fields treats omission differently:
  *
- * - Margins, `grow`, and `shrink` default to `0`.
+ * - Margins (see `placement/margin`), `grow`, and `shrink` default to `0`.
  * - `align` and `stretch` default to the inherit sentinel
  *   (`Number.POSITIVE_INFINITY`).
  * - The sizing fields (see `placement/sizing`) stay unset, and so does any
@@ -34,31 +35,8 @@ type RawSizing = { readonly [K in keyof Sizing.SizingInput]-?: Sizing.SizingInpu
  * that knows the basis of a percentage can take `FrameInput<LengthInput>`
  * (see `placement/length`) and resolve its lengths before it calls `make`.
  */
-export interface FrameInput<L extends LengthInput = number> extends Sizing.SizingInput<L> {
-  /**
-   * The space reserved above the frame in its container. A non-finite value
-   * requests an auto margin. Layout then gives the edge an equal share of
-   * the free space on its axis. Defaults to `0`.
-   */
-  readonly marginTop?: L | undefined
-  /**
-   * The space reserved to the right of the frame. A non-finite value
-   * requests an auto margin. Layout then gives the edge an equal share of
-   * the free space on its axis. Defaults to `0`.
-   */
-  readonly marginRight?: L | undefined
-  /**
-   * The space reserved below the frame. A non-finite value requests an auto
-   * margin. Layout then gives the edge an equal share of the free space on
-   * its axis. Defaults to `0`.
-   */
-  readonly marginBottom?: L | undefined
-  /**
-   * The space reserved to the left of the frame. A non-finite value
-   * requests an auto margin. Layout then gives the edge an equal share of
-   * the free space on its axis. Defaults to `0`.
-   */
-  readonly marginLeft?: L | undefined
+export interface FrameInput<L extends LengthInput = number>
+  extends Sizing.SizingInput<L>, Margin.MarginInput<L> {
   /**
    * The flex grow factor: the frame's share of positive free space along
    * the container's main axis, in proportion to the other items' factors.
@@ -186,10 +164,11 @@ class Frame extends Pipeable {
   constructor(input: FrameInput) {
     super()
 
-    this.marginTop = input.marginTop ?? 0
-    this.marginRight = input.marginRight ?? 0
-    this.marginBottom = input.marginBottom ?? 0
-    this.marginLeft = input.marginLeft ?? 0
+    const margin = Margin.normalize(input)
+    this.marginTop = margin.marginTop
+    this.marginRight = margin.marginRight
+    this.marginBottom = margin.marginBottom
+    this.marginLeft = margin.marginLeft
     this.grow = input.grow ?? 0
     this.shrink = input.shrink ?? 0
     this.align = input.align ?? Number.POSITIVE_INFINITY
