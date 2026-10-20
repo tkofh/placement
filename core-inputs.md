@@ -142,6 +142,11 @@ Two are speculative. The grid and anchor slices are guesses until those solvers 
 - **Margin name.** The frame's offsets become `marginTop`, `marginRight`, `marginBottom`, and `marginLeft`, as in CSS, with `setMargin` and its siblings.
 - **Hierarchy node keys.** A record, keyed by id.
 - **Ratio and stretch.** A stretched size feeds the ratio (see Sizing).
+- **Self-alignment names.** Split by flavor: one-axis `align` and `stretch`, two-axis `alignX`, `alignY`, `stretchX`, and `stretchY`, all plain numbers. An `Align` value module, a single `align` field whose value has a one-axis, a two-axis, and perhaps a logical kind, was weighed and set aside. It fits CSS, where `stretch` is an `align-self` value, but no logical case exists without writing modes: the one-axis flavor is already relative to the parent's axis, grid and anchor have physical frames, and anchor's flip fallbacks can mirror physical values inside the solver. It would also make `align` the one nested value in flat inputs, with costs in the model's field table, JSON round trips, and per-channel inherit. A logical flavor can still arrive later as a flavor or value type of its own without renaming these fields.
+- **Grow and the ratio.** A grown or shrunk main size derives an unset cross size through the ratio, as CSS lays out an item's hypothetical cross size with its flexed main size. An explicit or stretched cross size wins, and the ratio is not applied again.
+- **Box's default alignment.** The `Infinity` inherit sentinel. An omitted two-axis field inherits, and `Box.apply` resolves inherit to its default: stretch unless the ratio sizes the axis, at the start, which is CSS grid's `normal`. A grid will resolve inherit to its container's defaults. No input gains a third sentinel.
+- **Adornment shape.** Flat. `AdornmentInput` is the sizing, margin, and one-axis alignment slices beside `at`, `position`, `layer`, and `orient`, so it drops the `grow`, `shrink`, and `stretch` it never read, and `setFrame` goes.
+- **The `L` parameter.** In core: `SizingInput<L = number>` and `MarginInput<L = number>` carry the length type, and the composed inputs pass it through. `make` takes numbers. The model's item props are `FrameInput<LengthInput>`.
 - **Classes for specs.** Specs stay classes, and concept slices are input types, field tables, and functions with no class of their own, so composing a layout's input never needs a class per slice. Cost decides nothing between classes and records. On node 26, building a 16-field object takes about 9 ns as a class, 15 ns as an object literal or through `Object.create`, and 31 ns as a frozen literal, and reads cost the same in every shape. At hundreds of specs per solve the gap is microseconds. Classes keep the brand, `.pipe`, and the normalization at construction.
 
 ## Plan
@@ -154,14 +159,6 @@ Each step ships alone, with tests, docs, and a changeset, and leaves vue working
 4. **Self-alignment.** Extract one-axis and two-axis alignment with one per-axis resolve. Flex, hierarchy, and adornments read `align` and `stretch`. `Box` reads the two-axis flavor, with its fill as the default.
 5. Design the grid item beside the flex item before generalizing the item protocol or the model's kinds. Two layouts' item inputs are the fewest that show where the seams fall.
 6. Build anchor positioning on `Box.apply`.
-
-## Open questions
-
-- **Self-alignment names.** One-axis `align`/`stretch` and two-axis `alignX`/`alignY`/`stretchX`/`stretchY` (see Self-alignment), or one `align` that also takes an `[x, y]` pair.
-- **Grow and the ratio.** Whether a grown or shrunk main size derives the cross size through the ratio, as a stretched cross size derives the main size. The solve sizes the main axis first, so the derivation would be cheap.
-- **Box's default alignment.** A dedicated value that stretches unless the ratio sizes the axis, or the `Infinity` inherit sentinel with `Box.apply` supplying that behavior.
-- **Adornment shape.** An adornment holds a nested `frame`, while the flat-input direction would spread sizing, margin, and alignment into the adornment's own input beside `at` and `orient`.
-- **The `L` parameter.** Whether the sizing and margin inputs carry the length type in core, as PR tkofh/placement#7 has `BoxInput` and `FrameInput` do, or only the model's input types add it.
 
 ## Back to the model
 
