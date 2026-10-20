@@ -22,6 +22,10 @@
       "types": "./dist/adornment.d.mts",
       "import": "./dist/adornment.mjs"
     },
+    "./alignment": {
+      "types": "./dist/alignment.d.mts",
+      "import": "./dist/alignment.mjs"
+    },
     "./aspectRatio": {
       "types": "./dist/aspectRatio.d.mts",
       "import": "./dist/aspectRatio.mjs"
@@ -62,6 +66,10 @@
       "types": "./dist/length.d.mts",
       "import": "./dist/length.mjs"
     },
+    "./margin": {
+      "types": "./dist/margin.d.mts",
+      "import": "./dist/margin.mjs"
+    },
     "./offset": {
       "types": "./dist/offset.d.mts",
       "import": "./dist/offset.mjs"
@@ -77,6 +85,10 @@
     "./rect": {
       "types": "./dist/rect.d.mts",
       "import": "./dist/rect.mjs"
+    },
+    "./sizing": {
+      "types": "./dist/sizing.d.mts",
+      "import": "./dist/sizing.mjs"
     },
     "./track": {
       "types": "./dist/track.d.mts",

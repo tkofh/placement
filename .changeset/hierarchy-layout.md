@@ -4,14 +4,16 @@
 
 Add `placement/hierarchy`, `placement/edge`, and `placement/adornment`, a
 layered (Sugiyama-style) graph layout for flowcharts and other directed
-diagrams, as a peer of `Flexbox` and `Box`. `Hierarchy.apply(frames, edges,
-spec)` takes an array of `Frame`s with ids, and `Edge` specs that reference
-those ids. The types check the references: an edge to an unknown id, or a
-frame without an id, is a compile error. It returns a record of rects keyed
-by id, a route per edge, and the bounds of the drawing. The solver breaks
-cycles, ranks nodes by network simplex, reduces crossings by barycenter
-sweeps, and assigns coordinates by Brandes-Köpf with an edge-straightening
-pass. It is deterministic, and ties follow input order.
+diagrams, as a peer of `Flexbox` and `Box`. `Hierarchy.apply(nodes, edges,
+spec)` takes its nodes as a record of `Frame`s keyed by id, as
+`Connector.apply` takes its rects, and `Edge` specs that reference those
+ids. The types check the references: an edge to an unknown id is a compile
+error. It returns a record of rects keyed by id, a route per edge, and the
+bounds of the drawing. The solver breaks cycles, ranks nodes by network
+simplex, reduces crossings by barycenter sweeps, and assigns coordinates by
+Brandes-Köpf with an edge-straightening pass. It is deterministic, and ties
+follow input order: the order of the record's keys, which puts integer-like
+keys first, then the order of the edges.
 
 The layout places the nodes and `Connector.apply` (see
 `placement/connector`) routes the edges around them, so the two layouts
@@ -41,9 +43,11 @@ short or an adornment sits close, and how much larger than the innermost
 corner of its nest each corner is (`outsets`). The layout keeps room for
 corners of the edge's `radius` along the flow and out of each port.
 
-An `Adornment` is a `Frame` that decorates an edge, such as a label or an
-arrowhead, placed at `at` along it and turned to face along the line or
-kept upright. A `flow` adornment (the default) sits on a straight run,
+An `Adornment` decorates an edge, such as a label or an arrowhead, placed
+at `at` along it and turned to face along the line or kept upright. Its
+input is flat: the sizing and margin fields that a `Frame` takes, `align`
+for its side of the line, and its own `at`, `position`, `layer`, and
+`orient`, with setters for each. A `flow` adornment (the default) sits on a straight run,
 never on a corner: at `at` `0` or `1` it packs against the port, and the
 route runs straight out of the port as far as the adornments there take
 and an edge gap more; otherwise it sits on the run nearest `at` with room
@@ -55,7 +59,7 @@ rounded corners, and takes no room. Each route reports where its
 adornments landed and the stretch of the route each covers.
 
 Ports sit on each node's rect by default. `apply`'s fourth argument takes
-`shapes`, a `Polygon` per frame id, so that ports sit on a node's shape
+`shapes`, a `Polygon` per node id, so that ports sit on a node's shape
 instead: edges meet a diamond (`Polygon.make({ phase: 0.5 })`) at its tips
 and on its slopes, and a rounded rect on its curve. Shapes only move ports.
 The layout still spaces nodes by their rects. A side port needs a

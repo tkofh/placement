@@ -83,11 +83,11 @@ function translatedPoints(points: ReadonlyArray<Point.Point>, dx = 0, dy = 0) {
 }
 
 const spec = Hierarchy.make({ rankGap: 20, nodeGap: 10 })
-const frames = [
-  Frame.make({ id: 'a', width: 40, height: 20 }),
-  Frame.make({ id: 'b', width: 60, height: 30 }),
-  Frame.make({ id: 'c', width: 40, height: 20 }),
-]
+const frames = {
+  a: Frame.make({ width: 40, height: 20 }),
+  b: Frame.make({ width: 60, height: 30 }),
+  c: Frame.make({ width: 40, height: 20 }),
+}
 const expected = Hierarchy.apply(
   frames,
   [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'c' })],
@@ -177,10 +177,10 @@ describe('solving', () => {
     ])
     // The layout sizes corners by their reach, (1 + smoothing) radii.
     const solved = Hierarchy.apply(
-      [
-        Frame.make({ id: 'a', width: 40, height: 20 }),
-        Frame.make({ id: 'b', width: 40, height: 20 }),
-      ],
+      {
+        a: Frame.make({ width: 40, height: 20 }),
+        b: Frame.make({ width: 40, height: 20 }),
+      },
       [Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.right, radius: 1.6 * 6 })],
       Hierarchy.make({ rankGap: 20, nodeGap: 10, edgeGap: 4 }),
     )
@@ -193,13 +193,13 @@ describe('solving', () => {
   })
 
   test('the radius keeps room for corners in the layout', async () => {
-    const fan = ['a', 'b', 'c'].map((id) => Frame.make({ id, width: 40, height: 20 }))
+    const fan = ['a', 'b', 'c']
     const { root } = await mountLayout({ rankGap: 20, nodeGap: 10 }, () => [
       ...['b', 'c'].map((to) => edge({ from: 'a', to, r: 12 })),
-      ...fan.map((frame) => node(frame.id, 40, 20)),
+      ...fan.map((id) => node(id, 40, 20)),
     ])
     const solved = Hierarchy.apply(
-      fan,
+      Object.fromEntries(fan.map((id) => [id, Frame.make({ width: 40, height: 20 })])),
       ['b', 'c'].map((target) => Edge.make({ source: 'a', target, radius: 12 })),
       Hierarchy.make({ rankGap: 20, nodeGap: 10 }),
     )
@@ -255,7 +255,7 @@ describe('solving', () => {
     ]
     const { root } = await mountLayout({ backEdges: name, rankGap: 20, edgeGap: 10 }, cycle)
     const solved = Hierarchy.apply(
-      frames.slice(0, 2),
+      { a: frames.a, b: frames.b },
       [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'b', target: 'a' })],
       Hierarchy.make({ backEdges, rankGap: 20, edgeGap: 10 }),
     )
@@ -311,11 +311,10 @@ describe('solving', () => {
       node('c', 40, 20, { alignSelf: 'start', marginLeft: 8 }),
     ])
     const solved = Hierarchy.apply(
-      [
-        frames[0]!,
-        frames[1]!,
-        Frame.make({ id: 'c', width: 40, height: 20, align: 0, stretch: 0, offsetLeft: 8 }),
-      ],
+      {
+        ...frames,
+        c: Frame.make({ width: 40, height: 20, align: 0, stretch: 0, marginLeft: 8 }),
+      },
       [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'c' })],
       Hierarchy.make({ rankGap: 20 }),
     )
@@ -332,10 +331,10 @@ describe('ports and adornments', () => {
       node('b', 40, 20),
     ])
     const solved = Hierarchy.apply(
-      [
-        Frame.make({ id: 'a', width: 40, height: 20 }),
-        Frame.make({ id: 'b', width: 40, height: 20 }),
-      ],
+      {
+        a: Frame.make({ width: 40, height: 20 }),
+        b: Frame.make({ width: 40, height: 20 }),
+      },
       [
         Edge.make({
           source: 'a',
@@ -491,20 +490,20 @@ describe('ports and adornments', () => {
       node('a', 40, 20),
       node('b', 40, 20),
     ])
-    const labelFrame = Frame.make({ width: 30, height: 12 })
+    const labelSize = { width: 30, height: 12 }
     const solved = Hierarchy.apply(
-      [
-        Frame.make({ id: 'a', width: 40, height: 20 }),
-        Frame.make({ id: 'b', width: 40, height: 20 }),
-      ],
+      {
+        a: Frame.make({ width: 40, height: 20 }),
+        b: Frame.make({ width: 40, height: 20 }),
+      },
       [
         Edge.make({
           source: 'a',
           target: 'b',
           weight: 2,
           adornments: [
-            Adornment.make({ frame: labelFrame, at: 0.5 }),
-            Adornment.make({ frame: labelFrame, at: 1 }),
+            Adornment.make({ ...labelSize, at: 0.5 }),
+            Adornment.make({ ...labelSize, at: 1 }),
           ],
         }),
       ],
@@ -521,18 +520,18 @@ describe('ports and adornments', () => {
 })
 
 // A turned adornment at one end of an edge, as `at="start"` and `at="end"` make.
-const turned = (frame: Frame.Frame, at: number) =>
+const turned = (size: Adornment.AdornmentInput, at: number) =>
   Adornment.make({
-    frame,
+    ...size,
     at,
     orient: at === 0 ? Adornment.orient.backward : Adornment.orient.forward,
   })
 
 describe('end adornments', () => {
-  const frames = [
-    Frame.make({ id: 'a', width: 40, height: 20 }),
-    Frame.make({ id: 'b', width: 40, height: 20 }),
-  ]
+  const frames = {
+    a: Frame.make({ width: 40, height: 20 }),
+    b: Frame.make({ width: 40, height: 20 }),
+  }
   const solved = Hierarchy.apply(
     frames,
     [Edge.make({ source: 'a', target: 'b' })],
@@ -602,9 +601,9 @@ describe('end adornments', () => {
           source: 'a',
           target: 'b',
           adornments: [
-            turned(Frame.make({ width: 4, height: 4 }), 0),
-            turned(Frame.make({ width: 8, height: 6 }), 1),
-            turned(Frame.make({ width: 5, height: 6 }), 1),
+            turned({ width: 4, height: 4 }, 0),
+            turned({ width: 8, height: 6 }, 1),
+            turned({ width: 5, height: 6 }, 1),
           ],
         }),
       ],
@@ -625,22 +624,24 @@ describe('end adornments', () => {
   })
 
   test('an end adornment and its margin keep the route straight', async () => {
-    const fan = ['a', 'b', 'c'].map((id) => Frame.make({ id, width: 40, height: 20 }))
+    const fan = ['a', 'b', 'c']
     const { root } = await mountLayout({ rankGap: 20, nodeGap: 10 }, () => [
       ...['b', 'c'].map((to) =>
         edge({ from: 'a', to, r: 4, smoothing: 0.5 }, () => [
           adornment({ at: 'end', width: 8, height: 6, marginLeft: 6 }, 'arrow'),
         ]),
       ),
-      ...fan.map((frame) => node(frame.id, 40, 20)),
+      ...fan.map((id) => node(id, 40, 20)),
     ])
     const arrow = Adornment.make({
-      frame: Frame.make({ width: 8, height: 6, offsetLeft: 6 }),
+      width: 8,
+      height: 6,
+      marginLeft: 6,
       at: 1,
       orient: Adornment.orient.forward,
     })
     const solvedFan = Hierarchy.apply(
-      fan,
+      Object.fromEntries(fan.map((id) => [id, Frame.make({ width: 40, height: 20 })])),
       ['b', 'c'].map((target) =>
         Edge.make({ source: 'a', target, radius: 6, adornments: [arrow] }),
       ),
@@ -679,11 +680,12 @@ describe('end adornments', () => {
           sourceSide: Edge.side.right,
           radius: 4,
           adornments: [
-            Adornment.make({ frame: Frame.make({ width: 20, height: 10 }) }),
-            Adornment.make({ frame: Frame.make({ width: 20, height: 10 }) }),
-            Adornment.make({ frame: Frame.make({ width: 6, height: 6 }), layer: 1 }),
+            Adornment.make({ width: 20, height: 10 }),
+            Adornment.make({ width: 20, height: 10 }),
+            Adornment.make({ width: 6, height: 6, layer: 1 }),
             Adornment.make({
-              frame: Frame.make({ width: 4, height: 4 }),
+              width: 4,
+              height: 4,
               at: 0.25,
               position: Adornment.position.absolute,
               orient: Adornment.orient.forward,
@@ -726,7 +728,7 @@ describe('reactivity', () => {
     await nextTick()
 
     const solved = Hierarchy.apply(
-      [frames[0]!, Frame.make({ id: 'b', width: 100, height: 30 }), frames[2]!],
+      { ...frames, b: Frame.make({ width: 100, height: 30 }) },
       [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'c' })],
       spec,
     )
@@ -749,7 +751,7 @@ describe('reactivity', () => {
     ])
 
     const alone = Hierarchy.apply(
-      frames.slice(0, 2),
+      { a: frames.a, b: frames.b },
       [Edge.make({ source: 'a', target: 'b' })],
       spec,
     )

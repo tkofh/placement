@@ -1,10 +1,8 @@
 import { describe, expect, test } from 'vitest'
 import * as Adornment from '../src/adornment.ts'
 import * as Edge from '../src/edge.ts'
-import * as Frame from '../src/frame.ts'
 
-const label = Frame.make({ width: 40, height: 16 })
-const adornment = Adornment.make({ frame: label })
+const adornment = Adornment.make({ width: 40, height: 16 })
 
 describe('edge', () => {
   test('make applies the defaults', () => {
@@ -44,7 +42,7 @@ describe('edge', () => {
     expect(Edge.isEdge(Edge.make({ source: 'a', target: 'b' }))).toBe(true)
     expect(Edge.isEdge({ source: 'a', target: 'b' })).toBe(false)
     expect(Edge.isEdge(null)).toBe(false)
-    expect(Edge.isEdge(label)).toBe(false)
+    expect(Edge.isEdge(adornment)).toBe(false)
   })
 
   test('side encodes the four physical sides', () => {
