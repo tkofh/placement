@@ -5,8 +5,8 @@ import { percentage } from 'valued/data/percentage'
 import { createCache } from '../cache.ts'
 import { toNormalized } from './normalize.ts'
 
-// `Number.POSITIVE_INFINITY` is the core's inherit sentinel (see
-// `placement/frame`). An infinite `align` inherits the container's
+// `Number.POSITIVE_INFINITY` is the core's inherit sentinel (`inherit` in
+// `placement/alignment`). An infinite `align` inherits the container's
 // `alignItems`, and an infinite `stretch` inherits its `stretchItems`.
 export interface AlignSelfValue {
   align: number

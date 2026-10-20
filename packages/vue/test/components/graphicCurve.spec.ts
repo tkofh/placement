@@ -7,6 +7,7 @@ import { h, nextTick, ref } from 'vue'
 import type { GraphicCurveProps } from '../../src/components/GraphicCurve.ts'
 import { GraphicCurve } from '../../src/components/GraphicCurve.ts'
 import { GraphicPoint } from '../../src/components/GraphicPoint.ts'
+import { roundPolyline } from '../../src/internal/corners.ts'
 import { findAll, findOne, mountWithRect } from '../host.ts'
 
 // Origin at zero so the registered points equal the raw left/top inputs.
@@ -196,5 +197,36 @@ describe('reactivity', () => {
       Linear2d.toPath(Linear2d.fromArray([Vector2.make(0, 0), Vector2.make(10, 10)])),
     )
     expect(findOne(root, 'path').props['d']).toBe(expected)
+  })
+})
+
+describe('rounded corners', () => {
+  const corner: Array<XY> = [
+    { x: 0, y: 0 },
+    { x: 40, y: 0 },
+    { x: 40, y: 40 },
+  ]
+
+  test('r rounds the corners of a linear curve', async () => {
+    const { root } = await mountCurve({ curve: 'linear', r: 8, smoothing: 0.5 }, corner)
+
+    const expected = CubicPath2d.toPathData(roundPolyline(corner, 8, 0.5)!)
+    expect(findOne(root, 'path').props['d']).toBe(expected)
+  })
+
+  test('a closed rounded curve rounds its closing corners', async () => {
+    const { root } = await mountCurve(
+      { curve: 'linear', r: 8, smoothing: '60%', closed: true },
+      corner,
+    )
+
+    const expected = CubicPath2d.toPathData(roundPolyline(corner, 8, 0.6, true)!)
+    expect(findOne(root, 'path').props['d']).toBe(`${expected} Z`)
+  })
+
+  test('other curves ignore r', async () => {
+    const { root: rounded } = await mountCurve({ curve: 'basis', r: 8 }, corner)
+    const { root: plain } = await mountCurve({ curve: 'basis' }, corner)
+    expect(findOne(rounded, 'path').props['d']).toBe(findOne(plain, 'path').props['d'])
   })
 })

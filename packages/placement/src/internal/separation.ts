@@ -1,0 +1,511 @@
+import { EPSILON, RELATIVE_TOLERANCE, coincident } from 'curvy/number'
+
+// One-dimensional placement with separation constraints (Dwyer, Marriott,
+// and Stuckey, "Fast Node Overlap Removal", 2006, the solver known as VPSC).
+// Each variable wants to sit at a desired position, and each constraint keeps
+// a right variable at least a gap past a left one. The solver finds the
+// positions that minimize the weighted sum of squared distances from the
+// desired positions:
+//
+//   minimize sum(weight * (position - desired)^2)
+//   subject to position(right) - position(left) >= gap
+//
+// It is an active set method. Variables joined by constraints that hold at
+// exactly their gap form a block that moves as one, to the weighted mean of
+// its members' desired positions. Visiting the variables left to right, the
+// solver merges into each one's block the block behind its most violated
+// incoming constraint. Then it splits a block across the constraint with the
+// most negative Lagrange multiplier, the constraint that holds its two sides
+// together against their will, and merges again, until no multiplier is
+// negative.
+//
+// A fixed variable stays at its desired position. It acts as a variable of
+// infinite weight, so gradients and multipliers have two parts, compared in
+// order: the pull of fixed variables, then the pull of free ones. A block
+// sits at the mean of where its fixed members put it. When those disagree
+// and no split can free them, the constraints between them cannot all hold,
+// and the solver reports the block as a conflict, which the caller can
+// relax.
+
+export interface Variable {
+  readonly desired: number
+  // Defaults to `1`.
+  readonly weight?: number
+  readonly fixed?: boolean
+}
+
+export interface Separation {
+  readonly left: number
+  readonly right: number
+  readonly gap: number
+}
+
+export interface Conflict {
+  // The variables of a block whose fixed members disagree, or whose
+  // constraints could not all hold.
+  readonly variables: ReadonlyArray<number>
+  // For a block whose fixed members disagree: the chain of active
+  // constraints between the two that disagree most, from the one the block
+  // puts too low to the one it puts too high. A constraint that runs along
+  // the chain pushes them apart by its gap, and one that runs against it
+  // pulls them together. `excess` is how much farther apart the chain puts
+  // the two than their desired positions are.
+  readonly chain?: ReadonlyArray<{ readonly constraint: number; readonly along: boolean }>
+  readonly excess?: number
+}
+
+export interface Placement {
+  readonly positions: Float64Array
+  readonly conflicts: ReadonlyArray<Conflict>
+}
+
+interface Block {
+  readonly variables: Array<number>
+  readonly active: Array<number>
+  // Sums of desired - offset over fixed members, and of weight * (desired -
+  // offset) and weight over free ones.
+  fixedSum: number
+  fixedCount: number
+  sum: number
+  weight: number
+  // Where its offsets start, and the multipliers of its active constraints
+  // once they are needed. Both follow its members.
+  origin: number
+  lambdas: Map<number, [number, number]> | undefined
+}
+
+function emptyBlock(): Block {
+  return {
+    variables: [],
+    active: [],
+    fixedSum: 0,
+    fixedCount: 0,
+    sum: 0,
+    weight: 0,
+    origin: 0,
+    lambdas: undefined,
+  }
+}
+
+/**
+ * Places variables as close to their desired positions as the separation
+ * constraints allow.
+ *
+ * @param variables - The variables, each with its desired position.
+ * @param constraints - The separations between pairs of variables. The
+ * constraints must not form a cycle.
+ * @returns The position of each variable, and the blocks whose constraints
+ * could not all hold between fixed variables. Fixed variables always sit at
+ * their desired positions.
+ */
+export function placeSeparated(
+  variables: ReadonlyArray<Variable>,
+  constraints: ReadonlyArray<Separation>,
+): Placement {
+  const count = variables.length
+  const desired = Float64Array.from(variables, (v) => v.desired)
+  const weights = Float64Array.from(variables, (v) => ((v.weight ?? 1) > 0 ? (v.weight ?? 1) : 1))
+  const fixed = Uint8Array.from(variables, (v) => (v.fixed === true ? 1 : 0))
+  const offsets = new Float64Array(count)
+  const owner = new Int32Array(count)
+  const blocks: Array<Block | undefined> = []
+
+  const recompute = (block: Block) => {
+    block.fixedSum = 0
+    block.fixedCount = 0
+    block.sum = 0
+    block.weight = 0
+    for (const v of block.variables) {
+      const at = (desired[v] as number) - (offsets[v] as number)
+      if (fixed[v] === 1) {
+        block.fixedSum += at
+        block.fixedCount++
+      } else {
+        block.sum += (weights[v] as number) * at
+        block.weight += weights[v] as number
+      }
+    }
+    // The mean of where its fixed members put it, or the weighted mean of
+    // its free members' wishes.
+    block.origin =
+      block.fixedCount > 0 ? block.fixedSum / block.fixedCount : block.sum / block.weight
+    block.lambdas = undefined
+  }
+  for (let v = 0; v < count; v++) {
+    owner[v] = v
+    const block = emptyBlock()
+    block.variables.push(v)
+    recompute(block)
+    blocks.push(block)
+  }
+
+  let scale = 0
+  let freeWeight = 0
+  for (let v = 0; v < count; v++) {
+    scale = Math.max(scale, Math.abs(desired[v] as number))
+    if (fixed[v] === 0) {
+      freeWeight += weights[v] as number
+    }
+  }
+  // Pulls within rounding of zero, for the scale of the problem: of fixed
+  // variables, in units of distance, and of free ones, weighted.
+  const band = EPSILON + RELATIVE_TOLERANCE * scale
+  const fixedTolerance = band * Math.max(count, 1)
+  const freeTolerance = band * Math.max(freeWeight, 1)
+
+  const blockOf = (v: number) => blocks[owner[v] as number] as Block
+  const position = (v: number) =>
+    fixed[v] === 1 && blockOf(v).fixedCount === 1
+      ? (desired[v] as number)
+      : blockOf(v).origin + (offsets[v] as number)
+
+  // Joins the blocks of a constraint's two sides, so that it holds at
+  // exactly its gap. The larger block keeps its offsets.
+  const merge = (c: number) => {
+    const { left, right, gap } = constraints[c] as Separation
+    const a = owner[left] as number
+    const b = owner[right] as number
+    const keep = (blocks[a] as Block).variables.length >= (blocks[b] as Block).variables.length
+    const [base, other] = keep ? [a, b] : [b, a]
+    // How far the other block's offsets move into the base block's frame.
+    const shift = keep
+      ? (offsets[left] as number) + gap - (offsets[right] as number)
+      : (offsets[right] as number) - gap - (offsets[left] as number)
+    const into = blocks[base] as Block
+    const from = blocks[other] as Block
+    for (const v of from.variables) {
+      const offset = offsets[v] as number
+      offsets[v] = offset + shift
+      owner[v] = base
+      into.variables.push(v)
+    }
+    into.active.push(...from.active, c)
+    blocks[other] = undefined
+    recompute(into)
+  }
+
+  // The multiplier of each active constraint in a block, as its pull from
+  // fixed variables and from free ones: how much the cost would fall per
+  // unit of separation past its gap. The active constraints form a tree.
+  // Each fixed member absorbs whatever free pull its subtree has, as a
+  // variable of infinite weight would.
+  const multipliers = (block: Block, out: Map<number, [number, number]>) => {
+    const incident = new Map<number, Array<number>>()
+    for (const c of block.active) {
+      const { left, right } = constraints[c] as Separation
+      for (const v of [left, right]) {
+        const list = incident.get(v)
+        if (list === undefined) {
+          incident.set(v, [c])
+        } else {
+          list.push(c)
+        }
+      }
+    }
+    const root = block.variables.find((v) => fixed[v] === 1) ?? (block.variables[0] as number)
+    // Depth-first from the root, so that children follow their parents.
+    const order: Array<[variable: number, via: number]> = []
+    const stack: Array<[number, number]> = [[root, -1]]
+    while (stack.length > 0) {
+      const [v, via] = stack.pop() as [number, number]
+      order.push([v, via])
+      for (const c of incident.get(v) ?? []) {
+        if (c !== via) {
+          const { left, right } = constraints[c] as Separation
+          stack.push([left === v ? right : left, c])
+        }
+      }
+    }
+    const pull = new Map<number, [number, number]>()
+    const at = block.origin
+    for (const [v] of order) {
+      const away = at + (offsets[v] as number) - (desired[v] as number)
+      pull.set(v, fixed[v] === 1 ? [away, 0] : [0, (weights[v] as number) * away])
+    }
+    for (let k = order.length - 1; k > 0; k--) {
+      const [v, via] = order[k] as [number, number]
+      const total = pull.get(v) as [number, number]
+      if (fixed[v] === 1) {
+        total[1] = 0
+      }
+      const { left, right } = constraints[via] as Separation
+      // The subtree hangs off the constraint's right side or its left.
+      out.set(via, left === v ? [-total[0], -total[1]] : [total[0], total[1]])
+      const parent = pull.get(left === v ? right : left) as [number, number]
+      parent[0] += total[0]
+      parent[1] += total[1]
+    }
+  }
+
+  // Splits the block across the active constraint with the most negative
+  // multiplier, if any is negative.
+  const split = () => {
+    let worst = -1
+    let lowest: [number, number] = [0, 0]
+    for (const block of blocks) {
+      if (block === undefined || block.active.length === 0) {
+        continue
+      }
+      if (block.lambdas === undefined) {
+        block.lambdas = new Map()
+        multipliers(block, block.lambdas)
+      }
+      for (const [c, lambda] of block.lambdas) {
+        const negative =
+          lambda[0] < -fixedTolerance || (lambda[0] <= fixedTolerance && lambda[1] < -freeTolerance)
+        if (!negative) {
+          continue
+        }
+        const lower =
+          worst === -1 ||
+          lambda[0] < lowest[0] - fixedTolerance ||
+          (lambda[0] <= lowest[0] + fixedTolerance && lambda[1] < lowest[1])
+        if (lower) {
+          worst = c
+          lowest = lambda
+        }
+      }
+    }
+    if (worst === -1) {
+      return false
+    }
+    const { left } = constraints[worst] as Separation
+    const index = owner[left] as number
+    const block = blocks[index] as Block
+    const active = block.active.filter((c) => c !== worst)
+    // The left side keeps what it reaches without `worst`.
+    const reached = new Set<number>([left])
+    const queue = [left]
+    while (queue.length > 0) {
+      const v = queue.pop() as number
+      for (const c of active) {
+        const { left: l, right: r } = constraints[c] as Separation
+        const other = l === v ? r : r === v ? l : -1
+        if (other !== -1 && !reached.has(other)) {
+          reached.add(other)
+          queue.push(other)
+        }
+      }
+    }
+    const leftBlock = emptyBlock()
+    const rightBlock = emptyBlock()
+    for (const v of block.variables) {
+      ;(reached.has(v) ? leftBlock : rightBlock).variables.push(v)
+    }
+    for (const c of active) {
+      ;(reached.has((constraints[c] as Separation).left) ? leftBlock : rightBlock).active.push(c)
+    }
+    recompute(leftBlock)
+    recompute(rightBlock)
+    blocks[index] = leftBlock
+    blocks.push(rightBlock)
+    for (const v of rightBlock.variables) {
+      owner[v] = blocks.length - 1
+    }
+    // Both halves moved, so their constraints need another look.
+    for (const v of block.variables) {
+      mark(v)
+      touchOut(v)
+    }
+    return true
+  }
+
+  const violated = (c: number) => {
+    const { left, right, gap } = constraints[c] as Separation
+    const want = position(left) + gap
+    const at = position(right)
+    return at < want && !coincident(at, want)
+  }
+
+  // The constraints into each variable, and an order of the variables in
+  // which every constraint's left side comes before its right side.
+  const incoming: Array<Array<number>> = Array.from({ length: count }, () => [])
+  const outgoing: Array<Array<number>> = Array.from({ length: count }, () => [])
+  const pending = new Int32Array(count)
+  for (const [c, { left, right }] of constraints.entries()) {
+    ;(incoming[right] as Array<number>).push(c)
+    ;(outgoing[left] as Array<number>).push(c)
+    const waiting = pending[right] as number
+    pending[right] = waiting + 1
+  }
+  const order: Array<number> = []
+  for (let v = 0; v < count; v++) {
+    if (pending[v] === 0) {
+      order.push(v)
+    }
+  }
+  for (let k = 0; k < order.length; k++) {
+    for (const c of outgoing[order[k] as number] as Array<number>) {
+      const right = (constraints[c] as Separation).right
+      const waiting = (pending[right] as number) - 1
+      pending[right] = waiting
+      if (waiting === 0) {
+        order.push(right)
+      }
+    }
+  }
+
+  // The variables whose blocks moved, which satisfy visits: at first all of
+  // them. A block that moves can violate the constraints into it, which
+  // visiting its members checks, and the constraints out of it, which mark
+  // the variables they lead to.
+  const position0 = new Int32Array(count)
+  for (const [k, v] of order.entries()) {
+    position0[v] = k
+  }
+  const dirty = new Uint8Array(count).fill(1)
+  let cursor = -1
+  let behind = false
+  const mark = (v: number) => {
+    dirty[v] = 1
+    if ((position0[v] as number) < cursor) {
+      behind = true
+    }
+  }
+  // Marks the variables that the constraints out of `v`'s block lead to.
+  const touchOut = (v: number) => {
+    for (const c of outgoing[v] as Array<number>) {
+      const right = (constraints[c] as Separation).right
+      if (owner[right] !== owner[v]) {
+        mark(right)
+      }
+    }
+  }
+
+  // Visits the variables left to right, and merges into each one's block
+  // the block behind its most violated incoming constraint, until none is.
+  // A merge can move a block that an earlier visit settled, so the visits
+  // repeat until a pass leaves nothing behind.
+  const satisfy = () => {
+    do {
+      behind = false
+      for (const [k, v] of order.entries()) {
+        cursor = k
+        if (dirty[v] === 0) {
+          continue
+        }
+        dirty[v] = 0
+        satisfyAt(v)
+      }
+      cursor = -1
+    } while (behind)
+  }
+  const satisfyAt = (v: number) => {
+    {
+      for (;;) {
+        const block = blockOf(v)
+        let worst = -1
+        let lowest = 0
+        for (const u of block.variables) {
+          for (const c of incoming[u] as Array<number>) {
+            const { left, right, gap } = constraints[c] as Separation
+            if (owner[left] === owner[u] || !violated(c)) {
+              continue
+            }
+            const slack = position(right) - position(left) - gap
+            if (worst === -1 || slack < lowest) {
+              worst = c
+              lowest = slack
+            }
+          }
+        }
+        if (worst === -1) {
+          break
+        }
+        merge(worst)
+        // The loop checks the constraints into the merged block again.
+        for (const u of blockOf(v).variables) {
+          touchOut(u)
+        }
+      }
+    }
+  }
+
+  satisfy()
+  const limit = 10 * (count + constraints.length) + 100
+  for (let step = 0; step < limit && split(); step++) {
+    satisfy()
+  }
+
+  // The chain of active constraints in a block from one member to another,
+  // each marked by whether it runs along the chain, left to right.
+  const chainBetween = (block: Block, from: number, to: number) => {
+    const via = new Map<number, number>([[from, -1]])
+    const queue = [from]
+    while (queue.length > 0 && !via.has(to)) {
+      const v = queue.shift() as number
+      for (const c of block.active) {
+        const { left, right } = constraints[c] as Separation
+        const other = left === v ? right : right === v ? left : -1
+        if (other !== -1 && !via.has(other)) {
+          via.set(other, c)
+          queue.push(other)
+        }
+      }
+    }
+    const chain: Array<{ constraint: number; along: boolean }> = []
+    let v = to
+    while (v !== from) {
+      const c = via.get(v) as number
+      const { left, right } = constraints[c] as Separation
+      // Coming into `v` from the left side of `c` runs along it.
+      chain.push({ constraint: c, along: right === v })
+      v = right === v ? left : right
+    }
+    return chain.toReversed()
+  }
+
+  const conflicts: Array<Conflict> = []
+  const reported = new Set<Block>()
+  for (const block of blocks) {
+    if (block === undefined || block.fixedCount < 2) {
+      continue
+    }
+    const at = block.origin
+    const disagree = block.variables.some(
+      (v) => fixed[v] === 1 && !coincident(at + (offsets[v] as number), desired[v] as number),
+    )
+    if (!disagree) {
+      continue
+    }
+    // The fixed members the block puts farthest below and above where they
+    // want to be.
+    const miss = (v: number) => at + (offsets[v] as number) - (desired[v] as number)
+    let low = -1
+    let high = -1
+    for (const v of block.variables) {
+      if (fixed[v] === 1) {
+        if (low === -1 || miss(v) < miss(low)) {
+          low = v
+        }
+        if (high === -1 || miss(v) > miss(high)) {
+          high = v
+        }
+      }
+    }
+    reported.add(block)
+    conflicts.push({
+      variables: [...block.variables],
+      chain: chainBetween(block, low, high),
+      excess: miss(high) - miss(low),
+    })
+  }
+  for (let c = 0; c < constraints.length; c++) {
+    if (violated(c)) {
+      const { left, right } = constraints[c] as Separation
+      const a = blockOf(left)
+      const b = blockOf(right)
+      if (!reported.has(a) || !reported.has(b)) {
+        reported.add(a)
+        reported.add(b)
+        conflicts.push({ variables: [...new Set([...a.variables, ...b.variables])] })
+      }
+    }
+  }
+
+  const positions = new Float64Array(count)
+  for (let v = 0; v < count; v++) {
+    positions[v] = fixed[v] === 1 ? (desired[v] as number) : position(v)
+  }
+  return { positions, conflicts }
+}

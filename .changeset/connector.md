@@ -1,0 +1,129 @@
+---
+'placement': minor
+---
+
+Add `placement/connector`, which routes edges between rects that are
+already placed, around the other rects. `Connector.apply(rects, edges,
+connector)` takes rects keyed by id (such as the `nodes` that
+`Hierarchy.apply` returns), `Edge`s between them, and a `Connector` spec:
+a `clearance` that routes keep from rects, a `gap` between routes that run
+alongside each other, and a `bendCost` per corner, the one scale of every
+cost: a crossing (a route running straight across another) costs two
+fifths of it, and a corner against an edge's preferred turn as much again.
+Omitted, the bend cost is twice the clearance and gap together, so the
+costs scale with the room the routes keep. Each route is found among the routes
+found before it, and each one that still crosses another is found again
+among all the others; ports and merged lanes next to each other whose
+routes cross trade places when that leaves fewer crossings. Routes are orthogonal, leave and enter
+their ports straight out from the side, and report their corner `radii`.
+Gaps are between strokes: `Edge` gains a `thickness` (and
+`Edge.setThickness`), and routes sit their gap apart plus half of each
+thickness, and keep half their thickness more off the rects they run along
+where they can.
+Routes in a passage too narrow for the gap spread evenly across it.
+An edge's `radius` is the least its corners turn: every corner reaches
+that far unless a leg is too short for it, and `Edge.minRadius` is gone.
+The search prices a jog shorter than twice the radius, whose two corners
+could not both fit, at its two corners in proportion to its length, so
+that a route's cost varies smoothly as the rects move and no route flips
+to another over a jog of a pixel, and a route that comes onto another's
+line on one side of it and leaves on the other pays for the crossing that
+is. Nudging leaves the segment beside such a kink where it is rather than
+balance a staircase around it, and leaves a kink right past a port for
+the port to slide away.
+Routes that turn together get corners about one center, as on a metro
+map: the innermost corner keeps the radius and each corner outside it
+grows by how far it sits outside the one inside it, tapering off as the
+routes drift apart so that no corner jumps. Where a leg is too short for
+a grown corner and the corner at its other end, that corner gives way, by
+no more than the leg has spare past the two radii, so that a nest holds
+together where its leg falls a little short and lets go slowly where it
+falls far short. Each route's `outsets` say how much larger than the
+innermost corner of its nest each corner is, for a renderer to draw it as
+that corner moved out.
+Around a corner that a slanted jog flattens, the corners inside grow to
+its arc.
+An auto side is the side of the cheapest route, where a side with less
+room in front of its port than the end needs for its adornments and the
+corner past them costs up to twice the bend cost more, so an end comes in
+on a side with room where that costs less than the way around. Auto ports
+that share a
+side spread out in the order their routes part in, so that the routes nest
+instead of crossing at the rect. Ports sit on the rects, or on the shapes
+that `apply`'s `shapes` option gives them, as `Hierarchy.apply` takes
+them. Ports that touch, where two rects meet, make a route of no length
+that keeps both its ends. Each edge can also pass through `via` points,
+each with the way the route arrives there (`arriving`) and leaves
+(`leaving`) when it matters, and the routes beside such a point keep the
+gap from it; stay out of its own `avoid` rects; and prefer clockwise or
+counterclockwise turns. Nudging never takes a waypoint off its route, and
+a segment that moves takes the open side of one that stays put on the
+line of a wall. Routes that run alongside each other sit in the order
+their ends ask for; two that must cross whichever way they sit take the
+sides that leave them where they want to be, and where the orders that
+pairs of routes ask for conflict, the pairs that must cross anyway give
+way first, so the lanes of a merge peel off in order. A route whose
+waypoints hold a run on the line of another route's port leg, which
+nudging can move neither of, goes around it instead, and so does a route
+that runs along or beside such a leg where nudging could not move it the
+gap off, in a strip between the leg and a rect's clearance too narrow for
+it: it crosses the other route, or goes around, rather than lie on it. A jog, the rise of a Z-shaped route, sits at the
+spec's `jogAt` of the run it shifts (the middle by default, or per edge),
+and passes routes that run alongside all of it, since that adds no
+crossing. A jog too short for its two corners slants into an S (two arcs
+that meet halfway) instead of shrinking them into a kink, as far as the
+spec's `jogSlant` and the free length around it allow, so a route's
+`points` may include one slanted segment per such jog. Routes place their
+edges' adornments. Each straight run lays out
+its `flow` adornments like a flex container with no thickness: packed
+against the port at either end, otherwise on the nearest stretch of a run
+where no other route comes within the `gap` of them, or failing that on the
+run nearest where they fall that has room for them and its corners, justified by
+`justifyAdornments`, `justifyAdornmentsSpace`, and
+`justifyAdornmentsSpaceOuter`, `adornmentGap` apart, and aligned across the
+line by `alignAdornments`, with corners kept clear of them. `absolute`
+adornments sit on the route as drawn.
+With the spec's `merge` set to `side` or `near`, ends on one side of a rect
+that carry the same adornments there merge: they share one port and one
+copy of the adornments. Their routes come in on lanes whose strokes are
+`mergeGap` apart (`gap` by default) and step onto the line out of the port
+on arcs that leave the merge gap inside them, meeting right behind the
+adornments; the lanes on
+one side meet the line on the same circle, so they peel off one another
+like a whisk. Back from the merge, the routes stay the merge gap apart
+for as long as they run alongside each other, turning the same ways, and
+their jogs sit beside one another rather than at `jogAt`, so they turn
+together as one bundle with nested corners. Other routes never run inside
+a bundle: they go past it, and a route whose port leaves it among the lanes
+steps out past them once it clears its rect. A route parts from its bundle
+as far from the merge as its corners leave room for, and, where its run
+has the room, as leaves the flow adornments between its ports a stretch
+of their own past the bundle. Routes whose ends at one rect could merge
+pull each other along while sides are chosen: a stretch along a partner's
+route costs a quarter of its length, within the span of the route's own
+two rects, so that routes group up where a long run together pays for the
+bend and length it takes them to meet, and never go out of their way to
+join one. The search finds every route on its own first, without the
+pull, and then with it, so that each is drawn toward where its partners
+would go by themselves and no route's choice settles a tie for the next
+and holds it there. Where a route goes on alone from a group that goes on without
+it, its parting jog stays upright.
+A short jog right past an auto port slides the port along its side to
+straighten the route where it can (short for what its two corners need,
+with the corner at the port given no more of the leg out of it than the
+adornments packed there leave; the port keeps the gap from the routes
+alongside, or the merge gap from those that share a merge with it), and a
+slanted jog keeps its curve the
+gap from the routes and rects beside it. Jogs in a bundle, or where a
+route leaves a group, stay upright. Merged lanes stop short of a far end
+that faces them close by, so no route has to turn back past them. `near` merges
+only ends whose routes come in from the same way, and each route's
+`merged` names the edge that draws the shared adornments.
+`AdornmentPlacement` in `placement/adornment` is the shape that both
+layouts report placed adornments in.
+The layout's `notes` say what the routes gave up, and what would have fit
+them, for a caller or a layout that places the rects to act on: an edge
+with no route, a channel too narrow for the gaps of the routes in it (with
+the rects on either side and how much more room they need between them),
+a merge with no room in front of its side for its lanes, and a flow
+adornment longer than every run of its route.

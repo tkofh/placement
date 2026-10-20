@@ -18,13 +18,33 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./adornment": {
+      "types": "./dist/adornment.d.mts",
+      "import": "./dist/adornment.mjs"
+    },
+    "./alignment": {
+      "types": "./dist/alignment.d.mts",
+      "import": "./dist/alignment.mjs"
+    },
+    "./aspectRatio": {
+      "types": "./dist/aspectRatio.d.mts",
+      "import": "./dist/aspectRatio.mjs"
+    },
     "./box": {
       "types": "./dist/box.d.mts",
       "import": "./dist/box.mjs"
     },
+    "./connector": {
+      "types": "./dist/connector.d.mts",
+      "import": "./dist/connector.mjs"
+    },
     "./dimensions": {
       "types": "./dist/dimensions.d.mts",
       "import": "./dist/dimensions.mjs"
+    },
+    "./edge": {
+      "types": "./dist/edge.d.mts",
+      "import": "./dist/edge.mjs"
     },
     "./flexbox": {
       "types": "./dist/flexbox.d.mts",
@@ -34,9 +54,21 @@
       "types": "./dist/frame.d.mts",
       "import": "./dist/frame.mjs"
     },
+    "./hierarchy": {
+      "types": "./dist/hierarchy.d.mts",
+      "import": "./dist/hierarchy.mjs"
+    },
     "./interval": {
       "types": "./dist/interval.d.mts",
       "import": "./dist/interval.mjs"
+    },
+    "./length": {
+      "types": "./dist/length.d.mts",
+      "import": "./dist/length.mjs"
+    },
+    "./margin": {
+      "types": "./dist/margin.d.mts",
+      "import": "./dist/margin.mjs"
     },
     "./offset": {
       "types": "./dist/offset.d.mts",
@@ -46,9 +78,17 @@
       "types": "./dist/point.d.mts",
       "import": "./dist/point.mjs"
     },
+    "./polygon": {
+      "types": "./dist/polygon.d.mts",
+      "import": "./dist/polygon.mjs"
+    },
     "./rect": {
       "types": "./dist/rect.d.mts",
       "import": "./dist/rect.mjs"
+    },
+    "./sizing": {
+      "types": "./dist/sizing.d.mts",
+      "import": "./dist/sizing.mjs"
     },
     "./track": {
       "types": "./dist/track.d.mts",
@@ -68,12 +108,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "bench": "vitest bench --run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
+    "scene": "node scripts/scene.ts"
   },
   "dependencies": {
     "curvy": "^2.0.0-alpha.17"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"

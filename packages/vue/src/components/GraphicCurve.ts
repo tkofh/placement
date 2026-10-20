@@ -1,16 +1,14 @@
-import { CubicPath2d, LinearPath2d } from 'curvy/path'
-import { Basis2d, Bezier2d, Cardinal2d, Linear2d } from 'curvy/splines'
 import { Vector2 } from 'curvy/vector'
 import { Fragment, computed, defineComponent, h } from 'vue'
 import { PAINT_PROP_KEYS, type PaintProps, usePaint } from '../composables/usePaint.ts'
 import { usePointList } from '../composables/usePointList.ts'
 import { useParentX, useParentY } from '../composables/useSizingContext.ts'
-import { finiteNumber } from '../internal/curve.ts'
+import { type CurveEnds, type CurveKind, curveOptions, curvePathData } from '../internal/curve.ts'
+import { type SmoothingInput, resolveSmoothing } from '../internal/props/smoothing.ts'
 import { boolProp } from '../internal/utils.ts'
+import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
 
-export type CurveKind = 'cardinal' | 'basis' | 'bezier' | 'linear'
-
-export type CurveEnds = 'duplicate' | 'reflect' | 'interpolate' | 'natural'
+export type { CurveEnds, CurveKind }
 
 export interface GraphicCurveProps extends PaintProps {
   /**
@@ -34,22 +32,19 @@ export interface GraphicCurveProps extends PaintProps {
   tension?: number | `${number}`
   /** Cardinal parameterization: `0` uniform, `0.5` centripetal (default), `1` chordal. */
   alpha?: number | `${number}`
-  /** Closes the path back to its first point with a straight edge. */
+  /**
+   * Closes the path back to its first point with a straight edge. A
+   * rounded linear curve rounds the closing corners too.
+   */
   closed?: boolean
-}
-
-// The minimum count of registered points for each family. Below it, the
-// component does not draw the path (points mount progressively).
-function hasEnoughPoints(kind: CurveKind, ends: CurveEnds, count: number): boolean {
-  switch (kind) {
-    case 'basis':
-    case 'cardinal':
-      return count >= (ends === 'natural' ? 4 : 2)
-    case 'bezier':
-      return count >= 4 && count % 3 === 1
-    default:
-      return count >= 2
-  }
+  /** Rounds the corners of a `'linear'` curve to this radius. Other curves ignore it. */
+  r?: LengthPercentageInput
+  /**
+   * How much each rounded corner eases its curvature in, from `0`
+   * (default, circular corners) to `1` (fully smoothed, squircle-like).
+   * Numbers and percentages both work.
+   */
+  smoothing?: SmoothingInput
 }
 
 export const GraphicCurve = defineComponent(
@@ -63,56 +58,23 @@ export const GraphicCurve = defineComponent(
       points.value.map((point) => Vector2.make(point.x + parentX.value, point.y + parentY.value)),
     )
 
-    const options = computed(() => {
-      const resolved: { tension?: number; alpha?: number } = {}
-      const tension = finiteNumber(props.tension)
-      const alpha = finiteNumber(props.alpha)
-      if (tension !== undefined) {
-        resolved.tension = tension
-      }
-      if (alpha !== undefined) {
-        resolved.alpha = alpha
-      }
-      return resolved
-    })
+    const radius = useLengthPercentage(() => props.r, 0, 'width')
 
-    const pathData = computed(() => {
-      const kind = props.curve ?? 'cardinal'
-      const ends = props.ends ?? 'duplicate'
-      const controls = vectors.value
+    const options = computed(() => ({
+      ...curveOptions(props.tension, props.alpha),
+      radius: radius.value,
+      smoothing: resolveSmoothing(props.smoothing),
+      closed: boolProp(props.closed),
+    }))
 
-      if (!hasEnoughPoints(kind, ends, controls.length)) {
-        return undefined
-      }
-
-      switch (kind) {
-        case 'linear':
-          return LinearPath2d.toPathData(Linear2d.toPath(Linear2d.fromArray(controls)))
-        case 'basis': {
-          // Basis2d.fromArray requires four control points, so endpoint
-          // triplication pads the array before construction.
-          const padded =
-            ends === 'natural'
-              ? controls
-              : [controls[0]!, controls[0]!, ...controls, controls.at(-1)!, controls.at(-1)!]
-          return CubicPath2d.toPathData(Basis2d.toPath(Basis2d.fromArray(padded)))
-        }
-        case 'bezier':
-          return CubicPath2d.toPathData(Bezier2d.toPath(Bezier2d.fromArray(controls)))
-        default: {
-          const spline = Cardinal2d.fromArray(controls, options.value)
-          const padded =
-            ends === 'reflect'
-              ? Cardinal2d.withReflectedEndpoints(spline)
-              : ends === 'interpolate'
-                ? Cardinal2d.withInterpolatedEndpoints(spline)
-                : ends === 'natural'
-                  ? spline
-                  : Cardinal2d.withDuplicatedEndpoints(spline)
-          return CubicPath2d.toPathData(Cardinal2d.toPath(padded))
-        }
-      }
-    })
+    const pathData = computed(() =>
+      curvePathData(
+        props.curve ?? 'cardinal',
+        props.ends ?? 'duplicate',
+        vectors.value,
+        options.value,
+      ),
+    )
 
     const paint = usePaint(props)
 
@@ -135,7 +97,7 @@ export const GraphicCurve = defineComponent(
   },
   {
     name: 'GraphicCurve',
-    props: ['curve', 'ends', 'tension', 'alpha', 'closed', ...PAINT_PROP_KEYS],
+    props: ['curve', 'ends', 'tension', 'alpha', 'closed', 'r', 'smoothing', ...PAINT_PROP_KEYS],
     inheritAttrs: false,
   },
 )

@@ -1,6 +1,10 @@
 import { addComponent, defineNuxtModule } from '@nuxt/kit'
 
 const components = [
+  'ConnectorAdornment',
+  'ConnectorEdge',
+  'ConnectorLayout',
+  'ConnectorNode',
   'FlexItem',
   'FlexLayout',
   'GraphicCircle',
@@ -9,9 +13,14 @@ const components = [
   'GraphicLine',
   'GraphicPath',
   'GraphicPoint',
+  'GraphicPolygon',
   'GraphicRect',
   'GraphicRoot',
   'GraphicText',
+  'HierarchyAdornment',
+  'HierarchyEdge',
+  'HierarchyLayout',
+  'HierarchyNode',
 ]
 
 export default defineNuxtModule({

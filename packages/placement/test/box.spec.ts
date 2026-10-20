@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import type * as AspectRatio from '../src/aspectRatio.ts'
 import * as Box from '../src/box.ts'
 import * as Rect from '../src/rect.ts'
 
@@ -328,5 +329,131 @@ describe('box through a Proxy', () => {
     expect(box.toJSON()).toEqual({ top: 10, left: 20, width: 100, aspectRatio: 2 })
     expect(Box.setTop(box, 5).top).toBe(5)
     expect(Box.apply(box, parent)).toEqual(Rect.make(20, 10, 100, 50))
+  })
+})
+
+describe('aspect ratio pairs', () => {
+  const r169: AspectRatio.AspectRatio = [16, 9]
+
+  test('a pair derives the width with one rounding', () => {
+    const box = Box.make({ height: 7, aspectRatio: r169 })
+    expect(Box.apply(box, parent).width).toBe(112 / 9)
+    expect(box.pipe(Box.apply(parent)).width).toBe(112 / 9)
+  })
+
+  test('a pair derives the height from inset-determined width', () => {
+    expect(Box.apply(Box.make({ left: 0, right: 240, aspectRatio: r169 }), parent)).toEqual(
+      Rect.make(0, 0, 160, 90),
+    )
+  })
+
+  test('a ratio over 1 behaves as its number', () => {
+    for (const input of [{ height: 7 }, { width: 7 }, { top: 0, bottom: 0 }]) {
+      expect(Box.apply(Box.make({ ...input, aspectRatio: [16 / 9, 1] }), parent)).toEqual(
+        Box.apply(Box.make({ ...input, aspectRatio: 16 / 9 }), parent),
+      )
+    }
+  })
+
+  test('the getter reads the value and toJSON keeps the pair', () => {
+    const box = Box.make({ aspectRatio: r169 })
+    expect(box.aspectRatio).toBe(16 / 9)
+    expect(box.toJSON().aspectRatio).toBe(r169)
+  })
+
+  test('a JSON round trip keeps the pair', () => {
+    const box = Box.make({ height: 7, aspectRatio: r169 })
+    const revived = Box.make(JSON.parse(JSON.stringify(box)))
+    expect(revived.toJSON().aspectRatio).toEqual(r169)
+    expect(Box.apply(revived, parent)).toEqual(Box.apply(box, parent))
+  })
+
+  test('setAspectRatio takes a pair', () => {
+    const box = Box.make({ height: 7 })
+    expect(Box.apply(Box.setAspectRatio(box, r169), parent).width).toBe(112 / 9)
+    expect(Box.apply(box.pipe(Box.setAspectRatio(r169)), parent).width).toBe(112 / 9)
+  })
+
+  test('a degenerate pair acts as unset', () => {
+    const box = Box.make({ height: 10, aspectRatio: [1, 0] })
+    expect(Box.apply(box, parent).width).toBe(400)
+  })
+})
+
+describe('alignment', () => {
+  const parent = Rect.make(400, 200)
+
+  test('alignment fields default to inherit', () => {
+    const box = Box.make({})
+    expect([box.alignX, box.alignY, box.stretchX, box.stretchY]).toEqual([
+      Infinity,
+      Infinity,
+      Infinity,
+      Infinity,
+    ])
+  })
+
+  test('align places a sized box in the room its insets leave', () => {
+    expect(
+      Box.apply(Box.make({ width: 100, height: 50, alignX: 0.5, alignY: 0.5 }), parent),
+    ).toEqual(Rect.make(150, 75, 100, 50))
+    expect(
+      Box.apply(Box.make({ left: 20, right: 80, width: 100, height: 50, alignX: 1 }), parent),
+    ).toEqual(Rect.make(220, 0, 100, 50))
+  })
+
+  test('an explicit align overrides the right-edge anchor', () => {
+    expect(Box.apply(Box.make({ right: 10, width: 100, height: 50, alignX: 0 }), parent)).toEqual(
+      Rect.make(0, 0, 100, 50),
+    )
+  })
+
+  test('a stretch of 0 keeps an unset size at 0 in an inset pair', () => {
+    expect(Box.apply(Box.make({ left: 10, right: 30, height: 20, stretchX: 0 }), parent)).toEqual(
+      Rect.make(10, 0, 0, 20),
+    )
+  })
+
+  test('a partial stretch moves the size toward the room', () => {
+    expect(
+      Box.apply(Box.make({ width: 100, height: 40, stretchX: 0.5, stretchY: 0.25 }), parent),
+    ).toEqual(Rect.make(0, 0, 250, 80))
+  })
+
+  test('an explicit stretch fixes the axis, and the ratio follows it', () => {
+    // By default the height would fill and the ratio would size the width.
+    expect(Box.apply(Box.make({ aspectRatio: 2, stretchX: 1, stretchY: 0 }), parent)).toEqual(
+      Rect.make(0, 0, 400, 200),
+    )
+    expect(Box.apply(Box.make({ aspectRatio: 4, stretchX: 1, stretchY: 0 }), parent)).toEqual(
+      Rect.make(0, 0, 400, 100),
+    )
+  })
+
+  test('an explicit stretch sizes the other axis for the default fill', () => {
+    // The stretched height sizes the width through the ratio, so x does not fill.
+    expect(Box.apply(Box.make({ aspectRatio: 1, stretchY: 0.5 }), parent)).toEqual(
+      Rect.make(0, 0, 100, 100),
+    )
+  })
+
+  test('setters work in both forms', () => {
+    const box = Box.make({ width: 100, height: 50 })
+    expect(Box.apply(Box.setAlign(box, 0.5), parent)).toEqual(Rect.make(150, 75, 100, 50))
+    expect(Box.apply(box.pipe(Box.setAlign(1, 0)), parent)).toEqual(Rect.make(300, 0, 100, 50))
+    expect(Box.setAlignX(box, 0.25).alignX).toBe(0.25)
+    expect(box.pipe(Box.setAlignY(0.75)).alignY).toBe(0.75)
+    expect(Box.apply(Box.setStretch(Box.make({}), 0.5), parent)).toEqual(Rect.make(0, 0, 200, 100))
+    expect(Box.apply(Box.make({}).pipe(Box.setStretch(1, 0)), parent)).toEqual(
+      Rect.make(0, 0, 400, 0),
+    )
+    expect(Box.setStretchX(box, 1).stretchX).toBe(1)
+    expect(box.pipe(Box.setStretchY(1)).stretchY).toBe(1)
+  })
+
+  test('a JSON round trip keeps inherited alignment', () => {
+    const box = Box.make({ alignX: 0.5, stretchY: Infinity })
+    const back = Box.make(JSON.parse(JSON.stringify(box)))
+    expect([back.alignX, back.stretchY]).toEqual([0.5, Infinity])
   })
 })

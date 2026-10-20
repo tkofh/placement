@@ -1,10 +1,13 @@
 import { EPSILON, RELATIVE_TOLERANCE, clamp } from 'curvy/number'
 import { Pipeable } from 'curvy/utils'
+import * as Alignment from '../alignment.ts'
 import type { Frame } from '../frame.ts'
 import type { Interval } from '../interval.ts'
 import * as Rect from '../rect.ts'
+import * as Sizing from '../sizing.ts'
 import * as Track from '../track.ts'
 import { auto } from '../utils/arguments.ts'
+import { SizingOf } from './sizing.ts'
 
 /**
  * The main-axis directions, encoded as numbers: `row` is `0`, `rowReverse`
@@ -342,53 +345,66 @@ interface AxisView {
   readonly mainDimension: 'width' | 'height'
   readonly mainDimensionMin: 'minWidth' | 'minHeight'
   readonly mainDimensionMax: 'maxWidth' | 'maxHeight'
-  readonly mainOffsetStart: 'offsetLeft' | 'offsetTop'
-  readonly mainOffsetEnd: 'offsetRight' | 'offsetBottom'
+  readonly mainMarginStart: 'marginLeft' | 'marginTop'
+  readonly mainMarginEnd: 'marginRight' | 'marginBottom'
   readonly crossDimension: 'width' | 'height'
   readonly crossDimensionMin: 'minWidth' | 'minHeight'
   readonly crossDimensionMax: 'maxWidth' | 'maxHeight'
-  readonly crossOffsetStart: 'offsetTop' | 'offsetLeft'
-  readonly crossOffsetEnd: 'offsetBottom' | 'offsetRight'
+  readonly crossMarginStart: 'marginTop' | 'marginLeft'
+  readonly crossMarginEnd: 'marginBottom' | 'marginRight'
 }
 
 const rowAxes: AxisView = {
   mainDimension: 'width',
   mainDimensionMin: 'minWidth',
   mainDimensionMax: 'maxWidth',
-  mainOffsetStart: 'offsetLeft',
-  mainOffsetEnd: 'offsetRight',
+  mainMarginStart: 'marginLeft',
+  mainMarginEnd: 'marginRight',
   crossDimension: 'height',
   crossDimensionMin: 'minHeight',
   crossDimensionMax: 'maxHeight',
-  crossOffsetStart: 'offsetTop',
-  crossOffsetEnd: 'offsetBottom',
+  crossMarginStart: 'marginTop',
+  crossMarginEnd: 'marginBottom',
 }
 
 const columnAxes: AxisView = {
   mainDimension: 'height',
   mainDimensionMin: 'minHeight',
   mainDimensionMax: 'maxHeight',
-  mainOffsetStart: 'offsetTop',
-  mainOffsetEnd: 'offsetBottom',
+  mainMarginStart: 'marginTop',
+  mainMarginEnd: 'marginBottom',
   crossDimension: 'width',
   crossDimensionMin: 'minWidth',
   crossDimensionMax: 'maxWidth',
-  crossOffsetStart: 'offsetLeft',
-  crossOffsetEnd: 'offsetRight',
+  crossMarginStart: 'marginLeft',
+  crossMarginEnd: 'marginRight',
 }
 
-function computeItem(frame: Frame, flexbox: Flexbox, axes: AxisView) {
+// One item as the tracks read it, and how its size follows the other axis
+// through its aspect ratio once the layout sizes that axis.
+interface Item {
+  readonly sizing: Sizing.Sizing
+  readonly main: Track.SequenceItem
+  readonly cross: Track.StackItem
+  readonly outerHypotheticalSize: number
+  // An unset cross size that no stretch fixes follows the flexed main size.
+  readonly followsMain: boolean
+  // An unset main size follows the cross size that a stretch fixes.
+  readonly followsCross: boolean
+}
+
+function computeItem(frame: Frame, flexbox: Flexbox, axes: AxisView): Item {
   const basisMain = frame[axes.mainDimension]
-  // Frame offsets are physical (offsetLeft always names the left edge). A
+  // Frame margins are physical (marginLeft always names the left edge). A
   // reversed flow lays the main track out logically and then reflects it,
-  // margins included. So the sources swap here, and each offset lands on its
+  // margins included. So the sources swap here, and each margin lands on its
   // named physical side after the reflection.
-  const mainStart = frame[flexbox.isReverse ? axes.mainOffsetEnd : axes.mainOffsetStart]
-  const mainEnd = frame[flexbox.isReverse ? axes.mainOffsetStart : axes.mainOffsetEnd]
+  const mainStart = frame[flexbox.isReverse ? axes.mainMarginEnd : axes.mainMarginStart]
+  const mainEnd = frame[flexbox.isReverse ? axes.mainMarginStart : axes.mainMarginEnd]
 
   const outerHypotheticalSize = basisMain + auto(mainStart, 0) + auto(mainEnd, 0)
 
-  const mainItem = {
+  const main = {
     basis: basisMain,
     start: mainStart,
     end: mainEnd,
@@ -398,19 +414,46 @@ function computeItem(frame: Frame, flexbox: Flexbox, axes: AxisView) {
     shrink: frame.shrink,
   } satisfies Track.SequenceItem
 
-  const crossItem = {
+  // A frame's alignment is on the cross axis, and inherits the container's.
+  const { align, stretch } = Alignment.resolve(frame, {
+    align: flexbox.alignItems,
+    stretch: flexbox.stretchItems,
+  })
+  const cross = {
     basis: frame[axes.crossDimension],
-    start: frame[axes.crossOffsetStart],
-    end: frame[axes.crossOffsetEnd],
+    start: frame[axes.crossMarginStart],
+    end: frame[axes.crossMarginEnd],
     min: frame[axes.crossDimensionMin],
     max: frame[axes.crossDimensionMax],
-    place: frame.align,
-    // Any non-finite per-item stretch inherits the container's stretchItems,
-    // exactly as a non-finite align inherits alignItems inside stack().
-    stretch: auto(frame.stretch, flexbox.stretchItems, 0),
+    place: align,
+    stretch,
   } satisfies Track.StackItem
 
-  return { mainItem, crossItem, outerHypotheticalSize }
+  // The stack stretches an item without auto cross margins (see
+  // `applyStretch`).
+  const sizing = frame[SizingOf]
+  const stretched =
+    cross.stretch !== 0 && Number.isFinite(cross.start) && Number.isFinite(cross.end)
+  const hasRatio = sizing.aspectRatio !== undefined
+
+  return {
+    sizing,
+    main,
+    cross,
+    outerHypotheticalSize,
+    followsMain: hasRatio && !stretched && Number.isNaN(sizing[axes.crossDimension]),
+    followsCross: hasRatio && stretched && Number.isNaN(sizing[axes.mainDimension]),
+  }
+}
+
+// The size on `dimension` of an item whose other axis the layout fixed at
+// `size`.
+function follow(sizing: Sizing.Sizing, dimension: 'width' | 'height', size: number): number {
+  const resolved =
+    dimension === 'width'
+      ? Sizing.resolve(sizing, { width: 0, height: size, definiteHeight: true })
+      : Sizing.resolve(sizing, { width: size, height: 0, definiteWidth: true })
+  return resolved[dimension]
 }
 
 function computeMainTrack(
@@ -433,18 +476,86 @@ function computeMainTrack(
   return result
 }
 
+// A non-finite `crossSize` sizes the line by its largest item.
 function computeCrossTrack(
   items: ReadonlyArray<Track.StackItem>,
   flexbox: Flexbox,
   crossSize: number,
-  isSolo: boolean,
 ) {
   // Every item arrives with a finite stretch (computeItem resolves the
   // inherit sentinel), so no track-level stretch fallback is passed.
   return Track.stack(items, {
     place: flexbox.alignItems,
-    size: isSolo ? crossSize : Number.POSITIVE_INFINITY,
+    size: crossSize,
   })
+}
+
+// Solves one line: the main track, then the cross track. A cross size
+// that follows the main size derives from the flexed main size before the
+// cross track sizes the line. A main size that follows a stretched cross
+// size derives from it after, and the main track solves again. The line
+// then keeps its cross size, and the cross sizes that follow the main size
+// derive again from the new main sizes.
+function computeLine(
+  items: ReadonlyArray<Item>,
+  flexbox: Flexbox,
+  axes: AxisView,
+  mainSize: number,
+  crossSize: number,
+): { mainTrack: Track.Track; crossTrack: Track.Track } {
+  const crossItems = (mainTrack: Track.Track): Array<Track.StackItem> =>
+    items.map((item, k) =>
+      item.followsMain
+        ? {
+            ...item.cross,
+            basis: follow(
+              item.sizing,
+              axes.crossDimension,
+              (mainTrack.intervals[k] as Interval).size,
+            ),
+          }
+        : item.cross,
+    )
+
+  let mainTrack = computeMainTrack(
+    items.map((item) => item.main),
+    flexbox,
+    mainSize,
+  )
+  const firstCrossItems = crossItems(mainTrack)
+  let crossTrack = computeCrossTrack(firstCrossItems, flexbox, crossSize)
+
+  if (items.some((item) => item.followsCross)) {
+    const stretched = crossTrack
+    // The size the stack stretched into: the container's for a lone line,
+    // or else its largest item's (see `stack`).
+    let lineSize = crossSize
+    if (!Number.isFinite(lineSize)) {
+      lineSize = 0
+      for (const { basis = 0, min = 0, max = Number.POSITIVE_INFINITY } of firstCrossItems) {
+        lineSize = Math.max(lineSize, clamp(Math.max(basis, 0), Math.max(min, 0), Math.max(max, 0)))
+      }
+    }
+    mainTrack = computeMainTrack(
+      items.map((item, k) =>
+        item.followsCross
+          ? {
+              ...item.main,
+              basis: follow(
+                item.sizing,
+                axes.mainDimension,
+                (stretched.intervals[k] as Interval).size,
+              ),
+            }
+          : item.main,
+      ),
+      flexbox,
+      mainSize,
+    )
+    crossTrack = computeCrossTrack(crossItems(mainTrack), flexbox, lineSize)
+  }
+
+  return { mainTrack, crossTrack }
 }
 
 function computeTracks(
@@ -456,66 +567,53 @@ function computeTracks(
   const mainSize = parent[axes.mainDimension]
   const crossSize = parent[axes.crossDimension]
 
-  const mainTracks: Array<Track.Track> = []
-  const crossTracks: Array<Track.Track> = []
-
+  // Break the items into lines by their hypothetical main sizes.
+  const lines: Array<Array<Item>> = []
+  let line: Array<Item> = []
   let totalMainSize = 0
-  let minCrossSize = 0
-
-  let mainItems: Array<Track.SequenceItem> = []
-  let crossItems: Array<Track.StackItem> = []
-  const lineItems: Array<Track.SequenceItem> = []
 
   for (const frame of frames) {
-    const { mainItem, crossItem, outerHypotheticalSize } = computeItem(frame, flexbox, axes)
+    const item = computeItem(frame, flexbox, axes)
 
-    const requiredMainSize = totalMainSize + outerHypotheticalSize
+    const requiredMainSize = totalMainSize + item.outerHypotheticalSize
 
-    // Flush only when the line already has items. A lone overflowing frame
-    // keeps its own line, because flushing it here AND pushing it below emits
-    // more rects than frames. The overflow test uses a tolerance (see
+    // Break only when the line already has items. A lone overflowing frame
+    // keeps its own line. The overflow test uses a tolerance (see
     // PRECISION.md). Rounding residue past the main size must not wrap a
     // line that the same layout at another scale keeps whole.
     if (
       flexbox.wrap !== wrap.nowrap &&
-      mainItems.length > 0 &&
+      line.length > 0 &&
       requiredMainSize - mainSize >
         EPSILON + RELATIVE_TOLERANCE * Math.max(Math.abs(requiredMainSize), Math.abs(mainSize))
     ) {
-      const mainTrack = computeMainTrack(mainItems, flexbox, mainSize)
-      const crossTrack = computeCrossTrack(crossItems, flexbox, crossSize, false)
-      mainItems = []
-      crossItems = []
-
-      mainTracks.push(mainTrack)
-      crossTracks.push(crossTrack)
-
-      lineItems.push({
-        min: minCrossSize,
-        basis: crossTrack.size,
-        start: 0,
-        end: 0,
-        max: Number.POSITIVE_INFINITY,
-        grow: 1,
-        shrink: 0,
-      })
-      minCrossSize = 0
+      lines.push(line)
+      line = []
       totalMainSize = 0
     }
-    totalMainSize += outerHypotheticalSize + flexbox.mainGap
-
-    // This runs after the flush, so the min goes to the line that the item
-    // joins, not to the line that just closed.
-    minCrossSize = Math.max(minCrossSize, crossItem.min)
-
-    mainItems.push(mainItem)
-    crossItems.push(crossItem)
+    totalMainSize += item.outerHypotheticalSize + flexbox.mainGap
+    line.push(item)
+  }
+  if (line.length > 0) {
+    lines.push(line)
   }
 
-  if (mainItems.length > 0) {
-    mainTracks.push(computeMainTrack(mainItems, flexbox, mainSize))
-    const crossTrack = computeCrossTrack(crossItems, flexbox, crossSize, crossTracks.length === 0)
+  const mainTracks: Array<Track.Track> = []
+  const crossTracks: Array<Track.Track> = []
+  const lineItems: Array<Track.SequenceItem> = []
+
+  // A lone line takes the container's cross size. Each of several lines
+  // takes the size of its largest item.
+  const lineCrossSize = lines.length === 1 ? crossSize : Number.POSITIVE_INFINITY
+  for (const items of lines) {
+    const { mainTrack, crossTrack } = computeLine(items, flexbox, axes, mainSize, lineCrossSize)
+    mainTracks.push(mainTrack)
     crossTracks.push(crossTrack)
+
+    let minCrossSize = 0
+    for (const item of items) {
+      minCrossSize = Math.max(minCrossSize, item.cross.min ?? 0)
+    }
     lineItems.push({
       min: minCrossSize,
       basis: crossTrack.size,
@@ -544,8 +642,19 @@ function computeTracks(
  * `align` or `stretch` is non-finite (both default to `Infinity`) inherits
  * the container's `alignItems` or `stretchItems`.
  *
- * Frame offsets are physical in every direction. `offsetLeft` pads the
- * item's left edge even in `rowReverse`. A non-finite offset is an auto
+ * An item with an `aspectRatio` keeps it as the layout sizes it, where its
+ * own size leaves an axis unset:
+ *
+ * - An unset cross size follows the main size that `grow` and `shrink`
+ *   give the item, unless a stretch sizes the cross axis.
+ * - An unset main size follows a stretched cross size, and the main axis
+ *   solves again with it. A lone line stretches its items into the
+ *   container's cross size. Each of several lines stretches them into the
+ *   size of its largest item, keeps that size, and keeps its items even if
+ *   the new main sizes overflow it.
+ *
+ * Frame margins are physical in every direction. `marginLeft` pads the
+ * item's left edge even in `rowReverse`. A non-finite margin is an auto
  * margin that absorbs free space on its named physical side. The y axis
  * points down, so cross positions grow toward `parent.bottom`, and
  * `wrapReverse` stacks lines upward instead.

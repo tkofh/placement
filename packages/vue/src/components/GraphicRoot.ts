@@ -12,7 +12,7 @@ import {
   useXYTranslation,
 } from '../composables/useRect.ts'
 import { useSizingContextRoot } from '../composables/useSizingContext.ts'
-import { resolveAspectRatio } from '../internal/props/aspectRatio.ts'
+import { toAspectRatio } from '../internal/props/aspectRatio.ts'
 import { resolveSize1D } from '../internal/props/size1d.ts'
 import { provideShouldRenderGroups } from '../internal/render.ts'
 import { boolProp } from '../internal/utils.ts'
@@ -37,7 +37,7 @@ export const GraphicRoot = defineComponent(
       Box.make({
         width: resolveSize1D(props.width, Number.NaN, domRect.value.width),
         height: resolveSize1D(props.height, Number.NaN, domRect.value.height),
-        aspectRatio: resolveAspectRatio(props.aspectRatio, Number.NaN),
+        aspectRatio: toAspectRatio(props.aspectRatio, Number.NaN),
         minWidth: resolveSize1D(props.minWidth, Number.NaN, domRect.value.width),
         minHeight: resolveSize1D(props.minHeight, Number.NaN, domRect.value.height),
         maxWidth: resolveSize1D(props.maxWidth, Number.NaN, domRect.value.width),

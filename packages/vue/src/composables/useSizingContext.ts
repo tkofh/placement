@@ -8,6 +8,7 @@ import {
   provide,
   toValue,
 } from 'vue'
+import { blockOutlines } from './useOutline.ts'
 
 export type RectComponentGetter = () => ComputedRef<number>
 export interface RectGetters {
@@ -86,6 +87,10 @@ export function useParentHeight(): ComputedRef<number> {
 
 export function useParentRectRegistration(rect: MaybeRefOrGetter<Rect>) {
   const { x, y, width, height } = useRectGetters(rect)
+
+  // Children get a box of their own, so their outlines are not this
+  // component's parent's.
+  blockOutlines()
 
   provide(PARENT_RECT_X, x)
   provide(PARENT_RECT_Y, y)

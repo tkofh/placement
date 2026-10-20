@@ -393,12 +393,12 @@ describe('min and max constraints', () => {
   })
 })
 
-describe('offsets', () => {
+describe('margins', () => {
   test(
     ...c(
       Flexbox.make({}),
       Rect.make(1000),
-      [Frame.make({ width: 100, height: 100, offsetLeft: 10, offsetRight: 20 }), square(100)],
+      [Frame.make({ width: 100, height: 100, marginLeft: 10, marginRight: 20 }), square(100)],
       [Rect.make(10, 0, 100), Rect.make(130, 0, 100)],
     ),
   )
@@ -406,7 +406,7 @@ describe('offsets', () => {
     ...c(
       Flexbox.make({}),
       Rect.make(300),
-      [Frame.make({ width: 100, height: 100, offsetTop: 25 })],
+      [Frame.make({ width: 100, height: 100, marginTop: 25 })],
       [Rect.make(0, 25, 100)],
     ),
   )
@@ -414,32 +414,32 @@ describe('offsets', () => {
     ...c(
       Flexbox.make({ alignItems: 1 }),
       Rect.make(300),
-      [Frame.make({ width: 100, height: 100, offsetBottom: 10 })],
+      [Frame.make({ width: 100, height: 100, marginBottom: 10 })],
       [Rect.make(0, 190, 100)],
     ),
   )
 })
 
-describe('auto margin offsets', () => {
-  test('an auto cross-start offset pushes the item to the cross end', () => {
+describe('auto margin margins', () => {
+  test('an auto cross-start margin pushes the item to the cross end', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetTop: Number.POSITIVE_INFINITY })],
+        [Frame.make({ width: 100, height: 100, marginTop: Number.POSITIVE_INFINITY })],
         Flexbox.make({}),
         Rect.make(300),
       ),
     ).toEqual([Rect.make(0, 200, 100)])
   })
 
-  test('auto offsets on both cross sides center the item', () => {
+  test('auto margins on both cross sides center the item', () => {
     expect(
       Flexbox.apply(
         [
           Frame.make({
             width: 100,
             height: 100,
-            offsetTop: Number.POSITIVE_INFINITY,
-            offsetBottom: Number.POSITIVE_INFINITY,
+            marginTop: Number.POSITIVE_INFINITY,
+            marginBottom: Number.POSITIVE_INFINITY,
           }),
         ],
         Flexbox.make({}),
@@ -448,37 +448,37 @@ describe('auto margin offsets', () => {
     ).toEqual([Rect.make(0, 100, 100)])
   })
 
-  test('auto cross offsets defeat inherited stretch', () => {
+  test('auto cross margins defeat inherited stretch', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetTop: Number.POSITIVE_INFINITY })],
+        [Frame.make({ width: 100, height: 100, marginTop: Number.POSITIVE_INFINITY })],
         Flexbox.make({ stretchItems: 1 }),
         Rect.make(300),
       ),
     ).toEqual([Rect.make(0, 200, 100)])
   })
 
-  test('an auto main-start offset pushes the item to the main end (regression)', () => {
+  test('an auto main-start margin pushes the item to the main end (regression)', () => {
     // The sequence walkers used to add the raw Infinity sentinel instead of
-    // the definite offset, and that produced Infinity positions.
+    // the definite margin, and that produced Infinity positions.
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetLeft: Number.POSITIVE_INFINITY })],
+        [Frame.make({ width: 100, height: 100, marginLeft: Number.POSITIVE_INFINITY })],
         Flexbox.make({}),
         Rect.make(300),
       ),
     ).toEqual([Rect.make(200, 0, 100)])
   })
 
-  test('auto offsets on both main sides center the item', () => {
+  test('auto margins on both main sides center the item', () => {
     expect(
       Flexbox.apply(
         [
           Frame.make({
             width: 100,
             height: 100,
-            offsetLeft: Number.POSITIVE_INFINITY,
-            offsetRight: Number.POSITIVE_INFINITY,
+            marginLeft: Number.POSITIVE_INFINITY,
+            marginRight: Number.POSITIVE_INFINITY,
           }),
         ],
         Flexbox.make({}),
@@ -487,12 +487,12 @@ describe('auto margin offsets', () => {
     ).toEqual([Rect.make(100, 0, 100)])
   })
 
-  test('auto main offsets split free space between items', () => {
+  test('auto main margins split free space between items', () => {
     expect(
       Flexbox.apply(
         [
-          Frame.make({ width: 100, height: 100, offsetRight: Number.POSITIVE_INFINITY }),
-          Frame.make({ width: 100, height: 100, offsetLeft: Number.POSITIVE_INFINITY }),
+          Frame.make({ width: 100, height: 100, marginRight: Number.POSITIVE_INFINITY }),
+          Frame.make({ width: 100, height: 100, marginLeft: Number.POSITIVE_INFINITY }),
         ],
         Flexbox.make({}),
         Rect.make(500, 100),
@@ -734,47 +734,183 @@ describe('wrap decision is tolerance-aware (regression)', () => {
   })
 })
 
-describe('offsets are physical in reversed flows (regression)', () => {
+describe('margins are physical in reversed flows (regression)', () => {
   // The main track is laid out logically and reflected afterward, margins
-  // included. In reversed flows, computeItem swaps the offset sources so
+  // included. In reversed flows, computeItem swaps the margin sources so
   // each margin lands on its named physical side.
-  test('rowReverse keeps offsetLeft on the physical left of the item', () => {
+  test('rowReverse keeps marginLeft on the physical left of the item', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetLeft: 10 }), square(100)],
+        [Frame.make({ width: 100, height: 100, marginLeft: 10 }), square(100)],
         Flexbox.make({ direction: Flexbox.direction.rowReverse }),
         Rect.make(1000),
       ),
     ).toEqual([Rect.make(900, 0, 100), Rect.make(790, 0, 100)])
   })
 
-  test('columnReverse keeps offsetTop physically above the item', () => {
+  test('columnReverse keeps marginTop physically above the item', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetTop: 10 })],
+        [Frame.make({ width: 100, height: 100, marginTop: 10 })],
         Flexbox.make({ direction: Flexbox.direction.columnReverse }),
         Rect.make(300),
       ),
     ).toEqual([Rect.make(0, 200, 100)])
   })
 
-  test('an auto offsetLeft pushes the item to the physical right in rowReverse', () => {
+  test('an auto marginLeft pushes the item to the physical right in rowReverse', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetLeft: Number.POSITIVE_INFINITY })],
+        [Frame.make({ width: 100, height: 100, marginLeft: Number.POSITIVE_INFINITY })],
         Flexbox.make({ direction: Flexbox.direction.rowReverse }),
         Rect.make(300),
       ),
     ).toEqual([Rect.make(200, 0, 100)])
   })
 
-  test('an auto offsetBottom pushes the item to the physical top in columnReverse', () => {
+  test('an auto marginBottom pushes the item to the physical top in columnReverse', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetBottom: Number.POSITIVE_INFINITY })],
+        [Frame.make({ width: 100, height: 100, marginBottom: Number.POSITIVE_INFINITY })],
         Flexbox.make({ direction: Flexbox.direction.columnReverse }),
         Rect.make(300),
       ),
     ).toEqual([Rect.make(0, 0, 100)])
+  })
+})
+
+describe('aspect ratio', () => {
+  const row = Flexbox.make({})
+
+  test('an unset cross size follows the grown main size', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ width: 100, aspectRatio: 2, grow: 1 })],
+        row,
+        Rect.make(300, 400),
+      ),
+    ).toEqual([Rect.make(0, 0, 300, 150)])
+  })
+
+  test('an unset cross size follows the shrunk main size', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ width: 400, aspectRatio: 2, shrink: 1 })],
+        row,
+        Rect.make(200, 400),
+      ),
+    ).toEqual([Rect.make(0, 0, 200, 100)])
+  })
+
+  test('a set cross size ignores the grown main size', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ width: 100, height: 20, aspectRatio: 2, grow: 1 })],
+        row,
+        Rect.make(300, 400),
+      ),
+    ).toEqual([Rect.make(0, 0, 300, 20)])
+  })
+
+  test('the followed cross size sizes a wrapped line', () => {
+    const rects = Flexbox.apply(
+      [Frame.make({ width: 50, aspectRatio: 1, grow: 1 }), rectangle(250, 10)],
+      Flexbox.make({ wrap: Flexbox.wrap.wrap }),
+      Rect.make(200, 400),
+    )
+    expect(rects).toEqual([Rect.make(0, 0, 200, 200), Rect.make(0, 200, 250, 10)])
+  })
+
+  test('an unset main size follows a stretch into a lone line', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ aspectRatio: 2 }), rectangle(50, 10)],
+        Flexbox.make({ stretchItems: 1 }),
+        Rect.make(300, 60),
+      ),
+    ).toEqual([Rect.make(0, 0, 120, 60), Rect.make(120, 0, 50, 60)])
+  })
+
+  test('a partial stretch fixes the cross size too', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ height: 20, aspectRatio: 2, stretch: 0.5 })],
+        row,
+        Rect.make(300, 60),
+      ),
+    ).toEqual([Rect.make(0, 0, 80, 40)])
+  })
+
+  test('a set main size ignores the stretch', () => {
+    expect(
+      Flexbox.apply(
+        [Frame.make({ width: 30, aspectRatio: 2, stretch: 1 })],
+        row,
+        Rect.make(300, 60),
+      ),
+    ).toEqual([Rect.make(0, 0, 30, 60)])
+  })
+
+  test('a stretched cross size wins over the grown main size', () => {
+    expect(
+      Flexbox.apply([Frame.make({ aspectRatio: 2, stretch: 1, grow: 1 })], row, Rect.make(300, 60)),
+    ).toEqual([Rect.make(0, 0, 300, 60)])
+  })
+
+  test('auto cross margins keep the ratio from following the line', () => {
+    expect(
+      Flexbox.apply(
+        [
+          Frame.make({
+            height: 20,
+            aspectRatio: 2,
+            stretch: 1,
+            marginTop: Number.POSITIVE_INFINITY,
+          }),
+        ],
+        row,
+        Rect.make(300, 60),
+      ),
+    ).toEqual([Rect.make(0, 40, 40, 20)])
+  })
+
+  test('a stretch in a wrapped line follows the line, which keeps its size', () => {
+    const rects = Flexbox.apply(
+      [
+        Frame.make({ height: 10, aspectRatio: 2, stretch: 1 }),
+        rectangle(50, 40),
+        rectangle(280, 20),
+      ],
+      Flexbox.make({ wrap: Flexbox.wrap.wrap }),
+      Rect.make(300, 200),
+    )
+    expect(rects).toEqual([
+      Rect.make(0, 0, 80, 40),
+      Rect.make(80, 0, 50, 40),
+      Rect.make(0, 40, 280, 20),
+    ])
+  })
+
+  test('a stretched width drives the height in a column', () => {
+    expect(
+      Flexbox.apply(
+        [square(100)],
+        Flexbox.make({ direction: Flexbox.direction.column, stretchItems: 1 }),
+        Rect.make(200, 400),
+      ),
+    ).toEqual([Rect.make(0, 0, 200, 200)])
+  })
+
+  test('a followed main size that overflows a wrapped line stays on it', () => {
+    const rects = Flexbox.apply(
+      [
+        Frame.make({ height: 10, aspectRatio: 4, stretch: 1 }),
+        rectangle(150, 40),
+        rectangle(300, 5),
+      ],
+      Flexbox.make({ wrap: Flexbox.wrap.wrap }),
+      Rect.make(200, 200),
+    )
+    expect(rects.slice(0, 2)).toEqual([Rect.make(0, 0, 160, 40), Rect.make(160, 0, 150, 40)])
   })
 })

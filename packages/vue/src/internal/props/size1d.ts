@@ -1,3 +1,4 @@
+import * as Length from 'placement/length'
 import { type ParserInput, type ParserValue, parse } from 'valued'
 import { oneOf } from 'valued'
 import { isKeywordValue, keywords } from 'valued/data/keyword'
@@ -15,7 +16,6 @@ export type Size1DValue = ParserValue<Size1D>
 export type Size1DInput = ParserInput<Size1D> | Size1DValue | number | undefined
 
 const parseCache = createCache<string, Size1DValue | null>(512)
-const normalizationCache = createCache<string, number>(1024)
 
 function parseSize1DInput(input: string): Size1DValue | null {
   return parseCache(input, () => {
@@ -24,30 +24,16 @@ function parseSize1DInput(input: string): Size1DValue | null {
   })
 }
 
-export function normalizeSize1DValue(
-  value: Size1DValue,
-  auto: number,
-  percentBasis: number,
-): number {
-  return normalizationCache(`${auto}:${percentBasis}:${value.toString()}`, () => {
-    if (value === null || isKeywordValue(value)) {
-      return auto
-    }
-
-    if (isNumberValue(value)) {
-      return value.value
-    }
-
-    switch (value.unit) {
-      case 'px':
-        return value.value
-      case '%':
-        return percentBasis * value.value * 0.01
-    }
-  })
-}
-
-export function resolveSize1D(input: Size1DInput, auto: number, percentBasis: number) {
+/**
+ * Parses a size input into a `Length` input: a number of pixels, or a
+ * percentage `Length` for `Length.resolve` to resolve against its basis.
+ * Unset, `auto`, and unparsable inputs give `auto`.
+ *
+ * @param input - The prop value.
+ * @param auto - The value for unset, `auto`, and unparsable inputs.
+ * @returns The pixels, or the percentage left unresolved.
+ */
+export function toLength(input: Size1DInput, auto: number): Length.LengthInput {
   if (typeof input === 'number') {
     return input
   }
@@ -58,9 +44,17 @@ export function resolveSize1D(input: Size1DInput, auto: number, percentBasis: nu
 
   const parsed: Size1DValue | null = typeof input === 'string' ? parseSize1DInput(input) : input
 
-  if (parsed === null) {
+  if (parsed === null || isKeywordValue(parsed)) {
     return auto
   }
 
-  return normalizeSize1DValue(parsed, auto, percentBasis)
+  if (isNumberValue(parsed)) {
+    return parsed.value
+  }
+
+  return parsed.unit === '%' ? Length.percent(parsed.value) : parsed.value
+}
+
+export function resolveSize1D(input: Size1DInput, auto: number, percentBasis: number): number {
+  return Length.resolve(toLength(input, auto), percentBasis)
 }

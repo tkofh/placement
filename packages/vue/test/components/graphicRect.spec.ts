@@ -1,8 +1,10 @@
+import { CubicPath2d } from 'curvy/path'
 import * as Rect from 'placement/rect'
 import { describe, expect, test } from 'vitest'
 import { h, nextTick, ref } from 'vue'
-import { GraphicRect } from '../../src/components/GraphicRect.ts'
-import { findOne, mountWithRect } from '../host.ts'
+import { GraphicRect, type GraphicRectProps } from '../../src/components/GraphicRect.ts'
+import { roundRect } from '../../src/internal/corners.ts'
+import { findAll, findOne, mountWithRect } from '../host.ts'
 
 const host = Rect.make(0, 0, 200, 100)
 
@@ -120,5 +122,38 @@ describe('reactivity', () => {
     await nextTick()
 
     expect(findOne(root, 'rect').props['width']).toBe(80)
+  })
+})
+
+describe('smoothing', () => {
+  test('smoothed corners render a closed path', () => {
+    const { root } = mountWithRect(host, () => [
+      h(GraphicRect, { top: 10, left: 20, width: 50, height: 30, r: 6, smoothing: 0.6 }),
+    ])
+
+    const expected = `${CubicPath2d.toPathData(roundRect(20, 10, 50, 30, 6, 6, 0.6))} Z`
+    expect(findOne(root, 'path').props['d']).toBe(expected)
+    expect(findAll(root, 'rect')).toEqual([])
+  })
+
+  test.each<[string, GraphicRectProps & { r?: number }]>([
+    ['no smoothing', { r: 6 }],
+    ['smoothing 0', { r: 6, smoothing: 0 }],
+    ['no radius', { smoothing: 0.6 }],
+    ['unparseable smoothing', { r: 6, smoothing: 'soft' as never }],
+  ])('%s keeps the native rect', (_, props) => {
+    const { root } = mountWithRect(host, () => [h(GraphicRect, props)])
+    expect(findAll(root, 'path')).toEqual([])
+    expect(findOne(root, 'rect').props['rx']).toBe(props.r ?? 0)
+  })
+
+  test('percent smoothing and paint reach the path', () => {
+    const { root } = mountWithRect(host, () => [
+      h(GraphicRect, { r: '8px 4px', smoothing: '100%', fill: 'red' }),
+    ])
+
+    const path = findOne(root, 'path')
+    expect(path.props['d']).toBe(`${CubicPath2d.toPathData(roundRect(0, 0, 200, 100, 8, 4, 1))} Z`)
+    expect(path.props['fill']).toBe('color(srgb 1 0 0)')
   })
 })
