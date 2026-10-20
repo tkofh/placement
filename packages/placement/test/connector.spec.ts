@@ -4,6 +4,7 @@ import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
 import * as Interval from '../src/interval.ts'
 import * as Point from '../src/point.ts'
+import * as Polygon from '../src/polygon.ts'
 import * as Rect from '../src/rect.ts'
 
 const pointsOf = (layout: Connector.ConnectorLayout, i = 0) =>
@@ -1636,5 +1637,178 @@ describe('jogs', () => {
       [-43.5, 20],
       [-43.5, 200],
     ])
+  })
+})
+
+// The nodes of `applyTolerant` for rects keyed by id.
+const nodesOf = (rects: Readonly<Record<string, Rect.Rect>>) =>
+  Object.entries(rects).map(([id, rect]) => ({ id, rect }))
+
+describe('applyTolerant', () => {
+  test('routes a clean graph as apply does', () => {
+    const rects = {
+      a: Rect.make(0, 120, 40, 40),
+      b: Rect.make(60, 0, 40, 40),
+      t: Rect.make(140, 120, 40, 40),
+    }
+    const edges = [Edge.make({ source: 'a', target: 't' }), Edge.make({ source: 'b', target: 't' })]
+    const pulled = Connector.make({ clearance: 10, gap: 4, bendCost: 20, merge: 1 })
+    const layout = Connector.applyTolerant(
+      nodesOf(rects),
+      edges.map((edge) => ({ edge })),
+      pulled,
+    )
+    expect(layout).toEqual({ ...Connector.apply(rects, edges, pulled), problems: [] })
+  })
+
+  test('a node without an id is an obstacle, and no problem', () => {
+    const edges = [Edge.make({ source: 'a', target: 'b', sourceSide: 1, targetSide: 3 })]
+    const wall = Rect.make(60, -20, 20, 60)
+    const layout = Connector.applyTolerant(
+      [...nodesOf(pair), { rect: wall }],
+      edges.map((edge) => ({ edge })),
+      spec,
+    )
+    const expected = Connector.apply({ ...pair, w: wall }, edges, spec)
+    expect(layout.edges).toEqual(expected.edges)
+    expect(layout.problems).toEqual([])
+  })
+
+  test('a node whose id an earlier node took is an obstacle, and a problem', () => {
+    const edges = [Edge.make({ source: 'a', target: 'b', sourceSide: 1, targetSide: 3 })]
+    const wall = Rect.make(60, -20, 20, 60)
+    const layout = Connector.applyTolerant(
+      [...nodesOf(pair), { id: 'a', rect: wall }],
+      edges.map((edge) => ({ edge })),
+      spec,
+    )
+    // The edge leaves the first `a`, and goes around the second.
+    const expected = Connector.apply({ ...pair, w: wall }, edges, spec)
+    expect(layout.edges).toEqual(expected.edges)
+    expect(layout.edges).not.toEqual(Connector.apply(pair, edges, spec).edges)
+    expect(layout.problems).toEqual([{ kind: Connector.problem.duplicate, node: 2, id: 'a' }])
+  })
+
+  test('an edge that names an id no node has gets no route, and is a problem', () => {
+    const edges = [
+      { edge: Edge.make({ source: 'a', target: 'z' }) },
+      { edge: Edge.make({ source: 'a', target: 'b' }) },
+      { edge: Edge.make({ source: 'y', target: 'b' }) },
+    ]
+    const layout = Connector.applyTolerant(nodesOf(pair), edges, spec)
+    expect(layout.edges[0]).toBeUndefined()
+    expect(layout.edges[1]).toEqual(
+      Connector.apply(pair, [Edge.make({ source: 'a', target: 'b' })], spec).edges[0],
+    )
+    expect(layout.edges[2]).toBeUndefined()
+    expect(layout.problems).toEqual([
+      { kind: Connector.problem.dangling, edge: 0 },
+      { kind: Connector.problem.dangling, edge: 2 },
+    ])
+  })
+
+  test('problems list the nodes, then the edges', () => {
+    const layout = Connector.applyTolerant(
+      [...nodesOf(pair), { id: 'b', rect: Rect.make(0, 100, 20, 20) }],
+      [{ edge: Edge.make({ source: 'x', target: 'b' }) }],
+      spec,
+    )
+    expect(layout.problems).toEqual([
+      { kind: Connector.problem.duplicate, node: 2, id: 'b' },
+      { kind: Connector.problem.dangling, edge: 0 },
+    ])
+  })
+
+  test('an edge that no route connects is noted by its index in the input, not a problem', () => {
+    const rects = {
+      a: Rect.make(0, 0, 20, 20),
+      n: Rect.make(100, 0, 60, 40),
+      w: Rect.make(100, 40, 20, 20),
+      e: Rect.make(140, 40, 20, 20),
+      s: Rect.make(100, 60, 60, 40),
+      x: Rect.make(120, 40, 20, 20),
+    }
+    const layout = Connector.applyTolerant(
+      nodesOf(rects),
+      [
+        { edge: Edge.make({ source: 'a', target: 'q' }) },
+        { edge: Edge.make({ source: 'a', target: 'n' }) },
+        { edge: Edge.make({ source: 'a', target: 'x' }) },
+      ],
+      spec,
+    )
+    expect(layout.edges[2]).toBeUndefined()
+    expect(layout.notes).toEqual([{ kind: Connector.note.unrouted, edge: 2 }])
+    expect(layout.problems).toEqual([{ kind: Connector.problem.dangling, edge: 0 }])
+  })
+
+  test('a crowded channel names edges by their index in the input, and only nodes with ids', () => {
+    // As in the notes above: three routes through a passage between `a`
+    // and an obstacle without an id.
+    const layout = Connector.applyTolerant(
+      [
+        { id: 'n', rect: Rect.make(30, -100, 30, 20) },
+        { id: 's', rect: Rect.make(30, 100, 30, 20) },
+        { id: 'a', rect: Rect.make(0, 0, 40, 40) },
+        { rect: Rect.make(50, 0, 40, 40) },
+      ],
+      [
+        { edge: Edge.make({ source: 'n', target: 'q' }) },
+        ...Array.from({ length: 3 }, () => ({ edge: Edge.make({ source: 'n', target: 's' }) })),
+      ],
+      Connector.make({ gap: 6 }),
+    )
+    expect(layout.notes).toEqual([
+      { kind: Connector.note.crowded, edges: [1, 2, 3], axis: 0, rects: ['a'], need: 2 },
+    ])
+  })
+
+  test('merged ends name edges by their index in the input', () => {
+    const rects = {
+      a: Rect.make(0, 120, 40, 40),
+      b: Rect.make(60, 0, 40, 40),
+      t: Rect.make(140, 120, 40, 40),
+    }
+    const layout = Connector.applyTolerant(
+      nodesOf(rects),
+      [
+        { edge: Edge.make({ source: 'q', target: 't' }) },
+        { edge: Edge.make({ source: 'a', target: 't' }) },
+        { edge: Edge.make({ source: 'b', target: 't' }) },
+      ],
+      Connector.make({ clearance: 10, gap: 4, bendCost: 20, merge: 1 }),
+    )
+    expect(layout.edges[1]?.merged).toEqual([-1, 1])
+    expect(layout.edges[2]?.merged).toEqual([-1, 1])
+  })
+
+  test('obstacles take keys that no id has', () => {
+    const edges = [Edge.make({ source: 'a', target: '\u00000', sourceSide: 1, targetSide: 3 })]
+    const layout = Connector.applyTolerant(
+      [{ rect: Rect.make(60, -20, 20, 60) }, ...nodesOf({ a: pair.a, '\u00000': pair.b })],
+      edges.map((edge) => ({ edge })),
+      spec,
+    )
+    expect(layout.edges[0]).toEqual(
+      Connector.apply({ w: Rect.make(60, -20, 20, 60), a: pair.a, '\u00000': pair.b }, edges, spec)
+        .edges[0],
+    )
+  })
+
+  test('route constraints and shapes reach the routing', () => {
+    const edge = Edge.make({ source: 'a', target: 'b', sourceSide: 1, targetSide: 3 })
+    const via = [{ x: 70, y: 60 }]
+    const shape = Polygon.make({ phase: 0.5 })
+    const layout = Connector.applyTolerant(
+      [
+        { id: 'a', rect: pair.a },
+        { id: 'b', rect: pair.b, shape },
+      ],
+      [{ edge, options: { via } }],
+      spec,
+    )
+    expect(layout.edges).toEqual(
+      Connector.apply(pair, [edge], spec, { edges: [{ via }], shapes: { b: shape } }).edges,
+    )
   })
 })

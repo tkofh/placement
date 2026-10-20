@@ -58,6 +58,10 @@ outline fills the rect (`internal/polygon.ts`, shared with the hierarchy
 ports). `Connector` is a routing spec, and `Connector.apply` routes `Edge`s
 between rects that are already placed, keyed by id, around the others, and
 reports in `notes` what the routes gave up and what would have fit them.
+`Hierarchy.applyTolerant` and `Connector.applyTolerant` take nodes as a
+list whose ids may be missing or repeated, leave out what `apply` would
+throw on, and report it as typed `problems` (`internal/tolerant.ts` maps
+the notes back to input indices); vue's layouts solve through them.
 `apply` is `solve(normalize(...))`: `internal/connector/problem.ts` turns
 the inputs into a `Problem` (rects grown into obstacles, the shapes their
 ports sit on, edges with their ends, waypoints with the ways a route

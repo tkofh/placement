@@ -108,57 +108,48 @@ interface Solution {
 }
 
 // Children mount, unmount, and change ids one at a time, so the registered
-// graph is often briefly incomplete. The solve never throws on it: it skips
-// nodes without an id or with a taken id, and edges whose ends name no
-// registered node. Skipped children resolve to an empty rect or route.
+// graph is often briefly incomplete. `Hierarchy.applyTolerant` never throws
+// on it: it leaves out nodes without an id or with a taken id, and edges
+// whose ends name no registered node. Those children resolve to an empty
+// rect or route.
 function solve(
   nodes: ReadonlyArray<NodeChild>,
   edges: ReadonlyArray<EdgeChild>,
   spec: Hierarchy.Hierarchy,
 ): Solution {
-  const problems: Array<string> = []
-  const frames: Record<string, Frame> = Object.create(null)
-  const placed: Array<[NodeChild, string]> = []
-  const ids = new Set<string>()
-  const shapes: Record<string, Polygon.Polygon> = Object.create(null)
-
-  for (const child of nodes) {
-    const { id, frame, shape } = child.input.value
-    if (id === undefined) {
-      problems.push('a node has no id')
-    } else if (ids.has(id)) {
-      problems.push(`nodes share the id "${id}"`)
-    } else {
-      ids.add(id)
-      frames[id] = frame
-      placed.push([child, id])
-      if (shape !== undefined) {
-        shapes[id] = shape
+  const specs = edges.map((child) => child.input.value)
+  const layout = Hierarchy.applyTolerant(
+    nodes.map((child) => child.input.value),
+    specs,
+    spec,
+  )
+  const placed = new Map<NodeChild, Rect.Rect>()
+  for (const [index, child] of nodes.entries()) {
+    const rect = layout.nodes[index]
+    if (rect !== undefined) {
+      placed.set(child, rect)
+    }
+  }
+  const routed = new Map<EdgeChild, HierarchyEdgeRoute>()
+  for (const [index, child] of edges.entries()) {
+    const route = layout.edges[index]
+    if (route !== undefined) {
+      routed.set(child, route)
+    }
+  }
+  const problems = layout.problems.map((problem) => {
+    switch (problem.kind) {
+      case Hierarchy.problem.anonymous:
+        return 'a node has no id'
+      case Hierarchy.problem.duplicate:
+        return `nodes share the id "${problem.id}"`
+      case Hierarchy.problem.dangling: {
+        const { source, target } = specs[problem.edge]!
+        return `the edge "${source}" -> "${target}" names an id that no node has`
       }
     }
-  }
-
-  const specs: Array<Edge.Edge<string>> = []
-  const routed: Array<EdgeChild> = []
-
-  for (const child of edges) {
-    const edge = child.input.value
-    if (!ids.has(edge.source) || !ids.has(edge.target)) {
-      problems.push(`the edge "${edge.source}" -> "${edge.target}" names an id that no node has`)
-    } else {
-      specs.push(edge)
-      routed.push(child)
-    }
-  }
-
-  const layout = Hierarchy.apply(frames, specs, spec, { shapes })
-
-  return {
-    bounds: layout.bounds,
-    nodes: new Map(placed.map(([child, id]) => [child, layout.nodes[id]!])),
-    edges: new Map(routed.map((child, index) => [child, layout.edges[index]!])),
-    problems,
-  }
+  })
+  return { bounds: layout.bounds, nodes: placed, edges: routed, problems }
 }
 
 function translateRoute(route: HierarchyEdgeRoute, origin: Point.Point): HierarchyEdgeRoute {

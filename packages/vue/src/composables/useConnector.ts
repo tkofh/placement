@@ -80,55 +80,46 @@ interface Solution {
 }
 
 // Children mount, unmount, and change ids one at a time, so the registered
-// graph is often briefly incomplete. The solve never throws on it: a node
-// whose id another node took is only an obstacle, and edges whose ends name
-// no registered node resolve to an empty route, as do edges that no route
-// connects.
+// graph is often briefly incomplete. `Connector.applyTolerant` never throws
+// on it: a node whose id another node took is only an obstacle, and edges
+// whose ends name no registered node resolve to an empty route, as do edges
+// that no route connects.
 function solve(
   nodes: ReadonlyArray<NodeChild>,
   edges: ReadonlyArray<EdgeChild>,
   spec: Connector.Connector,
 ): Solution {
-  const problems: Array<string> = []
-  const rects: Record<string, Rect.Rect> = Object.create(null)
-  let anonymous = 0
-  for (const child of nodes) {
-    const { id, rect } = child.input.value
-    if (id !== undefined && id in rects) {
-      problems.push(`nodes share the id "${id}"`)
-    }
-    // Obstacles take keys that no id written in a template has.
-    const key = id === undefined || id in rects ? `\0${anonymous++}` : id
-    rects[key] = rect
+  const entries = edges.map((child) => child.input.value)
+  const layout = Connector.applyTolerant(
+    nodes.map((child) => child.input.value),
+    entries,
+    spec,
+  )
+  const named = (index: number) => {
+    const { source, target } = entries[index]!.edge
+    return `the edge "${source}" -> "${target}"`
   }
-
-  const specs: Array<Edge.Edge<string>> = []
-  const options: Array<Connector.ConnectorEdgeOptions> = []
-  const routed: Array<EdgeChild> = []
-  for (const child of edges) {
-    const { edge, options: option } = child.input.value
-    if (!(edge.source in rects) || !(edge.target in rects)) {
-      problems.push(`the edge "${edge.source}" -> "${edge.target}" names an id that no node has`)
-    } else {
-      specs.push(edge)
-      options.push(option)
-      routed.push(child)
+  const problems = layout.problems.map((problem) =>
+    problem.kind === Connector.problem.duplicate
+      ? `nodes share the id "${problem.id}"`
+      : `${named(problem.edge)} names an id that no node has`,
+  )
+  for (const note of layout.notes) {
+    if (note.kind === Connector.note.unrouted) {
+      problems.push(`no route connects ${named(note.edge)}`)
     }
   }
 
-  const layout = Connector.apply(rects, specs, spec, { edges: options })
   const routes = new Map<EdgeChild, EdgeRoute>()
-  for (const [index, child] of routed.entries()) {
+  for (const [index, child] of edges.entries()) {
     const route = layout.edges[index]
-    const { source, target, adornments } = specs[index]!
     if (route === undefined) {
-      problems.push(`no route connects the edge "${source}" -> "${target}"`)
       continue
     }
     // At an end merged with others, one of their edges draws the adornments
     // they share there.
     const shared = route.merged.map((leader) => leader >= 0 && leader !== index)
-    const drawn = adornments.map((adornment) => {
+    const drawn = entries[index]!.edge.adornments.map((adornment) => {
       const at = Number.isFinite(adornment.at) ? Math.min(Math.max(adornment.at, 0), 1) : 0.5
       return !((coincident(at, 0) && shared[0]) || (coincident(at, 1) && shared[1]))
     })
