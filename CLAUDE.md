@@ -34,9 +34,14 @@ main axis, `stack` is the cross axis). Flexbox is two tracks per line plus a
 track of lines. `Frame` is a flex-item spec. `Flexbox` is the container spec,
 and `Flexbox.apply` solves it. `Box` is a positioned-box spec (CSS absolute
 positioning). `Box.apply` solves it against a parent rect, and every
-non-finite input acts as unset. `Hierarchy` is a layered graph layout spec.
-`Hierarchy.apply` solves `Frame`s with ids plus `Edge` specs (which
-reference frame ids and carry `Adornment`s), with optional `Polygon` node
+non-finite input acts as unset. Item inputs compose concept slices: types,
+field tables, and functions with no class of their own. `placement/sizing`
+is the sizing slice (`SizingInput`, `fields`, `normalize`, `resolve`), and
+`Frame`, `Box`, `Flexbox.apply`, and `Hierarchy.apply` all resolve sizing
+through it; specs keep the normalized sizing under `SizingOf`
+(`internal/sizing.ts`). `Hierarchy` is a layered graph layout spec.
+`Hierarchy.apply` solves a record of `Frame`s keyed by id plus `Edge` specs
+(which reference those ids and carry `Adornment`s), with optional `Polygon` node
 shapes that ports sit on. `internal/hierarchy/layout.ts` places the nodes
 through the phases in `internal/hierarchy/`: acyclic
 (`internal/graph/acyclic.ts`), rank (network simplex), order, position

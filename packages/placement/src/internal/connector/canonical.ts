@@ -74,20 +74,19 @@ const by = (...orders: ReadonlyArray<() => number>): number => {
 }
 
 const maybeNumbers = optional(compareNumbers)
-const maybeIds = optional(compareIds)
 
-// The fields of an adornment's frame that routing reads.
-const FRAME_FIELDS = [
+// The fields of an adornment's size and margins that routing reads.
+const ADORNMENT_FIELDS = [
   'width',
   'height',
   'minWidth',
   'maxWidth',
   'minHeight',
   'maxHeight',
-  'offsetTop',
-  'offsetRight',
-  'offsetBottom',
-  'offsetLeft',
+  'marginTop',
+  'marginRight',
+  'marginBottom',
+  'marginLeft',
   'align',
 ] as const
 
@@ -97,13 +96,12 @@ const compareAdornments = lists((a: Adornment, b: Adornment): number => {
     () => compareNumbers(a.position, b.position),
     () => compareNumbers(a.layer, b.layer),
     () => compareNumbers(a.orient, b.orient),
-    () => maybeIds(a.frame.id, b.frame.id),
   )
   if (order !== 0) {
     return order
   }
-  for (const field of FRAME_FIELDS) {
-    const next = compareNumbers(a.frame[field], b.frame[field])
+  for (const field of ADORNMENT_FIELDS) {
+    const next = compareNumbers(a[field], b[field])
     if (next !== 0) {
       return next
     }

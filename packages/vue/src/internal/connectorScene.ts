@@ -1,7 +1,6 @@
 import type * as Adornment from 'placement/adornment'
 import type * as Connector from 'placement/connector'
 import type * as Edge from 'placement/edge'
-import type * as Frame from 'placement/frame'
 import type * as Point from 'placement/point'
 import type * as Rect from 'placement/rect'
 
@@ -16,13 +15,8 @@ export type ConnectorSceneSpec = {
   readonly [K in keyof Connector.ConnectorInput]?: number
 }
 
-/**
- * An adornment's fields (see `AdornmentInput` in `placement/adornment`),
- * with its frame's fields (see `FrameInput` in `placement/frame`) beside
- * them rather than nested.
- */
-export type ConnectorSceneAdornment = Omit<Frame.FrameInput, 'id'> &
-  Omit<Adornment.AdornmentInput, 'frame'>
+/** An adornment's fields (see `AdornmentInput` in `placement/adornment`). */
+export type ConnectorSceneAdornment = Adornment.AdornmentInput
 
 /** An edge's fields (see `EdgeInput` in `placement/edge`). */
 export type ConnectorSceneEdge = Omit<Edge.EdgeInput<string>, 'adornments'> & {
@@ -98,9 +92,7 @@ function plain(record: object): Record<string, unknown> {
 const rectOf = ({ x, y, width, height }: Rect.RectLike): Rect.RectLike => ({ x, y, width, height })
 
 function adornmentOf(adornment: Adornment.Adornment): ConnectorSceneAdornment {
-  const { id: _, ...frame } = adornment.frame.toJSON()
-  const { at, position, layer, orient } = adornment
-  return plain({ ...frame, at, position, layer, orient }) as ConnectorSceneAdornment
+  return plain(adornment.toJSON()) as ConnectorSceneAdornment
 }
 
 function edgeOf(edge: Edge.Edge<string>): ConnectorSceneEdge {

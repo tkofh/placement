@@ -1,6 +1,6 @@
 import { coincident } from 'curvy/number'
 import type { Adornment } from '../adornment.ts'
-import { auto } from '../utils/arguments.ts'
+import * as Alignment from '../alignment.ts'
 import { atMost, before, overlaps } from '../utils/tolerance.ts'
 
 // The geometry of edge adornments in logical space: how much of a straight
@@ -61,37 +61,22 @@ function finite(value: number): number {
   return Number.isFinite(value) ? value : 0
 }
 
-// A frame's size along one axis, clamped to its finite limits. Unset sizes
-// are `0`.
-export function frameSize(size: number, min: number, max: number): number {
-  let result = finite(Math.max(size, 0))
-  if (Number.isFinite(max)) {
-    result = Math.min(result, max)
-  }
-  if (Number.isFinite(min)) {
-    result = Math.max(result, min)
-  }
-  return result
-}
-
 // Resolves an adornment into logical terms. Upright frames map their
 // physical axes to the logical ones: x to the order axis when `vertical`,
 // and the rank axis mirrored when `reverse`. Turned frames keep their own
-// axes. A non-finite `align` on the frame takes `align`.
+// axes. A non-finite `align` on the adornment takes `align`.
 export function resolveAdornment(
   adornment: Adornment,
   vertical: boolean,
   reverse: boolean,
   align: number,
 ): SolveAdornment {
-  const { frame } = adornment
-  const width = frameSize(frame.width, frame.minWidth, frame.maxWidth)
-  const height = frameSize(frame.height, frame.minHeight, frame.maxHeight)
-  const top = finite(frame.offsetTop)
-  const right = finite(frame.offsetRight)
-  const bottom = finite(frame.offsetBottom)
-  const left = finite(frame.offsetLeft)
-  const side = auto(frame.align, align)
+  const { width, height } = adornment
+  const top = finite(adornment.marginTop)
+  const right = finite(adornment.marginRight)
+  const bottom = finite(adornment.marginBottom)
+  const left = finite(adornment.marginLeft)
+  const side = Alignment.resolve(adornment, { align }).align
   const [leading, trailing] = vertical ? [top, bottom] : [left, right]
   const o: AxisFrame = vertical
     ? { size: width, start: left, end: right, align: side }

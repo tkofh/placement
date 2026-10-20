@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest'
 import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
-import * as Frame from '../src/frame.ts'
 import { route } from '../src/internal/connector/canonical.ts'
 import { normalize } from '../src/internal/connector/problem.ts'
 import {
@@ -372,7 +371,7 @@ describe('scoreLayout', () => {
   test('partners of a group squeeze only closer than the merge gap', () => {
     // Two edges into the left of b with one arrow merge there, their
     // strokes 2 apart with a merge gap of 2 and a gap of 8.
-    const arrow = Adornment.make({ frame: Frame.make({ width: 4, height: 4 }), at: 1 })
+    const arrow = Adornment.make({ width: 4, height: 4, at: 1 })
     const merging = Connector.make({
       clearance: 16,
       gap: 8,
@@ -434,11 +433,13 @@ describe('scoreLayout', () => {
       events: Rect.make(520, 60, 100, 40),
     }
     const arrow = Adornment.make({
-      frame: Frame.make({ width: 9, height: 8, offsetLeft: 4 }),
+      width: 9,
+      height: 8,
+      marginLeft: 4,
       at: 1,
       orient: Adornment.orient.forward,
     })
-    const label = Adornment.make({ frame: Frame.make({ width: 40, height: 16 }), at: 0.5 })
+    const label = Adornment.make({ width: 40, height: 16, at: 0.5 })
     const link = (source: keyof typeof scene, target: keyof typeof scene, labelled = false) =>
       Edge.make({
         source,

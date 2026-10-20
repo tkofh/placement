@@ -4,7 +4,6 @@ import { basename, dirname, resolve } from 'node:path'
 import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
-import * as Frame from '../src/frame.ts'
 import { type Move, type Routed, type Try, routeBest } from '../src/internal/connector/orders.ts'
 import type { XY } from '../src/internal/orient.ts'
 import * as Polygon from '../src/polygon.ts'
@@ -35,8 +34,15 @@ const USAGE = `usage: node packages/placement/scripts/scene.ts <scene.json | -> 
 type Loose<T> = { readonly [K in keyof T]?: T[K] | null }
 type Coded<T> = number | keyof T | null
 
-type SceneAdornment = Loose<Omit<Frame.FrameInput, 'id'>> &
-  Loose<Omit<Adornment.AdornmentInput, 'frame' | 'position' | 'orient'>> & {
+// Scenes written before adornments took their sizing and margins as their
+// own fields carry a frame's fields instead: its offsets, which are the
+// margins under their old names, and flex fields an adornment never read.
+type LegacyOffsets = Loose<
+  Record<'offsetTop' | 'offsetRight' | 'offsetBottom' | 'offsetLeft', number>
+>
+
+type SceneAdornment = Loose<Omit<Adornment.AdornmentInput, 'position' | 'orient'>> &
+  LegacyOffsets & {
     readonly position?: Coded<typeof Adornment.position>
     readonly orient?: Coded<typeof Adornment.orient>
   }
@@ -148,7 +154,7 @@ function fromShort(state: Short): Scene {
   }
   // The page draws corners of radius 10 with smoothing 0.6.
   const radius = state.corners ? 10 * 1.6 : 0
-  const arrow: SceneAdornment = { width: 9, height: 8, offsetLeft: 4, at: 1, orient: 'forward' }
+  const arrow: SceneAdornment = { width: 9, height: 8, marginLeft: 4, at: 1, orient: 'forward' }
   const label: SceneAdornment = { width: 40, height: 16 }
   return {
     spec: {
@@ -211,21 +217,21 @@ function fields<K extends string>(
   return out
 }
 
-const FRAME_KEYS = [
-  'offsetTop',
-  'offsetRight',
-  'offsetBottom',
-  'offsetLeft',
+const ADORNMENT_KEYS = [
+  'marginTop',
+  'marginRight',
+  'marginBottom',
+  'marginLeft',
   'width',
   'height',
+  'aspectRatio',
   'minWidth',
   'minHeight',
   'maxWidth',
   'maxHeight',
-  'grow',
-  'shrink',
   'align',
-  'stretch',
+  'at',
+  'layer',
 ] as const
 
 const SPEC_KEYS = [
@@ -247,15 +253,20 @@ const EDGE_KEYS = ['weight', 'minLength', 'sourceAt', 'targetAt', 'radius', 'thi
 const rectOf = ({ x, y, width, height }: Rect.RectLike) => Rect.make(x, y, width, height)
 
 function adornmentOf(input: SceneAdornment, where: string): Adornment.Adornment {
-  const ratio = input.aspectRatio
+  const { offsetTop, offsetRight, offsetBottom, offsetLeft, ...rest } = input
   return Adornment.make({
-    frame: Frame.make({
-      ...fields(input, FRAME_KEYS, where),
-      ...(ratio === null || ratio === undefined ? {} : { aspectRatio: ratio }),
-    }),
-    at: field(input.at, `${where}.at`),
+    ...fields(
+      {
+        marginTop: offsetTop,
+        marginRight: offsetRight,
+        marginBottom: offsetBottom,
+        marginLeft: offsetLeft,
+      },
+      ['marginTop', 'marginRight', 'marginBottom', 'marginLeft'],
+      where,
+    ),
+    ...fields(rest, ADORNMENT_KEYS, where),
     position: field(input.position, `${where}.position`, Adornment.position),
-    layer: field(input.layer, `${where}.layer`),
     orient: field(input.orient, `${where}.orient`, Adornment.orient),
   })
 }

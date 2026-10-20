@@ -29,7 +29,8 @@ const lineAt = (route: Hierarchy.HierarchyRoute | undefined, y: number) => {
   return Number.NaN
 }
 
-const withIds = (ids: ReadonlyArray<string>) => ids.map((id) => Frame.setId(box, id))
+const withIds = (ids: ReadonlyArray<string>) =>
+  Object.fromEntries(ids.map((id) => [id, box])) as Record<string, Frame.Frame>
 
 const points = (route: Hierarchy.HierarchyRoute | undefined) =>
   route?.points.map((point) => [point.x, point.y])
@@ -38,13 +39,15 @@ const points = (route: Hierarchy.HierarchyRoute | undefined) =>
 // stand-in for an arrowhead at `at` 0 or 1.
 const stub = (length: number, at: number) =>
   Adornment.make({
-    frame: Frame.make({ width: length, height: 0 }),
+    width: length,
+    height: 0,
     at,
     orient: at === 0 ? Adornment.orient.backward : Adornment.orient.forward,
   })
 
-const labelOf = (frame: Frame.Frame, input: Omit<Adornment.AdornmentInput, 'frame'> = {}) =>
-  Adornment.make({ frame, ...input })
+// An adornment with a frame's size, margins, and side of the line.
+const labelOf = (frame: Frame.Frame, input: Adornment.AdornmentInput = {}) =>
+  Adornment.make({ ...frame.toJSON(), ...input })
 
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-7
 
@@ -120,15 +123,15 @@ describe('make', () => {
 
 describe('apply', () => {
   test('an empty graph has empty results', () => {
-    const layout = Hierarchy.apply([], [], spec)
+    const layout = Hierarchy.apply({}, [], spec)
     expect(Object.keys(layout.nodes)).toEqual([])
     expect(layout.edges).toEqual([])
     expect(layout.bounds).toEqual(Rect.make())
   })
 
   test('an edge to an unknown key throws', () => {
-    const nodes = [Frame.setId(box, 'a')]
-    // @ts-expect-error -- 'b' is not the id of any frame
+    const nodes = { a: box }
+    // @ts-expect-error -- 'b' is not the id of any node
     expect(() => Hierarchy.apply(nodes, [Edge.make({ source: 'a', target: 'b' })], spec)).toThrow(
       RangeError,
     )
@@ -181,7 +184,7 @@ describe('apply', () => {
     ],
   ] as const)('a single edge flows %s', (_, direction, a, b, route, bounds) => {
     const layout = Hierarchy.apply(
-      [Frame.setId(box, 'a'), Frame.setId(small, 'b')],
+      { a: box, b: small },
       [Edge.make({ source: 'a', target: 'b' })],
       Hierarchy.make({ rankGap: 40, nodeGap: 20, edgeGap: 10, direction }),
     )
@@ -191,17 +194,19 @@ describe('apply', () => {
     expect(layout.bounds).toEqual(bounds)
   })
 
-  test('frames need unique ids', () => {
-    const anonymous = Frame.make({ width: 10 }) as unknown as Frame.Frame<string>
-    expect(() => Hierarchy.apply([anonymous], [], spec)).toThrow(RangeError)
-    expect(() =>
-      Hierarchy.apply([Frame.setId(box, 'a'), Frame.setId(small, 'a')], [], spec),
-    ).toThrow(RangeError)
+  test('ties follow key order, which puts integer-like keys first', () => {
+    const layout = Hierarchy.apply({ b: box, 10: box, a: box, 2: box }, [], spec)
+    expect(Object.entries(layout.nodes).map(([id, rect]) => [id, rect.x])).toEqual([
+      ['2', 0],
+      ['10', 120],
+      ['b', 240],
+      ['a', 360],
+    ])
   })
 
   test('nodes are keyed by id, even ids that name Object.prototype members', () => {
     const layout = Hierarchy.apply(
-      [Frame.setId(box, '__proto__'), Frame.setId(box, 'constructor')],
+      { ['__proto__']: box, constructor: box },
       [Edge.make({ source: 'constructor', target: '__proto__' })],
       spec,
     )
@@ -210,33 +215,28 @@ describe('apply', () => {
     expect(layout.nodes.__proto__.y).toBe(80)
   })
 
-  test('the types check frame ids', () => {
-    const a = Frame.make({ id: 'a', width: 10 })
-    const b = Frame.make({ id: 'b', width: 10 })
-    const layout = Hierarchy.apply([a, b], [Edge.make({ source: 'a', target: 'b' })], spec)
+  test('the types check node ids', () => {
+    const nodes = { a: Frame.make({ width: 10 }), b: Frame.make({ width: 10 }) }
+    const layout = Hierarchy.apply(nodes, [Edge.make({ source: 'a', target: 'b' })], spec)
     expect(layout.nodes.a satisfies Rect.Rect).toBeDefined()
     expect(() =>
-      // @ts-expect-error -- 'c' is not the id of any frame
-      Hierarchy.apply([a, b], [Edge.make({ source: 'a', target: 'c' })], spec),
+      // @ts-expect-error -- 'c' is not the id of any node
+      Hierarchy.apply(nodes, [Edge.make({ source: 'a', target: 'c' })], spec),
     ).toThrow(RangeError)
-    expect(() =>
-      // @ts-expect-error -- every frame needs an id
-      Hierarchy.apply([a, Frame.make({ width: 10 })], [], spec),
-    ).toThrow(RangeError)
-    // @ts-expect-error -- the result only has the frames' ids
+    // @ts-expect-error -- the result only has the nodes' ids
     expect(layout.nodes.c).toBeUndefined()
 
-    // Inline frames and edges keep their literal ids too.
+    // Inline nodes and edges keep their literal ids too.
     const inline = Hierarchy.apply(
-      [Frame.make({ id: 'x' }), Frame.setId(box, 'y')],
+      { x: Frame.make({}), y: box },
       [Edge.make({ source: 'x', target: 'y' })],
       spec,
     )
     expect(inline.nodes.y satisfies Rect.Rect).toBeDefined()
     expect(() =>
       Hierarchy.apply(
-        [Frame.make({ id: 'x' }), Frame.setId(box, 'y')],
-        // @ts-expect-error -- 'z' is not the id of any frame
+        { x: Frame.make({}), y: box },
+        // @ts-expect-error -- 'z' is not the id of any node
         [Edge.make({ source: 'x', target: 'z' })],
         spec,
       ),
@@ -245,7 +245,7 @@ describe('apply', () => {
     // Ids known only at runtime widen to string.
     const ids: Array<string> = ['p', 'q']
     const dynamic = Hierarchy.apply(
-      ids.map((id) => Frame.make({ id, width: 10 })),
+      Object.fromEntries(ids.map((id) => [id, Frame.make({ width: 10 })])),
       [Edge.make({ source: ids[0] ?? '', target: ids[1] ?? '' })],
       spec,
     )
@@ -253,14 +253,14 @@ describe('apply', () => {
   })
 
   test('nodes without edges sit side by side, nodeGap apart', () => {
-    const layout = Hierarchy.apply([Frame.setId(box, 'a'), Frame.setId(box, 'b')], [], spec)
+    const layout = Hierarchy.apply({ a: box, b: box }, [], spec)
     expect(layout.nodes.a).toEqual(Rect.make(0, 0, 100, 40))
     expect(layout.nodes.b).toEqual(Rect.make(120, 0, 100, 40))
   })
 
   test('a fan-out centers the parent and spreads its ports', () => {
     const layout = Hierarchy.apply(
-      [Frame.setId(box, 'a'), Frame.setId(box, 'b'), Frame.setId(box, 'c')],
+      { a: box, b: box, c: box },
       [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'c' })],
       spec,
     )
@@ -289,7 +289,7 @@ describe('apply', () => {
     // overlaps, so it takes two lanes, edgeGap apart and a clearance from
     // the ranks, which the rank gap still holds.
     const layout = Hierarchy.apply(
-      ['a', 'b', 'c', 'd', 'e'].map((id) => Frame.setId(box, id)),
+      withIds(['a', 'b', 'c', 'd', 'e']),
       ['b', 'c', 'd', 'e'].map((target) => Edge.make({ source: 'a', target })),
       spec,
     )
@@ -314,7 +314,7 @@ describe('apply', () => {
 
   test('minLength stretches an edge over more ranks', () => {
     const layout = Hierarchy.apply(
-      [Frame.setId(box, 'a'), Frame.setId(box, 'b')],
+      { a: box, b: box },
       [Edge.make({ source: 'a', target: 'b', minLength: 2 })],
       spec,
     )
@@ -323,7 +323,7 @@ describe('apply', () => {
 
   test('a route between touching ports keeps both ends', () => {
     const layout = Hierarchy.apply(
-      [Frame.setId(small, 'a'), Frame.setId(small, 'b')],
+      { a: small, b: small },
       [Edge.make({ source: 'a', target: 'b' })],
       Hierarchy.make({}),
     )
@@ -336,7 +336,7 @@ describe('apply', () => {
 
   test('a cycle routes both edges from source to target', () => {
     const layout = Hierarchy.apply(
-      [Frame.setId(box, 'a'), Frame.setId(box, 'b')],
+      { a: box, b: box },
       [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'b', target: 'a' })],
       spec,
     )
@@ -355,7 +355,7 @@ describe('apply', () => {
   })
 
   describe('end adornments', () => {
-    const three = ['a', 'b', 'c'].map((id) => Frame.setId(box, id))
+    const three = withIds(['a', 'b', 'c'])
 
     test('an adornment at the target keeps the last turn that far from it', () => {
       const layout = Hierarchy.apply(
@@ -481,11 +481,12 @@ describe('apply', () => {
 
   describe('back edges', () => {
     const loop = Hierarchy.make({ ...spec.toJSON(), backEdges: Hierarchy.backEdges.loop })
-    const nodes = [Frame.setId(box, 'a'), Frame.setId(box, 'b'), Frame.setId(box, 'c')]
+    const nodes = { a: box, b: box, c: box }
+    const two = { a: box, b: box }
 
     test('a loop leaves downstream and enters upstream, around both nodes', () => {
       const layout = Hierarchy.apply(
-        nodes.slice(0, 2),
+        two,
         [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'b', target: 'a' })],
         loop,
       )
@@ -533,7 +534,7 @@ describe('apply', () => {
 
     test('an explicit side overrides the loop at its end only', () => {
       const layout = Hierarchy.apply(
-        nodes.slice(0, 2),
+        two,
         [
           Edge.make({ source: 'a', target: 'b' }),
           Edge.make({ source: 'b', target: 'a', sourceSide: Edge.side.top }),
@@ -548,13 +549,13 @@ describe('apply', () => {
   })
 
   describe('rank bands', () => {
-    const nodes = [
-      Frame.setId(box, 'root'),
-      Frame.make({ id: 'short', width: 40, height: 20 }),
-      Frame.make({ id: 'tall', width: 40, height: 60 }),
-      Frame.make({ id: 'end', width: 40, height: 20, align: 1 }),
-      Frame.make({ id: 'fill', width: 40, height: 20, stretch: 1 }),
-    ]
+    const nodes = {
+      root: box,
+      short: Frame.make({ width: 40, height: 20 }),
+      tall: Frame.make({ width: 40, height: 60 }),
+      end: Frame.make({ width: 40, height: 20, align: 1 }),
+      fill: Frame.make({ width: 40, height: 20, stretch: 1 }),
+    }
     const edges = (['short', 'tall', 'end', 'fill'] as const).map((target) =>
       Edge.make({ source: 'root', target }),
     )
@@ -583,12 +584,43 @@ describe('apply', () => {
       expect(layout.nodes.end).toMatchObject({ y: 40, height: 20 })
     })
 
-    test('auto offsets along the flow position a node like auto margins', () => {
+    test('a stretched node with a ratio takes its width from its stretched height', () => {
       const layout = Hierarchy.apply(
+        {
+          root: box,
+          tall: nodes.tall,
+          wide: Frame.make({ height: 20, aspectRatio: 2, stretch: 1 }),
+        },
         [
-          Frame.make({ id: 'tall', width: 40, height: 60 }),
-          Frame.make({ id: 'auto', width: 40, height: 20, offsetTop: Number.POSITIVE_INFINITY }),
+          Edge.make({ source: 'root', target: 'tall' }),
+          Edge.make({ source: 'root', target: 'wide' }),
         ],
+        spec,
+      )
+      expect(layout.nodes.wide).toMatchObject({ height: 60, width: 120 })
+      // The rank spaces the node by its derived width.
+      const [left, right] = [layout.nodes.tall, layout.nodes.wide].toSorted((p, q) => p.x - q.x)
+      expect((right as Rect.Rect).x - (left as Rect.Rect).right).toBe(20)
+    })
+
+    test('a ratio node keeps its width when it does not stretch', () => {
+      const layout = Hierarchy.apply(
+        { root: box, tall: nodes.tall, wide: Frame.make({ height: 20, aspectRatio: 2 }) },
+        [
+          Edge.make({ source: 'root', target: 'tall' }),
+          Edge.make({ source: 'root', target: 'wide' }),
+        ],
+        spec,
+      )
+      expect(layout.nodes.wide).toMatchObject({ height: 20, width: 40 })
+    })
+
+    test('auto margins along the flow position a node like auto margins', () => {
+      const layout = Hierarchy.apply(
+        {
+          tall: Frame.make({ width: 40, height: 60 }),
+          auto: Frame.make({ width: 40, height: 20, marginTop: Number.POSITIVE_INFINITY }),
+        },
         [],
         Hierarchy.make({ alignItems: 0 }),
       )
@@ -597,7 +629,7 @@ describe('apply', () => {
   })
 
   describe('flow adornments', () => {
-    const nodes = [Frame.setId(box, 'a'), Frame.setId(box, 'b')]
+    const nodes = { a: box, b: box }
     const label = Frame.make({ width: 20, height: 10 })
 
     test('one in the middle takes room in the rank between the nodes', () => {
@@ -617,9 +649,9 @@ describe('apply', () => {
       ])
     })
 
-    test('align puts one beside the line, and offsets add clearance', () => {
-      const right = Frame.make({ width: 20, height: 10, align: 1, offsetLeft: 4 })
-      const left = Frame.make({ width: 20, height: 10, align: 0, offsetRight: 4 })
+    test('align puts one beside the line, and margins add clearance', () => {
+      const right = Frame.make({ width: 20, height: 10, align: 1, marginLeft: 4 })
+      const left = Frame.make({ width: 20, height: 10, align: 0, marginRight: 4 })
       const layout = Hierarchy.apply(
         nodes,
         [
@@ -645,7 +677,7 @@ describe('apply', () => {
     })
 
     test('ones in a layer on one run line up in order along the edge', () => {
-      const gapped = Frame.make({ width: 20, height: 10, offsetTop: 2 })
+      const gapped = Frame.make({ width: 20, height: 10, marginTop: 2 })
       const layout = Hierarchy.apply(
         nodes,
         [
@@ -722,7 +754,7 @@ describe('apply', () => {
     })
 
     test('a turned one measures its frame along the line', () => {
-      const arrow = Frame.make({ width: 20, height: 10, offsetLeft: 4 })
+      const arrow = Frame.make({ width: 20, height: 10, marginLeft: 4 })
       const layout = Hierarchy.apply(
         nodes,
         [
@@ -942,7 +974,7 @@ describe('apply', () => {
     })
 
     test('keep clear of flow adornments and their gaps', () => {
-      const arrow = Frame.make({ width: 9, height: 8, offsetLeft: 4 })
+      const arrow = Frame.make({ width: 9, height: 8, marginLeft: 4 })
       const layout = Hierarchy.apply(
         three,
         [
@@ -967,7 +999,7 @@ describe('apply', () => {
   })
 
   describe('ports', () => {
-    const nodes = [Frame.setId(box, 'a'), Frame.setId(box, 'b')]
+    const nodes = { a: box, b: box }
 
     test('fixed ports end the route at the requested point', () => {
       const layout = Hierarchy.apply(
@@ -1016,7 +1048,7 @@ describe('apply', () => {
 
     test('side ports that share a side take their own columns, edgeGap apart', () => {
       const layout = Hierarchy.apply(
-        [Frame.setId(box, 'a'), Frame.setId(box, 'b'), Frame.setId(box, 'c')],
+        { a: box, b: box, c: box },
         [
           Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.right }),
           Edge.make({ source: 'a', target: 'c', sourceSide: Edge.side.right }),
@@ -1063,7 +1095,7 @@ describe('apply', () => {
 
     test('a side port runs straight out to where its edge continues', () => {
       const layout = Hierarchy.apply(
-        [Frame.setId(box, 'a'), Frame.setId(box, 'b'), Frame.setId(box, 'c')],
+        { a: box, b: box, c: box },
         [
           Edge.make({ source: 'a', target: 'b' }),
           Edge.make({ source: 'a', target: 'c', sourceSide: Edge.side.right }),
@@ -1080,7 +1112,7 @@ describe('apply', () => {
 
     test('a column stops short of a node beside it in the rank', () => {
       const layout = Hierarchy.apply(
-        ['a', 'b', 'c', 'x'].map((id) => Frame.setId(box, id)),
+        withIds(['a', 'b', 'c', 'x']),
         [
           Edge.make({ source: 'a', target: 'b' }),
           Edge.make({ source: 'x', target: 'c' }),
@@ -1152,7 +1184,7 @@ describe('apply', () => {
       // Three ports 10 apart need 20 of the 16 available.
       const narrow = Frame.make({ width: 16, height: 20 })
       const layout = Hierarchy.apply(
-        [Frame.setId(narrow, 'a'), Frame.setId(narrow, 'b')],
+        { a: narrow, b: narrow },
         [
           Edge.make({ source: 'a', target: 'b' }),
           Edge.make({ source: 'a', target: 'b' }),
@@ -1171,7 +1203,7 @@ describe('apply', () => {
   describe('self loops', () => {
     test('loops nest on the order-end side, edgeGap apart', () => {
       const layout = Hierarchy.apply(
-        [Frame.make({ id: 'a', width: 100, height: 60 })],
+        { a: Frame.make({ width: 100, height: 60 }) },
         [Edge.make({ source: 'a', target: 'a' }), Edge.make({ source: 'a', target: 'a' })],
         spec,
       )
@@ -1196,7 +1228,7 @@ describe('apply', () => {
 
     test('a loop between two sides walks around the corner', () => {
       const layout = Hierarchy.apply(
-        [Frame.setId(box, 'a')],
+        { a: box },
         [
           Edge.make({
             source: 'a',
@@ -1217,13 +1249,7 @@ describe('apply', () => {
     })
   })
   describe('shapes', () => {
-    const diamond = Frame.make({ id: 'd', width: 80, height: 40 })
-    const nodes = [
-      Frame.setId(small, 'a'),
-      diamond,
-      Frame.setId(small, 'b'),
-      Frame.setId(small, 'c'),
-    ]
+    const nodes = { a: small, d: Frame.make({ width: 80, height: 40 }), b: small, c: small }
     const shapes = { d: Polygon.make({ phase: 0.5 }) }
 
     test('ports meet a diamond at its tips and on its slopes', () => {
@@ -1315,7 +1341,7 @@ describe('apply', () => {
       [0.5, 1000, 40],
     ])('a rounded rect puts a port at %f with radius %f %f down', (at, radius, y) => {
       const layout = Hierarchy.apply(
-        [Frame.setId(box, 'a'), Frame.setId(box, 'b')],
+        { a: box, b: box },
         [Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.bottom, sourceAt: at })],
         spec,
         { shapes: { a: Polygon.make({ radius }) } },
@@ -1332,7 +1358,7 @@ describe('apply', () => {
       ['a rounded triangle', Polygon.make({ sides: 3, radius: 6 })],
     ])('ports meet %s on its outline', (_, polygon) => {
       const layout = Hierarchy.apply(
-        [Frame.setId(box, 'a'), Frame.setId(box, 'b')],
+        { a: box, b: box },
         [0.125, 0.3, 0.5, 0.7, 0.875].map((at) =>
           Edge.make({ source: 'a', target: 'b', sourceSide: Edge.side.bottom, sourceAt: at }),
         ),
@@ -1360,7 +1386,7 @@ describe('apply', () => {
       ['a phase of 1', Polygon.make({ phase: 1 })],
       ['a value that is no polygon', {} as Polygon.Polygon],
     ])('%s is no shape', (_, polygon) => {
-      const nodes = [Frame.setId(box, 'a'), Frame.setId(box, 'b')]
+      const nodes = { a: box, b: box }
       const edges = [
         Edge.make({ source: 'a', target: 'b' }),
         Edge.make({ source: 'a', target: 'b', sourceAt: 0.125 }),
@@ -1371,7 +1397,7 @@ describe('apply', () => {
     })
 
     test('ids that name prototype properties have no shape', () => {
-      const nodes = [Frame.setId(box, 'toString'), Frame.setId(box, 'constructor')]
+      const nodes = { toString: box, constructor: box }
       const edges = [Edge.make({ source: 'toString', target: 'constructor' })]
       // A plain object, whose prototype has both names.
       const shapes = JSON.parse('{}')
@@ -1390,15 +1416,12 @@ function randomGraph(seed: number, nodeCount: number, edgeCount: number, sides =
     state = (state * 1103515245 + 12345) % 2147483648
     return state / 2147483648
   }
-  const nodes: Array<Frame.Frame<string>> = []
+  const nodes: Record<string, Frame.Frame> = {}
   for (let i = 0; i < nodeCount; i++) {
-    nodes.push(
-      Frame.make({
-        id: `n${i}`,
-        width: 20 + Math.floor(next() * 8) * 10,
-        height: 20 + Math.floor(next() * 4) * 10,
-      }),
-    )
+    nodes[`n${i}`] = Frame.make({
+      width: 20 + Math.floor(next() * 8) * 10,
+      height: 20 + Math.floor(next() * 4) * 10,
+    })
   }
   const edges: Array<Edge.Edge<string>> = []
   for (let i = 0; i < edgeCount; i++) {
@@ -1408,7 +1431,8 @@ function randomGraph(seed: number, nodeCount: number, edgeCount: number, sides =
     if (next() < 0.2) {
       adornments.push(
         Adornment.make({
-          frame: Frame.make({ width: 30, height: 12 }),
+          width: 30,
+          height: 12,
           at: Math.floor(next() * 5) / 4,
           layer: Math.floor(next() * 2),
         }),
@@ -1425,7 +1449,8 @@ function randomGraph(seed: number, nodeCount: number, edgeCount: number, sides =
     if (sides && next() < 0.2) {
       adornments.push(
         Adornment.make({
-          frame: Frame.make({ width: 6, height: 6 }),
+          width: 6,
+          height: 6,
           at: next(),
           position: Math.floor(next() * 2),
         }),
@@ -1522,8 +1547,8 @@ describe('properties', () => {
       expect(applyOf(seed)(nodes, edges, hierarchy)).toEqual(layout)
 
       // Node sizes are the frame sizes.
-      for (const frame of nodes) {
-        const rect = layout.nodes[frame.id] as Rect.Rect
+      for (const [id, frame] of Object.entries(nodes)) {
+        const rect = layout.nodes[id] as Rect.Rect
         expect([rect.width, rect.height]).toEqual([frame.width, frame.height])
       }
 
@@ -1659,7 +1684,7 @@ describe('properties', () => {
                 0,
                 ...edge.adornments
                   .filter((adornment) => adornment.at === at && adornment.orient !== 0)
-                  .map((adornment) => adornment.frame.width),
+                  .map((adornment) => adornment.width),
               )
             expect(first).toBeGreaterThanOrEqual(stubOf(0) - 1e-9)
             expect(last).toBeGreaterThanOrEqual(stubOf(1) - 1e-9)
@@ -1704,20 +1729,17 @@ describe('properties', () => {
   test('uniform scaling scales the layout', () => {
     const { nodes, edges } = randomGraph(7, 12, 16)
     const scale = 1e6
-    const scaled = nodes.map((frame) =>
-      Frame.make({ id: frame.id, width: frame.width * scale, height: frame.height * scale }),
+    const scaled = Object.fromEntries(
+      Object.entries(nodes).map(([id, frame]) => [
+        id,
+        Frame.make({ width: frame.width * scale, height: frame.height * scale }),
+      ]),
     )
     const scaledEdges = edges.map((edge) =>
       Edge.setAdornments(
         Edge.setRadius(edge, edge.radius * scale),
         edge.adornments.map((adornment) =>
-          Adornment.setFrame(
-            adornment,
-            Frame.make({
-              width: adornment.frame.width * scale,
-              height: adornment.frame.height * scale,
-            }),
-          ),
+          Adornment.setSize(adornment, adornment.width * scale, adornment.height * scale),
         ),
       ),
     )
@@ -1731,9 +1753,9 @@ describe('properties', () => {
       scaledEdges,
       Hierarchy.make({ rankGap: 30 * scale, nodeGap: 20 * scale, edgeGap: 8 * scale }),
     )
-    for (const frame of nodes) {
-      const rect = base.nodes[frame.id] as Rect.Rect
-      const other = big.nodes[frame.id] as Rect.Rect
+    for (const id of Object.keys(nodes)) {
+      const rect = base.nodes[id] as Rect.Rect
+      const other = big.nodes[id] as Rect.Rect
       expect(other.x / scale).toBeCloseTo(rect.x, 6)
       expect(other.y / scale).toBeCloseTo(rect.y, 6)
     }
@@ -1746,11 +1768,11 @@ describe('properties', () => {
   })
 
   test('non-dyadic sizes stay close to the dyadic layout', () => {
-    const nodes = [
-      Frame.make({ id: 'a', width: 0.1, height: 0.1 }),
-      Frame.make({ id: 'b', width: 0.1, height: 0.1 }),
-      Frame.make({ id: 'c', width: 0.1, height: 0.1 }),
-    ]
+    const nodes = {
+      a: Frame.make({ width: 0.1, height: 0.1 }),
+      b: Frame.make({ width: 0.1, height: 0.1 }),
+      c: Frame.make({ width: 0.1, height: 0.1 }),
+    }
     const layout = Hierarchy.apply(
       nodes,
       [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'c' })],
@@ -1779,9 +1801,9 @@ describe('properties', () => {
     ]
     const kindOf = (id: string) => kinds[Number(id.slice(1)) % kinds.length]
     const shapes = Object.fromEntries(
-      nodes.flatMap((frame): Array<[string, Polygon.Polygon]> => {
-        const kind = kindOf(frame.id)
-        return kind === undefined ? [] : [[frame.id, kind]]
+      Object.keys(nodes).flatMap((id): Array<[string, Polygon.Polygon]> => {
+        const kind = kindOf(id)
+        return kind === undefined ? [] : [[id, kind]]
       }),
     )
     for (const backEdges of Object.values(Hierarchy.backEdges)) {
@@ -1795,8 +1817,8 @@ describe('properties', () => {
         })
         const shaped = applyOf(seed)(nodes, edges, hierarchy, { shapes })
         expect(applyOf(seed)(nodes, edges, hierarchy, { shapes })).toEqual(shaped)
-        for (const frame of nodes) {
-          const rect = shaped.nodes[frame.id] as Rect.Rect
+        for (const [id, frame] of Object.entries(nodes)) {
+          const rect = shaped.nodes[id] as Rect.Rect
           expect([rect.width, rect.height]).toEqual([frame.width, frame.height])
         }
         for (const [i, edge] of edges.entries()) {

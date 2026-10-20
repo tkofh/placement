@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest'
 import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
-import * as Frame from '../src/frame.ts'
 import { canonicalOrder, restore, route } from '../src/internal/connector/canonical.ts'
 import { MOVES, SOLVES, type Try, routeBest } from '../src/internal/connector/orders.ts'
 import * as Rect from '../src/rect.ts'
@@ -61,7 +60,9 @@ const egress = {
       thickness: 1.75,
       adornments: [
         Adornment.make({
-          frame: Frame.make({ width: 9, height: 8, offsetLeft: 4 }),
+          width: 9,
+          height: 8,
+          marginLeft: 4,
           at: 1,
           orient: Adornment.orient.forward,
         }),

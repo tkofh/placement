@@ -1,7 +1,6 @@
 import * as Adornment from '../../src/adornment.ts'
 import * as Connector from '../../src/connector.ts'
 import * as Edge from '../../src/edge.ts'
-import * as Frame from '../../src/frame.ts'
 import * as Point from '../../src/point.ts'
 import * as Rect from '../../src/rect.ts'
 
@@ -137,11 +136,13 @@ const DIAGRAMS = {
 export type SceneName = keyof typeof SCENES | keyof typeof DIAGRAMS
 
 const arrow = Adornment.make({
-  frame: Frame.make({ width: 9, height: 8, offsetLeft: 4 }),
+  width: 9,
+  height: 8,
+  marginLeft: 4,
   at: 1,
   orient: Adornment.orient.forward,
 })
-const label = Adornment.make({ frame: Frame.make({ width: 40, height: 16 }) })
+const label = Adornment.make({ width: 40, height: 16 })
 
 /**
  * A judged scene, as `Connector.apply` takes it, with the playground's

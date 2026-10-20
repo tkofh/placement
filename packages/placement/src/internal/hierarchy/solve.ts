@@ -1,5 +1,6 @@
 import { coincident } from 'curvy/number'
 import type { Adornment } from '../../adornment.ts'
+import * as Alignment from '../../alignment.ts'
 import * as Connector from '../../connector.ts'
 import * as Edge from '../../edge.ts'
 import type { Frame } from '../../frame.ts'
@@ -14,8 +15,9 @@ import * as Interval from '../../interval.ts'
 import * as Point from '../../point.ts'
 import type { Polygon } from '../../polygon.ts'
 import * as Rect from '../../rect.ts'
-import { auto } from '../../utils/arguments.ts'
+import * as Sizing from '../../sizing.ts'
 import { type SolveAdornment, resolveAdornment } from '../adornments.ts'
+import { SizingOf } from '../sizing.ts'
 import {
   type Growth,
   type LogicalBox,
@@ -54,54 +56,63 @@ const ROUNDS = 3
  * Lays out a directed graph in ranks (see `Hierarchy.apply`), routing the
  * edges with `router`.
  *
- * @param frames - The nodes, each a `Frame` with an id.
- * @param edges - The edges, referencing frames by id.
+ * @param nodes - The nodes, each a `Frame`, keyed by id.
+ * @param edges - The edges, referencing nodes by id.
  * @param hierarchy - The layout spec.
  * @param options - The shapes of the nodes.
  * @param router - Routes the edges between the placed nodes.
  * @returns The layout.
- * @throws `RangeError` when a frame has no id, two frames share one, or an
- *   edge references an id that no frame has.
+ * @throws `RangeError` when an edge references an id that no node has.
  */
-export function solveHierarchy<const T extends ReadonlyArray<Frame<string>>>(
-  frames: T,
-  edges: ReadonlyArray<Edge.Edge<NoInfer<T[number]['id']>>>,
+export function solveHierarchy<const K extends string>(
+  nodes: Readonly<Record<K, Frame>>,
+  edges: ReadonlyArray<Edge.Edge<NoInfer<K>>>,
   hierarchy: Hierarchy,
-  options: HierarchyApplyOptions<NoInfer<T[number]['id']>>,
+  options: HierarchyApplyOptions<NoInfer<K>>,
   router: Router,
-): HierarchyLayout<T[number]['id']> {
-  type K = T[number]['id']
-  const index = new Map<string, number>()
-  for (const [i, frame] of frames.entries()) {
-    const id: unknown = frame.id
-    if (typeof id !== 'string') {
-      throw new RangeError(`Frame ${i} has no id`)
-    }
-    if (index.has(id)) {
-      throw new RangeError(`Frames share the id "${id}"`)
-    }
-    index.set(id, i)
-  }
+): HierarchyLayout<K> {
+  const ids = Object.keys(nodes) as Array<K>
+  const frames = ids.map((id) => nodes[id])
+  const index = new Map<string, number>(ids.map((id, i) => [id, i]))
 
   const vertical = hierarchy.isVertical
   const reverse = hierarchy.isReverse
 
   const solveNodes: Array<SolveNode> = frames.map((frame) => {
     const [rLeading, rTrailing] = vertical
-      ? [frame.offsetTop, frame.offsetBottom]
-      : [frame.offsetLeft, frame.offsetRight]
-    const placeAt = auto(frame.align, hierarchy.alignItems)
+      ? [frame.marginTop, frame.marginBottom]
+      : [frame.marginLeft, frame.marginRight]
+    // A frame's alignment is along the flow, within its rank's thickness.
+    const { align: placeAt, stretch } = Alignment.resolve(frame, {
+      align: hierarchy.alignItems,
+      stretch: hierarchy.stretchItems,
+    })
+    // An unset order-axis size follows a stretched rank-axis size through
+    // the ratio.
+    const sizing = frame[SizingOf]
+    const oDimension = vertical ? 'width' : 'height'
+    const oFor =
+      sizing.aspectRatio !== undefined && Number.isNaN(sizing[oDimension])
+        ? (rSize: number): number =>
+            Sizing.resolve(
+              sizing,
+              vertical
+                ? { width: 0, height: rSize, definiteHeight: true }
+                : { width: rSize, height: 0, definiteWidth: true },
+            )[oDimension]
+        : undefined
     return {
       oSize: vertical ? frame.width : frame.height,
       rSize: vertical ? frame.height : frame.width,
       rMin: vertical ? frame.minHeight : frame.minWidth,
       rMax: vertical ? frame.maxHeight : frame.maxWidth,
-      oStart: finite(vertical ? frame.offsetLeft : frame.offsetTop),
-      oEnd: finite(vertical ? frame.offsetRight : frame.offsetBottom),
+      oStart: finite(vertical ? frame.marginLeft : frame.marginTop),
+      oEnd: finite(vertical ? frame.marginRight : frame.marginBottom),
       rStart: reverse ? rTrailing : rLeading,
       rEnd: reverse ? rLeading : rTrailing,
       place: reverse ? 1 - placeAt : placeAt,
-      stretch: auto(frame.stretch, hierarchy.stretchItems),
+      stretch,
+      oFor,
     }
   })
 
@@ -109,7 +120,7 @@ export function solveHierarchy<const T extends ReadonlyArray<Frame<string>>>(
     const source = index.get(edge.source)
     const target = index.get(edge.target)
     if (source === undefined || target === undefined) {
-      throw new RangeError(`Edge ${i} references an id that no frame has`)
+      throw new RangeError(`Edge ${i} references an id that no node has`)
     }
     return {
       source,
@@ -149,7 +160,6 @@ export function solveHierarchy<const T extends ReadonlyArray<Frame<string>>>(
     alignAdornments: hierarchy.alignAdornments,
   })
   const sides = faceSides[hierarchy.direction]
-  const ids = frames.map((frame) => frame.id as string)
 
   // Place, route, and grow what the routes needed, until they need nothing
   // more or the rounds run out.
@@ -266,8 +276,8 @@ export function solveHierarchy<const T extends ReadonlyArray<Frame<string>>>(
   const rect = (r: Rect.Rect): Rect.Rect => Rect.make(r.x - minX, r.y - minY, r.width, r.height)
   const point = (p: Point.Point): Point.Point => Point.make(p.x - minX, p.y - minY)
 
-  for (const [i, frame] of frames.entries()) {
-    layoutNodes[frame.id as K] = rect(nodeRects[i] as Rect.Rect)
+  for (const [i, id] of ids.entries()) {
+    layoutNodes[id] = rect(nodeRects[i] as Rect.Rect)
   }
 
   return {

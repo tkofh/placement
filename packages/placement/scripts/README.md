@@ -49,8 +49,10 @@ The tool reads three shapes of JSON:
   `Connector.apply` with every class reduced to the fields its `make`
   takes. `spec` holds `ConnectorInput` fields, `rects` maps ids to
   `{ x, y, width, height }`, and each of `edges` holds `EdgeInput` fields,
-  with each adornment's `AdornmentInput` fields and its frame's
-  `FrameInput` fields side by side in one object. `options` holds `edges`
+  with each adornment's `AdornmentInput` fields. An adornment written
+  before adornments had margins of their own may give its frame's
+  `offsetTop`, `offsetRight`, `offsetBottom`, and `offsetLeft`, which read
+  as its margins. `options` holds `edges`
   (per-edge `via`, `avoid`, `turn`, and `jogAt`, in edge order) and
   `shapes` (`PolygonInput` fields by id). A `null` or missing number is
   unset, since JSON has no non-finite numbers. Encoded fields also take

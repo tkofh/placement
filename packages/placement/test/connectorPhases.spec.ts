@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest'
 import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
-import * as Frame from '../src/frame.ts'
 import { lengths, pointOnDrawn } from '../src/internal/adornments.ts'
 import {
   canonicalOrder,
@@ -1652,7 +1651,9 @@ describe('tight ends', () => {
   }
   const spec = Connector.make({ clearance: 10, gap: 4, bendCost: 20 })
   const arrow = Adornment.make({
-    frame: Frame.make({ width: 8, height: 6, offsetLeft: 2 }),
+    width: 8,
+    height: 6,
+    marginLeft: 2,
     at: 1,
     orient: Adornment.orient.forward,
   })
@@ -1701,7 +1702,7 @@ describe('grouped ends', () => {
     // each other, and routes from a and b group at one spot on the left of
     // u below it. No route runs straight through the end of another,
     // across the way it arrives, since the port there goes on that way.
-    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+    const head = Adornment.make({ width: 8, height: 6, at: 1, orient: 1 })
     const rects = {
       a: Rect.make(0, 0, 40, 20),
       b: Rect.make(0, 60, 40, 20),
@@ -1899,11 +1900,13 @@ describe('held runs the search sees', () => {
     // the leg under it, and between it and the route from auth, too close
     // for both.
     const head = Adornment.make({
-      frame: Frame.make({ width: 9, height: 8, offsetLeft: 4 }),
+      width: 9,
+      height: 8,
+      marginLeft: 4,
       at: 1,
       orient: Adornment.orient.forward,
     })
-    const label = Adornment.make({ frame: Frame.make({ width: 40, height: 16 }), at: 0.5 })
+    const label = Adornment.make({ width: 40, height: 16, at: 0.5 })
     const rects = {
       auth: Rect.make(370, 340, 112, 40),
       billing: Rect.make(512, 288, 120, 40),
@@ -2160,7 +2163,7 @@ describe('share budgets', () => {
   })
 
   test('partners are the ends at one rect with one merge key, either way', () => {
-    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1 })
+    const head = Adornment.make({ width: 8, height: 6, at: 1 })
     const problem = normalize(
       rects,
       [
