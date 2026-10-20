@@ -58,7 +58,7 @@ describe('resolve', () => {
 
   test.each([
     ['nothing set', {}, zero, [0, 0]],
-    ['nothing set, sizes supplied', {}, { width: 30, height: 40 }, [30, 40]],
+    ['nothing set, sizes in the context', {}, { width: 30, height: 40 }, [30, 40]],
     ['both set', { width: 10, height: 20 }, zero, [10, 20]],
     ['the width set, with a ratio', { width: 100, aspectRatio: 2 }, zero, [100, 50]],
     ['the height set, with a ratio', { height: 50, aspectRatio: 2 }, zero, [100, 50]],
@@ -66,7 +66,7 @@ describe('resolve', () => {
     ['a ratio alone', { aspectRatio: 2 }, zero, [0, 0]],
     ['a ratio and a minimum width', { aspectRatio: 2, minWidth: 40 }, zero, [40, 20]],
     ['a ratio and a minimum height', { aspectRatio: 2, minHeight: 40 }, zero, [80, 40]],
-    ['a ratio and supplied sizes', { aspectRatio: 2 }, { width: 30, height: 40 }, [30, 15]],
+    ['a ratio and sizes in the context', { aspectRatio: 2 }, { width: 30, height: 40 }, [30, 15]],
     [
       'a size clamped before the ratio',
       { width: 100, maxWidth: 60, aspectRatio: 2 },
@@ -75,8 +75,8 @@ describe('resolve', () => {
     ],
     ['a derived size clamped', { width: 100, aspectRatio: 2, maxHeight: 10 }, zero, [100, 10]],
     ['crossed bounds', { width: 5, minWidth: 20, maxWidth: 10 }, zero, [20, 0]],
-  ] as const)('%s', (_, input, supplied, [width, height]) => {
-    expect(Sizing.resolve(Sizing.normalize(input), supplied)).toEqual({ width, height })
+  ] as const)('%s', (_, input, context, [width, height]) => {
+    expect(Sizing.resolve(Sizing.normalize(input), context)).toEqual({ width, height })
   })
 
   test('a fixed axis overrides the preferred size and drives the ratio', () => {

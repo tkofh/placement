@@ -1,7 +1,7 @@
 import { Pipeable, dual } from 'curvy/utils'
 import * as Alignment from './alignment.ts'
 import type * as AspectRatio from './aspectRatio.ts'
-import { SizingOf } from './internal/sizing.ts'
+import { type RawSizing, SizeOf, SizingOf } from './internal/sizing.ts'
 import type { LengthInput } from './length.ts'
 import * as Margin from './margin.ts'
 import * as Sizing from './sizing.ts'
@@ -10,12 +10,10 @@ import { normalizeTRBL } from './utils/arguments.ts'
 const TypeBrand: unique symbol = Symbol('placement/frame')
 type TypeBrand = typeof TypeBrand
 
-// Sizing state uses symbols, not `#private` fields, so reads still work
-// through a `Proxy` (Vue's `ref`/`reactive`).
+// The raw sizing inputs use a symbol, not a `#private` field, so reads
+// still work through a `Proxy` (Vue's `ref`/`reactive`). The normalized
+// sizing and the resolved size use the shared keys in `internal/sizing.ts`.
 const Raw: unique symbol = Symbol('placement/frame/raw')
-const Size: unique symbol = Symbol('placement/frame/size')
-
-type RawSizing = { readonly [K in keyof Sizing.SizingInput]-?: Sizing.SizingInput[K] }
 
 /**
  * The construction input for `make`. Every field is optional. Passing
@@ -147,7 +145,7 @@ class Frame extends Pipeable {
   // resolves its own size, once at construction.
   readonly [Raw]: RawSizing
   readonly [SizingOf]: Sizing.Sizing
-  readonly [Size]: Sizing.Size
+  readonly [SizeOf]: Sizing.Size
 
   constructor(input: FrameInput) {
     super()
@@ -173,7 +171,7 @@ class Frame extends Pipeable {
     }
     this[Raw] = raw
     this[SizingOf] = Sizing.normalize(raw)
-    this[Size] = Sizing.resolve(this[SizingOf], { width: 0, height: 0 })
+    this[SizeOf] = Sizing.resolve(this[SizingOf], { width: 0, height: 0 })
   }
 
   /**
@@ -187,7 +185,7 @@ class Frame extends Pipeable {
    * Otherwise it falls back to `0`, which `minWidth` can raise.
    */
   get width(): number {
-    return this[Size].width
+    return this[SizeOf].width
   }
 
   /**
@@ -201,7 +199,7 @@ class Frame extends Pipeable {
    * Otherwise it falls back to `0`, which `minHeight` can raise.
    */
   get height(): number {
-    return this[Size].height
+    return this[SizeOf].height
   }
 
   /**
@@ -212,7 +210,7 @@ class Frame extends Pipeable {
    * for `0` over `0` (the empty `Frame.make({})`).
    */
   get aspectRatio(): number {
-    return this[Size].width / this[Size].height
+    return this[SizeOf].width / this[SizeOf].height
   }
 
   /**

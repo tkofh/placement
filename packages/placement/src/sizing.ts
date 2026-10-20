@@ -145,16 +145,16 @@ export function normalize(input: SizingInput): Sizing {
 }
 
 /**
- * What a layout gives `resolve` for each axis: the size the axis takes
- * when the item leaves it unset, and whether the layout has fixed the
- * axis.
+ * What a layout knows about an item's axes when it resolves the item's
+ * sizing: the size each axis takes when the item leaves it unset, and
+ * whether the layout has fixed the axis.
  *
  * A layout fixes an axis when it decides the size itself, before the item
  * is sized: a stretch into space that is already known, or a pair of
  * insets. A fixed (definite) size overrides the item's own size on that
  * axis, and the ratio derives the other axis from it.
  */
-export interface Supplied {
+export interface SizingContext {
   /** The width for an item that leaves it unset, or the fixed width when `definiteWidth` is `true`. */
   readonly width: number
   /** The height for an item that leaves it unset, or the fixed height when `definiteHeight` is `true`. */
@@ -174,17 +174,17 @@ export interface Size {
 }
 
 /**
- * The width and height of an item, from its sizing and what its layout
- * supplies. Each axis takes the first of these that applies:
+ * The width and height of an item, from its sizing and its layout's
+ * context. Each axis takes the first of these that applies:
  *
- * - the supplied size, when the layout has fixed the axis,
+ * - the context's size, when the layout has fixed the axis,
  * - the item's preferred size,
  * - the other axis's size through `aspectRatio`, when the other axis has
  *   one of the two sizes above,
- * - the supplied size.
+ * - the context's size.
  *
  * When neither axis has a fixed or preferred size and the ratio is set,
- * the ratio derives one axis from the other's supplied size, clamped. It
+ * the ratio derives one axis from the other's context size, clamped. It
  * derives the height from the width, unless the clamped width is `0`, in
  * which case it derives the width from the height. A positive minimum on
  * one axis therefore drives the other.
@@ -193,7 +193,7 @@ export interface Size {
  * arithmetic is exact IEEE 754 (see PRECISION.md).
  *
  * @param sizing - The item's sizing, as `normalize` builds it.
- * @param supplied - The size the layout supplies for each axis, and which axes it has fixed.
+ * @param context - The size the layout gives each axis, and which axes it has fixed.
  * @returns The resolved width and height.
  * @example
  * ```ts
@@ -203,18 +203,18 @@ export interface Size {
  * Sizing.resolve(sizing, { width: 0, height: 80, definiteHeight: true }) // { width: 160, height: 80 }
  * ```
  */
-export function resolve(sizing: Sizing, supplied: Supplied): Size {
+export function resolve(sizing: Sizing, context: SizingContext): Size {
   const { aspectRatio, minWidth, minHeight, maxWidth, maxHeight } = sizing
 
   let width =
-    supplied.definiteWidth === true
-      ? clamp(supplied.width, minWidth, maxWidth)
+    context.definiteWidth === true
+      ? clamp(context.width, minWidth, maxWidth)
       : Number.isNaN(sizing.width)
         ? Number.NaN
         : clamp(sizing.width, minWidth, maxWidth)
   let height =
-    supplied.definiteHeight === true
-      ? clamp(supplied.height, minHeight, maxHeight)
+    context.definiteHeight === true
+      ? clamp(context.height, minHeight, maxHeight)
       : Number.isNaN(sizing.height)
         ? Number.NaN
         : clamp(sizing.height, minHeight, maxHeight)
@@ -225,8 +225,8 @@ export function resolve(sizing: Sizing, supplied: Supplied): Size {
     } else if (Number.isNaN(height) && !Number.isNaN(width)) {
       height = clamp(AspectRatio.heightFor(aspectRatio, width), minHeight, maxHeight)
     } else if (Number.isNaN(width) && Number.isNaN(height)) {
-      const fallbackWidth = clamp(supplied.width, minWidth, maxWidth)
-      const fallbackHeight = clamp(supplied.height, minHeight, maxHeight)
+      const fallbackWidth = clamp(context.width, minWidth, maxWidth)
+      const fallbackHeight = clamp(context.height, minHeight, maxHeight)
       // `clamp` returns `0` itself when nothing raises the width, so the
       // raw comparison is an identity check (see PRECISION.md).
       if (fallbackWidth === 0) {
@@ -240,8 +240,8 @@ export function resolve(sizing: Sizing, supplied: Supplied): Size {
   }
 
   return {
-    width: Number.isNaN(width) ? clamp(supplied.width, minWidth, maxWidth) : width,
-    height: Number.isNaN(height) ? clamp(supplied.height, minHeight, maxHeight) : height,
+    width: Number.isNaN(width) ? clamp(context.width, minWidth, maxWidth) : width,
+    height: Number.isNaN(height) ? clamp(context.height, minHeight, maxHeight) : height,
   }
 }
 

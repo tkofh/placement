@@ -1,7 +1,7 @@
 import { Pipeable, dual } from 'curvy/utils'
 import * as Alignment from './alignment.ts'
 import type * as AspectRatio from './aspectRatio.ts'
-import { SizingOf } from './internal/sizing.ts'
+import { type RawSizing, SizeOf, SizingOf } from './internal/sizing.ts'
 import type * as Interval from './interval.ts'
 import type { LengthInput } from './length.ts'
 import * as Margin from './margin.ts'
@@ -12,12 +12,10 @@ import { normalizeTRBL } from './utils/arguments.ts'
 const TypeBrand: unique symbol = Symbol('placement/adornment')
 type TypeBrand = typeof TypeBrand
 
-// Sizing state uses symbols, not `#private` fields, so reads still work
-// through a `Proxy` (Vue's `ref`/`reactive`).
+// The raw sizing inputs use a symbol, not a `#private` field, so reads
+// still work through a `Proxy` (Vue's `ref`/`reactive`). The normalized
+// sizing and the resolved size use the shared keys in `internal/sizing.ts`.
 const Raw: unique symbol = Symbol('placement/adornment/raw')
-const Size: unique symbol = Symbol('placement/adornment/size')
-
-type RawSizing = { readonly [K in keyof Sizing.SizingInput]-?: Sizing.SizingInput[K] }
 
 /**
  * The ways an adornment sits on its edge, encoded as numbers: `flow` is `0`,
@@ -160,7 +158,7 @@ class Adornment extends Pipeable {
   // normalizes them, and resolves its size, once at construction.
   readonly [Raw]: RawSizing
   readonly [SizingOf]: Sizing.Sizing
-  readonly [Size]: Sizing.Size
+  readonly [SizeOf]: Sizing.Size
 
   constructor(input: AdornmentInput) {
     super()
@@ -186,7 +184,7 @@ class Adornment extends Pipeable {
       maxHeight: input.maxHeight,
     }
     this[SizingOf] = Sizing.normalize(this[Raw])
-    this[Size] = Sizing.resolve(this[SizingOf], { width: 0, height: 0 })
+    this[SizeOf] = Sizing.resolve(this[SizingOf], { width: 0, height: 0 })
   }
 
   /**
@@ -194,7 +192,7 @@ class Adornment extends Pipeable {
    * the height through `aspectRatio` when unset, or `0`.
    */
   get width(): number {
-    return this[Size].width
+    return this[SizeOf].width
   }
 
   /**
@@ -202,7 +200,7 @@ class Adornment extends Pipeable {
    * the width through `aspectRatio` when unset, or `0`.
    */
   get height(): number {
-    return this[Size].height
+    return this[SizeOf].height
   }
 
   /** The effective lower bound on `width`, `0` when unset. */
