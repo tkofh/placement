@@ -1,7 +1,4 @@
-import type { Field, FieldTable } from './internal/fields.ts'
 import type { LengthInput } from './length.ts'
-
-export type { Field, FieldTable }
 
 /**
  * The margin inputs of an item: the space it reserves outside itself on
@@ -40,24 +37,6 @@ export interface MarginInput<L extends LengthInput = number> {
    */
   readonly marginLeft?: L | undefined
 }
-
-/**
- * The field table of `MarginInput`: what each margin field holds. The top
- * and bottom margins are lengths whose percentages resolve against the
- * basis height (`y`), and the left and right margins against its width
- * (`x`).
- *
- * @example
- * ```ts
- * Margin.fields.marginLeft // 'x'
- * ```
- */
-export const fields = {
-  marginTop: 'y',
-  marginRight: 'x',
-  marginBottom: 'y',
-  marginLeft: 'x',
-} as const satisfies FieldTable<MarginInput>
 
 /** The four margins of an item, with omitted ones `0`. A non-finite margin is auto. */
 export interface Margin {

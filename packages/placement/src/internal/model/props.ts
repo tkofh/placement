@@ -12,20 +12,21 @@
 //
 // Each plain input has one table that says what each of its fields is, and
 // its check and its resolution both read it. The tables compose the field
-// tables that core's input concepts export, so a field a concept adds
-// reaches the model without an edit here.
-import * as Alignment from '../../alignment.ts'
+// tables of core's input concepts, so a field a concept adds reaches the
+// model without an edit here.
 import * as AspectRatio from '../../aspectRatio.ts'
 import * as Box from '../../box.ts'
 import * as Frame from '../../frame.ts'
 import * as Length from '../../length.ts'
-import * as Margin from '../../margin.ts'
 import * as Offset from '../../offset.ts'
 import * as Point from '../../point.ts'
 import * as Rect from '../../rect.ts'
-import * as Sizing from '../../sizing.ts'
 import { isPlainRecord } from '../../utils/object.ts'
+import * as Alignment from '../alignment.ts'
+import type { Field, FieldTable } from '../fields.ts'
 import * as Flexbox from '../flexbox.ts'
+import * as Margin from '../margin.ts'
+import * as Sizing from '../sizing.ts'
 import type {
   FlexProps,
   GroupProps,
@@ -39,8 +40,6 @@ import type {
 /** The props of any node. */
 export type NodeProps = GroupProps | FlexProps | ItemProps
 
-type Field = Sizing.Field
-
 type Table = { readonly [field: string]: Field }
 
 const BOX = {
@@ -50,7 +49,7 @@ const BOX = {
   left: 'x',
   ...Sizing.fields,
   ...Alignment.fields2d,
-} as const satisfies Sizing.FieldTable<Box.BoxInput<Length.LengthInput>>
+} as const satisfies FieldTable<Box.BoxInput<Length.LengthInput>>
 
 const FRAME = {
   ...Sizing.fields,
@@ -58,16 +57,16 @@ const FRAME = {
   ...Alignment.fields,
   grow: 'number',
   shrink: 'number',
-} as const satisfies Sizing.FieldTable<Frame.FrameInput<Length.LengthInput>>
+} as const satisfies FieldTable<Frame.FrameInput<Length.LengthInput>>
 
 const GUTTER = {
   top: 'y',
   right: 'x',
   bottom: 'y',
   left: 'x',
-} as const satisfies Sizing.FieldTable<GutterInput>
+} as const satisfies FieldTable<GutterInput>
 
-const TRANSLATE = { x: 'x', y: 'y' } as const satisfies Sizing.FieldTable<TranslateInput>
+const TRANSLATE = { x: 'x', y: 'y' } as const satisfies FieldTable<TranslateInput>
 
 const CHECKS: { readonly [F in Field]: (value: unknown) => boolean } = {
   x: Length.isLengthInput,

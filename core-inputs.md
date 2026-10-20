@@ -37,7 +37,7 @@ A frame's margins push outward from the item, and a box's insets measure inward 
 `placement/sizing` owns the sizing slice:
 
 - `SizingInput<L>`: the seven fields, with the length type `L` as a parameter (`number` by default).
-- `fields`: the field table, naming each field's percentage axis (`x`, `y`) or `ratio`.
+- `fields` (in `internal/sizing.ts`): the field table, naming each field's percentage axis (`x`, `y`) or `ratio`. It is internal, because only a prop layer such as the model reads it.
 - `normalize`: reads every non-finite size or bound as unset, as `Box` already did. An unset size is `NaN`, an unset minimum `0`, an unset maximum `Infinity`. Negative bounds clamp to `0`, and a crossed maximum rises to its minimum. A non-positive or non-finite ratio is unset.
 - `resolve(sizing, context)`: the one resolve for the clamp, the ratio transfer, and min-wins bounds.
 
@@ -94,7 +94,7 @@ Each axis that a layout leaves to its item takes one **alignment**: a position f
 - **One-axis alignment** (`AlignInput`: `align`, `stretch`) is for a layout that names the axis. In flex, both mean the cross axis, so a flex that changes direction keeps them.
 - **Two-axis alignment** (`Align2dInput`: `alignX`, `alignY`, `stretchX`, `stretchY`) is for a layout that names no axis. Physical names match the physical margins and insets.
 
-Both flavors share one resolve per axis. `resolve(item, defaults)` takes one axis's `{ align, stretch }` and the layout's default, and an omitted or non-finite field inherits (`inherit` is the `Infinity` sentinel). A default that is itself non-finite resolves to `0`, so the result is always finite. `x` and `y` read each axis of the two-axis flavor as one-axis fields. `fields` and `fields2d` are the field tables. Flex resolves against `alignItems`/`stretchItems`, hierarchy against its own, and adornments against `alignAdornments`.
+Both flavors share one resolve per axis. `resolve(item, defaults)` takes one axis's `{ align, stretch }` and the layout's default, and an omitted or non-finite field inherits (`inherit` is the `Infinity` sentinel). A default that is itself non-finite resolves to `0`, so the result is always finite. `x` and `y` read each axis of the two-axis flavor as one-axis fields. `fields` and `fields2d` in `internal/alignment.ts` are the field tables. Flex resolves against `alignItems`/`stretchItems`, hierarchy against its own, and adornments against `alignAdornments`.
 
 A layout reads one flavor. The model's type index can reject the other flavor on its children, so `align` on a grid child is a type error and never quietly means y. A child that moves from a column flex into a grid renames `align` to `alignX`, and the rename is accurate, because the axis has changed from one the parent chose to a fixed one.
 
@@ -121,9 +121,10 @@ A god class fails through behavior: methods and invariants that span unrelated f
 
 ```ts
 // Each slice module owns its fields, its field table, and its functions.
-// placement/sizing:    SizingInput<L>, fields, normalize, resolve
-// placement/margin:    MarginInput<L>, fields, normalize
-// placement/alignment: AlignInput, Align2dInput, fields, fields2d, inherit, x, y, resolve
+// placement/sizing:    SizingInput<L>, normalize, resolve
+// placement/margin:    MarginInput<L>, normalize
+// placement/alignment: AlignInput, Align2dInput, inherit, x, y, resolve
+// Each one's field table (fields, fields2d) sits in its internal module.
 
 // A layout's item input extends its slices, and it stays flat.
 interface FrameInput<L extends LengthInput = number>
@@ -148,7 +149,7 @@ interface AdornmentInput<L extends LengthInput = number>
 Frame.make({ width: 100, marginLeft: 8, grow: 1 }) // still one flat object
 ```
 
-The inputs use `interface ... extends` rather than intersections, so each field keeps its slice's doc comment on hover. `grow`/`shrink` and the insets stay on their one spec until a second layout reads them. The field kinds (`x`, `y`, `ratio`, `number`) live in `internal/fields.ts`, and each slice module re-exports the `Field` and `FieldTable` types.
+The inputs use `interface ... extends` rather than intersections, so each field keeps its slice's doc comment on hover. `grow`/`shrink` and the insets stay on their one spec until a second layout reads them. The field kinds (`x`, `y`, `ratio`, `number`) and the `Field` and `FieldTable` types live in `internal/fields.ts`, and each slice's table lives in its internal module (`internal/sizing.ts`, `internal/margin.ts`, `internal/alignment.ts`). None of them is public.
 
 The model's field tables in `internal/model/props.ts` are a small property registry. Each names a field's value kind and the axis its percentage resolves against, as a CSS property definition names its value type and percentage basis. Each slice exports its table, and a layout's table is the union of its slices' tables, so checking and resolving stay generic.
 
@@ -192,7 +193,7 @@ Each step shipped alone, with tests, docs, and a changeset, and left vue working
 
 The model branch rebases onto this pass and changes in these places:
 
-- `internal/model/props.ts` builds its tables from `Sizing.fields`, `Margin.fields`, `Alignment.fields`, and `Alignment.fields2d`, plus `number` rows for `grow`, `shrink`, and the box insets' `x`/`y` rows. The field kinds come from `Sizing.Field` (`x`, `y`, `ratio`, `number`).
+- `internal/model/props.ts` builds its tables from the internal `fields` of sizing, margin, and alignment and alignment's `fields2d`, plus `number` rows for `grow` and `shrink` and `x`/`y` rows for the box insets. The field kinds come from `internal/fields.ts` (`x`, `y`, `ratio`, `number`).
 - It drops the `none` field kind and the `id` rejection: `FrameInput` has no `id`, and an item's path is its key.
 - It drops the `NaN` size rule and its `width`/`height` field kinds. A size that resolves to `NaN` can pass straight to `make`, which reads it as unset in `Box`, `Frame`, and `Adornment` alike.
 - Item props take `FrameInput<LengthInput>` with `margin*` fields, and box props take `BoxInput<LengthInput>`, so the model no longer threads `L` itself. PR tkofh/placement#7's `FrameInput<K, L>` becomes `FrameInput<L>`.

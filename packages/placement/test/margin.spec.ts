@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import * as Frame from '../src/frame.ts'
+import { fields } from '../src/internal/margin.ts'
 import * as Margin from '../src/margin.ts'
 
 describe('normalize', () => {
@@ -25,7 +26,7 @@ describe('normalize', () => {
 
 describe('fields', () => {
   test('names each margin with its percentage axis', () => {
-    expect(Margin.fields).toEqual({
+    expect(fields).toEqual({
       marginTop: 'y',
       marginRight: 'x',
       marginBottom: 'y',
