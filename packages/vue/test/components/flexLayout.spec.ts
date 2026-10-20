@@ -141,6 +141,15 @@ describe('gutters', () => {
     expect(findOne(root, 'probe').props).toEqual({ x: 10, y: 5, width: 170, height: 80 })
   })
 
+  test('percentage gutters resolve against the layout rect, not the host', async () => {
+    const { root } = await mountLayout(
+      { width: 100, height: 50, gutterLeft: '10%', gutterTop: '20%' },
+      () => [h(FlexItem, { grow: 1, height: '100%' }, itemSlot)],
+    )
+
+    expect(probes(root)).toEqual([{ x: 10, y: 10, width: 90, height: 40 }])
+  })
+
   test('a grow item fills only the inner rect', async () => {
     const { root } = await mountLayout({ gutterLeft: 10, gutterRight: 20 }, () => [
       h(FlexItem, { grow: 1, height: 100 }, itemSlot),
