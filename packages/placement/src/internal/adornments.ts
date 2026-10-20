@@ -1,6 +1,6 @@
 import { coincident } from 'curvy/number'
 import type { Adornment } from '../adornment.ts'
-import { auto } from '../utils/arguments.ts'
+import * as Alignment from '../alignment.ts'
 import { atMost, before, overlaps } from '../utils/tolerance.ts'
 
 // The geometry of edge adornments in logical space: how much of a straight
@@ -91,7 +91,7 @@ export function resolveAdornment(
   const right = finite(frame.marginRight)
   const bottom = finite(frame.marginBottom)
   const left = finite(frame.marginLeft)
-  const side = auto(frame.align, align)
+  const side = Alignment.resolve(frame, { align }).align
   const [leading, trailing] = vertical ? [top, bottom] : [left, right]
   const o: AxisFrame = vertical
     ? { size: width, start: left, end: right, align: side }

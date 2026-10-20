@@ -22,6 +22,10 @@
       "types": "./dist/adornment.d.mts",
       "import": "./dist/adornment.mjs"
     },
+    "./alignment": {
+      "types": "./dist/alignment.d.mts",
+      "import": "./dist/alignment.mjs"
+    },
     "./aspectRatio": {
       "types": "./dist/aspectRatio.d.mts",
       "import": "./dist/aspectRatio.mjs"

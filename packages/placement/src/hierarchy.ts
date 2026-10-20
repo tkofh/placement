@@ -1,6 +1,7 @@
 import { coincident } from 'curvy/number'
 import { Pipeable } from 'curvy/utils'
 import type { Adornment, AdornmentPlacement } from './adornment.ts'
+import * as Alignment from './alignment.ts'
 import * as Connector from './connector.ts'
 import * as Edge from './edge.ts'
 import type { Frame } from './frame.ts'
@@ -27,7 +28,6 @@ import * as Point from './point.ts'
 import type { Polygon } from './polygon.ts'
 import * as Rect from './rect.ts'
 import * as Sizing from './sizing.ts'
-import { auto } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/hierarchy')
 type TypeBrand = typeof TypeBrand
@@ -423,7 +423,11 @@ export function apply<const K extends string>(
     const [rLeading, rTrailing] = vertical
       ? [frame.marginTop, frame.marginBottom]
       : [frame.marginLeft, frame.marginRight]
-    const placeAt = auto(frame.align, hierarchy.alignItems)
+    // A frame's alignment is along the flow, within its rank's thickness.
+    const { align: placeAt, stretch } = Alignment.resolve(frame, {
+      align: hierarchy.alignItems,
+      stretch: hierarchy.stretchItems,
+    })
     // An unset order-axis size follows a stretched rank-axis size through
     // the ratio.
     const sizing = frame[SizingOf]
@@ -448,7 +452,7 @@ export function apply<const K extends string>(
       rStart: reverse ? rTrailing : rLeading,
       rEnd: reverse ? rLeading : rTrailing,
       place: reverse ? 1 - placeAt : placeAt,
-      stretch: auto(frame.stretch, hierarchy.stretchItems),
+      stretch,
       oFor,
     }
   })

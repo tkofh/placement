@@ -1,4 +1,5 @@
 import { Pipeable, dual } from 'curvy/utils'
+import * as Alignment from './alignment.ts'
 import type * as AspectRatio from './aspectRatio.ts'
 import { SizingOf } from './internal/sizing.ts'
 import type { LengthInput } from './length.ts'
@@ -23,8 +24,9 @@ type RawSizing = { readonly [K in keyof Sizing.SizingInput]-?: Sizing.SizingInpu
  * Each group of fields treats omission differently:
  *
  * - Margins (see `placement/margin`), `grow`, and `shrink` default to `0`.
- * - `align` and `stretch` default to the inherit sentinel
- *   (`Number.POSITIVE_INFINITY`).
+ * - `align` and `stretch` (see `placement/alignment`) default to the
+ *   inherit sentinel, `Alignment.inherit`, which takes the layout's
+ *   `alignItems` and `stretchItems`.
  * - The sizing fields (see `placement/sizing`) stay unset, and so does any
  *   non-finite size or bound. An unset width or height derives through
  *   `aspectRatio` or takes the size its layout supplies, which is `0` for
@@ -36,7 +38,7 @@ type RawSizing = { readonly [K in keyof Sizing.SizingInput]-?: Sizing.SizingInpu
  * (see `placement/length`) and resolve its lengths before it calls `make`.
  */
 export interface FrameInput<L extends LengthInput = number>
-  extends Sizing.SizingInput<L>, Margin.MarginInput<L> {
+  extends Sizing.SizingInput<L>, Margin.MarginInput<L>, Alignment.AlignInput {
   /**
    * The flex grow factor: the frame's share of positive free space along
    * the container's main axis, in proportion to the other items' factors.
@@ -50,21 +52,6 @@ export interface FrameInput<L extends LengthInput = number>
    * to `1`.
    */
   readonly shrink?: number | undefined
-  /**
-   * The position of the frame in the free cross-axis space of its line, as
-   * a fraction: `0` at the cross start, `0.5` centered, `1` at the cross
-   * end. Defaults to `Number.POSITIVE_INFINITY`, the inherit sentinel,
-   * which applies the container's `alignItems`.
-   */
-  readonly align?: number | undefined
-  /**
-   * How much of the free cross-axis space the frame absorbs into its size,
-   * as a fraction: `0` keeps the resolved size, `1` fills the line. The
-   * min/max constraints still apply. Defaults to
-   * `Number.POSITIVE_INFINITY`, the inherit sentinel, which applies the
-   * container's `stretchItems`.
-   */
-  readonly stretch?: number | undefined
 }
 
 /**
@@ -140,17 +127,18 @@ class Frame extends Pipeable {
    */
   readonly shrink: number
   /**
-   * The position of the frame in the free cross-axis space of its line, as
-   * a fraction: `0` at the cross start, `0.5` centered, `1` at the cross
-   * end. `Number.POSITIVE_INFINITY` (the default) inherits the container's
-   * `alignItems`.
+   * Where the frame sits in the free space on the axis its layout names,
+   * as a fraction: `0` at the start, `0.5` centered, `1` at the end. In
+   * flex, that is the cross axis of its line. In a hierarchy, it is the
+   * thickness of its rank. `Alignment.inherit` (the default) takes the
+   * layout's `alignItems`.
    */
   readonly align: number
   /**
-   * How much of the free cross-axis space the frame absorbs into its size,
-   * as a fraction: `0` keeps the resolved size, `1` fills the line, within
-   * the min/max constraints. `Number.POSITIVE_INFINITY` (the default)
-   * inherits the container's `stretchItems`.
+   * How much of the free space on the axis its layout names the frame
+   * absorbs into its size, as a fraction: `0` keeps the resolved size, `1`
+   * fills the space, within the min/max constraints. `Alignment.inherit`
+   * (the default) takes the layout's `stretchItems`.
    */
   readonly stretch: number
 
@@ -171,8 +159,8 @@ class Frame extends Pipeable {
     this.marginLeft = margin.marginLeft
     this.grow = input.grow ?? 0
     this.shrink = input.shrink ?? 0
-    this.align = input.align ?? Number.POSITIVE_INFINITY
-    this.stretch = input.stretch ?? Number.POSITIVE_INFINITY
+    this.align = input.align ?? Alignment.inherit
+    this.stretch = input.stretch ?? Alignment.inherit
 
     const raw: RawSizing = {
       width: input.width,
@@ -691,14 +679,14 @@ export const setShrink: {
 } = dual(2, (self: Frame, shrink: number) => new Frame({ ...self.toJSON(), shrink }))
 
 /**
- * Sets the cross-axis placement of the frame, which overrides the
- * container's `alignItems`. The value is a fraction: `0` at the cross
- * start, `0.5` centered, `1` at the cross end. `Number.POSITIVE_INFINITY`
- * restores inheritance. The data-last form omits `self` and returns a
- * function of it.
+ * Sets where the frame sits on the axis its layout names (the cross axis
+ * in flex), which overrides the layout's `alignItems`. The value is a
+ * fraction: `0` at the start, `0.5` centered, `1` at the end.
+ * `Alignment.inherit` restores inheritance. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param align - The placement fraction, or `Number.POSITIVE_INFINITY` to inherit.
+ * @param align - The placement fraction, or `Alignment.inherit` to inherit.
  * @returns A new frame with the alignment replaced.
  */
 export const setAlign: {
@@ -707,14 +695,15 @@ export const setAlign: {
 } = dual(2, (self: Frame, align: number) => new Frame({ ...self.toJSON(), align }))
 
 /**
- * Sets how much of the free cross-axis space the frame absorbs into its
- * size, which overrides the container's `stretchItems`. The value is a
- * fraction: `0` keeps the resolved size, `1` fills the line, within the
- * min/max constraints. `Number.POSITIVE_INFINITY` restores inheritance. The data-last form
- * omits `self` and returns a function of it.
+ * Sets how much of the free space on the axis its layout names the frame
+ * absorbs into its size, which overrides the layout's `stretchItems`. The
+ * value is a fraction: `0` keeps the resolved size, `1` fills the space,
+ * within the min/max constraints. `Alignment.inherit` restores
+ * inheritance. The data-last form omits `self` and returns a function of
+ * it.
  *
  * @param self - The frame to update.
- * @param stretch - The stretch fraction, or `Number.POSITIVE_INFINITY` to inherit.
+ * @param stretch - The stretch fraction, or `Alignment.inherit` to inherit.
  * @returns A new frame with the stretch replaced.
  */
 export const setStretch: {

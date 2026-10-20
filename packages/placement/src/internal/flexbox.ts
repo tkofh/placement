@@ -1,5 +1,6 @@
 import { EPSILON, RELATIVE_TOLERANCE, clamp } from 'curvy/number'
 import { Pipeable } from 'curvy/utils'
+import * as Alignment from '../alignment.ts'
 import type { Frame } from '../frame.ts'
 import type { Interval } from '../interval.ts'
 import * as Rect from '../rect.ts'
@@ -413,16 +414,19 @@ function computeItem(frame: Frame, flexbox: Flexbox, axes: AxisView): Item {
     shrink: frame.shrink,
   } satisfies Track.SequenceItem
 
+  // A frame's alignment is on the cross axis, and inherits the container's.
+  const { align, stretch } = Alignment.resolve(frame, {
+    align: flexbox.alignItems,
+    stretch: flexbox.stretchItems,
+  })
   const cross = {
     basis: frame[axes.crossDimension],
     start: frame[axes.crossMarginStart],
     end: frame[axes.crossMarginEnd],
     min: frame[axes.crossDimensionMin],
     max: frame[axes.crossDimensionMax],
-    place: frame.align,
-    // Any non-finite per-item stretch inherits the container's stretchItems,
-    // exactly as a non-finite align inherits alignItems inside stack().
-    stretch: auto(frame.stretch, flexbox.stretchItems, 0),
+    place: align,
+    stretch,
   } satisfies Track.StackItem
 
   // The stack stretches an item without auto cross margins (see
