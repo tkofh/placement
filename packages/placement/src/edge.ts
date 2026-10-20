@@ -7,7 +7,7 @@ type TypeBrand = typeof TypeBrand
 /**
  * The node sides that a port can sit on, encoded as numbers: `top` is `0`,
  * `right` is `1`, `bottom` is `2`, `left` is `3`. Sides are physical, as
- * `Frame` offsets are: `top` is the top side whatever the layout direction.
+ * `Frame` margins are: `top` is the top side whatever the layout direction.
  *
  * An omitted or non-finite side is auto. The layout then picks the side
  * that faces along the flow toward the other end of the edge. For a back
@@ -405,7 +405,7 @@ export const setAdornments: {
  * @example
  * ```ts
  * const edge = Edge.make({ source: 'a', target: 'b' })
- * const label = Adornment.make({ frame: Frame.make({ width: 40, height: 16 }) })
+ * const label = Adornment.make({ width: 40, height: 16 })
  * Edge.addAdornment(edge, label).adornments.length // 1
  * ```
  */

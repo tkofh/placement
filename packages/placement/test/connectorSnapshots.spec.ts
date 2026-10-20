@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest'
 import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
-import * as Frame from '../src/frame.ts'
 import * as Rect from '../src/rect.ts'
 
 // Snapshots of whole layouts, over every kind of input, which hold the
@@ -34,9 +33,9 @@ const same = (
 }
 
 const arrow = (at: number, orient: number) =>
-  Adornment.make({ frame: Frame.make({ width: 8, height: 6, marginLeft: 2 }), at, orient })
+  Adornment.make({ width: 8, height: 6, marginLeft: 2, at, orient })
 const label = (at: number, position: number = Adornment.position.flow) =>
-  Adornment.make({ frame: Frame.make({ width: 20, height: 10 }), at, position })
+  Adornment.make({ width: 20, height: 10, at, position })
 
 describe('snapshots', () => {
   const grid = {
@@ -114,7 +113,7 @@ describe('snapshots', () => {
   })
 
   test.each([Connector.merge.side, Connector.merge.near])('merging %i', (merge) => {
-    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+    const head = Adornment.make({ width: 8, height: 6, at: 1, orient: 1 })
     const rects = {
       a: Rect.make(0, 0, 40, 20),
       b: Rect.make(0, 60, 40, 20),

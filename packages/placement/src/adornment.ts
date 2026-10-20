@@ -1,10 +1,23 @@
 import { Pipeable, dual } from 'curvy/utils'
-import type { Frame } from './frame.ts'
+import * as Alignment from './alignment.ts'
+import type * as AspectRatio from './aspectRatio.ts'
+import { SizingOf } from './internal/sizing.ts'
 import type * as Interval from './interval.ts'
+import type { LengthInput } from './length.ts'
+import * as Margin from './margin.ts'
 import type * as Rect from './rect.ts'
+import * as Sizing from './sizing.ts'
+import { normalizeTRBL } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/adornment')
 type TypeBrand = typeof TypeBrand
+
+// Sizing state uses symbols, not `#private` fields, so reads still work
+// through a `Proxy` (Vue's `ref`/`reactive`).
+const Raw: unique symbol = Symbol('placement/adornment/raw')
+const Size: unique symbol = Symbol('placement/adornment/size')
+
+type RawSizing = { readonly [K in keyof Sizing.SizingInput]-?: Sizing.SizingInput[K] }
 
 /**
  * The ways an adornment sits on its edge, encoded as numbers: `flow` is `0`,
@@ -13,7 +26,7 @@ type TypeBrand = typeof TypeBrand
  * - `flow` adornments sit only on straight runs of the route, never on a
  *   corner. Flow adornments in the same `layer` on one run line up one
  *   after another, in the order of their `at`, like flex items: none
- *   overlaps another, and the frame's margins along the line keep them
+ *   overlaps another, and their margins along the line keep them
  *   apart and keep corners away. An adornment at `at` `0` or `1` packs
  *   against the port, flush with its node. In a hierarchy (see
  *   `placement/hierarchy`), each one goes to the straight run nearest its
@@ -41,10 +54,10 @@ export type AdornmentPosition = (typeof position)[keyof typeof position]
  * Which way an adornment faces, encoded as numbers: `upright` is `0`,
  * `forward` is `1`, `backward` is `2`.
  *
- * - `upright` keeps the frame in place: its width runs along the x axis and
+ * - `upright` keeps the adornment in place: its width runs along the x axis and
  *   its height along the y axis, whichever way the line runs. Text labels
  *   usually stay upright.
- * - `forward` turns the frame with the line, so that its local x axis
+ * - `forward` turns the adornment with the line, so that its local x axis
  *   points along the route toward the target. Its width then runs along the
  *   line and its height across it, its left margin trails it and its right
  *   margin leads it. An arrowhead at the target end, drawn pointing right,
@@ -63,22 +76,31 @@ export const orient = {
 export type AdornmentOrient = (typeof orient)[keyof typeof orient]
 
 /**
- * The construction input for `make`. Only `frame` is required. Passing
- * `undefined` for an optional field is the same as omitting it.
+ * The construction input for `make`. Every field is optional, and passing
+ * `undefined` for a field is the same as omitting it.
+ *
+ * An adornment takes three input slices beside its own fields: sizing (see
+ * `placement/sizing`), margins (see `placement/margin`), and the one-axis
+ * `align` (see `placement/alignment`). Its size resolves as a frame's does,
+ * with `0` for an unset size. Its margins along the line are gaps: they
+ * keep other flow adornments in the layer, and corners, that far away. Its
+ * margins across the line are clearance. A turned adornment measures its
+ * margins and `align` in its own axes, where `0` is above its local x
+ * axis. Non-finite margins act as `0`.
+ *
+ * The type parameter `L` is the type of the length fields: the sizes, the
+ * bounds, and the margins. `make` takes numbers, the default.
  */
-export interface AdornmentInput {
+export interface AdornmentInput<L extends LengthInput = number>
+  extends Sizing.SizingInput<L>, Margin.MarginInput<L>, Pick<Alignment.AlignInput, 'align'> {
   /**
-   * The adornment's size, gaps, and side of the line. The frame sizes as
-   * any frame does. Its margins along the line are gaps: they keep other
-   * flow adornments in the layer, and corners, that far away. Its margins
-   * across the line are clearance. Its `align` places it across the line:
-   * `0` on the left of a line running up or down (above a line running
-   * left or right), `1` on the right (below), and `0.5` centered on it. A
-   * turned adornment measures margins and `align` in its own frame, where
-   * `0` is above its local x axis. A non-finite `align` inherits the
-   * container's `alignAdornments`.
+   * Which side of the line the adornment sits on: `0` on the left of a
+   * line running up or down (above a line running left or right), `1` on
+   * the right (below), and `0.5` centered on it. A non-finite value
+   * inherits the layout's `alignAdornments`. Defaults to
+   * `Alignment.inherit`.
    */
-  readonly frame: Frame
+  readonly align?: number | undefined
   /**
    * Where the adornment sits along the edge, from `0` at the source to `1`
    * at the target. Values outside clamp, and an omitted or non-finite value
@@ -99,8 +121,8 @@ export interface AdornmentInput {
 }
 
 /**
- * A frame that decorates an edge: a label, an arrowhead, or any other
- * marker. `Hierarchy.apply` (from `placement/hierarchy`) places each of an
+ * A marker that decorates an edge: a label, an arrowhead, or any other
+ * shape. `Hierarchy.apply` (from `placement/hierarchy`) places each of an
  * edge's adornments, and makes room for the ones that flow.
  * `Connector.apply` (from `placement/connector`) places them on the routes
  * it finds, and keeps corners clear of the ones that flow.
@@ -111,8 +133,20 @@ export interface AdornmentInput {
 class Adornment extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
-  /** The adornment's size, gaps, and side of the line. */
-  readonly frame: Frame
+  /** The space reserved above the adornment, in its own axes when it turns. */
+  readonly marginTop: number
+  /** The space reserved to the right of the adornment, in its own axes when it turns. */
+  readonly marginRight: number
+  /** The space reserved below the adornment, in its own axes when it turns. */
+  readonly marginBottom: number
+  /** The space reserved to the left of the adornment, in its own axes when it turns. */
+  readonly marginLeft: number
+  /**
+   * Which side of the line it sits on: `0` left or above, `0.5` centered,
+   * `1` right or below. `Alignment.inherit` (the default) takes the
+   * layout's `alignAdornments`.
+   */
+  readonly align: number
   /** The raw position along the edge. Layout clamps it to `[0, 1]`. */
   readonly at: number
   /** How it sits on the edge, one of the `position` encodings. */
@@ -122,30 +156,95 @@ class Adornment extends Pipeable {
   /** Which way it faces, one of the `orient` encodings. */
   readonly orient: number
 
+  // The raw sizing inputs survive for the setters. The adornment
+  // normalizes them, and resolves its size, once at construction.
+  readonly [Raw]: RawSizing
+  readonly [SizingOf]: Sizing.Sizing
+  readonly [Size]: Sizing.Size
+
   constructor(input: AdornmentInput) {
     super()
 
-    this.frame = input.frame
+    const margin = Margin.normalize(input)
+    this.marginTop = margin.marginTop
+    this.marginRight = margin.marginRight
+    this.marginBottom = margin.marginBottom
+    this.marginLeft = margin.marginLeft
+    this.align = input.align ?? Alignment.inherit
     this.at = input.at ?? 0.5
     this.position = input.position ?? position.flow
     this.layer = input.layer ?? 0
     this.orient = input.orient ?? orient.upright
+
+    this[Raw] = {
+      width: input.width,
+      height: input.height,
+      aspectRatio: input.aspectRatio,
+      minWidth: input.minWidth,
+      minHeight: input.minHeight,
+      maxWidth: input.maxWidth,
+      maxHeight: input.maxHeight,
+    }
+    this[SizingOf] = Sizing.normalize(this[Raw])
+    this[Size] = Sizing.resolve(this[SizingOf], { width: 0, height: 0 })
+  }
+
+  /**
+   * The resolved width: the raw input clamped to its bounds, derived from
+   * the height through `aspectRatio` when unset, or `0`.
+   */
+  get width(): number {
+    return this[Size].width
+  }
+
+  /**
+   * The resolved height: the raw input clamped to its bounds, derived from
+   * the width through `aspectRatio` when unset, or `0`.
+   */
+  get height(): number {
+    return this[Size].height
+  }
+
+  /** The effective lower bound on `width`, `0` when unset. */
+  get minWidth(): number {
+    return this[SizingOf].minWidth
+  }
+
+  /** The effective lower bound on `height`, `0` when unset. */
+  get minHeight(): number {
+    return this[SizingOf].minHeight
+  }
+
+  /** The effective upper bound on `width`, `Infinity` when unset. */
+  get maxWidth(): number {
+    return this[SizingOf].maxWidth
+  }
+
+  /** The effective upper bound on `height`, `Infinity` when unset. */
+  get maxHeight(): number {
+    return this[SizingOf].maxHeight
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
     const name = this.position === position.absolute ? 'absolute' : 'flow'
-    return `Adornment [${name} at ${this.at}]`
+    return `Adornment [${name} at ${this.at}, ${this.width} x ${this.height}]`
   }
 
   /**
    * Returns the adornment's inputs as a plain record of the shape `make`
-   * accepts.
+   * accepts. Unset sizing fields come back as `undefined`, never as their
+   * resolved values.
    *
    * @returns The input record.
    */
-  toJSON() {
+  toJSON(): AdornmentInput {
     return {
-      frame: this.frame,
+      ...this[Raw],
+      marginTop: this.marginTop,
+      marginRight: this.marginRight,
+      marginBottom: this.marginBottom,
+      marginLeft: this.marginLeft,
+      align: this.align,
       at: this.at,
       position: this.position,
       layer: this.layer,
@@ -160,7 +259,7 @@ export type { Adornment }
  * Where an adornment landed on its edge's route, as the layouts that place
  * adornments report it (see `placement/hierarchy` and `placement/connector`).
  *
- * - `rect`: the adornment's frame, upright. Turn it by `angle` about its
+ * - `rect`: the adornment's rect, upright. Turn it by `angle` about its
  *   center to draw it.
  * - `angle`: the direction its local x axis points, in radians (atan2
  *   convention, with the y axis down). `0` for an upright adornment.
@@ -170,7 +269,7 @@ export type { Adornment }
  *   polyline the corner replaces.
  */
 export interface AdornmentPlacement {
-  /** The adornment's frame before it turns. */
+  /** The adornment's rect before it turns. */
   readonly rect: Rect.Rect
   /** How far it turns about the rect's center, in radians. */
   readonly angle: number
@@ -185,12 +284,9 @@ export interface AdornmentPlacement {
  * @returns An immutable `Adornment`.
  * @example
  * ```ts
- * const arrow = Adornment.make({
- *   frame: Frame.make({ width: 9, height: 8 }),
- *   at: 1,
- *   orient: Adornment.orient.forward,
- * })
+ * const arrow = Adornment.make({ width: 9, height: 8, at: 1, orient: Adornment.orient.forward })
  * arrow.position // 0
+ * arrow.height // 8
  * ```
  */
 export const make = (input: AdornmentInput): Adornment => new Adornment(input)
@@ -205,21 +301,324 @@ export const isAdornment = (value: unknown): value is Adornment => {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
 
-// Setters rebuild from toJSON. Each takes a frame or a number, never an
-// adornment, as its first data-last argument.
+// Setters rebuild from toJSON. Each takes a number or a ratio, never an
+// adornment, as its first data-last argument, so the setters with optional
+// trailing arguments dispatch on isAdornment.
+
+const rebuild = (self: Adornment, input: AdornmentInput): Adornment =>
+  new Adornment({ ...self.toJSON(), ...input })
 
 /**
- * Sets the frame. The data-last form omits `self` and returns a function of
- * it.
+ * Sets the preferred width and height, width first. One value sets both.
+ * The data-last form omits `self` and returns a function of it.
  *
  * @param self - The adornment to update.
- * @param frame - The new frame.
- * @returns A new adornment with the frame replaced.
+ * @param width - The new width.
+ * @param height - The new height. Defaults to the width.
+ * @returns A new adornment with both sizes set.
+ * @example
+ * ```ts
+ * Adornment.setSize(Adornment.make({}), 8, 6).height // 6
+ * Adornment.make({}).pipe(Adornment.setSize(8)).height // 8
+ * ```
  */
-export const setFrame: {
-  (self: Adornment, frame: Frame): Adornment
-  (frame: Frame): (self: Adornment) => Adornment
-} = dual(2, (self: Adornment, frame: Frame) => new Adornment({ ...self.toJSON(), frame }))
+export const setSize: {
+  (self: Adornment, width: number, height?: number): Adornment
+  (width: number, height?: number): (self: Adornment) => Adornment
+} = dual(
+  (args) => isAdornment(args[0]),
+  (self: Adornment, width: number, height?: number) =>
+    rebuild(self, { width, height: height ?? width }),
+)
+
+/**
+ * Sets the preferred width and keeps an unset height deriving from it. The
+ * data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The adornment to update.
+ * @param width - The new width.
+ * @returns A new adornment with the width replaced.
+ */
+export const setWidth: {
+  (self: Adornment, width: number): Adornment
+  (width: number): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, width: number) => rebuild(self, { width }))
+
+/**
+ * Sets the preferred height and keeps an unset width deriving from it. The
+ * data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The adornment to update.
+ * @param height - The new height.
+ * @returns A new adornment with the height replaced.
+ */
+export const setHeight: {
+  (self: Adornment, height: number): Adornment
+  (height: number): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, height: number) => rebuild(self, { height }))
+
+/**
+ * Sets the width-to-height ratio, which derives whichever size is unset.
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The adornment to update.
+ * @param aspectRatio - The new ratio, as `width / height` or a `[width, height]` pair.
+ * @returns A new adornment with the ratio replaced.
+ * @example
+ * ```ts
+ * Adornment.setAspectRatio(Adornment.make({ width: 12 }), 2).height // 6
+ * ```
+ */
+export const setAspectRatio: {
+  (self: Adornment, aspectRatio: AspectRatio.AspectRatio): Adornment
+  (aspectRatio: AspectRatio.AspectRatio): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, aspectRatio: AspectRatio.AspectRatio) =>
+  rebuild(self, { aspectRatio }),
+)
+
+/**
+ * Sets the minimum width and height, width first. One value sets both.
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The adornment to update.
+ * @param minWidth - The new minimum width.
+ * @param minHeight - The new minimum height. Defaults to the minimum width.
+ * @returns A new adornment with both minimums set.
+ */
+export const setMinSize: {
+  (self: Adornment, minWidth: number, minHeight?: number): Adornment
+  (minWidth: number, minHeight?: number): (self: Adornment) => Adornment
+} = dual(
+  (args) => isAdornment(args[0]),
+  (self: Adornment, minWidth: number, minHeight?: number) =>
+    rebuild(self, { minWidth, minHeight: minHeight ?? minWidth }),
+)
+
+/**
+ * Sets the minimum width. The data-last form omits `self` and returns a
+ * function of it.
+ *
+ * @param self - The adornment to update.
+ * @param minWidth - The new minimum width.
+ * @returns A new adornment with the minimum width replaced.
+ */
+export const setMinWidth: {
+  (self: Adornment, minWidth: number): Adornment
+  (minWidth: number): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, minWidth: number) => rebuild(self, { minWidth }))
+
+/**
+ * Sets the minimum height. The data-last form omits `self` and returns a
+ * function of it.
+ *
+ * @param self - The adornment to update.
+ * @param minHeight - The new minimum height.
+ * @returns A new adornment with the minimum height replaced.
+ */
+export const setMinHeight: {
+  (self: Adornment, minHeight: number): Adornment
+  (minHeight: number): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, minHeight: number) => rebuild(self, { minHeight }))
+
+/**
+ * Sets the maximum width and height, width first. One value sets both.
+ * The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The adornment to update.
+ * @param maxWidth - The new maximum width.
+ * @param maxHeight - The new maximum height. Defaults to the maximum width.
+ * @returns A new adornment with both maximums set.
+ */
+export const setMaxSize: {
+  (self: Adornment, maxWidth: number, maxHeight?: number): Adornment
+  (maxWidth: number, maxHeight?: number): (self: Adornment) => Adornment
+} = dual(
+  (args) => isAdornment(args[0]),
+  (self: Adornment, maxWidth: number, maxHeight?: number) =>
+    rebuild(self, { maxWidth, maxHeight: maxHeight ?? maxWidth }),
+)
+
+/**
+ * Sets the maximum width. The data-last form omits `self` and returns a
+ * function of it.
+ *
+ * @param self - The adornment to update.
+ * @param maxWidth - The new maximum width.
+ * @returns A new adornment with the maximum width replaced.
+ */
+export const setMaxWidth: {
+  (self: Adornment, maxWidth: number): Adornment
+  (maxWidth: number): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, maxWidth: number) => rebuild(self, { maxWidth }))
+
+/**
+ * Sets the maximum height. The data-last form omits `self` and returns a
+ * function of it.
+ *
+ * @param self - The adornment to update.
+ * @param maxHeight - The new maximum height.
+ * @returns A new adornment with the maximum height replaced.
+ */
+export const setMaxHeight: {
+  (self: Adornment, maxHeight: number): Adornment
+  (maxHeight: number): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, maxHeight: number) => rebuild(self, { maxHeight }))
+
+/**
+ * Sets all four margins in CSS shorthand order. One value sets every edge.
+ * Two values set the vertical edges, then the horizontal edges. Three
+ * values set top, horizontal, then bottom. Four values set top, right,
+ * bottom, and left. The data-last form omits `self` and returns a function
+ * of it.
+ *
+ * @param self - The adornment to update.
+ * @param marginTop - The top margin. As the only value, it sets every edge. As the first of two, it sets both vertical edges.
+ * @param marginRight - The right margin. As the second of two values, it sets both horizontal edges.
+ * @param marginBottom - The bottom margin.
+ * @param marginLeft - The left margin.
+ * @returns A new adornment with the margins replaced.
+ * @example
+ * ```ts
+ * Adornment.setMargin(Adornment.make({}), 1, 2).marginLeft // 2
+ * Adornment.make({}).pipe(Adornment.setMargin(1, 2, 3, 4)).marginBottom // 3
+ * ```
+ */
+export const setMargin: {
+  (self: Adornment, margin: number): Adornment
+  (self: Adornment, marginY: number, marginX: number): Adornment
+  (self: Adornment, marginTop: number, marginX: number, marginBottom: number): Adornment
+  (
+    self: Adornment,
+    marginTop: number,
+    marginRight: number,
+    marginBottom: number,
+    marginLeft: number,
+  ): Adornment
+  (margin: number): (self: Adornment) => Adornment
+  (marginY: number, marginX: number): (self: Adornment) => Adornment
+  (marginTop: number, marginX: number, marginBottom: number): (self: Adornment) => Adornment
+  (
+    marginTop: number,
+    marginRight: number,
+    marginBottom: number,
+    marginLeft: number,
+  ): (self: Adornment) => Adornment
+} = dual(
+  (args) => isAdornment(args[0]),
+  (self: Adornment, a: number, b?: number, c?: number, d?: number) => {
+    const [marginTop, marginRight, marginBottom, marginLeft] = normalizeTRBL(a, b, c, d)
+    return rebuild(self, { marginTop, marginRight, marginBottom, marginLeft })
+  },
+)
+
+/**
+ * Sets the horizontal margins. One value sets both edges. Two values set
+ * left, then right. The data-last form omits `self` and returns a function
+ * of it.
+ *
+ * @param self - The adornment to update.
+ * @param marginLeft - The left margin. As the only value, it also sets the right margin.
+ * @param marginRight - The right margin.
+ * @returns A new adornment with the horizontal margins replaced.
+ */
+export const setMarginX: {
+  (self: Adornment, margin: number): Adornment
+  (self: Adornment, marginLeft: number, marginRight: number): Adornment
+  (margin: number): (self: Adornment) => Adornment
+  (marginLeft: number, marginRight: number): (self: Adornment) => Adornment
+} = dual(
+  (args) => isAdornment(args[0]),
+  (self: Adornment, marginLeft: number, marginRight?: number) =>
+    rebuild(self, { marginLeft, marginRight: marginRight ?? marginLeft }),
+)
+
+/**
+ * Sets the vertical margins. One value sets both edges. Two values set
+ * top, then bottom. The data-last form omits `self` and returns a function
+ * of it.
+ *
+ * @param self - The adornment to update.
+ * @param marginTop - The top margin. As the only value, it also sets the bottom margin.
+ * @param marginBottom - The bottom margin.
+ * @returns A new adornment with the vertical margins replaced.
+ */
+export const setMarginY: {
+  (self: Adornment, margin: number): Adornment
+  (self: Adornment, marginTop: number, marginBottom: number): Adornment
+  (margin: number): (self: Adornment) => Adornment
+  (marginTop: number, marginBottom: number): (self: Adornment) => Adornment
+} = dual(
+  (args) => isAdornment(args[0]),
+  (self: Adornment, marginTop: number, marginBottom?: number) =>
+    rebuild(self, { marginTop, marginBottom: marginBottom ?? marginTop }),
+)
+
+/**
+ * Sets the top margin and keeps the other edges. The data-last form omits
+ * `self` and returns a function of it.
+ *
+ * @param self - The adornment to update.
+ * @param margin - The new top margin.
+ * @returns A new adornment with the top margin replaced.
+ */
+export const setMarginTop: {
+  (self: Adornment, margin: number): Adornment
+  (margin: number): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, margin: number) => rebuild(self, { marginTop: margin }))
+
+/**
+ * Sets the right margin and keeps the other edges. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The adornment to update.
+ * @param margin - The new right margin.
+ * @returns A new adornment with the right margin replaced.
+ */
+export const setMarginRight: {
+  (self: Adornment, margin: number): Adornment
+  (margin: number): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, margin: number) => rebuild(self, { marginRight: margin }))
+
+/**
+ * Sets the bottom margin and keeps the other edges. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The adornment to update.
+ * @param margin - The new bottom margin.
+ * @returns A new adornment with the bottom margin replaced.
+ */
+export const setMarginBottom: {
+  (self: Adornment, margin: number): Adornment
+  (margin: number): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, margin: number) => rebuild(self, { marginBottom: margin }))
+
+/**
+ * Sets the left margin and keeps the other edges. The data-last form omits
+ * `self` and returns a function of it.
+ *
+ * @param self - The adornment to update.
+ * @param margin - The new left margin.
+ * @returns A new adornment with the left margin replaced.
+ */
+export const setMarginLeft: {
+  (self: Adornment, margin: number): Adornment
+  (margin: number): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, margin: number) => rebuild(self, { marginLeft: margin }))
+
+/**
+ * Sets which side of the line the adornment sits on: `0` left or above,
+ * `0.5` centered, `1` right or below. `Alignment.inherit` restores the
+ * layout's `alignAdornments`. The data-last form omits `self` and returns a
+ * function of it.
+ *
+ * @param self - The adornment to update.
+ * @param align - The side, or `Alignment.inherit` to inherit.
+ * @returns A new adornment with the side replaced.
+ */
+export const setAlign: {
+  (self: Adornment, align: number): Adornment
+  (align: number): (self: Adornment) => Adornment
+} = dual(2, (self: Adornment, align: number) => rebuild(self, { align }))
 
 /**
  * Sets the position along the edge, from `0` at the source to `1` at the
@@ -230,14 +629,14 @@ export const setFrame: {
  * @returns A new adornment with the position replaced.
  * @example
  * ```ts
- * const label = Adornment.make({ frame: Frame.make({ width: 30, height: 12 }) })
+ * const label = Adornment.make({ width: 30, height: 12 })
  * Adornment.setAt(label, 0.25).at // 0.25
  * ```
  */
 export const setAt: {
   (self: Adornment, at: number): Adornment
   (at: number): (self: Adornment) => Adornment
-} = dual(2, (self: Adornment, at: number) => new Adornment({ ...self.toJSON(), at }))
+} = dual(2, (self: Adornment, at: number) => rebuild(self, { at }))
 
 /**
  * Sets how the adornment sits on its edge, one of the `position` encodings.
@@ -248,17 +647,14 @@ export const setAt: {
  * @returns A new adornment with the position encoding replaced.
  * @example
  * ```ts
- * const dot = Adornment.make({ frame: Frame.make({ width: 4, height: 4 }) })
+ * const dot = Adornment.make({ width: 4, height: 4 })
  * dot.pipe(Adornment.setPosition(Adornment.position.absolute)).position // 1
  * ```
  */
 export const setPosition: {
   (self: Adornment, value: number): Adornment
   (value: number): (self: Adornment) => Adornment
-} = dual(
-  2,
-  (self: Adornment, value: number) => new Adornment({ ...self.toJSON(), position: value }),
-)
+} = dual(2, (self: Adornment, value: number) => rebuild(self, { position: value }))
 
 /**
  * Sets the layer. The data-last form omits `self` and returns a function of
@@ -271,7 +667,7 @@ export const setPosition: {
 export const setLayer: {
   (self: Adornment, layer: number): Adornment
   (layer: number): (self: Adornment) => Adornment
-} = dual(2, (self: Adornment, layer: number) => new Adornment({ ...self.toJSON(), layer }))
+} = dual(2, (self: Adornment, layer: number) => rebuild(self, { layer }))
 
 /**
  * Sets which way the adornment faces, one of the `orient` encodings. The
@@ -284,4 +680,4 @@ export const setLayer: {
 export const setOrient: {
   (self: Adornment, value: number): Adornment
   (value: number): (self: Adornment) => Adornment
-} = dual(2, (self: Adornment, value: number) => new Adornment({ ...self.toJSON(), orient: value }))
+} = dual(2, (self: Adornment, value: number) => rebuild(self, { orient: value }))

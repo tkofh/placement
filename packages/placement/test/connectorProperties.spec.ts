@@ -3,7 +3,6 @@ import { describe, expect, test } from 'vitest'
 import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
-import * as Frame from '../src/frame.ts'
 import type * as Point from '../src/point.ts'
 import * as Rect from '../src/rect.ts'
 
@@ -23,9 +22,9 @@ interface Diagram {
 }
 
 const arrow = (at: number, orient: number) =>
-  Adornment.make({ frame: Frame.make({ width: 8, height: 6, marginLeft: 2 }), at, orient })
+  Adornment.make({ width: 8, height: 6, marginLeft: 2, at, orient })
 const label = (at: number, position: number = Adornment.position.flow) =>
-  Adornment.make({ frame: Frame.make({ width: 20, height: 10 }), at, position })
+  Adornment.make({ width: 20, height: 10, at, position })
 
 // A random diagram: up to 16 rects in a grid of 100 by 100 cells, each at
 // most 54 wide and high and offset at most 29 into its cell, so that a band

@@ -43,9 +43,11 @@ short or an adornment sits close, and how much larger than the innermost
 corner of its nest each corner is (`outsets`). The layout keeps room for
 corners of the edge's `radius` along the flow and out of each port.
 
-An `Adornment` is a `Frame` that decorates an edge, such as a label or an
-arrowhead, placed at `at` along it and turned to face along the line or
-kept upright. A `flow` adornment (the default) sits on a straight run,
+An `Adornment` decorates an edge, such as a label or an arrowhead, placed
+at `at` along it and turned to face along the line or kept upright. Its
+input is flat: the sizing and margin fields that a `Frame` takes, `align`
+for its side of the line, and its own `at`, `position`, `layer`, and
+`orient`, with setters for each. A `flow` adornment (the default) sits on a straight run,
 never on a corner: at `at` `0` or `1` it packs against the port, and the
 route runs straight out of the port as far as the adornments there take
 and an edge gap more; otherwise it sits on the run nearest `at` with room

@@ -37,13 +37,15 @@ const points = (route: Hierarchy.HierarchyRoute | undefined) =>
 // stand-in for an arrowhead at `at` 0 or 1.
 const stub = (length: number, at: number) =>
   Adornment.make({
-    frame: Frame.make({ width: length, height: 0 }),
+    width: length,
+    height: 0,
     at,
     orient: at === 0 ? Adornment.orient.backward : Adornment.orient.forward,
   })
 
-const labelOf = (frame: Frame.Frame, input: Omit<Adornment.AdornmentInput, 'frame'> = {}) =>
-  Adornment.make({ frame, ...input })
+// An adornment with a frame's size, margins, and side of the line.
+const labelOf = (frame: Frame.Frame, input: Adornment.AdornmentInput = {}) =>
+  Adornment.make({ ...frame.toJSON(), ...input })
 
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-7
 
@@ -1427,7 +1429,8 @@ function randomGraph(seed: number, nodeCount: number, edgeCount: number, sides =
     if (next() < 0.2) {
       adornments.push(
         Adornment.make({
-          frame: Frame.make({ width: 30, height: 12 }),
+          width: 30,
+          height: 12,
           at: Math.floor(next() * 5) / 4,
           layer: Math.floor(next() * 2),
         }),
@@ -1444,7 +1447,8 @@ function randomGraph(seed: number, nodeCount: number, edgeCount: number, sides =
     if (sides && next() < 0.2) {
       adornments.push(
         Adornment.make({
-          frame: Frame.make({ width: 6, height: 6 }),
+          width: 6,
+          height: 6,
           at: next(),
           position: Math.floor(next() * 2),
         }),
@@ -1664,7 +1668,7 @@ describe('properties', () => {
                 0,
                 ...edge.adornments
                   .filter((adornment) => adornment.at === at && adornment.orient !== 0)
-                  .map((adornment) => adornment.frame.width),
+                  .map((adornment) => adornment.width),
               )
             expect(first).toBeGreaterThanOrEqual(stubOf(0) - 1e-9)
             expect(last).toBeGreaterThanOrEqual(stubOf(1) - 1e-9)
@@ -1719,13 +1723,7 @@ describe('properties', () => {
       Edge.setAdornments(
         Edge.setRadius(edge, edge.radius * scale),
         edge.adornments.map((adornment) =>
-          Adornment.setFrame(
-            adornment,
-            Frame.make({
-              width: adornment.frame.width * scale,
-              height: adornment.frame.height * scale,
-            }),
-          ),
+          Adornment.setSize(adornment, adornment.width * scale, adornment.height * scale),
         ),
       ),
     )

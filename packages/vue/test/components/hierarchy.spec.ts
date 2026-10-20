@@ -490,7 +490,7 @@ describe('ports and adornments', () => {
       node('a', 40, 20),
       node('b', 40, 20),
     ])
-    const labelFrame = Frame.make({ width: 30, height: 12 })
+    const labelSize = { width: 30, height: 12 }
     const solved = Hierarchy.apply(
       {
         a: Frame.make({ width: 40, height: 20 }),
@@ -502,8 +502,8 @@ describe('ports and adornments', () => {
           target: 'b',
           weight: 2,
           adornments: [
-            Adornment.make({ frame: labelFrame, at: 0.5 }),
-            Adornment.make({ frame: labelFrame, at: 1 }),
+            Adornment.make({ ...labelSize, at: 0.5 }),
+            Adornment.make({ ...labelSize, at: 1 }),
           ],
         }),
       ],
@@ -520,9 +520,9 @@ describe('ports and adornments', () => {
 })
 
 // A turned adornment at one end of an edge, as `at="start"` and `at="end"` make.
-const turned = (frame: Frame.Frame, at: number) =>
+const turned = (size: Adornment.AdornmentInput, at: number) =>
   Adornment.make({
-    frame,
+    ...size,
     at,
     orient: at === 0 ? Adornment.orient.backward : Adornment.orient.forward,
   })
@@ -601,9 +601,9 @@ describe('end adornments', () => {
           source: 'a',
           target: 'b',
           adornments: [
-            turned(Frame.make({ width: 4, height: 4 }), 0),
-            turned(Frame.make({ width: 8, height: 6 }), 1),
-            turned(Frame.make({ width: 5, height: 6 }), 1),
+            turned({ width: 4, height: 4 }, 0),
+            turned({ width: 8, height: 6 }, 1),
+            turned({ width: 5, height: 6 }, 1),
           ],
         }),
       ],
@@ -634,7 +634,9 @@ describe('end adornments', () => {
       ...fan.map((id) => node(id, 40, 20)),
     ])
     const arrow = Adornment.make({
-      frame: Frame.make({ width: 8, height: 6, marginLeft: 6 }),
+      width: 8,
+      height: 6,
+      marginLeft: 6,
       at: 1,
       orient: Adornment.orient.forward,
     })
@@ -678,11 +680,12 @@ describe('end adornments', () => {
           sourceSide: Edge.side.right,
           radius: 4,
           adornments: [
-            Adornment.make({ frame: Frame.make({ width: 20, height: 10 }) }),
-            Adornment.make({ frame: Frame.make({ width: 20, height: 10 }) }),
-            Adornment.make({ frame: Frame.make({ width: 6, height: 6 }), layer: 1 }),
+            Adornment.make({ width: 20, height: 10 }),
+            Adornment.make({ width: 20, height: 10 }),
+            Adornment.make({ width: 6, height: 6, layer: 1 }),
             Adornment.make({
-              frame: Frame.make({ width: 4, height: 4 }),
+              width: 4,
+              height: 4,
               at: 0.25,
               position: Adornment.position.absolute,
               orient: Adornment.orient.forward,
