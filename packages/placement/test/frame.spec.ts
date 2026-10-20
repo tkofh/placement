@@ -7,10 +7,10 @@ import * as Rect from '../src/rect.ts'
 describe('frame', () => {
   test('empty input applies the defaults', () => {
     const result = Frame.make({})
-    expect(result.offsetTop).toBe(0)
-    expect(result.offsetRight).toBe(0)
-    expect(result.offsetBottom).toBe(0)
-    expect(result.offsetLeft).toBe(0)
+    expect(result.marginTop).toBe(0)
+    expect(result.marginRight).toBe(0)
+    expect(result.marginBottom).toBe(0)
+    expect(result.marginLeft).toBe(0)
     expect(result.width).toBe(0)
     expect(result.height).toBe(0)
     expect(result.aspectRatio).toBeNaN()
@@ -101,6 +101,34 @@ describe('sizing resolves lazily from raw inputs', () => {
     expect(Frame.setWidth(Frame.make({ maxWidth: 150 }), 200).width).toBe(150)
   })
 
+  test.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'a size or bound of %f is unset',
+    (value) => {
+      const frame = Frame.make({
+        height: 10,
+        aspectRatio: 2,
+        width: value,
+        minWidth: value,
+        maxWidth: value,
+        minHeight: value,
+        maxHeight: value,
+      })
+      expect([frame.width, frame.height]).toEqual([20, 10])
+      expect([frame.minWidth, frame.maxWidth, frame.minHeight, frame.maxHeight]).toEqual([
+        0,
+        Number.POSITIVE_INFINITY,
+        0,
+        Number.POSITIVE_INFINITY,
+      ])
+      // The raw input survives for the setters.
+      expect(frame.toJSON().width).toBe(value)
+    },
+  )
+
+  test('a non-finite ratio is unset', () => {
+    expect(Frame.make({ width: 10, aspectRatio: Number.POSITIVE_INFINITY }).height).toBe(0)
+  })
+
   test('setters chain without leaking resolved values', () => {
     const result = Frame.make({ aspectRatio: 2 }).pipe(Frame.setWidth(100), Frame.setMinHeight(60))
     expect(result.width).toBe(100)
@@ -108,116 +136,116 @@ describe('sizing resolves lazily from raw inputs', () => {
   })
 })
 
-describe('setOffset', () => {
-  test('one value sets all four offsets', () => {
-    const result = Frame.setOffset(Frame.make({}), 10)
-    expect(result.offsetTop).toBe(10)
-    expect(result.offsetRight).toBe(10)
-    expect(result.offsetBottom).toBe(10)
-    expect(result.offsetLeft).toBe(10)
+describe('setMargin', () => {
+  test('one value sets all four margins', () => {
+    const result = Frame.setMargin(Frame.make({}), 10)
+    expect(result.marginTop).toBe(10)
+    expect(result.marginRight).toBe(10)
+    expect(result.marginBottom).toBe(10)
+    expect(result.marginLeft).toBe(10)
   })
 
   test('two values are y and x', () => {
-    const result = Frame.setOffset(Frame.make({}), 10, 20)
-    expect(result.offsetTop).toBe(10)
-    expect(result.offsetRight).toBe(20)
-    expect(result.offsetBottom).toBe(10)
-    expect(result.offsetLeft).toBe(20)
+    const result = Frame.setMargin(Frame.make({}), 10, 20)
+    expect(result.marginTop).toBe(10)
+    expect(result.marginRight).toBe(20)
+    expect(result.marginBottom).toBe(10)
+    expect(result.marginLeft).toBe(20)
   })
 
   test('four values are top, right, bottom, left', () => {
-    const result = Frame.setOffset(Frame.make({}), 1, 2, 3, 4)
-    expect(result.offsetTop).toBe(1)
-    expect(result.offsetRight).toBe(2)
-    expect(result.offsetBottom).toBe(3)
-    expect(result.offsetLeft).toBe(4)
+    const result = Frame.setMargin(Frame.make({}), 1, 2, 3, 4)
+    expect(result.marginTop).toBe(1)
+    expect(result.marginRight).toBe(2)
+    expect(result.marginBottom).toBe(3)
+    expect(result.marginLeft).toBe(4)
   })
 
   test('data-last forms (regression: multi-arg calls used to dispatch data-first)', () => {
-    expect(Frame.make({}).pipe(Frame.setOffset(10)).offsetTop).toBe(10)
+    expect(Frame.make({}).pipe(Frame.setMargin(10)).marginTop).toBe(10)
 
-    const yx = Frame.make({}).pipe(Frame.setOffset(10, 20))
+    const yx = Frame.make({}).pipe(Frame.setMargin(10, 20))
     expect(Frame.isFrame(yx)).toBe(true)
-    expect(yx.offsetTop).toBe(10)
-    expect(yx.offsetLeft).toBe(20)
+    expect(yx.marginTop).toBe(10)
+    expect(yx.marginLeft).toBe(20)
 
-    const trbl = Frame.make({}).pipe(Frame.setOffset(1, 2, 3, 4))
-    expect(trbl.offsetTop).toBe(1)
-    expect(trbl.offsetRight).toBe(2)
-    expect(trbl.offsetBottom).toBe(3)
-    expect(trbl.offsetLeft).toBe(4)
+    const trbl = Frame.make({}).pipe(Frame.setMargin(1, 2, 3, 4))
+    expect(trbl.marginTop).toBe(1)
+    expect(trbl.marginRight).toBe(2)
+    expect(trbl.marginBottom).toBe(3)
+    expect(trbl.marginLeft).toBe(4)
   })
 })
 
-describe('setOffsetX', () => {
-  test('one value sets both horizontal offsets', () => {
-    const result = Frame.setOffsetX(Frame.make({}), 10)
-    expect(result.offsetLeft).toBe(10)
-    expect(result.offsetRight).toBe(10)
+describe('setMarginX', () => {
+  test('one value sets both horizontal margins', () => {
+    const result = Frame.setMarginX(Frame.make({}), 10)
+    expect(result.marginLeft).toBe(10)
+    expect(result.marginRight).toBe(10)
   })
 
   test('two values are left and right', () => {
-    const result = Frame.setOffsetX(Frame.make({}), 10, 20)
-    expect(result.offsetLeft).toBe(10)
-    expect(result.offsetRight).toBe(20)
+    const result = Frame.setMarginX(Frame.make({}), 10, 20)
+    expect(result.marginLeft).toBe(10)
+    expect(result.marginRight).toBe(20)
   })
 
   test('data-last forms (regression)', () => {
-    expect(Frame.make({}).pipe(Frame.setOffsetX(10)).offsetRight).toBe(10)
+    expect(Frame.make({}).pipe(Frame.setMarginX(10)).marginRight).toBe(10)
 
-    const result = Frame.make({}).pipe(Frame.setOffsetX(10, 20))
-    expect(result.offsetLeft).toBe(10)
-    expect(result.offsetRight).toBe(20)
+    const result = Frame.make({}).pipe(Frame.setMarginX(10, 20))
+    expect(result.marginLeft).toBe(10)
+    expect(result.marginRight).toBe(20)
   })
 })
 
-describe('setOffsetY', () => {
-  test('one value sets both vertical offsets', () => {
-    const result = Frame.setOffsetY(Frame.make({}), 10)
-    expect(result.offsetTop).toBe(10)
-    expect(result.offsetBottom).toBe(10)
+describe('setMarginY', () => {
+  test('one value sets both vertical margins', () => {
+    const result = Frame.setMarginY(Frame.make({}), 10)
+    expect(result.marginTop).toBe(10)
+    expect(result.marginBottom).toBe(10)
   })
 
   test('two values are top and bottom', () => {
-    const result = Frame.setOffsetY(Frame.make({}), 10, 20)
-    expect(result.offsetTop).toBe(10)
-    expect(result.offsetBottom).toBe(20)
+    const result = Frame.setMarginY(Frame.make({}), 10, 20)
+    expect(result.marginTop).toBe(10)
+    expect(result.marginBottom).toBe(20)
   })
 
   test('data-last forms (regression)', () => {
-    expect(Frame.make({}).pipe(Frame.setOffsetY(10)).offsetBottom).toBe(10)
+    expect(Frame.make({}).pipe(Frame.setMarginY(10)).marginBottom).toBe(10)
 
-    const result = Frame.make({}).pipe(Frame.setOffsetY(10, 20))
-    expect(result.offsetTop).toBe(10)
-    expect(result.offsetBottom).toBe(20)
+    const result = Frame.make({}).pipe(Frame.setMarginY(10, 20))
+    expect(result.marginTop).toBe(10)
+    expect(result.marginBottom).toBe(20)
   })
 })
 
-describe('single-edge offsets', () => {
-  test('setOffsetTop', () => {
-    expect(Frame.setOffsetTop(Frame.make({}), 5).offsetTop).toBe(5)
-    expect(Frame.make({}).pipe(Frame.setOffsetTop(5)).offsetTop).toBe(5)
+describe('single-edge margins', () => {
+  test('setMarginTop', () => {
+    expect(Frame.setMarginTop(Frame.make({}), 5).marginTop).toBe(5)
+    expect(Frame.make({}).pipe(Frame.setMarginTop(5)).marginTop).toBe(5)
   })
 
-  test('setOffsetRight', () => {
-    expect(Frame.setOffsetRight(Frame.make({}), 5).offsetRight).toBe(5)
-    expect(Frame.make({}).pipe(Frame.setOffsetRight(5)).offsetRight).toBe(5)
+  test('setMarginRight', () => {
+    expect(Frame.setMarginRight(Frame.make({}), 5).marginRight).toBe(5)
+    expect(Frame.make({}).pipe(Frame.setMarginRight(5)).marginRight).toBe(5)
   })
 
-  test('setOffsetBottom', () => {
-    expect(Frame.setOffsetBottom(Frame.make({}), 5).offsetBottom).toBe(5)
-    expect(Frame.make({}).pipe(Frame.setOffsetBottom(5)).offsetBottom).toBe(5)
+  test('setMarginBottom', () => {
+    expect(Frame.setMarginBottom(Frame.make({}), 5).marginBottom).toBe(5)
+    expect(Frame.make({}).pipe(Frame.setMarginBottom(5)).marginBottom).toBe(5)
   })
 
-  test('setOffsetLeft', () => {
-    expect(Frame.setOffsetLeft(Frame.make({}), 5).offsetLeft).toBe(5)
-    expect(Frame.make({}).pipe(Frame.setOffsetLeft(5)).offsetLeft).toBe(5)
+  test('setMarginLeft', () => {
+    expect(Frame.setMarginLeft(Frame.make({}), 5).marginLeft).toBe(5)
+    expect(Frame.make({}).pipe(Frame.setMarginLeft(5)).marginLeft).toBe(5)
   })
 
   test('an edge setter leaves the other edges alone', () => {
-    const result = Frame.setOffsetTop(Frame.make({ offsetLeft: 1 }), 5)
-    expect(result.offsetLeft).toBe(1)
-    expect(result.offsetBottom).toBe(0)
+    const result = Frame.setMarginTop(Frame.make({ marginLeft: 1 }), 5)
+    expect(result.marginLeft).toBe(1)
+    expect(result.marginBottom).toBe(0)
   })
 })
 
@@ -359,11 +387,11 @@ describe('flex and placement setters', () => {
 
 describe('serialization', () => {
   test('toJSON emits raw inputs; unset sizing keys are absent', () => {
-    expect(JSON.parse(JSON.stringify(Frame.make({ width: 100, offsetTop: 5 })))).toEqual({
-      offsetTop: 5,
-      offsetRight: 0,
-      offsetBottom: 0,
-      offsetLeft: 0,
+    expect(JSON.parse(JSON.stringify(Frame.make({ width: 100, marginTop: 5 })))).toEqual({
+      marginTop: 5,
+      marginRight: 0,
+      marginBottom: 0,
+      marginLeft: 0,
       width: 100,
       grow: 0,
       shrink: 0,
@@ -383,50 +411,11 @@ describe('frame through a Proxy', () => {
     expect(Frame.setWidth(frame, 40).height).toBe(20)
   })
 
-  describe('id', () => {
-    test('an omitted id is undefined', () => {
-      const frame: Frame.Frame<undefined> = Frame.make({ width: 10 })
-      expect(frame.id).toBeUndefined()
-      expect(JSON.parse(JSON.stringify(frame))).not.toHaveProperty('id')
-    })
-
-    test('make keeps the literal id type', () => {
-      const frame: Frame.Frame<'start'> = Frame.make({ id: 'start', width: 10 })
-      expect(frame.id).toBe('start')
-      // @ts-expect-error -- the id type is the literal 'start'
-      const other: Frame.Frame<'end'> = frame
-      expect(other.id).toBe('start')
-    })
-
-    test('a JSON round trip keeps the id', () => {
-      const frame = Frame.make({ id: 'a', width: 10 })
-      expect(Frame.make(JSON.parse(JSON.stringify(frame))).id).toBe('a')
-    })
-
-    test('setId works in both forms and retypes the frame', () => {
-      const base = Frame.make({ width: 10 })
-      const named: Frame.Frame<'a'> = Frame.setId(base, 'a')
-      const renamed: Frame.Frame<'b'> = named.pipe(Frame.setId('b'))
-      const cleared: Frame.Frame<undefined> = Frame.setId(renamed, undefined)
-      expect([named.id, renamed.id, cleared.id]).toEqual(['a', 'b', undefined])
-      expect(renamed.width).toBe(10)
-    })
-
-    test('setters keep the id and its type', () => {
-      const frame = Frame.make({ id: 'a', width: 10 })
-      const wider: Frame.Frame<'a'> = Frame.setWidth(frame, 20)
-      const offset: Frame.Frame<'a'> = frame.pipe(Frame.setOffset(1, 2))
-      expect([wider.id, offset.id]).toEqual(['a', 'a'])
-    })
-
-    test('layouts that ignore ids accept any frame', () => {
-      const rects = Flexbox.apply(
-        [Frame.make({ id: 'a', width: 10 }), Frame.make({ width: 10 })],
-        Flexbox.make({}),
-        Rect.make(100),
-      )
-      expect(rects).toHaveLength(2)
-    })
+  test('a frame has no identity', () => {
+    // @ts-expect-error -- layouts key frames by id, so a frame takes none
+    const frame = Frame.make({ id: 'a', width: 10 })
+    expect(frame.toJSON()).not.toHaveProperty('id')
+    expect('id' in frame).toBe(false)
   })
 })
 

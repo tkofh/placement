@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest'
 import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
-import * as Frame from '../src/frame.ts'
 import { lengths, pointOnDrawn } from '../src/internal/adornments.ts'
 import { cornerOutsets, cornerRadii } from '../src/internal/connector/corners.ts'
 import { addWhisk, step } from '../src/internal/connector/merge.ts'
@@ -1462,7 +1461,9 @@ describe('tight ends', () => {
   }
   const spec = Connector.make({ clearance: 10, gap: 4, bendCost: 20 })
   const arrow = Adornment.make({
-    frame: Frame.make({ width: 8, height: 6, offsetLeft: 2 }),
+    width: 8,
+    height: 6,
+    marginLeft: 2,
     at: 1,
     orient: Adornment.orient.forward,
   })

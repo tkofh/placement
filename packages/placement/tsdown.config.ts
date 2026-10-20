@@ -3,6 +3,7 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   entry: [
     'src/adornment.ts',
+    'src/alignment.ts',
     'src/aspectRatio.ts',
     'src/box.ts',
     'src/connector.ts',
@@ -13,10 +14,12 @@ export default defineConfig({
     'src/hierarchy.ts',
     'src/interval.ts',
     'src/length.ts',
+    'src/margin.ts',
     'src/offset.ts',
     'src/point.ts',
     'src/polygon.ts',
     'src/rect.ts',
+    'src/sizing.ts',
     'src/track.ts',
     'src/unstable/model.ts',
     'src/unstable/utils.ts',

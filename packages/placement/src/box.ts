@@ -1,7 +1,10 @@
-import { clamp } from 'curvy/number'
 import { Pipeable, dual } from 'curvy/utils'
+import * as Alignment from './alignment.ts'
 import * as AspectRatio from './aspectRatio.ts'
+import { SizingOf } from './internal/sizing.ts'
+import type { LengthInput } from './length.ts'
 import * as Rect from './rect.ts'
+import * as Sizing from './sizing.ts'
 import { normalizeTRBL } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/box')
@@ -11,94 +14,56 @@ type TypeBrand = typeof TypeBrand
 // fields, so reads still work through a `Proxy` (Vue's `ref`/`reactive`).
 const Raw: unique symbol = Symbol('placement/box/raw')
 
-type RawInput = {
-  readonly [K in Exclude<keyof BoxInput, 'aspectRatio'>]-?: number | undefined
-} & { readonly aspectRatio: AspectRatio.AspectRatio | undefined }
+type RawInput = { readonly [K in keyof BoxInput]-?: BoxInput[K] }
 
 /**
  * The construction input for `make`. Every field is optional, and passing
  * `undefined` is the same as omitting the field. Any non-finite value acts
- * as unset. This differs from `Frame`, where a non-finite size is a literal
- * infinite preference.
+ * as unset.
  *
  * Unset means a different thing in each group. An unset inset is auto: it
- * does not anchor or shrink its axis. Unset sizing fields stay unset until
- * `apply` resolves them against a parent (see `apply` for the resolution
- * order). Unset constraints default to `0` (minimums) and `Infinity`
- * (maximums).
+ * does not anchor or shrink its axis. The sizing fields (see
+ * `placement/sizing`) stay unset until `apply` resolves them against a
+ * parent (see `apply` for the resolution order). Unset bounds default to
+ * `0` (minimums) and `Infinity` (maximums). The alignment fields (see
+ * `placement/alignment`) inherit the box's default alignment, which `apply`
+ * describes.
+ *
+ * The type parameter `L` is the type of the length fields: the insets, the
+ * sizes, and the bounds. `make` takes numbers, the default. A layer that
+ * knows the basis of a percentage can take `BoxInput<LengthInput>` (see
+ * `placement/length`) and resolve its lengths before it calls `make`.
  */
-export interface BoxInput {
+export interface BoxInput<L extends LengthInput = number>
+  extends Sizing.SizingInput<L>, Alignment.Align2dInput {
   /**
    * The gap between the parent's top edge and the box, as `top` in CSS
    * absolute positioning. When set, it anchors the vertical position.
    * Together with `bottom`, it also determines an unset height. It is unset
    * when omitted or non-finite.
    */
-  readonly top?: number | undefined
+  readonly top?: L | undefined
   /**
    * The gap between the box and the parent's right edge, as `right` in CSS
    * absolute positioning. When it is set and `left` is unset, the box
    * anchors to the right edge. Together with `left`, it also determines an
    * unset width. It is unset when omitted or non-finite.
    */
-  readonly right?: number | undefined
+  readonly right?: L | undefined
   /**
    * The gap between the box and the parent's bottom edge, as `bottom` in
    * CSS absolute positioning. When it is set and `top` is unset, the box
    * anchors to the bottom edge. Together with `top`, it also determines an
    * unset height. It is unset when omitted or non-finite.
    */
-  readonly bottom?: number | undefined
+  readonly bottom?: L | undefined
   /**
    * The gap between the parent's left edge and the box, as `left` in CSS
    * absolute positioning. When set, it anchors the horizontal position.
    * Together with `right`, it also determines an unset width. It is unset
    * when omitted or non-finite.
    */
-  readonly left?: number | undefined
-  /**
-   * The preferred width. It is unset when omitted or non-finite. The
-   * resolved width then derives from the horizontal insets, from the height
-   * and `aspectRatio`, or fills the parent (see `apply`).
-   */
-  readonly width?: number | undefined
-  /**
-   * The preferred height. It is unset when omitted or non-finite. The
-   * resolved height then derives from the vertical insets, from the width
-   * and `aspectRatio`, or fills the parent (see `apply`).
-   */
-  readonly height?: number | undefined
-  /**
-   * The width-to-height ratio, as a number (`width / height`) or a
-   * `[width, height]` pair such as `[16, 9]` (see `placement/aspectRatio`).
-   * It derives the dimension that no explicit size or pair of insets
-   * determines. A pair derives it with one rounding. Ratios whose value is
-   * non-positive or non-finite act as unset. It is unset when
-   * omitted.
-   */
-  readonly aspectRatio?: AspectRatio.AspectRatio | undefined
-  /**
-   * The lower bound on the resolved width. Negative values clamp to `0`.
-   * The default is `0`. Non-finite values act as unset.
-   */
-  readonly minWidth?: number | undefined
-  /**
-   * The lower bound on the resolved height. Negative values clamp to `0`.
-   * The default is `0`. Non-finite values act as unset.
-   */
-  readonly minHeight?: number | undefined
-  /**
-   * The upper bound on the resolved width. Negative values clamp to `0`.
-   * If the bounds cross, `minWidth` wins, as in CSS `clamp()`. The default
-   * is `Infinity` (unconstrained). Non-finite values act as unset.
-   */
-  readonly maxWidth?: number | undefined
-  /**
-   * The upper bound on the resolved height. Negative values clamp to `0`.
-   * If the bounds cross, `minHeight` wins, as in CSS `clamp()`. The default
-   * is `Infinity` (unconstrained). Non-finite values act as unset.
-   */
-  readonly maxHeight?: number | undefined
+  readonly left?: L | undefined
 }
 
 /**
@@ -118,6 +83,7 @@ class Box extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
   readonly [Raw]: RawInput
+  readonly [SizingOf]: Sizing.Sizing
 
   constructor(input: BoxInput) {
     super()
@@ -135,7 +101,12 @@ class Box extends Pipeable {
       minHeight: input.minHeight ?? undefined,
       maxWidth: input.maxWidth ?? undefined,
       maxHeight: input.maxHeight ?? undefined,
+      alignX: input.alignX ?? undefined,
+      alignY: input.alignY ?? undefined,
+      stretchX: input.stretchX ?? undefined,
+      stretchY: input.stretchY ?? undefined,
     }
+    this[SizingOf] = Sizing.normalize(this[Raw])
   }
 
   /**
@@ -200,8 +171,7 @@ class Box extends Pipeable {
    * clamped to `>= 0`, or `0` when unset or non-finite.
    */
   get minWidth(): number {
-    const raw = this[Raw].minWidth ?? 0
-    return Number.isFinite(raw) ? Math.max(raw, 0) : 0
+    return this[SizingOf].minWidth
   }
 
   /**
@@ -209,8 +179,7 @@ class Box extends Pipeable {
    * clamped to `>= 0`, or `0` when unset or non-finite.
    */
   get minHeight(): number {
-    const raw = this[Raw].minHeight ?? 0
-    return Number.isFinite(raw) ? Math.max(raw, 0) : 0
+    return this[SizingOf].minHeight
   }
 
   /**
@@ -219,8 +188,7 @@ class Box extends Pipeable {
    * cross, it rises to `minWidth`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxWidth(): number {
-    const raw = this[Raw].maxWidth ?? Number.POSITIVE_INFINITY
-    return Number.isFinite(raw) ? Math.max(raw, this.minWidth) : Number.POSITIVE_INFINITY
+    return this[SizingOf].maxWidth
   }
 
   /**
@@ -229,8 +197,39 @@ class Box extends Pipeable {
    * cross, it rises to `minHeight`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxHeight(): number {
-    const raw = this[Raw].maxHeight ?? Number.POSITIVE_INFINITY
-    return Number.isFinite(raw) ? Math.max(raw, this.minHeight) : Number.POSITIVE_INFINITY
+    return this[SizingOf].maxHeight
+  }
+
+  /**
+   * The raw alignment across x, or `Alignment.inherit` when unset. Any
+   * non-finite value inherits in `apply`.
+   */
+  get alignX(): number {
+    return this[Raw].alignX ?? Alignment.inherit
+  }
+
+  /**
+   * The raw alignment across y, or `Alignment.inherit` when unset. Any
+   * non-finite value inherits in `apply`.
+   */
+  get alignY(): number {
+    return this[Raw].alignY ?? Alignment.inherit
+  }
+
+  /**
+   * The raw stretch across x, or `Alignment.inherit` when unset. Any
+   * non-finite value inherits in `apply`.
+   */
+  get stretchX(): number {
+    return this[Raw].stretchX ?? Alignment.inherit
+  }
+
+  /**
+   * The raw stretch across y, or `Alignment.inherit` when unset. Any
+   * non-finite value inherits in `apply`.
+   */
+  get stretchY(): number {
+    return this[Raw].stretchY ?? Alignment.inherit
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
@@ -282,26 +281,38 @@ export const isBox = (value: unknown): value is Box => {
 
 /**
  * Solves the box against a parent rect, as in CSS absolute positioning.
- * Each axis resolves independently. The rules below show the horizontal
- * axis. The vertical axis mirrors them with `top`/`bottom`/`height`.
+ * Each axis resolves the same way. The rules below show the horizontal
+ * axis. The vertical axis mirrors them with `top`/`bottom`/`height` and
+ * `alignY`/`stretchY`.
  *
- * The used width is the first of these that applies:
+ * The box sits in the room its insets leave: the parent less whichever of
+ * `left` and `right` are set. `stretchX` is how much of that room the box
+ * absorbs into its width, and `alignX` is where the box sits in the room
+ * left over, as fractions (see `placement/alignment`).
+ *
+ * Each inherited alignment field takes the box's default:
+ *
+ * - `stretchX` fills the room, unless the width is set, or the ratio sizes
+ *   the width from a height that something besides this default sizes: an
+ *   explicit height, a stretch across y, or a `top`/`bottom` pair. An
+ *   inset pair always fills, so it ranks above the ratio, and the default
+ *   fill ranks below it. That is CSS grid's `normal`.
+ * - `alignX` is `1` when only `right` is set, which anchors the box to
+ *   `right`, and `0` otherwise, which anchors it to `left` or to the
+ *   parent's left edge. An over-constrained box ignores `right`, as in
+ *   CSS.
+ *
+ * The used width is then the first of these that applies:
+ *
+ * - the stretched width, when the stretch is not `0`: the width the box
+ *   would have unstretched, moved by `stretchX` toward the room,
  * - the explicit `width`,
- * - `parent.width - left - right` when both insets are set,
- * - the used height times `aspectRatio`, when the ratio is set and one of
- *   the two rules above resolved the height,
- * - the fill fallback: `parent.width` minus whichever insets are set.
+ * - the used height times `aspectRatio`,
+ * - `0`.
  *
- * In every case, `minWidth` and `maxWidth` clamp the result. If the bounds
- * cross, the minimum wins, so the fill fallback never goes negative. If no
- * explicit size or inset pair determines either axis, `apply` ignores
- * `aspectRatio` and both axes fill.
- *
- * The box then anchors to `left` when it is set. An over-constrained box
- * ignores `right`, as in CSS. Otherwise the box anchors to `right`,
- * measured with the used width. With neither inset set, the box sits at
- * the parent's left edge. The fill fallback makes this the same as a
- * `left` of `0`.
+ * In every case, `minWidth` and `maxWidth` clamp the result, and if the
+ * bounds cross, the minimum wins, so a fill never goes negative. If the
+ * default fill sizes both axes, `apply` ignores `aspectRatio`.
  *
  * The arithmetic is exact IEEE 754 (see PRECISION.md). The data-last form
  * omits `self` and returns a function of it.
@@ -318,73 +329,60 @@ export const isBox = (value: unknown): value is Box => {
  * // Rect [10, 0, 360, 200]
  * Box.apply(Box.make({ top: 0, bottom: 0, aspectRatio: 1 }), parent)
  * // Rect [0, 0, 200, 200] — the width derives from the inset-determined height
+ * Box.apply(Box.make({ width: 100, height: 50, alignX: 0.5, alignY: 0.5 }), parent)
+ * // Rect [150, 75, 100, 50]
  * ```
  */
 export const apply: {
   (self: Box, parent: Rect.Rect): Rect.Rect
   (parent: Rect.Rect): (self: Box) => Rect.Rect
 } = dual(2, (self: Box, parent: Rect.Rect): Rect.Rect => {
-  const { top, right, bottom, left, minWidth, minHeight, maxWidth, maxHeight } = self
+  const { top, right, bottom, left, stretchX, stretchY } = self
+  const sizing = self[SizingOf]
 
   const topIsSet = Number.isFinite(top)
   const rightIsSet = Number.isFinite(right)
   const bottomIsSet = Number.isFinite(bottom)
   const leftIsSet = Number.isFinite(left)
 
-  // The value gates the derivation, and the ratio as given derives the
-  // extent, so a pair rounds once.
-  const aspectRatio = self[Raw].aspectRatio ?? Number.NaN
-  const ratio = AspectRatio.toNumber(aspectRatio)
+  // The room each axis leaves the box: the parent less the set insets.
+  const roomX = parent.width - (leftIsSet ? left : 0) - (rightIsSet ? right : 0)
+  const roomY = parent.height - (topIsSet ? top : 0) - (bottomIsSet ? bottom : 0)
 
-  let width = Number.isFinite(self.width)
-    ? clamp(self.width, minWidth, maxWidth)
-    : leftIsSet && rightIsSet
-      ? clamp(parent.width - left - right, minWidth, maxWidth)
-      : Number.NaN
+  // The default stretch fills the room unless an explicit size sets the
+  // axis, or the ratio sizes it from the other axis, which something
+  // besides the default fill sizes. An inset pair always fills.
+  const widthIsSet = !Number.isNaN(sizing.width)
+  const heightIsSet = !Number.isNaN(sizing.height)
+  const pairX = leftIsSet && rightIsSet
+  const pairY = topIsSet && bottomIsSet
+  const sizedX = widthIsSet || (Number.isFinite(stretchX) ? stretchX !== 0 : pairX)
+  const sizedY = heightIsSet || (Number.isFinite(stretchY) ? stretchY !== 0 : pairY)
+  const hasRatio = sizing.aspectRatio !== undefined
+  const x = Alignment.resolve(Alignment.x(self), {
+    align: rightIsSet && !leftIsSet ? 1 : 0,
+    stretch: !widthIsSet && (pairX || !(hasRatio && sizedY)) ? 1 : 0,
+  })
+  const y = Alignment.resolve(Alignment.y(self), {
+    align: bottomIsSet && !topIsSet ? 1 : 0,
+    stretch: !heightIsSet && (pairY || !(hasRatio && sizedX)) ? 1 : 0,
+  })
 
-  let height = Number.isFinite(self.height)
-    ? clamp(self.height, minHeight, maxHeight)
-    : topIsSet && bottomIsSet
-      ? clamp(parent.height - top - bottom, minHeight, maxHeight)
-      : Number.NaN
+  // A stretch fixes its axis, moving the unstretched size toward the room.
+  const unstretched = Sizing.resolve(sizing, { width: 0, height: 0 })
+  const { width, height } = Sizing.resolve(sizing, {
+    width: (1 - x.stretch) * unstretched.width + x.stretch * roomX,
+    height: (1 - y.stretch) * unstretched.height + y.stretch * roomY,
+    definiteWidth: x.stretch !== 0,
+    definiteHeight: y.stretch !== 0,
+  })
 
-  if (Number.isFinite(ratio) && ratio > 0) {
-    if (Number.isNaN(width) && !Number.isNaN(height)) {
-      width = clamp(AspectRatio.widthFor(aspectRatio, height), minWidth, maxWidth)
-    } else if (Number.isNaN(height) && !Number.isNaN(width)) {
-      height = clamp(AspectRatio.heightFor(aspectRatio, width), minHeight, maxHeight)
-    }
-  }
-
-  if (Number.isNaN(width)) {
-    width = clamp(
-      parent.width - (leftIsSet ? left : 0) - (rightIsSet ? right : 0),
-      minWidth,
-      maxWidth,
-    )
-  }
-
-  if (Number.isNaN(height)) {
-    height = clamp(
-      parent.height - (topIsSet ? top : 0) - (bottomIsSet ? bottom : 0),
-      minHeight,
-      maxHeight,
-    )
-  }
-
-  const x = leftIsSet
-    ? parent.x + left
-    : rightIsSet
-      ? parent.x + parent.width - width - right
-      : parent.x
-
-  const y = topIsSet
-    ? parent.y + top
-    : bottomIsSet
-      ? parent.y + parent.height - height - bottom
-      : parent.y
-
-  return Rect.make(x, y, width, height)
+  return Rect.make(
+    parent.x + (leftIsSet ? left : 0) + x.align * (roomX - width),
+    parent.y + (topIsSet ? top : 0) + y.align * (roomY - height),
+    width,
+    height,
+  )
 })
 
 // Setters rebuild from the raw inputs (toJSON), never from a resolved value.
@@ -685,3 +683,111 @@ export const setMaxHeight: {
   (self: Box, maxHeight: number): Box
   (maxHeight: number): (self: Box) => Box
 } = dual(2, (self: Box, maxHeight: number) => new Box({ ...self.toJSON(), maxHeight }))
+
+/**
+ * Sets where the box sits in the room its insets leave, as fractions
+ * across x and y (see `apply`). One value sets both axes. A non-finite
+ * value inherits the box's default. The data-last form omits `self` and
+ * returns a function of it.
+ *
+ * @param self - The box to update.
+ * @param alignX - The alignment across x: `0` left, `0.5` centered, `1` right.
+ * @param alignY - The alignment across y: `0` top, `0.5` centered, `1` bottom. Defaults to `alignX`.
+ * @returns A new box with both alignments replaced.
+ * @example
+ * ```ts
+ * const centered = Box.setAlign(Box.make({ width: 100, height: 50 }), 0.5)
+ * Box.apply(centered, Rect.make(400, 200)) // Rect [150, 75, 100, 50]
+ * ```
+ */
+export const setAlign: {
+  (self: Box, alignX: number, alignY?: number): Box
+  (alignX: number, alignY?: number): (self: Box) => Box
+} = dual(
+  (args) => isBox(args[0]),
+  (self: Box, alignX: number, alignY?: number) =>
+    new Box({ ...self.toJSON(), alignX, alignY: alignY ?? alignX }),
+)
+
+/**
+ * Sets where the box sits across x in the room its insets leave: `0` at
+ * the left, `1` at the right. A non-finite value inherits the box's
+ * default. The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The box to update.
+ * @param alignX - The new alignment across x.
+ * @returns A new box with the alignment across x replaced.
+ */
+export const setAlignX: {
+  (self: Box, alignX: number): Box
+  (alignX: number): (self: Box) => Box
+} = dual(2, (self: Box, alignX: number) => new Box({ ...self.toJSON(), alignX }))
+
+/**
+ * Sets where the box sits across y in the room its insets leave: `0` at
+ * the top, `1` at the bottom. A non-finite value inherits the box's
+ * default. The data-last form omits `self` and returns a function of it.
+ *
+ * @param self - The box to update.
+ * @param alignY - The new alignment across y.
+ * @returns A new box with the alignment across y replaced.
+ */
+export const setAlignY: {
+  (self: Box, alignY: number): Box
+  (alignY: number): (self: Box) => Box
+} = dual(2, (self: Box, alignY: number) => new Box({ ...self.toJSON(), alignY }))
+
+/**
+ * Sets how much of the room its insets leave the box absorbs into its
+ * size, as fractions across x and y (see `apply`). One value sets both
+ * axes. A non-finite value inherits the box's default. The data-last form
+ * omits `self` and returns a function of it.
+ *
+ * @param self - The box to update.
+ * @param stretchX - The stretch across x: `0` keeps the width, `1` fills the room.
+ * @param stretchY - The stretch across y: `0` keeps the height, `1` fills the room. Defaults to `stretchX`.
+ * @returns A new box with both stretches replaced.
+ * @example
+ * ```ts
+ * const half = Box.setStretch(Box.make({}), 0.5)
+ * Box.apply(half, Rect.make(400, 200)) // Rect [0, 0, 200, 100]
+ * ```
+ */
+export const setStretch: {
+  (self: Box, stretchX: number, stretchY?: number): Box
+  (stretchX: number, stretchY?: number): (self: Box) => Box
+} = dual(
+  (args) => isBox(args[0]),
+  (self: Box, stretchX: number, stretchY?: number) =>
+    new Box({ ...self.toJSON(), stretchX, stretchY: stretchY ?? stretchX }),
+)
+
+/**
+ * Sets how much of the room across x the box absorbs into its width: `0`
+ * keeps the width, `1` fills the room. A non-finite value inherits the
+ * box's default. The data-last form omits `self` and returns a function of
+ * it.
+ *
+ * @param self - The box to update.
+ * @param stretchX - The new stretch across x.
+ * @returns A new box with the stretch across x replaced.
+ */
+export const setStretchX: {
+  (self: Box, stretchX: number): Box
+  (stretchX: number): (self: Box) => Box
+} = dual(2, (self: Box, stretchX: number) => new Box({ ...self.toJSON(), stretchX }))
+
+/**
+ * Sets how much of the room across y the box absorbs into its height: `0`
+ * keeps the height, `1` fills the room. A non-finite value inherits the
+ * box's default. The data-last form omits `self` and returns a function of
+ * it.
+ *
+ * @param self - The box to update.
+ * @param stretchY - The new stretch across y.
+ * @returns A new box with the stretch across y replaced.
+ */
+export const setStretchY: {
+  (self: Box, stretchY: number): Box
+  (stretchY: number): (self: Box) => Box
+} = dual(2, (self: Box, stretchY: number) => new Box({ ...self.toJSON(), stretchY }))

@@ -1,109 +1,42 @@
 import { Pipeable, dual } from 'curvy/utils'
+import * as Alignment from './alignment.ts'
 import type * as AspectRatio from './aspectRatio.ts'
-import { type NormalizedSizing, normalizeSizing, normalizeTRBL } from './utils/arguments.ts'
+import { type RawSizing, SizeOf, SizingOf } from './internal/sizing.ts'
+import type { LengthInput } from './length.ts'
+import * as Margin from './margin.ts'
+import * as Sizing from './sizing.ts'
+import { normalizeTRBL } from './utils/arguments.ts'
 
 const TypeBrand: unique symbol = Symbol('placement/frame')
 type TypeBrand = typeof TypeBrand
 
-// Sizing state uses module-private symbols, not `#private` fields, so reads
-// still work through a `Proxy` (Vue's `ref`/`reactive`).
+// The raw sizing inputs use a symbol, not a `#private` field, so reads
+// still work through a `Proxy` (Vue's `ref`/`reactive`). The normalized
+// sizing and the resolved size use the shared keys in `internal/sizing.ts`.
 const Raw: unique symbol = Symbol('placement/frame/raw')
-const Sizing: unique symbol = Symbol('placement/frame/sizing')
-
-type RawSizing = {
-  readonly [K in 'width' | 'height' | 'minWidth' | 'minHeight' | 'maxWidth' | 'maxHeight']:
-    | number
-    | undefined
-} & {
-  readonly aspectRatio: AspectRatio.AspectRatio | undefined
-}
 
 /**
  * The construction input for `make`. Every field is optional. Passing
  * `undefined` is the same as omitting the field.
  *
- * Each group of fields treats omission differently. Offsets, `grow`, and
- * `shrink` default to `0`. The fields `align` and `stretch` default to the
- * inherit sentinel (`Number.POSITIVE_INFINITY`). The sizing fields stay
- * unset and get no default. These are `width`, `height`, `aspectRatio`, and
- * the min/max constraints. The frame derives them from the fields that are
- * set (see `Frame`). The `id` stays `undefined` when omitted.
+ * Each group of fields treats omission differently:
  *
- * The type parameter `K` is the literal type of `id`, or `undefined` when
- * the frame has none.
+ * - Margins (see `placement/margin`), `grow`, and `shrink` default to `0`.
+ * - `align` and `stretch` (see `placement/alignment`) default to the
+ *   inherit sentinel, `Alignment.inherit`, which takes the layout's
+ *   `alignItems` and `stretchItems`.
+ * - The sizing fields (see `placement/sizing`) stay unset, and so does any
+ *   non-finite size or bound. An unset width or height derives through
+ *   `aspectRatio` or takes the size its layout supplies, which is `0` for
+ *   the frame's own `width` and `height` (see `Frame`).
+ *
+ * The type parameter `L` is the type of the length fields: the margins,
+ * the sizes, and the bounds. `make` takes numbers, the default. A layer
+ * that knows the basis of a percentage can take `FrameInput<LengthInput>`
+ * (see `placement/length`) and resolve its lengths before it calls `make`.
  */
-export interface FrameInput<K extends string | undefined = string | undefined> {
-  /**
-   * An identifier for the frame. Layouts that connect frames to each other,
-   * such as `Hierarchy.apply` (from `placement/hierarchy`), require it and
-   * reference frames by it. Other layouts ignore it. Defaults to
-   * `undefined`.
-   */
-  readonly id?: K
-  /**
-   * Space reserved above the frame, which is its top margin in the
-   * container. A non-finite value requests an auto margin. Layout then gives
-   * the edge an equal share of the free space on its axis. Defaults to `0`.
-   */
-  readonly offsetTop?: number | undefined
-  /**
-   * Space reserved to the right of the frame, which is its right margin. A
-   * non-finite value requests an auto margin. Layout then gives the edge an
-   * equal share of the free space on its axis. Defaults to `0`.
-   */
-  readonly offsetRight?: number | undefined
-  /**
-   * Space reserved below the frame, which is its bottom margin. A non-finite
-   * value requests an auto margin. Layout then gives the edge an equal share
-   * of the free space on its axis. Defaults to `0`.
-   */
-  readonly offsetBottom?: number | undefined
-  /**
-   * Space reserved to the left of the frame, which is its left margin. A
-   * non-finite value requests an auto margin. Layout then gives the edge an
-   * equal share of the free space on its axis. Defaults to `0`.
-   */
-  readonly offsetLeft?: number | undefined
-  /**
-   * The preferred width. If you omit it, the width is unset. The resolved
-   * width then derives from the height and `aspectRatio`, or falls back to
-   * `0`.
-   */
-  readonly width?: number | undefined
-  /**
-   * The preferred height. If you omit it, the height is unset. The resolved
-   * height then derives from the width and `aspectRatio`, or falls back to
-   * `0`.
-   */
-  readonly height?: number | undefined
-  /**
-   * The width-to-height ratio, as a number (`width / height`) or a
-   * `[width, height]` pair such as `[16, 9]` (see `placement/aspectRatio`).
-   * The frame uses it to derive whichever of `width` and `height` is
-   * unset. A pair derives it with one rounding. Ratios whose value is non-positive or `NaN` act as unset. If you omit it, the
-   * ratio is unset.
-   */
-  readonly aspectRatio?: AspectRatio.AspectRatio | undefined
-  /**
-   * The lower bound on the resolved width. Negative values clamp to `0`.
-   * Defaults to `0`.
-   */
-  readonly minWidth?: number | undefined
-  /**
-   * The lower bound on the resolved height. Negative values clamp to `0`.
-   * Defaults to `0`.
-   */
-  readonly minHeight?: number | undefined
-  /**
-   * The upper bound on the resolved width. Negative values clamp to `0`.
-   * Defaults to `Infinity` (unconstrained).
-   */
-  readonly maxWidth?: number | undefined
-  /**
-   * The upper bound on the resolved height. Negative values clamp to `0`.
-   * Defaults to `Infinity` (unconstrained).
-   */
-  readonly maxHeight?: number | undefined
+export interface FrameInput<L extends LengthInput = number>
+  extends Sizing.SizingInput<L>, Margin.MarginInput<L>, Alignment.AlignInput {
   /**
    * The flex grow factor: the frame's share of positive free space along
    * the container's main axis, in proportion to the other items' factors.
@@ -117,21 +50,6 @@ export interface FrameInput<K extends string | undefined = string | undefined> {
    * to `1`.
    */
   readonly shrink?: number | undefined
-  /**
-   * The position of the frame in the free cross-axis space of its line, as
-   * a fraction: `0` at the cross start, `0.5` centered, `1` at the cross
-   * end. Defaults to `Number.POSITIVE_INFINITY`, the inherit sentinel,
-   * which applies the container's `alignItems`.
-   */
-  readonly align?: number | undefined
-  /**
-   * How much of the free cross-axis space the frame absorbs into its size,
-   * as a fraction: `0` keeps the resolved size, `1` fills the line. The
-   * min/max constraints still apply. Defaults to
-   * `Number.POSITIVE_INFINITY`, the inherit sentinel, which applies the
-   * container's `stretchItems`.
-   */
-  readonly stretch?: number | undefined
 }
 
 /**
@@ -144,54 +62,56 @@ export interface FrameInput<K extends string | undefined = string | undefined> {
  * getters resolve from whatever is set. The setters rebuild from the raw
  * inputs, so a derived dimension keeps re-deriving after any setter.
  *
- * Width and height resolve in this order:
+ * Width and height resolve as `resolve` in `placement/sizing` resolves
+ * them, with `0` for an unset size:
+ *
  * - If both are set, each clamps to its own min/max constraints.
- * - If one is set and `aspectRatio` is positive, the set dimension clamps.
- *   The other derives from it through the ratio, then clamps.
+ * - If one is set and `aspectRatio` is set, the set dimension clamps. The
+ *   other derives from it through the ratio, then clamps.
  * - If only `aspectRatio` is set, the ratio applies against the clamped `0`
  *   fallbacks. A positive minimum on one axis then drives the other.
  * - If nothing is set, both dimensions fall back to `0`, clamped.
  *
+ * Layouts resolve the sizing again where they fix an axis. A frame
+ * stretched into known space takes the stretched size on that axis, and an
+ * unset size on the other axis follows it through the ratio (see
+ * `Flexbox.apply` and `Hierarchy.apply`).
+ *
  * The resolution arithmetic is exact IEEE 754 (see PRECISION.md).
  *
- * The type parameter `K` is the literal type of `id`. A frame without an id
- * is a `Frame<undefined>`. The bare `Frame` type accepts any frame.
+ * A frame has no identity. A layout that connects items, such as
+ * `Hierarchy.apply` (from `placement/hierarchy`), takes its frames keyed by
+ * id.
  *
  * Create a frame with `make`.
  */
-class Frame<K extends string | undefined = string | undefined> extends Pipeable {
+class Frame extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
   /**
-   * The frame's identifier, or `undefined` when it has none. Layouts that
-   * connect frames, such as `Hierarchy.apply`, reference frames by it.
+   * The space reserved above the frame in its container. A non-finite value
+   * is an auto margin. Layout then gives the edge an equal share of the free
+   * space on its axis.
    */
-  readonly id: K
-
+  readonly marginTop: number
   /**
-   * Space reserved above the frame, which is its top margin in the
-   * container. A non-finite value is an auto margin. Layout then gives the
-   * edge an equal share of the free space on its axis.
+   * The space reserved to the right of the frame. A non-finite value is an
+   * auto margin. Layout then gives the edge an equal share of the free space
+   * on its axis.
    */
-  readonly offsetTop: number
+  readonly marginRight: number
   /**
-   * Space reserved to the right of the frame, which is its right margin. A
-   * non-finite value is an auto margin. Layout then gives the edge an equal
-   * share of the free space on its axis.
+   * The space reserved below the frame. A non-finite value is an auto
+   * margin. Layout then gives the edge an equal share of the free space on
+   * its axis.
    */
-  readonly offsetRight: number
+  readonly marginBottom: number
   /**
-   * Space reserved below the frame, which is its bottom margin. A non-finite
-   * value is an auto margin. Layout then gives the edge an equal share of
-   * the free space on its axis.
+   * The space reserved to the left of the frame. A non-finite value is an
+   * auto margin. Layout then gives the edge an equal share of the free space
+   * on its axis.
    */
-  readonly offsetBottom: number
-  /**
-   * Space reserved to the left of the frame, which is its left margin. A
-   * non-finite value is an auto margin. Layout then gives the edge an equal
-   * share of the free space on its axis.
-   */
-  readonly offsetLeft: number
+  readonly marginLeft: number
   /**
    * The flex grow factor: the frame's share of positive free space along
    * the container's main axis, in proportion to the other items' factors.
@@ -205,38 +125,40 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
    */
   readonly shrink: number
   /**
-   * The position of the frame in the free cross-axis space of its line, as
-   * a fraction: `0` at the cross start, `0.5` centered, `1` at the cross
-   * end. `Number.POSITIVE_INFINITY` (the default) inherits the container's
-   * `alignItems`.
+   * Where the frame sits in the free space on the axis its layout names,
+   * as a fraction: `0` at the start, `0.5` centered, `1` at the end. In
+   * flex, that is the cross axis of its line. In a hierarchy, it is the
+   * thickness of its rank. `Alignment.inherit` (the default) takes the
+   * layout's `alignItems`.
    */
   readonly align: number
   /**
-   * How much of the free cross-axis space the frame absorbs into its size,
-   * as a fraction: `0` keeps the resolved size, `1` fills the line, within
-   * the min/max constraints. `Number.POSITIVE_INFINITY` (the default)
-   * inherits the container's `stretchItems`.
+   * How much of the free space on the axis its layout names the frame
+   * absorbs into its size, as a fraction: `0` keeps the resolved size, `1`
+   * fills the space, within the min/max constraints. `Alignment.inherit`
+   * (the default) takes the layout's `stretchItems`.
    */
   readonly stretch: number
 
   // The frame stores sizing inputs raw (undefined means unset) so that
-  // unset-ness survives setter round trips. It resolves them once at
-  // construction.
+  // unset-ness survives setter round trips. It normalizes them, and
+  // resolves its own size, once at construction.
   readonly [Raw]: RawSizing
-  readonly [Sizing]: NormalizedSizing
+  readonly [SizingOf]: Sizing.Sizing
+  readonly [SizeOf]: Sizing.Size
 
-  constructor(input: FrameInput<K>) {
+  constructor(input: FrameInput) {
     super()
 
-    this.id = input.id as K
-    this.offsetTop = input.offsetTop ?? 0
-    this.offsetRight = input.offsetRight ?? 0
-    this.offsetBottom = input.offsetBottom ?? 0
-    this.offsetLeft = input.offsetLeft ?? 0
+    const margin = Margin.normalize(input)
+    this.marginTop = margin.marginTop
+    this.marginRight = margin.marginRight
+    this.marginBottom = margin.marginBottom
+    this.marginLeft = margin.marginLeft
     this.grow = input.grow ?? 0
     this.shrink = input.shrink ?? 0
-    this.align = input.align ?? Number.POSITIVE_INFINITY
-    this.stretch = input.stretch ?? Number.POSITIVE_INFINITY
+    this.align = input.align ?? Alignment.inherit
+    this.stretch = input.stretch ?? Alignment.inherit
 
     const raw: RawSizing = {
       width: input.width,
@@ -248,15 +170,8 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
       maxHeight: input.maxHeight,
     }
     this[Raw] = raw
-    this[Sizing] = normalizeSizing(
-      raw.aspectRatio ?? 0,
-      raw.width ?? Number.NaN,
-      raw.height ?? Number.NaN,
-      raw.minWidth ?? 0,
-      raw.minHeight ?? 0,
-      raw.maxWidth ?? Number.POSITIVE_INFINITY,
-      raw.maxHeight ?? Number.POSITIVE_INFINITY,
-    )
+    this[SizingOf] = Sizing.normalize(raw)
+    this[SizeOf] = Sizing.resolve(this[SizingOf], { width: 0, height: 0 })
   }
 
   /**
@@ -264,13 +179,13 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
    * `maxWidth`, and it is never negative. If the constraints conflict, the
    * minimum wins.
    *
-   * If the raw width is unset, it derives from the height through
-   * `aspectRatio` where possible (`Frame.make({ height: 50, aspectRatio: 2 })`
-   * resolves to `100`). Otherwise it falls back to `0`, which `minWidth` can
-   * raise.
+   * If the raw width is unset or non-finite, it derives from the height
+   * through `aspectRatio` where possible
+   * (`Frame.make({ height: 50, aspectRatio: 2 })` resolves to `100`).
+   * Otherwise it falls back to `0`, which `minWidth` can raise.
    */
   get width(): number {
-    return this[Sizing].width
+    return this[SizeOf].width
   }
 
   /**
@@ -278,13 +193,13 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
    * `maxHeight`, and it is never negative. If the constraints conflict, the
    * minimum wins.
    *
-   * If the raw height is unset, it derives from the width through
-   * `aspectRatio` where possible (`Frame.make({ width: 100, aspectRatio: 2 })`
-   * resolves to `50`). Otherwise it falls back to `0`, which `minHeight` can
-   * raise.
+   * If the raw height is unset or non-finite, it derives from the width
+   * through `aspectRatio` where possible
+   * (`Frame.make({ width: 100, aspectRatio: 2 })` resolves to `50`).
+   * Otherwise it falls back to `0`, which `minHeight` can raise.
    */
   get height(): number {
-    return this[Sizing].height
+    return this[SizeOf].height
   }
 
   /**
@@ -295,41 +210,41 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
    * for `0` over `0` (the empty `Frame.make({})`).
    */
   get aspectRatio(): number {
-    return this[Sizing].aspectRatio
+    return this[SizeOf].width / this[SizeOf].height
   }
 
   /**
    * The effective lower bound on `width`: the raw input clamped to
-   * `>= 0`, and `0` when unset.
+   * `>= 0`, and `0` when unset or non-finite.
    */
   get minWidth(): number {
-    return this[Sizing].minWidth
+    return this[SizingOf].minWidth
   }
 
   /**
    * The effective lower bound on `height`: the raw input clamped to
-   * `>= 0`, and `0` when unset.
+   * `>= 0`, and `0` when unset or non-finite.
    */
   get minHeight(): number {
-    return this[Sizing].minHeight
+    return this[SizingOf].minHeight
   }
 
   /**
    * The effective upper bound on `width`: the raw input clamped to
-   * `>= 0`, and `Infinity` when unset. If the bounds cross, it rises to
-   * `minWidth`, so the minimum wins, as in CSS `clamp()`.
+   * `>= 0`, and `Infinity` when unset or non-finite. If the bounds cross,
+   * it rises to `minWidth`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxWidth(): number {
-    return this[Sizing].maxWidth
+    return this[SizingOf].maxWidth
   }
 
   /**
    * The effective upper bound on `height`: the raw input clamped to
-   * `>= 0`, and `Infinity` when unset. If the bounds cross, it rises to
-   * `minHeight`, so the minimum wins, as in CSS `clamp()`.
+   * `>= 0`, and `Infinity` when unset or non-finite. If the bounds cross,
+   * it rises to `minHeight`, so the minimum wins, as in CSS `clamp()`.
    */
   get maxHeight(): number {
-    return this[Sizing].maxHeight
+    return this[SizingOf].maxHeight
   }
 
   [Symbol.for('nodejs.util.inspect.custom')]() {
@@ -337,22 +252,21 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
   }
 
   /**
-   * Returns the raw inputs of the frame, including its `id`. Unset sizing
-   * fields come back as `undefined`, never as their resolved values.
-   * `JSON.stringify` drops the unset fields (and an unset `id`) and writes
-   * infinite values (`align`/`stretch` inherit, auto offsets) as `null`. The `make` factory reads `null` back as the default
-   * of the field. A JSON round trip therefore keeps inheritance but turns
-   * auto offsets into `0`.
+   * Returns the raw inputs of the frame. Unset sizing fields come back as
+   * `undefined`, never as their resolved values. `JSON.stringify` drops the
+   * unset fields and writes infinite values (`align`/`stretch` inherit,
+   * auto margins) as `null`. The `make` factory reads `null` back as the
+   * default of the field. A JSON round trip therefore keeps inheritance but
+   * turns auto margins into `0`.
    *
    * @returns The raw input record, of the shape `make` accepts.
    */
-  toJSON(): FrameInput<K> {
+  toJSON(): FrameInput {
     return {
-      id: this.id,
-      offsetTop: this.offsetTop,
-      offsetRight: this.offsetRight,
-      offsetBottom: this.offsetBottom,
-      offsetLeft: this.offsetLeft,
+      marginTop: this.marginTop,
+      marginRight: this.marginRight,
+      marginBottom: this.marginBottom,
+      marginLeft: this.marginLeft,
       width: this[Raw].width,
       height: this[Raw].height,
       aspectRatio: this[Raw].aspectRatio,
@@ -385,12 +299,7 @@ export type { Frame }
  * Frame.setWidth(item, 200).height // 100 — the height keeps deriving
  * ```
  */
-// `NoInfer` keeps a contextual type from choosing the id type. Only the
-// input decides it, so an inline frame without an id stays
-// `Frame<undefined>` even where a `Frame<string>` is expected.
-export const make = <const K extends string | undefined = undefined>(
-  input: FrameInput<K>,
-): Frame<NoInfer<K>> => new Frame(input)
+export const make = (input: FrameInput): Frame => new Frame(input)
 
 /**
  * Checks if a value is a `Frame`. Only values that `make` builds carry the
@@ -403,222 +312,162 @@ export const isFrame = (value: unknown): value is Frame => {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
 
-/**
- * Sets the frame's identifier, which changes the frame's type parameter to
- * the new id's literal type. Passing `undefined` removes the id. The id is
- * never a frame, so the arity is fixed. The data-last form omits `self` and
- * returns a function of it.
- *
- * @param self - The frame to update.
- * @param id - The new identifier, or `undefined` to remove it.
- * @returns A new frame with the id replaced.
- * @example
- * ```ts
- * Frame.setId(Frame.make({ width: 100 }), 'start').id // 'start'
- * Frame.make({ id: 'a' }).pipe(Frame.setId(undefined)).id // undefined
- * ```
- */
-export const setId: {
-  <K extends string | undefined, const J extends string | undefined>(
-    self: Frame<K>,
-    id: J,
-  ): Frame<NoInfer<J>>
-  <const J extends string | undefined>(
-    id: J,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<NoInfer<J>>
-} = dual(
-  2,
-  <K extends string | undefined, J extends string | undefined>(self: Frame<K>, id: J): Frame<J> =>
-    new Frame<J>({ ...self.toJSON(), id }),
-)
-
 // Setters rebuild from the raw inputs (toJSON), never from the resolved
 // sizing. Setters with optional trailing arguments dispatch on isFrame. The
 // first argument of the data-last form is always a number, so the two forms
 // cannot collide.
 
 /**
- * Sets all four offsets in CSS shorthand order. One value sets every edge.
+ * Sets all four margins in CSS shorthand order. One value sets every edge.
  * Two values set the vertical edges, then the horizontal edges. Three values
  * set top, horizontal, then bottom. Four values set top, right, bottom, and
  * left. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param offsetTop - The top offset. As the only value, it sets every edge. As the
+ * @param marginTop - The top margin. As the only value, it sets every edge. As the
  * first of two, it sets both vertical edges.
- * @param offsetRight - The right offset. As the second of two values, it sets both
+ * @param marginRight - The right margin. As the second of two values, it sets both
  * horizontal edges.
- * @param offsetBottom - The bottom offset.
- * @param offsetLeft - The left offset.
- * @returns A new frame with the offsets replaced.
+ * @param marginBottom - The bottom margin.
+ * @param marginLeft - The left margin.
+ * @returns A new frame with the margins replaced.
  * @example
  * ```ts
- * Frame.setOffset(Frame.make({}), 1, 2, 3, 4).offsetLeft // 4
- * Frame.make({}).pipe(Frame.setOffset(10, 20)).offsetTop // 10
+ * Frame.setMargin(Frame.make({}), 1, 2, 3, 4).marginLeft // 4
+ * Frame.make({}).pipe(Frame.setMargin(10, 20)).marginTop // 10
  * ```
  */
-export const setOffset: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  <K extends string | undefined>(self: Frame<K>, offsetY: number, offsetX: number): Frame<K>
-  <K extends string | undefined>(
-    self: Frame<K>,
-    offsetTop: number,
-    offsetX: number,
-    offsetBottom: number,
-  ): Frame<K>
-  <K extends string | undefined>(
-    self: Frame<K>,
-    offsetTop: number,
-    offsetRight: number,
-    offsetBottom: number,
-    offsetLeft: number,
-  ): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-  (offsetY: number, offsetX: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+export const setMargin: {
+  (self: Frame, margin: number): Frame
+  (self: Frame, marginY: number, marginX: number): Frame
+  (self: Frame, marginTop: number, marginX: number, marginBottom: number): Frame
   (
-    offsetTop: number,
-    offsetX: number,
-    offsetBottom: number,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+    self: Frame,
+    marginTop: number,
+    marginRight: number,
+    marginBottom: number,
+    marginLeft: number,
+  ): Frame
+  (margin: number): (self: Frame) => Frame
+  (marginY: number, marginX: number): (self: Frame) => Frame
+  (marginTop: number, marginX: number, marginBottom: number): (self: Frame) => Frame
   (
-    offsetTop: number,
-    offsetRight: number,
-    offsetBottom: number,
-    offsetLeft: number,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+    marginTop: number,
+    marginRight: number,
+    marginBottom: number,
+    marginLeft: number,
+  ): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, a: number, b?: number, c?: number, d?: number) => {
+  (self: Frame, a: number, b?: number, c?: number, d?: number) => {
     const [top, right, bottom, left] = normalizeTRBL(a, b, c, d)
     return new Frame({
       ...self.toJSON(),
-      offsetTop: top,
-      offsetRight: right,
-      offsetBottom: bottom,
-      offsetLeft: left,
+      marginTop: top,
+      marginRight: right,
+      marginBottom: bottom,
+      marginLeft: left,
     })
   },
 )
 
 /**
- * Sets the horizontal offsets. One value sets both edges. Two values set
+ * Sets the horizontal margins. One value sets both edges. Two values set
  * left, then right. The data-last form omits `self` and returns a function
  * of it.
  *
  * @param self - The frame to update.
- * @param offsetLeft - The left offset. As the only value, it also sets the right offset.
- * @param offsetRight - The right offset.
- * @returns A new frame with the horizontal offsets replaced.
+ * @param marginLeft - The left margin. As the only value, it also sets the right margin.
+ * @param marginRight - The right margin.
+ * @returns A new frame with the horizontal margins replaced.
  */
-export const setOffsetX: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  <K extends string | undefined>(self: Frame<K>, offsetLeft: number, offsetRight: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-  (
-    offsetLeft: number,
-    offsetRight: number,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+export const setMarginX: {
+  (self: Frame, margin: number): Frame
+  (self: Frame, marginLeft: number, marginRight: number): Frame
+  (margin: number): (self: Frame) => Frame
+  (marginLeft: number, marginRight: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, left: number, right?: number) =>
-    new Frame({ ...self.toJSON(), offsetLeft: left, offsetRight: right ?? left }),
+  (self: Frame, left: number, right?: number) =>
+    new Frame({ ...self.toJSON(), marginLeft: left, marginRight: right ?? left }),
 )
 
 /**
- * Sets the vertical offsets. One value sets both edges. Two values set top,
+ * Sets the vertical margins. One value sets both edges. Two values set top,
  * then bottom. The data-last form omits `self` and returns a function of
  * it.
  *
  * @param self - The frame to update.
- * @param offsetTop - The top offset. As the only value, it also sets the bottom offset.
- * @param offsetBottom - The bottom offset.
- * @returns A new frame with the vertical offsets replaced.
+ * @param marginTop - The top margin. As the only value, it also sets the bottom margin.
+ * @param marginBottom - The bottom margin.
+ * @returns A new frame with the vertical margins replaced.
  */
-export const setOffsetY: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  <K extends string | undefined>(self: Frame<K>, offsetTop: number, offsetBottom: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-  (
-    offsetTop: number,
-    offsetBottom: number,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+export const setMarginY: {
+  (self: Frame, margin: number): Frame
+  (self: Frame, marginTop: number, marginBottom: number): Frame
+  (margin: number): (self: Frame) => Frame
+  (marginTop: number, marginBottom: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, top: number, bottom?: number) =>
-    new Frame({ ...self.toJSON(), offsetTop: top, offsetBottom: bottom ?? top }),
+  (self: Frame, top: number, bottom?: number) =>
+    new Frame({ ...self.toJSON(), marginTop: top, marginBottom: bottom ?? top }),
 )
 
 /**
- * Sets the top offset and keeps the other edges. The data-last form omits
+ * Sets the top margin and keeps the other edges. The data-last form omits
  * `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param offset - The new top offset.
- * @returns A new frame with the top offset replaced.
+ * @param margin - The new top margin.
+ * @returns A new frame with the top margin replaced.
  */
-export const setOffsetTop: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, offset: number) =>
-    new Frame({ ...self.toJSON(), offsetTop: offset }),
-)
+export const setMarginTop: {
+  (self: Frame, margin: number): Frame
+  (margin: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, margin: number) => new Frame({ ...self.toJSON(), marginTop: margin }))
 
 /**
- * Sets the right offset and keeps the other edges. The data-last form omits
+ * Sets the right margin and keeps the other edges. The data-last form omits
  * `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param offset - The new right offset.
- * @returns A new frame with the right offset replaced.
+ * @param margin - The new right margin.
+ * @returns A new frame with the right margin replaced.
  */
-export const setOffsetRight: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, offset: number) =>
-    new Frame({ ...self.toJSON(), offsetRight: offset }),
-)
+export const setMarginRight: {
+  (self: Frame, margin: number): Frame
+  (margin: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, margin: number) => new Frame({ ...self.toJSON(), marginRight: margin }))
 
 /**
- * Sets the bottom offset and keeps the other edges. The data-last form omits
+ * Sets the bottom margin and keeps the other edges. The data-last form omits
  * `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param offset - The new bottom offset.
- * @returns A new frame with the bottom offset replaced.
+ * @param margin - The new bottom margin.
+ * @returns A new frame with the bottom margin replaced.
  */
-export const setOffsetBottom: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, offset: number) =>
-    new Frame({ ...self.toJSON(), offsetBottom: offset }),
-)
+export const setMarginBottom: {
+  (self: Frame, margin: number): Frame
+  (margin: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, margin: number) => new Frame({ ...self.toJSON(), marginBottom: margin }))
 
 /**
- * Sets the left offset and keeps the other edges. The data-last form omits
+ * Sets the left margin and keeps the other edges. The data-last form omits
  * `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param offset - The new left offset.
- * @returns A new frame with the left offset replaced.
+ * @param margin - The new left margin.
+ * @returns A new frame with the left margin replaced.
  */
-export const setOffsetLeft: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, offset: number) =>
-    new Frame({ ...self.toJSON(), offsetLeft: offset }),
-)
+export const setMarginLeft: {
+  (self: Frame, margin: number): Frame
+  (margin: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, margin: number) => new Frame({ ...self.toJSON(), marginLeft: margin }))
 
 /**
  * Sets the preferred width and height. The width comes first. This is the
- * opposite of the two-value form of `setOffset`, which puts the vertical
+ * opposite of the two-value form of `setMargin`, which puts the vertical
  * edges first. One value sets both dimensions. The data-last form omits
  * `self` and returns a function of it.
  *
@@ -633,11 +482,11 @@ export const setOffsetLeft: {
  * ```
  */
 export const setSize: {
-  <K extends string | undefined>(self: Frame<K>, width: number, height?: number): Frame<K>
-  (width: number, height?: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (self: Frame, width: number, height?: number): Frame
+  (width: number, height?: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, width: number, height?: number) =>
+  (self: Frame, width: number, height?: number) =>
     new Frame({ ...self.toJSON(), width, height: height ?? width }),
 )
 
@@ -657,13 +506,9 @@ export const setSize: {
  * ```
  */
 export const setWidth: {
-  <K extends string | undefined>(self: Frame<K>, width: number): Frame<K>
-  (width: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, width: number) =>
-    new Frame({ ...self.toJSON(), width }),
-)
+  (self: Frame, width: number): Frame
+  (width: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, width: number) => new Frame({ ...self.toJSON(), width }))
 
 /**
  * Sets the preferred height and keeps the other sizing inputs, including an
@@ -676,17 +521,13 @@ export const setWidth: {
  * @returns A new frame with the height replaced.
  */
 export const setHeight: {
-  <K extends string | undefined>(self: Frame<K>, height: number): Frame<K>
-  (height: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, height: number) =>
-    new Frame({ ...self.toJSON(), height }),
-)
+  (self: Frame, height: number): Frame
+  (height: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, height: number) => new Frame({ ...self.toJSON(), height }))
 
 /**
  * Sets the width-to-height ratio. The frame uses it to derive whichever
- * dimension is unset. Non-positive and `NaN` ratios act as unset. The
+ * dimension is unset. Non-positive and non-finite ratios act as unset. The
  * data-last form omits `self` and returns a function of it.
  *
  * @param self - The frame to update.
@@ -699,11 +540,11 @@ export const setHeight: {
  * ```
  */
 export const setAspectRatio: {
-  <K extends string | undefined>(self: Frame<K>, aspectRatio: AspectRatio.AspectRatio): Frame<K>
-  (aspectRatio: AspectRatio.AspectRatio): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (self: Frame, aspectRatio: AspectRatio.AspectRatio): Frame
+  (aspectRatio: AspectRatio.AspectRatio): (self: Frame) => Frame
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, aspectRatio: AspectRatio.AspectRatio) =>
+  (self: Frame, aspectRatio: AspectRatio.AspectRatio) =>
     new Frame({ ...self.toJSON(), aspectRatio }),
 )
 
@@ -717,11 +558,11 @@ export const setAspectRatio: {
  * @returns A new frame with both minimums set.
  */
 export const setMinSize: {
-  <K extends string | undefined>(self: Frame<K>, minWidth: number, minHeight?: number): Frame<K>
-  (minWidth: number, minHeight?: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (self: Frame, minWidth: number, minHeight?: number): Frame
+  (minWidth: number, minHeight?: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, minWidth: number, minHeight?: number) =>
+  (self: Frame, minWidth: number, minHeight?: number) =>
     new Frame({ ...self.toJSON(), minWidth, minHeight: minHeight ?? minWidth }),
 )
 
@@ -734,13 +575,9 @@ export const setMinSize: {
  * @returns A new frame with the minimum width replaced.
  */
 export const setMinWidth: {
-  <K extends string | undefined>(self: Frame<K>, minWidth: number): Frame<K>
-  (minWidth: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, minWidth: number) =>
-    new Frame({ ...self.toJSON(), minWidth }),
-)
+  (self: Frame, minWidth: number): Frame
+  (minWidth: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, minWidth: number) => new Frame({ ...self.toJSON(), minWidth }))
 
 /**
  * Sets the minimum height, the lower clamp on the resolved height. The
@@ -751,13 +588,9 @@ export const setMinWidth: {
  * @returns A new frame with the minimum height replaced.
  */
 export const setMinHeight: {
-  <K extends string | undefined>(self: Frame<K>, minHeight: number): Frame<K>
-  (minHeight: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, minHeight: number) =>
-    new Frame({ ...self.toJSON(), minHeight }),
-)
+  (self: Frame, minHeight: number): Frame
+  (minHeight: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, minHeight: number) => new Frame({ ...self.toJSON(), minHeight }))
 
 /**
  * Sets the maximum width and height, width first. One value sets both
@@ -769,11 +602,11 @@ export const setMinHeight: {
  * @returns A new frame with both maximums set.
  */
 export const setMaxSize: {
-  <K extends string | undefined>(self: Frame<K>, maxWidth: number, maxHeight?: number): Frame<K>
-  (maxWidth: number, maxHeight?: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (self: Frame, maxWidth: number, maxHeight?: number): Frame
+  (maxWidth: number, maxHeight?: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, maxWidth: number, maxHeight?: number) =>
+  (self: Frame, maxWidth: number, maxHeight?: number) =>
     new Frame({ ...self.toJSON(), maxWidth, maxHeight: maxHeight ?? maxWidth }),
 )
 
@@ -794,13 +627,9 @@ export const setMaxSize: {
  * ```
  */
 export const setMaxWidth: {
-  <K extends string | undefined>(self: Frame<K>, maxWidth: number): Frame<K>
-  (maxWidth: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, maxWidth: number) =>
-    new Frame({ ...self.toJSON(), maxWidth }),
-)
+  (self: Frame, maxWidth: number): Frame
+  (maxWidth: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, maxWidth: number) => new Frame({ ...self.toJSON(), maxWidth }))
 
 /**
  * Sets the maximum height, the upper clamp on the resolved height.
@@ -813,13 +642,9 @@ export const setMaxWidth: {
  * @returns A new frame with the maximum height replaced.
  */
 export const setMaxHeight: {
-  <K extends string | undefined>(self: Frame<K>, maxHeight: number): Frame<K>
-  (maxHeight: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, maxHeight: number) =>
-    new Frame({ ...self.toJSON(), maxHeight }),
-)
+  (self: Frame, maxHeight: number): Frame
+  (maxHeight: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, maxHeight: number) => new Frame({ ...self.toJSON(), maxHeight }))
 
 /**
  * Sets the flex grow factor: the frame's share of positive free space
@@ -832,13 +657,9 @@ export const setMaxHeight: {
  * @returns A new frame with the grow factor replaced.
  */
 export const setGrow: {
-  <K extends string | undefined>(self: Frame<K>, grow: number): Frame<K>
-  (grow: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, grow: number) =>
-    new Frame({ ...self.toJSON(), grow }),
-)
+  (self: Frame, grow: number): Frame
+  (grow: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, grow: number) => new Frame({ ...self.toJSON(), grow }))
 
 /**
  * Sets the flex shrink factor: the frame's share of main-axis overflow, in
@@ -851,50 +672,39 @@ export const setGrow: {
  * @returns A new frame with the shrink factor replaced.
  */
 export const setShrink: {
-  <K extends string | undefined>(self: Frame<K>, shrink: number): Frame<K>
-  (shrink: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, shrink: number) =>
-    new Frame({ ...self.toJSON(), shrink }),
-)
+  (self: Frame, shrink: number): Frame
+  (shrink: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, shrink: number) => new Frame({ ...self.toJSON(), shrink }))
 
 /**
- * Sets the cross-axis placement of the frame, which overrides the
- * container's `alignItems`. The value is a fraction: `0` at the cross
- * start, `0.5` centered, `1` at the cross end. `Number.POSITIVE_INFINITY`
- * restores inheritance. The data-last form omits `self` and returns a
- * function of it.
+ * Sets where the frame sits on the axis its layout names (the cross axis
+ * in flex), which overrides the layout's `alignItems`. The value is a
+ * fraction: `0` at the start, `0.5` centered, `1` at the end.
+ * `Alignment.inherit` restores inheritance. The data-last form omits
+ * `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param align - The placement fraction, or `Number.POSITIVE_INFINITY` to inherit.
+ * @param align - The placement fraction, or `Alignment.inherit` to inherit.
  * @returns A new frame with the alignment replaced.
  */
 export const setAlign: {
-  <K extends string | undefined>(self: Frame<K>, align: number): Frame<K>
-  (align: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, align: number) =>
-    new Frame({ ...self.toJSON(), align }),
-)
+  (self: Frame, align: number): Frame
+  (align: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, align: number) => new Frame({ ...self.toJSON(), align }))
 
 /**
- * Sets how much of the free cross-axis space the frame absorbs into its
- * size, which overrides the container's `stretchItems`. The value is a
- * fraction: `0` keeps the resolved size, `1` fills the line, within the
- * min/max constraints. `Number.POSITIVE_INFINITY` restores inheritance. The data-last form
- * omits `self` and returns a function of it.
+ * Sets how much of the free space on the axis its layout names the frame
+ * absorbs into its size, which overrides the layout's `stretchItems`. The
+ * value is a fraction: `0` keeps the resolved size, `1` fills the space,
+ * within the min/max constraints. `Alignment.inherit` restores
+ * inheritance. The data-last form omits `self` and returns a function of
+ * it.
  *
  * @param self - The frame to update.
- * @param stretch - The stretch fraction, or `Number.POSITIVE_INFINITY` to inherit.
+ * @param stretch - The stretch fraction, or `Alignment.inherit` to inherit.
  * @returns A new frame with the stretch replaced.
  */
 export const setStretch: {
-  <K extends string | undefined>(self: Frame<K>, stretch: number): Frame<K>
-  (stretch: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, stretch: number) =>
-    new Frame({ ...self.toJSON(), stretch }),
-)
+  (self: Frame, stretch: number): Frame
+  (stretch: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, stretch: number) => new Frame({ ...self.toJSON(), stretch }))

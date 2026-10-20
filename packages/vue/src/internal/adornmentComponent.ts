@@ -1,5 +1,4 @@
 import * as Adornment from 'placement/adornment'
-import * as Frame from 'placement/frame'
 import { type MaybeRefOrGetter, type Ref, type VNode, computed, h } from 'vue'
 import { useParentRectRegistration } from '../composables/useSizingContext.ts'
 import { finiteNumber } from './curve.ts'
@@ -93,8 +92,10 @@ export function useEdgeAdornmentRenderer(
       const end = props.at === 'start' || props.at === 'end' ? props.at : undefined
       const orient = props.orient ?? 'auto'
       return {
+        // The adornment reads the frame input's sizing, margins, and
+        // `align`. It never stretches, so it ignores `stretch`.
         adornment: Adornment.make({
-          frame: Frame.make(input.value),
+          ...input.value,
           at: end === 'start' ? 0 : end === 'end' ? 1 : resolveRatio(props.at, 0.5),
           position:
             props.position === 'absolute' ? Adornment.position.absolute : Adornment.position.flow,

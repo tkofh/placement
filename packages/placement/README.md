@@ -24,11 +24,11 @@ const rects = Flexbox.apply(
 // [Rect (0, 0) 100x100, Rect (110, 0) 290x100]
 ```
 
-A `Frame` describes one item: sizing, min/max, grow/shrink, margins as
-offsets, and alignment. A `Flexbox` describes the container. `Flexbox.apply`
+A `Frame` describes one item: sizing, min/max, grow/shrink, margins, and
+alignment. A `Flexbox` describes the container. `Flexbox.apply`
 returns one `Rect` per frame, positioned inside the parent rect. Wrapping,
 reverse directions, gaps, `alignContent`/`alignItems`/`justifyContent`, and
-auto margins (pass `Infinity` as an offset) all behave like their CSS
+auto margins (pass `Infinity` as a margin) all behave like their CSS
 namesakes.
 
 ## Absolute positioning
@@ -48,7 +48,9 @@ An explicit size wins. An inset pair determines an unset dimension. An
 still undetermined fills the parent minus the set insets. Every size clamps to
 the min/max constraints (the minimum wins, as in CSS `clamp()`). A box anchors
 to `left`/`top` when set, else to `right`/`bottom` measured with the used
-size. The result is CSS absolute positioning without a DOM.
+size. `alignX`/`alignY` and `stretchX`/`stretchY` override that default
+placement and fill within the room the insets leave. The result is CSS
+absolute positioning without a DOM.
 
 ## The pieces underneath
 
@@ -99,9 +101,10 @@ radians.
 
 ## Entry points
 
-`placement/box` · `placement/dimensions` · `placement/flexbox` ·
-`placement/frame` · `placement/interval` · `placement/offset` ·
-`placement/point` · `placement/rect` · `placement/track`
+`placement/alignment` · `placement/box` · `placement/dimensions` ·
+`placement/flexbox` · `placement/frame` · `placement/interval` ·
+`placement/margin` · `placement/offset` · `placement/point` ·
+`placement/rect` · `placement/sizing` · `placement/track`
 
 `placement/unstable/utils` holds internal helpers that `@placement/vue` uses.
 It is not covered by semver, so an export there can change in any release.
