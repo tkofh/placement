@@ -54,6 +54,10 @@ export interface SolveNode {
   // Resolved band placement and stretch.
   readonly place: number
   readonly stretch: number
+  // The order-axis size that follows a rank-axis size through the node's
+  // aspect ratio, for a node whose order-axis size is unset. A stretch
+  // that fixes the rank-axis size within its band sets it.
+  readonly oFor?: ((rSize: number) => number) | undefined
 }
 
 export interface SolvePort {
@@ -170,12 +174,12 @@ interface Band {
  * @returns The placement.
  */
 export function place(
-  nodes: ReadonlyArray<SolveNode>,
+  given: ReadonlyArray<SolveNode>,
   edges: ReadonlyArray<SolveEdge>,
   options: SolveOptions,
   growth: Growth = noGrowth,
 ): Placement {
-  const nodeCount = nodes.length
+  const nodeCount = given.length
   const { rankGap, nodeGap, edgeGap } = options
   // How far a route keeps from a node, which is where a route that leaves
   // a node sideways turns.
@@ -192,7 +196,7 @@ export function place(
 
   // Self loops never enter the layered graph. They route around their node.
   const flow: Array<number> = []
-  const loops: Array<Array<number>> = nodes.map(() => [])
+  const loops: Array<Array<number>> = given.map(() => [])
   for (const [index, edge] of edges.entries()) {
     if (edge.source === edge.target) {
       loops[edge.source]?.push(index)
@@ -236,13 +240,13 @@ export function place(
   // the edge: the stub at either end, or the run through an odd rank, which
   // the adornment's dummy then sizes.
   const ranks: Array<number> = [...nodeRanks]
-  const dummy: Array<boolean> = nodes.map(() => false)
-  const dummyItems: Array<ReadonlyArray<RunItem>> = nodes.map(() => [])
+  const dummy: Array<boolean> = given.map(() => false)
+  const dummyItems: Array<ReadonlyArray<RunItem>> = given.map(() => [])
   const stubItems: Array<readonly [upper: ReadonlyArray<RunItem>, lower: ReadonlyArray<RunItem>]> =
     []
   const segments: Array<Segment> = []
-  const up: Array<Array<number>> = nodes.map(() => [])
-  const down: Array<Array<number>> = nodes.map(() => [])
+  const up: Array<Array<number>> = given.map(() => [])
+  const down: Array<Array<number>> = given.map(() => [])
   const chains: Array<Array<number>> = []
 
   for (const [j, edge] of flowEdges.entries()) {
@@ -318,6 +322,53 @@ export function place(
 
   const graph: LayeredGraph = { rankCount, ranks, dummy, segments, up, down }
   const layers = order(graph)
+
+  // Rank bands. Each band is as thick as the outer size of its largest
+  // element, and its elements stack inside it.
+  const thicknesses: Array<number> = []
+  const placements = new Map<number, { start: number; size: number }>()
+
+  for (const layer of layers) {
+    const items: Array<Track.StackItem> = []
+    const owners: Array<number> = []
+    let thickness = 0
+
+    for (const element of layer) {
+      const item = stackItem(element, nodeCount, given, dummyItems)
+      if (item === undefined) {
+        continue
+      }
+      items.push(item)
+      owners.push(element)
+      const size = clamp(item.basis ?? 0, item.min ?? 0, item.max ?? Number.POSITIVE_INFINITY)
+      thickness = Math.max(thickness, size + finite(item.start) + finite(item.end))
+    }
+
+    thicknesses.push(thickness)
+    if (items.length > 0) {
+      const track = Track.stack(items, { size: thickness })
+      for (const [i, interval] of track.intervals.entries()) {
+        placements.set(owners[i] as number, { start: interval.start, size: interval.size })
+      }
+    }
+  }
+
+  // A node stretched within its band has a fixed rank-axis size, and an
+  // unset order-axis size follows it through the node's ratio. The stack
+  // stretches a node without auto rank-axis margins (see `applyStretch`).
+  const nodes: ReadonlyArray<SolveNode> = given.map((node, element) => {
+    const { oFor } = node
+    if (
+      oFor === undefined ||
+      node.stretch === 0 ||
+      !Number.isFinite(node.rStart) ||
+      !Number.isFinite(node.rEnd)
+    ) {
+      return node
+    }
+    const placement = placements.get(element) as { start: number; size: number }
+    return { ...node, oSize: oFor(placement.size) }
+  })
 
   // The routes that run beside each node, on each of its order faces, and
   // the room they need there: each takes an edge gap, and the stub out of
@@ -603,36 +654,6 @@ export function place(
   // resolve before the rank bands do.
   const ends = makeEnds()
   const rankAlong = placePorts(ends, orderBox, true, edgeGap, rankOrder, isWrap)
-
-  // Rank bands. Each band is as thick as the outer size of its largest
-  // element, and its elements stack inside it.
-  const thicknesses: Array<number> = []
-  const placements = new Map<number, { start: number; size: number }>()
-
-  for (const layer of layers) {
-    const items: Array<Track.StackItem> = []
-    const owners: Array<number> = []
-    let thickness = 0
-
-    for (const element of layer) {
-      const item = stackItem(element, nodeCount, nodes, dummyItems)
-      if (item === undefined) {
-        continue
-      }
-      items.push(item)
-      owners.push(element)
-      const size = clamp(item.basis ?? 0, item.min ?? 0, item.max ?? Number.POSITIVE_INFINITY)
-      thickness = Math.max(thickness, size + finite(item.start) + finite(item.end))
-    }
-
-    thicknesses.push(thickness)
-    if (items.length > 0) {
-      const track = Track.stack(items, { size: thickness })
-      for (const [i, interval] of track.intervals.entries()) {
-        placements.set(owners[i] as number, { start: interval.start, size: interval.size })
-      }
-    }
-  }
 
   // How far inside its band a node's face sits: the downstream face for
   // `direction` 1, the upstream face for -1.

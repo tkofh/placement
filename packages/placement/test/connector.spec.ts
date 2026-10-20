@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest'
 import * as Adornment from '../src/adornment.ts'
 import * as Connector from '../src/connector.ts'
 import * as Edge from '../src/edge.ts'
-import * as Frame from '../src/frame.ts'
 import * as Interval from '../src/interval.ts'
 import * as Point from '../src/point.ts'
 import * as Rect from '../src/rect.ts'
@@ -34,11 +33,11 @@ const pair = { a: Rect.make(0, 0, 40, 20), b: Rect.make(100, 0, 40, 20) }
 
 // An arrowhead 8 long, with a margin of 2 trailing it.
 const arrow = (at: number, orient: number) =>
-  Adornment.make({ frame: Frame.make({ width: 8, height: 6, offsetLeft: 2 }), at, orient })
+  Adornment.make({ width: 8, height: 6, marginLeft: 2, at, orient })
 
 // An upright label, 20 by 10.
 const label = (at: number, position: number = Adornment.position.flow) =>
-  Adornment.make({ frame: Frame.make({ width: 20, height: 10 }), at, position })
+  Adornment.make({ width: 20, height: 10, at, position })
 
 describe('make', () => {
   const defaults = {
@@ -1042,7 +1041,7 @@ const pointsAt = (layout: Connector.ConnectorLayout, k: number) =>
 describe('merging', () => {
   // An arrowhead 8 long at the target, and two sources, above and below the
   // target's left side.
-  const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+  const head = Adornment.make({ width: 8, height: 6, at: 1, orient: 1 })
   const rects = {
     a: Rect.make(0, -40, 40, 20),
     b: Rect.make(0, 60, 40, 20),
@@ -1120,7 +1119,7 @@ describe('merging', () => {
     // hold each other there. Found alone first, the middle route takes the
     // bottom for its fewer turns, and the long run down from the bottom
     // then draws the far route too: all three leave the bottom together.
-    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 8 }), at: 1, orient: 1 })
+    const head = Adornment.make({ width: 8, height: 8, at: 1, orient: 1 })
     const rects = {
       hub: Rect.make(800, 240, 136, 40),
       store: Rect.make(645, 329, 120, 40),
@@ -1269,7 +1268,7 @@ describe('merging', () => {
     // of the other's lanes, merged at both ends: the lanes stop short of
     // passing each other, so the routes run on without turning back.
     const near = { a: Rect.make(0, 0, 40, 40), b: Rect.make(60, 60, 40, 40) }
-    const tail = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 0 })
+    const tail = Adornment.make({ width: 8, height: 6, at: 0 })
     const edges = [0.25, 0.25].map(() =>
       Edge.make<'a' | 'b'>({
         source: 'a',
@@ -1436,7 +1435,7 @@ describe('notes', () => {
   })
 
   test('a merge without room for its lanes is noted', () => {
-    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+    const head = Adornment.make({ width: 8, height: 6, at: 1, orient: 1 })
     const rects = {
       a: Rect.make(0, -40, 40, 20),
       b: Rect.make(0, 60, 40, 20),
@@ -1477,7 +1476,7 @@ describe('notes', () => {
   })
 
   test('a flow adornment longer than every run is noted', () => {
-    const wide = Adornment.make({ frame: Frame.make({ width: 100, height: 10 }), at: 0.5 })
+    const wide = Adornment.make({ width: 100, height: 10, at: 0.5 })
     const layout = Connector.apply(
       pair,
       [

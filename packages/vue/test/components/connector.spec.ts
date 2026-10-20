@@ -4,7 +4,6 @@ import { Vector2 } from 'curvy/vector'
 import * as Adornment from 'placement/adornment'
 import * as Connector from 'placement/connector'
 import * as Edge from 'placement/edge'
-import * as Frame from 'placement/frame'
 import type * as Point from 'placement/point'
 import * as Rect from 'placement/rect'
 import { afterEach, describe, expect, test, vi } from 'vitest'
@@ -344,7 +343,7 @@ describe('adornments', () => {
       node('d', merged.d),
       node('b', merged.b),
     ])
-    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+    const head = Adornment.make({ width: 8, height: 6, at: 1, orient: 1 })
     const core = Connector.apply(
       merged,
       [
@@ -450,7 +449,7 @@ describe('adornments', () => {
         node('b', merged.b),
       ],
     )
-    const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+    const head = Adornment.make({ width: 8, height: 6, at: 1, orient: 1 })
     const core = Connector.apply(
       merged,
       (['a', 'd'] as const).map((source) =>
@@ -480,7 +479,7 @@ describe('adornments', () => {
           node('b', merged.b),
         ],
       )
-      const head = Adornment.make({ frame: Frame.make({ width: 8, height: 6 }), at: 1, orient: 1 })
+      const head = Adornment.make({ width: 8, height: 6, at: 1, orient: 1 })
       const core = Connector.apply(
         merged,
         (['a', 'd'] as const).map((source) =>
@@ -522,9 +521,10 @@ describe('adornments', () => {
           source: 'a',
           target: 'b',
           adornments: [
-            Adornment.make({ frame: Frame.make({ width: 30, height: 10 }), at: 0.5 }),
+            Adornment.make({ width: 30, height: 10, at: 0.5 }),
             Adornment.make({
-              frame: Frame.make({ width: 10, height: 10 }),
+              width: 10,
+              height: 10,
               at: 0.25,
               position: Adornment.position.absolute,
             }),
