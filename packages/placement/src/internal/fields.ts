@@ -1,5 +1,5 @@
-// The vocabulary of the field tables that each input concept exports
-// (`fields` in `placement/sizing`, for one). A table names what each field
+// The vocabulary of the field tables that each input concept keeps in its
+// internal module (`fields` in `internal/sizing.ts`, for one). A table names what each field
 // of an input is, so that code which checks and resolves inputs, such as a
 // prop layer, can stay generic over the concepts a layout composes.
 

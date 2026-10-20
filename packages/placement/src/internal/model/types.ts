@@ -1,32 +1,68 @@
 // The type-level vocabulary of the model: node kinds, their props and
 // outputs, and the index that maps every path in a model to its kind.
 // Nothing here exists at runtime except through `import type`.
-import type { Box } from '../../box.ts'
-import type { Frame } from '../../frame.ts'
+import type { Box, BoxInput } from '../../box.ts'
+import type { Frame, FrameInput } from '../../frame.ts'
+import type { LengthInput } from '../../length.ts'
 import type { Offset } from '../../offset.ts'
 import type { Point } from '../../point.ts'
 import type { Rect } from '../../rect.ts'
 import type { Flexbox } from '../flexbox.ts'
 
 /**
+ * A flex's gutter as plain data whose sides may be percentages of the
+ * flex's placed rect: `top` and `bottom` of its height, `left` and `right`
+ * of its width. A number is pixels, and an omitted side is `0`.
+ */
+export interface GutterInput {
+  /** The inset from the top edge. */
+  readonly top?: LengthInput | undefined
+  /** The inset from the right edge. */
+  readonly right?: LengthInput | undefined
+  /** The inset from the bottom edge. */
+  readonly bottom?: LengthInput | undefined
+  /** The inset from the left edge. */
+  readonly left?: LengthInput | undefined
+}
+
+/**
+ * A translation as plain data whose components may be percentages of the
+ * node's own size, as in CSS `translate`: `x` of its width, `y` of its
+ * height. A number is pixels, and an omitted component is `0`.
+ */
+export interface TranslateInput {
+  /** The horizontal translation. */
+  readonly x?: LengthInput | undefined
+  /** The vertical translation. */
+  readonly y?: LengthInput | undefined
+}
+
+/**
  * The props of a group node, which places a rect against its parent's rect.
  * Every field is optional, and `undefined` resets a field to its default.
+ * `update` replaces a field whole, so it never merges a plain input into
+ * the one before it.
  */
 export interface GroupProps {
   /**
-   * The positioned-box spec that `Box.apply` (from `placement/box`) solves
-   * against the parent rect. Defaults to `Box.make({})`, which fills the
-   * parent.
+   * The positioned box that `Box.apply` (from `placement/box`) solves
+   * against the parent rect: a `Box`, or its fields as a
+   * `BoxInput<LengthInput>`, whose percentages resolve against the parent
+   * rect. Defaults to `Box.make({})`, which fills the parent.
    */
-  readonly box?: Box | undefined
+  readonly box?: Box | BoxInput<LengthInput> | undefined
   /**
    * The point of the rect, as a fraction of its size, that lands where the
    * box placed the rect's top-left corner. `Point.half` centers the rect on
    * that position. Defaults to `Point.zero`.
    */
   readonly origin?: Point | undefined
-  /** A final translation of the rect. Defaults to `Point.zero`. */
-  readonly translate?: Point | undefined
+  /**
+   * A final translation of the rect: a `Point`, or a `TranslateInput` whose
+   * percentages resolve against the rect's own size. Defaults to
+   * `Point.zero`.
+   */
+  readonly translate?: Point | TranslateInput | undefined
 }
 
 /**
@@ -41,10 +77,12 @@ export interface FlexProps extends GroupProps {
    */
   readonly layout?: Flexbox | undefined
   /**
-   * The inset of the content rect from the placed rect. The node's output
-   * and its items' basis are the content rect. Defaults to `Offset.zero`.
+   * The inset of the content rect from the placed rect: an `Offset`, or a
+   * `GutterInput` whose percentages resolve against the placed rect. The
+   * node's output and its items' basis are the content rect. Defaults to
+   * `Offset.zero`.
    */
-  readonly gutter?: Offset | undefined
+  readonly gutter?: Offset | GutterInput | undefined
 }
 
 /**
@@ -53,10 +91,14 @@ export interface FlexProps extends GroupProps {
  */
 export interface ItemProps {
   /**
-   * The flex-item spec that the parent's `Flexbox.apply` reads. Defaults to
-   * `Frame.make({})`.
+   * The flex item that the parent's `Flexbox.apply` reads: a `Frame`, or
+   * its fields as a `FrameInput<LengthInput>`, whose percentages resolve
+   * against the parent's content rect. Horizontal margins and sizes
+   * resolve against its width and vertical ones against its height, which
+   * differs from CSS for vertical margins and matches `@placement/vue`.
+   * Defaults to `Frame.make({})`.
    */
-  readonly frame?: Frame | undefined
+  readonly frame?: Frame | FrameInput<LengthInput> | undefined
 }
 
 /**

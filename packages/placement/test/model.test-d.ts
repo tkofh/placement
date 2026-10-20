@@ -1,6 +1,9 @@
 import { describe, expectTypeOf, test } from 'vitest'
 import * as Box from '../src/box.ts'
 import * as Frame from '../src/frame.ts'
+import * as Length from '../src/length.ts'
+import type * as Offset from '../src/offset.ts'
+import type * as Point from '../src/point.ts'
 import * as Rect from '../src/rect.ts'
 import * as Model from '../src/unstable/model.ts'
 
@@ -69,6 +72,53 @@ describe('specs', () => {
   test('reject props of another kind', () => {
     // @ts-expect-error -- items have no box
     Model.item('i', { box: Box.make({}) })
+  })
+})
+
+describe('lengths', () => {
+  const pct = Length.percent
+
+  test('props take built specs or plain inputs with lengths', () => {
+    expectTypeOf<Model.GroupProps['box']>().toEqualTypeOf<
+      Box.Box | Box.BoxInput<Length.LengthInput> | undefined
+    >()
+    expectTypeOf<Model.ItemProps['frame']>().toEqualTypeOf<
+      Frame.Frame | Frame.FrameInput<Length.LengthInput> | undefined
+    >()
+    expectTypeOf<Model.FlexProps['gutter']>().toEqualTypeOf<
+      Offset.Offset | Model.GutterInput | undefined
+    >()
+    expectTypeOf<Model.GroupProps['translate']>().toEqualTypeOf<
+      Point.Point | Model.TranslateInput | undefined
+    >()
+    expectTypeOf<Box.BoxInput<Length.LengthInput>['width']>().toEqualTypeOf<
+      Length.LengthInput | undefined
+    >()
+    expectTypeOf<Frame.FrameInput<Length.LengthInput>['grow']>().toEqualTypeOf<number | undefined>()
+    expectTypeOf<Box.BoxInput['width']>().toEqualTypeOf<number | undefined>()
+    expectTypeOf<Frame.FrameInput['width']>().toEqualTypeOf<number | undefined>()
+
+    Model.group('g', { box: { width: pct(50), top: 10, aspectRatio: [16, 9] } })
+    Model.group('g', { box: { width: pct(50), alignX: 0.5, stretchY: 0 } })
+    Model.flex('t', { gutter: { left: pct(5) }, translate: { x: pct(-50) } }, [
+      Model.item({ frame: { width: pct(25), marginTop: Length.px(4), grow: 1 } }),
+    ])
+    Model.mutate(toolbar, (m) => m.update('toolbar.b', { frame: { width: pct(50) } }))
+  })
+
+  test('reject what the inputs lack', () => {
+    // @ts-expect-error -- a length is a number or a `Length`
+    Model.group('g', { box: { width: '50%' } })
+    // @ts-expect-error -- grow belongs to a frame
+    Model.group('g', { box: { grow: 1 } })
+    // @ts-expect-error -- the path is the id
+    Model.item('i', { frame: { id: 'x' } })
+    // @ts-expect-error -- factors take numbers
+    Model.item('i', { frame: { grow: pct(1) } })
+    // @ts-expect-error -- a gutter has sides, not axes
+    Model.flex('t', { gutter: { x: 1 } })
+    // @ts-expect-error -- a frame input on a group
+    Model.mutate(app, (m) => m.update('app.top', { frame: { width: pct(50) } }))
   })
 })
 

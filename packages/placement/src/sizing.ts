@@ -1,9 +1,6 @@
 import { clamp } from 'curvy/number'
 import * as AspectRatio from './aspectRatio.ts'
-import type { Field, FieldTable } from './internal/fields.ts'
 import type { LengthInput } from './length.ts'
-
-export type { Field, FieldTable }
 
 /**
  * The sizing inputs that every layout reads from its items: a preferred
@@ -64,27 +61,6 @@ export interface SizingInput<L extends LengthInput = number> {
    */
   readonly maxHeight?: L | undefined
 }
-
-/**
- * The field table of `SizingInput`: what each sizing field holds. The
- * width fields are lengths whose percentages resolve against the basis
- * width (`x`), the height fields against its height (`y`), and
- * `aspectRatio` is a ratio.
- *
- * @example
- * ```ts
- * Sizing.fields.minHeight // 'y'
- * ```
- */
-export const fields = {
-  width: 'x',
-  height: 'y',
-  aspectRatio: 'ratio',
-  minWidth: 'x',
-  minHeight: 'y',
-  maxWidth: 'x',
-  maxHeight: 'y',
-} as const satisfies FieldTable<SizingInput>
 
 /**
  * Sizing inputs in the form `resolve` reads, as `normalize` builds them.

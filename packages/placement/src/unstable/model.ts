@@ -9,6 +9,13 @@
  * dots. The checker knows every path of a model built from literal keys, so
  * a path that does not exist is a type error.
  *
+ * Props take lengths where the specs they build take numbers. A
+ * percentage (`Length.percent` from `placement/length`) resolves against
+ * the node's basis: a box against its parent's rect, a flex's gutter and a
+ * translation against the node's own placed rect, and an item's frame
+ * against its flex container's content rect. It re-resolves whenever the
+ * basis changes.
+ *
  * This subpath is not covered by semver: an export can change or move in any
  * release.
  *
@@ -22,6 +29,7 @@ export type {
   Dynamic,
   FlexProps,
   GroupProps,
+  GutterInput,
   Index,
   IndexOf,
   ItemProps,
@@ -31,4 +39,5 @@ export type {
   Outputs,
   Paths,
   RootKind,
+  TranslateInput,
 } from '../internal/model/types.ts'

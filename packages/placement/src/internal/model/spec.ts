@@ -1,9 +1,5 @@
 import { Pipeable } from 'curvy/utils'
-import { isBox } from '../../box.ts'
-import { isFrame } from '../../frame.ts'
-import { isOffset } from '../../offset.ts'
-import { isPoint } from '../../point.ts'
-import { isFlexbox } from '../flexbox.ts'
+import * as Props from './props.ts'
 import type {
   AcceptsOf,
   ContainerIndex,
@@ -96,45 +92,6 @@ export const ACCEPTS: { readonly [T in Kind]: ReadonlySet<Kind> } = {
 /** The kinds a root can have, mirroring `RootKind`. */
 export const ROOT_KINDS: ReadonlySet<Kind> = new Set<RootKind>(['group', 'flex'])
 
-// Each prop's guard, by kind. A prop may also be `undefined`.
-const PROPS: { readonly [T in Kind]: Readonly<Record<string, (value: unknown) => boolean>> } = {
-  group: { box: isBox, origin: isPoint, translate: isPoint },
-  flex: {
-    box: isBox,
-    origin: isPoint,
-    translate: isPoint,
-    layout: isFlexbox,
-    gutter: isOffset,
-  },
-  item: { frame: isFrame },
-}
-
-/**
- * Checks props against a kind and returns a frozen copy.
- *
- * @param kind - The node kind.
- * @param props - The props to check.
- * @returns The frozen copy.
- * @throws `TypeError` when `props` is not an object, has a field the kind
- * lacks, or has a field of the wrong type.
- */
-export function checkProps<T extends Kind>(kind: T, props: unknown): PropsOf<T> {
-  if (typeof props !== 'object' || props === null) {
-    throw new TypeError(`The props of a ${kind} must be an object`)
-  }
-  const guards = PROPS[kind]
-  for (const [field, value] of Object.entries(props)) {
-    const guard = guards[field]
-    if (guard === undefined) {
-      throw new TypeError(`A ${kind} has no prop "${field}"`)
-    }
-    if (value !== undefined && !guard(value)) {
-      throw new TypeError(`The "${field}" prop of a ${kind} has the wrong type`)
-    }
-  }
-  return Object.freeze({ ...props }) as PropsOf<T>
-}
-
 /**
  * Checks a key: non-empty, without a dot, and not starting with a digit, so
  * it never reads as a path or collides with a position.
@@ -188,7 +145,7 @@ function make(kind: Kind, args: ReadonlyArray<unknown>): Spec {
     seen.add(childKey)
   }
 
-  return new Spec(key, kind, checkProps(kind, props), Object.freeze([...children]))
+  return new Spec(key, kind, Props.check(kind, props), Object.freeze([...children]))
 }
 
 type Children<T extends Kind> = ReadonlyArray<Spec<string | undefined, AcceptsOf<T>>>

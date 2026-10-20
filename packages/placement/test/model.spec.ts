@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest'
 import * as Box from '../src/box.ts'
 import * as Flexbox from '../src/flexbox.ts'
 import * as Frame from '../src/frame.ts'
+import * as Length from '../src/length.ts'
 import * as Offset from '../src/offset.ts'
 import * as Point from '../src/point.ts'
 import * as Rect from '../src/rect.ts'
@@ -196,6 +197,135 @@ describe('mutate', () => {
       return m
     })
     expect(store.get('toolbar.b')).toBeDefined()
+  })
+})
+
+// Places one frame alone in `content`.
+const solve = (content: Rect.Rect, input: Frame.FrameInput) =>
+  Flexbox.apply([Frame.make(input)], Flexbox.make({}), content)[0]
+
+describe('lengths', () => {
+  const pct = Length.percent
+
+  test('a box resolves against its parent rect, each field on its axis', () => {
+    const store = Model.store(
+      Model.group('g', {
+        box: { left: pct(10), top: pct(25), width: pct(50), maxHeight: pct(25), right: 8 },
+      }),
+      { root },
+    )
+    const box = Box.make({ left: 80, top: 150, width: 400, maxHeight: 150, right: 8 })
+    expect(store.get('g')).toEqual(Box.apply(box, root))
+  })
+
+  test('a nested box resolves against its parent group, and re-resolves with it', () => {
+    const store = Model.store(
+      Model.group('g', { box: { width: pct(50), height: pct(50) } }, [
+        Model.group('inner', { box: { width: pct(50), top: pct(50) } }),
+      ]),
+      { root },
+    )
+    expect(store.get('g.inner')).toEqual(Rect.make(0, 150, 200, 150))
+
+    const listener = vi.fn()
+    store.subscribe('g.inner', listener)
+    Model.mutate(store, (m) => m.setRoot(Rect.make(400, 200)))
+    expect(store.get('g.inner')).toEqual(Rect.make(0, 50, 100, 50))
+    expect(listener).toHaveBeenCalledTimes(1)
+
+    Model.mutate(store, (m) => m.update('g', { box: { width: pct(100), height: pct(100) } }))
+    expect(store.get('g.inner')).toEqual(Rect.make(0, 100, 200, 100))
+    expect(listener).toHaveBeenCalledTimes(2)
+  })
+
+  test('a box input carries its two-axis alignment', () => {
+    const store = Model.store(
+      Model.group('g', { box: { width: pct(25), height: pct(10), alignX: 0.5, alignY: 1 } }),
+      { root },
+    )
+    expect(store.get('g')).toEqual(Rect.make(300, 540, 200, 60))
+  })
+
+  test('a translation resolves against the rect it moves', () => {
+    const store = Model.store(
+      Model.group('g', {
+        box: { width: 100, height: 50, left: 200 },
+        translate: { x: pct(50), y: pct(-100) },
+      }),
+      { root },
+    )
+    expect(store.get('g')).toEqual(Rect.make(250, -50, 100, 50))
+  })
+
+  test('a gutter resolves against the placed rect', () => {
+    const store = Model.store(
+      Model.flex('t', {
+        box: { width: 400, height: 200 },
+        gutter: { top: pct(10), left: pct(10), right: 4 },
+      }),
+      { root },
+    )
+    expect(store.get('t')).toEqual(Rect.make(40, 20, 356, 180))
+  })
+
+  test('a frame resolves against its container content rect, and re-resolves with it', () => {
+    const frame = { width: pct(50), height: pct(25), marginLeft: pct(25), marginTop: pct(25) }
+    const store = Model.store(
+      Model.flex('t', { gutter: Offset.make(100) }, [Model.item('i', { frame })]),
+      { root },
+    )
+    const content = Rect.make(100, 100, 600, 400)
+    const resolved = { width: 300, height: 100, marginLeft: 150, marginTop: 100 }
+    expect(store.get('t.i')).toEqual(solve(content, resolved))
+
+    Model.mutate(store, (m) => m.update('t', { gutter: Offset.make(200) }))
+    const smaller = Rect.make(200, 200, 400, 200)
+    expect(store.get('t.i')).toEqual(
+      solve(smaller, { width: 200, height: 50, marginLeft: 100, marginTop: 50 }),
+    )
+
+    Model.mutate(store, (m) => m.update('t', { gutter: undefined }).setRoot(Rect.make(400, 400)))
+    expect(store.get('t.i')).toEqual(
+      solve(Rect.make(400, 400), { width: 200, height: 100, marginLeft: 100, marginTop: 100 }),
+    )
+  })
+
+  test('a frame size that is NaN is unset, and a NaN margin stays auto', () => {
+    const store = Model.store(
+      Model.group('g', {}, [
+        Model.flex('t', {}, [Model.item('a', { frame: { grow: 1, maxWidth: Number.NaN } })]),
+        Model.flex('u', {}, [Model.item('b', { frame: { width: 100, marginLeft: Number.NaN } })]),
+      ]),
+      { root },
+    )
+    expect(store.get('g.t.a')).toEqual(solve(root, { grow: 1 }))
+    expect(store.get('g.t.a').width).toBe(800)
+    expect(store.get('g.u.b')).toEqual(solve(root, { width: 100, marginLeft: Number.NaN }))
+    expect(store.get('g.u.b').x).toBe(700)
+  })
+
+  test('plain inputs are copied and frozen', () => {
+    const ratio: [number, number] = [16, 9]
+    const box = { width: 10, aspectRatio: ratio }
+    const spec = Model.group('g', { box })
+    const kept = spec.props.box as Box.BoxInput<Length.LengthInput>
+    expect(kept).not.toBe(box)
+    expect(Object.isFrozen(kept)).toBe(true)
+    expect(kept.aspectRatio).not.toBe(ratio)
+    expect(Object.isFrozen(kept.aspectRatio)).toBe(true)
+  })
+
+  test.each<[string, () => unknown]>([
+    ['a frame field in a box', () => Model.group('g', { box: { grow: 1 } as never })],
+    ['a string length', () => Model.group('g', { box: { width: '50%' as never } })],
+    ['an id in a frame', () => Model.item('i', { frame: { id: 'x' } as never })],
+    ['a box as a frame', () => Model.item('i', { frame: Box.make({}) as never })],
+    ['a bad ratio', () => Model.item('i', { frame: { aspectRatio: [16] as never } })],
+    ['an unknown gutter side', () => Model.flex('t', { gutter: { x: 1 } as never })],
+    ['a length object as a gutter', () => Model.flex('t', { gutter: pct(5) as never })],
+    ['an unknown translate field', () => Model.group('g', { translate: { z: 1 } as never })],
+  ])('rejects %s', (_, make) => {
+    expect(make).toThrow(TypeError)
   })
 })
 

@@ -36,10 +36,12 @@ and `Flexbox.apply` solves it. `Box` is a positioned-box spec (CSS absolute
 positioning). `Box.apply` solves it against a parent rect, and every
 non-finite input acts as unset. Item inputs compose concept slices: types,
 field tables, and functions with no class of their own. `placement/sizing`
-is the sizing slice (`SizingInput`, `fields`, `normalize`, `resolve`), and
+is the sizing slice (`SizingInput`, `normalize`, `resolve`), and
 `Frame`, `Box`, `Flexbox.apply`, and `Hierarchy.apply` all resolve sizing
 through it; specs keep the normalized sizing under `SizingOf`
-(`internal/sizing.ts`). `Hierarchy` is a layered graph layout spec.
+(`internal/sizing.ts`). Each slice's field table (`fields`, naming each
+field's percentage axis) is internal, in `internal/sizing.ts`,
+`internal/margin.ts`, and `internal/alignment.ts`. `Hierarchy` is a layered graph layout spec.
 `Hierarchy.apply` solves a record of `Frame`s keyed by id plus `Edge` specs
 (which reference those ids and carry `Adornment`s), with optional `Polygon` node
 shapes that ports sit on. `internal/hierarchy/layout.ts` places the nodes
