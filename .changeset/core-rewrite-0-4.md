@@ -65,6 +65,6 @@ Fixed:
 - Grow/shrink distribution no longer runs extra rounds on float dust.
 - The wrap decision and all boundary predicates are tolerance-aware and scale-invariant.
 - `equals` compares non-finite fields exactly (an infinity equals only itself), and infinite bounds no longer break the `contains`/`intersects` band.
-- Frame offsets are physical in reversed flows. A `columnReverse` `offsetTop` stays at the physical top.
+- Frame margins are physical in reversed flows. A `columnReverse` `marginTop` stays at the physical top.
 - A wrapping item's cross-axis `min` no longer inflates the previous line.
 - Crossed clamp bounds resolve with the minimum winning (CSS semantics) everywhere.

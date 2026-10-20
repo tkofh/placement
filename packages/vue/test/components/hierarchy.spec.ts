@@ -313,7 +313,7 @@ describe('solving', () => {
     const solved = Hierarchy.apply(
       {
         ...frames,
-        c: Frame.make({ width: 40, height: 20, align: 0, stretch: 0, offsetLeft: 8 }),
+        c: Frame.make({ width: 40, height: 20, align: 0, stretch: 0, marginLeft: 8 }),
       },
       [Edge.make({ source: 'a', target: 'b' }), Edge.make({ source: 'a', target: 'c' })],
       Hierarchy.make({ rankGap: 20 }),
@@ -634,7 +634,7 @@ describe('end adornments', () => {
       ...fan.map((id) => node(id, 40, 20)),
     ])
     const arrow = Adornment.make({
-      frame: Frame.make({ width: 8, height: 6, offsetLeft: 6 }),
+      frame: Frame.make({ width: 8, height: 6, marginLeft: 6 }),
       at: 1,
       orient: Adornment.orient.forward,
     })

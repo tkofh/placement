@@ -23,7 +23,7 @@ interface Diagram {
 }
 
 const arrow = (at: number, orient: number) =>
-  Adornment.make({ frame: Frame.make({ width: 8, height: 6, offsetLeft: 2 }), at, orient })
+  Adornment.make({ frame: Frame.make({ width: 8, height: 6, marginLeft: 2 }), at, orient })
 const label = (at: number, position: number = Adornment.position.flow) =>
   Adornment.make({ frame: Frame.make({ width: 20, height: 10 }), at, position })
 

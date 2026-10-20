@@ -342,49 +342,49 @@ interface AxisView {
   readonly mainDimension: 'width' | 'height'
   readonly mainDimensionMin: 'minWidth' | 'minHeight'
   readonly mainDimensionMax: 'maxWidth' | 'maxHeight'
-  readonly mainOffsetStart: 'offsetLeft' | 'offsetTop'
-  readonly mainOffsetEnd: 'offsetRight' | 'offsetBottom'
+  readonly mainMarginStart: 'marginLeft' | 'marginTop'
+  readonly mainMarginEnd: 'marginRight' | 'marginBottom'
   readonly crossDimension: 'width' | 'height'
   readonly crossDimensionMin: 'minWidth' | 'minHeight'
   readonly crossDimensionMax: 'maxWidth' | 'maxHeight'
-  readonly crossOffsetStart: 'offsetTop' | 'offsetLeft'
-  readonly crossOffsetEnd: 'offsetBottom' | 'offsetRight'
+  readonly crossMarginStart: 'marginTop' | 'marginLeft'
+  readonly crossMarginEnd: 'marginBottom' | 'marginRight'
 }
 
 const rowAxes: AxisView = {
   mainDimension: 'width',
   mainDimensionMin: 'minWidth',
   mainDimensionMax: 'maxWidth',
-  mainOffsetStart: 'offsetLeft',
-  mainOffsetEnd: 'offsetRight',
+  mainMarginStart: 'marginLeft',
+  mainMarginEnd: 'marginRight',
   crossDimension: 'height',
   crossDimensionMin: 'minHeight',
   crossDimensionMax: 'maxHeight',
-  crossOffsetStart: 'offsetTop',
-  crossOffsetEnd: 'offsetBottom',
+  crossMarginStart: 'marginTop',
+  crossMarginEnd: 'marginBottom',
 }
 
 const columnAxes: AxisView = {
   mainDimension: 'height',
   mainDimensionMin: 'minHeight',
   mainDimensionMax: 'maxHeight',
-  mainOffsetStart: 'offsetTop',
-  mainOffsetEnd: 'offsetBottom',
+  mainMarginStart: 'marginTop',
+  mainMarginEnd: 'marginBottom',
   crossDimension: 'width',
   crossDimensionMin: 'minWidth',
   crossDimensionMax: 'maxWidth',
-  crossOffsetStart: 'offsetLeft',
-  crossOffsetEnd: 'offsetRight',
+  crossMarginStart: 'marginLeft',
+  crossMarginEnd: 'marginRight',
 }
 
 function computeItem(frame: Frame, flexbox: Flexbox, axes: AxisView) {
   const basisMain = frame[axes.mainDimension]
-  // Frame offsets are physical (offsetLeft always names the left edge). A
+  // Frame margins are physical (marginLeft always names the left edge). A
   // reversed flow lays the main track out logically and then reflects it,
-  // margins included. So the sources swap here, and each offset lands on its
+  // margins included. So the sources swap here, and each margin lands on its
   // named physical side after the reflection.
-  const mainStart = frame[flexbox.isReverse ? axes.mainOffsetEnd : axes.mainOffsetStart]
-  const mainEnd = frame[flexbox.isReverse ? axes.mainOffsetStart : axes.mainOffsetEnd]
+  const mainStart = frame[flexbox.isReverse ? axes.mainMarginEnd : axes.mainMarginStart]
+  const mainEnd = frame[flexbox.isReverse ? axes.mainMarginStart : axes.mainMarginEnd]
 
   const outerHypotheticalSize = basisMain + auto(mainStart, 0) + auto(mainEnd, 0)
 
@@ -400,8 +400,8 @@ function computeItem(frame: Frame, flexbox: Flexbox, axes: AxisView) {
 
   const crossItem = {
     basis: frame[axes.crossDimension],
-    start: frame[axes.crossOffsetStart],
-    end: frame[axes.crossOffsetEnd],
+    start: frame[axes.crossMarginStart],
+    end: frame[axes.crossMarginEnd],
     min: frame[axes.crossDimensionMin],
     max: frame[axes.crossDimensionMax],
     place: frame.align,
@@ -544,8 +544,8 @@ function computeTracks(
  * `align` or `stretch` is non-finite (both default to `Infinity`) inherits
  * the container's `alignItems` or `stretchItems`.
  *
- * Frame offsets are physical in every direction. `offsetLeft` pads the
- * item's left edge even in `rowReverse`. A non-finite offset is an auto
+ * Frame margins are physical in every direction. `marginLeft` pads the
+ * item's left edge even in `rowReverse`. A non-finite margin is an auto
  * margin that absorbs free space on its named physical side. The y axis
  * points down, so cross positions grow toward `parent.bottom`, and
  * `wrapReverse` stacks lines upward instead.

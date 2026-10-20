@@ -393,12 +393,12 @@ describe('min and max constraints', () => {
   })
 })
 
-describe('offsets', () => {
+describe('margins', () => {
   test(
     ...c(
       Flexbox.make({}),
       Rect.make(1000),
-      [Frame.make({ width: 100, height: 100, offsetLeft: 10, offsetRight: 20 }), square(100)],
+      [Frame.make({ width: 100, height: 100, marginLeft: 10, marginRight: 20 }), square(100)],
       [Rect.make(10, 0, 100), Rect.make(130, 0, 100)],
     ),
   )
@@ -406,7 +406,7 @@ describe('offsets', () => {
     ...c(
       Flexbox.make({}),
       Rect.make(300),
-      [Frame.make({ width: 100, height: 100, offsetTop: 25 })],
+      [Frame.make({ width: 100, height: 100, marginTop: 25 })],
       [Rect.make(0, 25, 100)],
     ),
   )
@@ -414,32 +414,32 @@ describe('offsets', () => {
     ...c(
       Flexbox.make({ alignItems: 1 }),
       Rect.make(300),
-      [Frame.make({ width: 100, height: 100, offsetBottom: 10 })],
+      [Frame.make({ width: 100, height: 100, marginBottom: 10 })],
       [Rect.make(0, 190, 100)],
     ),
   )
 })
 
-describe('auto margin offsets', () => {
-  test('an auto cross-start offset pushes the item to the cross end', () => {
+describe('auto margin margins', () => {
+  test('an auto cross-start margin pushes the item to the cross end', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetTop: Number.POSITIVE_INFINITY })],
+        [Frame.make({ width: 100, height: 100, marginTop: Number.POSITIVE_INFINITY })],
         Flexbox.make({}),
         Rect.make(300),
       ),
     ).toEqual([Rect.make(0, 200, 100)])
   })
 
-  test('auto offsets on both cross sides center the item', () => {
+  test('auto margins on both cross sides center the item', () => {
     expect(
       Flexbox.apply(
         [
           Frame.make({
             width: 100,
             height: 100,
-            offsetTop: Number.POSITIVE_INFINITY,
-            offsetBottom: Number.POSITIVE_INFINITY,
+            marginTop: Number.POSITIVE_INFINITY,
+            marginBottom: Number.POSITIVE_INFINITY,
           }),
         ],
         Flexbox.make({}),
@@ -448,37 +448,37 @@ describe('auto margin offsets', () => {
     ).toEqual([Rect.make(0, 100, 100)])
   })
 
-  test('auto cross offsets defeat inherited stretch', () => {
+  test('auto cross margins defeat inherited stretch', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetTop: Number.POSITIVE_INFINITY })],
+        [Frame.make({ width: 100, height: 100, marginTop: Number.POSITIVE_INFINITY })],
         Flexbox.make({ stretchItems: 1 }),
         Rect.make(300),
       ),
     ).toEqual([Rect.make(0, 200, 100)])
   })
 
-  test('an auto main-start offset pushes the item to the main end (regression)', () => {
+  test('an auto main-start margin pushes the item to the main end (regression)', () => {
     // The sequence walkers used to add the raw Infinity sentinel instead of
-    // the definite offset, and that produced Infinity positions.
+    // the definite margin, and that produced Infinity positions.
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetLeft: Number.POSITIVE_INFINITY })],
+        [Frame.make({ width: 100, height: 100, marginLeft: Number.POSITIVE_INFINITY })],
         Flexbox.make({}),
         Rect.make(300),
       ),
     ).toEqual([Rect.make(200, 0, 100)])
   })
 
-  test('auto offsets on both main sides center the item', () => {
+  test('auto margins on both main sides center the item', () => {
     expect(
       Flexbox.apply(
         [
           Frame.make({
             width: 100,
             height: 100,
-            offsetLeft: Number.POSITIVE_INFINITY,
-            offsetRight: Number.POSITIVE_INFINITY,
+            marginLeft: Number.POSITIVE_INFINITY,
+            marginRight: Number.POSITIVE_INFINITY,
           }),
         ],
         Flexbox.make({}),
@@ -487,12 +487,12 @@ describe('auto margin offsets', () => {
     ).toEqual([Rect.make(100, 0, 100)])
   })
 
-  test('auto main offsets split free space between items', () => {
+  test('auto main margins split free space between items', () => {
     expect(
       Flexbox.apply(
         [
-          Frame.make({ width: 100, height: 100, offsetRight: Number.POSITIVE_INFINITY }),
-          Frame.make({ width: 100, height: 100, offsetLeft: Number.POSITIVE_INFINITY }),
+          Frame.make({ width: 100, height: 100, marginRight: Number.POSITIVE_INFINITY }),
+          Frame.make({ width: 100, height: 100, marginLeft: Number.POSITIVE_INFINITY }),
         ],
         Flexbox.make({}),
         Rect.make(500, 100),
@@ -734,44 +734,44 @@ describe('wrap decision is tolerance-aware (regression)', () => {
   })
 })
 
-describe('offsets are physical in reversed flows (regression)', () => {
+describe('margins are physical in reversed flows (regression)', () => {
   // The main track is laid out logically and reflected afterward, margins
-  // included. In reversed flows, computeItem swaps the offset sources so
+  // included. In reversed flows, computeItem swaps the margin sources so
   // each margin lands on its named physical side.
-  test('rowReverse keeps offsetLeft on the physical left of the item', () => {
+  test('rowReverse keeps marginLeft on the physical left of the item', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetLeft: 10 }), square(100)],
+        [Frame.make({ width: 100, height: 100, marginLeft: 10 }), square(100)],
         Flexbox.make({ direction: Flexbox.direction.rowReverse }),
         Rect.make(1000),
       ),
     ).toEqual([Rect.make(900, 0, 100), Rect.make(790, 0, 100)])
   })
 
-  test('columnReverse keeps offsetTop physically above the item', () => {
+  test('columnReverse keeps marginTop physically above the item', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetTop: 10 })],
+        [Frame.make({ width: 100, height: 100, marginTop: 10 })],
         Flexbox.make({ direction: Flexbox.direction.columnReverse }),
         Rect.make(300),
       ),
     ).toEqual([Rect.make(0, 200, 100)])
   })
 
-  test('an auto offsetLeft pushes the item to the physical right in rowReverse', () => {
+  test('an auto marginLeft pushes the item to the physical right in rowReverse', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetLeft: Number.POSITIVE_INFINITY })],
+        [Frame.make({ width: 100, height: 100, marginLeft: Number.POSITIVE_INFINITY })],
         Flexbox.make({ direction: Flexbox.direction.rowReverse }),
         Rect.make(300),
       ),
     ).toEqual([Rect.make(200, 0, 100)])
   })
 
-  test('an auto offsetBottom pushes the item to the physical top in columnReverse', () => {
+  test('an auto marginBottom pushes the item to the physical top in columnReverse', () => {
     expect(
       Flexbox.apply(
-        [Frame.make({ width: 100, height: 100, offsetBottom: Number.POSITIVE_INFINITY })],
+        [Frame.make({ width: 100, height: 100, marginBottom: Number.POSITIVE_INFINITY })],
         Flexbox.make({ direction: Flexbox.direction.columnReverse }),
         Rect.make(300),
       ),

@@ -366,11 +366,11 @@ const ROUNDS = 3
  * gives it one. Auto ports that share a side spread along it in the order
  * their routes part.
  *
- * Node sizes resolve as usual. Offsets across the flow add clearance.
- * Offsets along the flow add clearance within the rank, and auto
- * (non-finite) offsets along the flow position the node in the rank as auto
- * margins do in flexbox. Auto offsets across the flow act as `0`. The
- * frames' `grow` and `shrink` have no effect.
+ * Node sizes resolve as usual. Margins across the flow add clearance.
+ * Margins along the flow add clearance within the rank, and auto
+ * (non-finite) margins along the flow position the node in the rank as
+ * they do in flexbox. Auto margins across the flow act as `0`. The frames'
+ * `grow` and `shrink` have no effect.
  *
  * Every input is deterministic: the same nodes and edges always produce
  * the same layout. Ties fall back to the input order: the order of the
@@ -417,16 +417,16 @@ export function apply<const K extends string>(
 
   const solveNodes: Array<SolveNode> = frames.map((frame) => {
     const [rLeading, rTrailing] = vertical
-      ? [frame.offsetTop, frame.offsetBottom]
-      : [frame.offsetLeft, frame.offsetRight]
+      ? [frame.marginTop, frame.marginBottom]
+      : [frame.marginLeft, frame.marginRight]
     const placeAt = auto(frame.align, hierarchy.alignItems)
     return {
       oSize: vertical ? frame.width : frame.height,
       rSize: vertical ? frame.height : frame.width,
       rMin: vertical ? frame.minHeight : frame.minWidth,
       rMax: vertical ? frame.maxHeight : frame.maxWidth,
-      oStart: finite(vertical ? frame.offsetLeft : frame.offsetTop),
-      oEnd: finite(vertical ? frame.offsetRight : frame.offsetBottom),
+      oStart: finite(vertical ? frame.marginLeft : frame.marginTop),
+      oEnd: finite(vertical ? frame.marginRight : frame.marginBottom),
       rStart: reverse ? rTrailing : rLeading,
       rEnd: reverse ? rLeading : rTrailing,
       place: reverse ? 1 - placeAt : placeAt,

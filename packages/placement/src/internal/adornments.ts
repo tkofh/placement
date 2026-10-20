@@ -87,10 +87,10 @@ export function resolveAdornment(
   const { frame } = adornment
   const width = frameSize(frame.width, frame.minWidth, frame.maxWidth)
   const height = frameSize(frame.height, frame.minHeight, frame.maxHeight)
-  const top = finite(frame.offsetTop)
-  const right = finite(frame.offsetRight)
-  const bottom = finite(frame.offsetBottom)
-  const left = finite(frame.offsetLeft)
+  const top = finite(frame.marginTop)
+  const right = finite(frame.marginRight)
+  const bottom = finite(frame.marginBottom)
+  const left = finite(frame.marginLeft)
   const side = auto(frame.align, align)
   const [leading, trailing] = vertical ? [top, bottom] : [left, right]
   const o: AxisFrame = vertical

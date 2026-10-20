@@ -580,11 +580,11 @@ describe('apply', () => {
       expect(layout.nodes.end).toMatchObject({ y: 40, height: 20 })
     })
 
-    test('auto offsets along the flow position a node like auto margins', () => {
+    test('auto margins along the flow position a node like auto margins', () => {
       const layout = Hierarchy.apply(
         {
           tall: Frame.make({ width: 40, height: 60 }),
-          auto: Frame.make({ width: 40, height: 20, offsetTop: Number.POSITIVE_INFINITY }),
+          auto: Frame.make({ width: 40, height: 20, marginTop: Number.POSITIVE_INFINITY }),
         },
         [],
         Hierarchy.make({ alignItems: 0 }),
@@ -614,9 +614,9 @@ describe('apply', () => {
       ])
     })
 
-    test('align puts one beside the line, and offsets add clearance', () => {
-      const right = Frame.make({ width: 20, height: 10, align: 1, offsetLeft: 4 })
-      const left = Frame.make({ width: 20, height: 10, align: 0, offsetRight: 4 })
+    test('align puts one beside the line, and margins add clearance', () => {
+      const right = Frame.make({ width: 20, height: 10, align: 1, marginLeft: 4 })
+      const left = Frame.make({ width: 20, height: 10, align: 0, marginRight: 4 })
       const layout = Hierarchy.apply(
         nodes,
         [
@@ -642,7 +642,7 @@ describe('apply', () => {
     })
 
     test('ones in a layer on one run line up in order along the edge', () => {
-      const gapped = Frame.make({ width: 20, height: 10, offsetTop: 2 })
+      const gapped = Frame.make({ width: 20, height: 10, marginTop: 2 })
       const layout = Hierarchy.apply(
         nodes,
         [
@@ -719,7 +719,7 @@ describe('apply', () => {
     })
 
     test('a turned one measures its frame along the line', () => {
-      const arrow = Frame.make({ width: 20, height: 10, offsetLeft: 4 })
+      const arrow = Frame.make({ width: 20, height: 10, marginLeft: 4 })
       const layout = Hierarchy.apply(
         nodes,
         [
@@ -939,7 +939,7 @@ describe('apply', () => {
     })
 
     test('keep clear of flow adornments and their gaps', () => {
-      const arrow = Frame.make({ width: 9, height: 8, offsetLeft: 4 })
+      const arrow = Frame.make({ width: 9, height: 8, marginLeft: 4 })
       const layout = Hierarchy.apply(
         three,
         [

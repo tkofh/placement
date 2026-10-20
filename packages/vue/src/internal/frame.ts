@@ -70,10 +70,10 @@ export function useFrameInput(
     minHeight: unsetIfNaN(minHeight.value),
     maxWidth: unsetIfNaN(maxWidth.value),
     maxHeight: unsetIfNaN(maxHeight.value),
-    offsetTop: margin.value.top,
-    offsetRight: margin.value.right,
-    offsetBottom: margin.value.bottom,
-    offsetLeft: margin.value.left,
+    marginTop: margin.value.top,
+    marginRight: margin.value.right,
+    marginBottom: margin.value.bottom,
+    marginLeft: margin.value.left,
     ...resolveAlignSelf(props.alignSelf),
   }))
 }

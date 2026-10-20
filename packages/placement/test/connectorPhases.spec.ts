@@ -1462,7 +1462,7 @@ describe('tight ends', () => {
   }
   const spec = Connector.make({ clearance: 10, gap: 4, bendCost: 20 })
   const arrow = Adornment.make({
-    frame: Frame.make({ width: 8, height: 6, offsetLeft: 2 }),
+    frame: Frame.make({ width: 8, height: 6, marginLeft: 2 }),
     at: 1,
     orient: Adornment.orient.forward,
   })

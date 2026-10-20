@@ -34,7 +34,7 @@ const pair = { a: Rect.make(0, 0, 40, 20), b: Rect.make(100, 0, 40, 20) }
 
 // An arrowhead 8 long, with a margin of 2 trailing it.
 const arrow = (at: number, orient: number) =>
-  Adornment.make({ frame: Frame.make({ width: 8, height: 6, offsetLeft: 2 }), at, orient })
+  Adornment.make({ frame: Frame.make({ width: 8, height: 6, marginLeft: 2 }), at, orient })
 
 // An upright label, 20 by 10.
 const label = (at: number, position: number = Adornment.position.flow) =>

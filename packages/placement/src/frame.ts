@@ -22,7 +22,7 @@ type RawSizing = {
  * The construction input for `make`. Every field is optional. Passing
  * `undefined` is the same as omitting the field.
  *
- * Each group of fields treats omission differently. Offsets, `grow`, and
+ * Each group of fields treats omission differently. Margins, `grow`, and
  * `shrink` default to `0`. The fields `align` and `stretch` default to the
  * inherit sentinel (`Number.POSITIVE_INFINITY`). The sizing fields stay
  * unset and get no default. These are `width`, `height`, `aspectRatio`, and
@@ -31,29 +31,29 @@ type RawSizing = {
  */
 export interface FrameInput {
   /**
-   * Space reserved above the frame, which is its top margin in the
-   * container. A non-finite value requests an auto margin. Layout then gives
-   * the edge an equal share of the free space on its axis. Defaults to `0`.
+   * The space reserved above the frame in its container. A non-finite value
+   * requests an auto margin. Layout then gives the edge an equal share of
+   * the free space on its axis. Defaults to `0`.
    */
-  readonly offsetTop?: number | undefined
+  readonly marginTop?: number | undefined
   /**
-   * Space reserved to the right of the frame, which is its right margin. A
-   * non-finite value requests an auto margin. Layout then gives the edge an
-   * equal share of the free space on its axis. Defaults to `0`.
+   * The space reserved to the right of the frame. A non-finite value
+   * requests an auto margin. Layout then gives the edge an equal share of
+   * the free space on its axis. Defaults to `0`.
    */
-  readonly offsetRight?: number | undefined
+  readonly marginRight?: number | undefined
   /**
-   * Space reserved below the frame, which is its bottom margin. A non-finite
-   * value requests an auto margin. Layout then gives the edge an equal share
-   * of the free space on its axis. Defaults to `0`.
+   * The space reserved below the frame. A non-finite value requests an auto
+   * margin. Layout then gives the edge an equal share of the free space on
+   * its axis. Defaults to `0`.
    */
-  readonly offsetBottom?: number | undefined
+  readonly marginBottom?: number | undefined
   /**
-   * Space reserved to the left of the frame, which is its left margin. A
-   * non-finite value requests an auto margin. Layout then gives the edge an
-   * equal share of the free space on its axis. Defaults to `0`.
+   * The space reserved to the left of the frame. A non-finite value
+   * requests an auto margin. Layout then gives the edge an equal share of
+   * the free space on its axis. Defaults to `0`.
    */
-  readonly offsetLeft?: number | undefined
+  readonly marginLeft?: number | undefined
   /**
    * The preferred width. If you omit it, the width is unset. The resolved
    * width then derives from the height and `aspectRatio`, or falls back to
@@ -154,29 +154,29 @@ class Frame extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
   /**
-   * Space reserved above the frame, which is its top margin in the
-   * container. A non-finite value is an auto margin. Layout then gives the
-   * edge an equal share of the free space on its axis.
+   * The space reserved above the frame in its container. A non-finite value
+   * is an auto margin. Layout then gives the edge an equal share of the free
+   * space on its axis.
    */
-  readonly offsetTop: number
+  readonly marginTop: number
   /**
-   * Space reserved to the right of the frame, which is its right margin. A
-   * non-finite value is an auto margin. Layout then gives the edge an equal
-   * share of the free space on its axis.
+   * The space reserved to the right of the frame. A non-finite value is an
+   * auto margin. Layout then gives the edge an equal share of the free space
+   * on its axis.
    */
-  readonly offsetRight: number
+  readonly marginRight: number
   /**
-   * Space reserved below the frame, which is its bottom margin. A non-finite
-   * value is an auto margin. Layout then gives the edge an equal share of
-   * the free space on its axis.
+   * The space reserved below the frame. A non-finite value is an auto
+   * margin. Layout then gives the edge an equal share of the free space on
+   * its axis.
    */
-  readonly offsetBottom: number
+  readonly marginBottom: number
   /**
-   * Space reserved to the left of the frame, which is its left margin. A
-   * non-finite value is an auto margin. Layout then gives the edge an equal
-   * share of the free space on its axis.
+   * The space reserved to the left of the frame. A non-finite value is an
+   * auto margin. Layout then gives the edge an equal share of the free space
+   * on its axis.
    */
-  readonly offsetLeft: number
+  readonly marginLeft: number
   /**
    * The flex grow factor: the frame's share of positive free space along
    * the container's main axis, in proportion to the other items' factors.
@@ -213,10 +213,10 @@ class Frame extends Pipeable {
   constructor(input: FrameInput) {
     super()
 
-    this.offsetTop = input.offsetTop ?? 0
-    this.offsetRight = input.offsetRight ?? 0
-    this.offsetBottom = input.offsetBottom ?? 0
-    this.offsetLeft = input.offsetLeft ?? 0
+    this.marginTop = input.marginTop ?? 0
+    this.marginRight = input.marginRight ?? 0
+    this.marginBottom = input.marginBottom ?? 0
+    this.marginLeft = input.marginLeft ?? 0
     this.grow = input.grow ?? 0
     this.shrink = input.shrink ?? 0
     this.align = input.align ?? Number.POSITIVE_INFINITY
@@ -324,18 +324,18 @@ class Frame extends Pipeable {
    * Returns the raw inputs of the frame. Unset sizing fields come back as
    * `undefined`, never as their resolved values. `JSON.stringify` drops the
    * unset fields and writes infinite values (`align`/`stretch` inherit,
-   * auto offsets) as `null`. The `make` factory reads `null` back as the
+   * auto margins) as `null`. The `make` factory reads `null` back as the
    * default of the field. A JSON round trip therefore keeps inheritance but
-   * turns auto offsets into `0`.
+   * turns auto margins into `0`.
    *
    * @returns The raw input record, of the shape `make` accepts.
    */
   toJSON(): FrameInput {
     return {
-      offsetTop: this.offsetTop,
-      offsetRight: this.offsetRight,
-      offsetBottom: this.offsetBottom,
-      offsetLeft: this.offsetLeft,
+      marginTop: this.marginTop,
+      marginRight: this.marginRight,
+      marginBottom: this.marginBottom,
+      marginLeft: this.marginLeft,
       width: this[Raw].width,
       height: this[Raw].height,
       aspectRatio: this[Raw].aspectRatio,
@@ -387,44 +387,44 @@ export const isFrame = (value: unknown): value is Frame => {
 // cannot collide.
 
 /**
- * Sets all four offsets in CSS shorthand order. One value sets every edge.
+ * Sets all four margins in CSS shorthand order. One value sets every edge.
  * Two values set the vertical edges, then the horizontal edges. Three values
  * set top, horizontal, then bottom. Four values set top, right, bottom, and
  * left. The data-last form omits `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param offsetTop - The top offset. As the only value, it sets every edge. As the
+ * @param marginTop - The top margin. As the only value, it sets every edge. As the
  * first of two, it sets both vertical edges.
- * @param offsetRight - The right offset. As the second of two values, it sets both
+ * @param marginRight - The right margin. As the second of two values, it sets both
  * horizontal edges.
- * @param offsetBottom - The bottom offset.
- * @param offsetLeft - The left offset.
- * @returns A new frame with the offsets replaced.
+ * @param marginBottom - The bottom margin.
+ * @param marginLeft - The left margin.
+ * @returns A new frame with the margins replaced.
  * @example
  * ```ts
- * Frame.setOffset(Frame.make({}), 1, 2, 3, 4).offsetLeft // 4
- * Frame.make({}).pipe(Frame.setOffset(10, 20)).offsetTop // 10
+ * Frame.setMargin(Frame.make({}), 1, 2, 3, 4).marginLeft // 4
+ * Frame.make({}).pipe(Frame.setMargin(10, 20)).marginTop // 10
  * ```
  */
-export const setOffset: {
-  (self: Frame, offset: number): Frame
-  (self: Frame, offsetY: number, offsetX: number): Frame
-  (self: Frame, offsetTop: number, offsetX: number, offsetBottom: number): Frame
+export const setMargin: {
+  (self: Frame, margin: number): Frame
+  (self: Frame, marginY: number, marginX: number): Frame
+  (self: Frame, marginTop: number, marginX: number, marginBottom: number): Frame
   (
     self: Frame,
-    offsetTop: number,
-    offsetRight: number,
-    offsetBottom: number,
-    offsetLeft: number,
+    marginTop: number,
+    marginRight: number,
+    marginBottom: number,
+    marginLeft: number,
   ): Frame
-  (offset: number): (self: Frame) => Frame
-  (offsetY: number, offsetX: number): (self: Frame) => Frame
-  (offsetTop: number, offsetX: number, offsetBottom: number): (self: Frame) => Frame
+  (margin: number): (self: Frame) => Frame
+  (marginY: number, marginX: number): (self: Frame) => Frame
+  (marginTop: number, marginX: number, marginBottom: number): (self: Frame) => Frame
   (
-    offsetTop: number,
-    offsetRight: number,
-    offsetBottom: number,
-    offsetLeft: number,
+    marginTop: number,
+    marginRight: number,
+    marginBottom: number,
+    marginLeft: number,
   ): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
@@ -432,111 +432,111 @@ export const setOffset: {
     const [top, right, bottom, left] = normalizeTRBL(a, b, c, d)
     return new Frame({
       ...self.toJSON(),
-      offsetTop: top,
-      offsetRight: right,
-      offsetBottom: bottom,
-      offsetLeft: left,
+      marginTop: top,
+      marginRight: right,
+      marginBottom: bottom,
+      marginLeft: left,
     })
   },
 )
 
 /**
- * Sets the horizontal offsets. One value sets both edges. Two values set
+ * Sets the horizontal margins. One value sets both edges. Two values set
  * left, then right. The data-last form omits `self` and returns a function
  * of it.
  *
  * @param self - The frame to update.
- * @param offsetLeft - The left offset. As the only value, it also sets the right offset.
- * @param offsetRight - The right offset.
- * @returns A new frame with the horizontal offsets replaced.
+ * @param marginLeft - The left margin. As the only value, it also sets the right margin.
+ * @param marginRight - The right margin.
+ * @returns A new frame with the horizontal margins replaced.
  */
-export const setOffsetX: {
-  (self: Frame, offset: number): Frame
-  (self: Frame, offsetLeft: number, offsetRight: number): Frame
-  (offset: number): (self: Frame) => Frame
-  (offsetLeft: number, offsetRight: number): (self: Frame) => Frame
+export const setMarginX: {
+  (self: Frame, margin: number): Frame
+  (self: Frame, marginLeft: number, marginRight: number): Frame
+  (margin: number): (self: Frame) => Frame
+  (marginLeft: number, marginRight: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
   (self: Frame, left: number, right?: number) =>
-    new Frame({ ...self.toJSON(), offsetLeft: left, offsetRight: right ?? left }),
+    new Frame({ ...self.toJSON(), marginLeft: left, marginRight: right ?? left }),
 )
 
 /**
- * Sets the vertical offsets. One value sets both edges. Two values set top,
+ * Sets the vertical margins. One value sets both edges. Two values set top,
  * then bottom. The data-last form omits `self` and returns a function of
  * it.
  *
  * @param self - The frame to update.
- * @param offsetTop - The top offset. As the only value, it also sets the bottom offset.
- * @param offsetBottom - The bottom offset.
- * @returns A new frame with the vertical offsets replaced.
+ * @param marginTop - The top margin. As the only value, it also sets the bottom margin.
+ * @param marginBottom - The bottom margin.
+ * @returns A new frame with the vertical margins replaced.
  */
-export const setOffsetY: {
-  (self: Frame, offset: number): Frame
-  (self: Frame, offsetTop: number, offsetBottom: number): Frame
-  (offset: number): (self: Frame) => Frame
-  (offsetTop: number, offsetBottom: number): (self: Frame) => Frame
+export const setMarginY: {
+  (self: Frame, margin: number): Frame
+  (self: Frame, marginTop: number, marginBottom: number): Frame
+  (margin: number): (self: Frame) => Frame
+  (marginTop: number, marginBottom: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
   (self: Frame, top: number, bottom?: number) =>
-    new Frame({ ...self.toJSON(), offsetTop: top, offsetBottom: bottom ?? top }),
+    new Frame({ ...self.toJSON(), marginTop: top, marginBottom: bottom ?? top }),
 )
 
 /**
- * Sets the top offset and keeps the other edges. The data-last form omits
+ * Sets the top margin and keeps the other edges. The data-last form omits
  * `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param offset - The new top offset.
- * @returns A new frame with the top offset replaced.
+ * @param margin - The new top margin.
+ * @returns A new frame with the top margin replaced.
  */
-export const setOffsetTop: {
-  (self: Frame, offset: number): Frame
-  (offset: number): (self: Frame) => Frame
-} = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetTop: offset }))
+export const setMarginTop: {
+  (self: Frame, margin: number): Frame
+  (margin: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, margin: number) => new Frame({ ...self.toJSON(), marginTop: margin }))
 
 /**
- * Sets the right offset and keeps the other edges. The data-last form omits
+ * Sets the right margin and keeps the other edges. The data-last form omits
  * `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param offset - The new right offset.
- * @returns A new frame with the right offset replaced.
+ * @param margin - The new right margin.
+ * @returns A new frame with the right margin replaced.
  */
-export const setOffsetRight: {
-  (self: Frame, offset: number): Frame
-  (offset: number): (self: Frame) => Frame
-} = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetRight: offset }))
+export const setMarginRight: {
+  (self: Frame, margin: number): Frame
+  (margin: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, margin: number) => new Frame({ ...self.toJSON(), marginRight: margin }))
 
 /**
- * Sets the bottom offset and keeps the other edges. The data-last form omits
+ * Sets the bottom margin and keeps the other edges. The data-last form omits
  * `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param offset - The new bottom offset.
- * @returns A new frame with the bottom offset replaced.
+ * @param margin - The new bottom margin.
+ * @returns A new frame with the bottom margin replaced.
  */
-export const setOffsetBottom: {
-  (self: Frame, offset: number): Frame
-  (offset: number): (self: Frame) => Frame
-} = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetBottom: offset }))
+export const setMarginBottom: {
+  (self: Frame, margin: number): Frame
+  (margin: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, margin: number) => new Frame({ ...self.toJSON(), marginBottom: margin }))
 
 /**
- * Sets the left offset and keeps the other edges. The data-last form omits
+ * Sets the left margin and keeps the other edges. The data-last form omits
  * `self` and returns a function of it.
  *
  * @param self - The frame to update.
- * @param offset - The new left offset.
- * @returns A new frame with the left offset replaced.
+ * @param margin - The new left margin.
+ * @returns A new frame with the left margin replaced.
  */
-export const setOffsetLeft: {
-  (self: Frame, offset: number): Frame
-  (offset: number): (self: Frame) => Frame
-} = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetLeft: offset }))
+export const setMarginLeft: {
+  (self: Frame, margin: number): Frame
+  (margin: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, margin: number) => new Frame({ ...self.toJSON(), marginLeft: margin }))
 
 /**
  * Sets the preferred width and height. The width comes first. This is the
- * opposite of the two-value form of `setOffset`, which puts the vertical
+ * opposite of the two-value form of `setMargin`, which puts the vertical
  * edges first. One value sets both dimensions. The data-last form omits
  * `self` and returns a function of it.
  *
