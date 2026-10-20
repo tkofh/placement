@@ -32,9 +32,9 @@ export type EdgeSide = (typeof side)[keyof typeof side]
  * omitting it.
  */
 export interface EdgeInput<K extends string> {
-  /** The `id` of the frame that the edge leaves. */
+  /** The id of the node that the edge leaves. */
   readonly source: K
-  /** The `id` of the frame that the edge enters. */
+  /** The id of the node that the edge enters. */
   readonly target: K
   /**
    * How strongly layout keeps the edge short and straight, relative to the
@@ -95,13 +95,13 @@ export interface EdgeInput<K extends string> {
 }
 
 /**
- * A directed edge spec: the ids of the two frames it connects, plus the
+ * A directed edge spec: the ids of the two nodes it connects, plus the
  * weight, length, port, corner, and adornment inputs that `Hierarchy.apply` (from
  * `placement/hierarchy`) reads. An edge has no geometry of its own. Layout
  * produces its route.
  *
  * The type parameter `K` is the union of the literal ids the edge can
- * reference. `Hierarchy.apply` checks it against the ids of its frames.
+ * reference. `Hierarchy.apply` checks it against the keys of its nodes.
  *
  * Values are immutable. Every setter returns a new edge. Create an edge
  * with `make`.
@@ -109,9 +109,9 @@ export interface EdgeInput<K extends string> {
 class Edge<K extends string> extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
 
-  /** The `id` of the frame that the edge leaves. */
+  /** The id of the node that the edge leaves. */
   readonly source: K
-  /** The `id` of the frame that the edge enters. */
+  /** The id of the node that the edge enters. */
   readonly target: K
   /** The raw weight input. Layout treats negative and non-finite values as `0`. */
   readonly weight: number
@@ -210,7 +210,7 @@ export const isEdge = (value: unknown): value is Edge<string> => {
 // them can receive an edge as their first data-last argument.
 
 /**
- * Sets the source frame id. The result's type parameter keeps the old ids
+ * Sets the source node id. The result's type parameter keeps the old ids
  * and adds the new one, since the type cannot tell which ids are still in
  * use. The data-last form omits `self` and returns a function of it.
  *
@@ -232,7 +232,7 @@ export const setSource: {
 )
 
 /**
- * Sets the target frame id. As with `setSource`, the result's type
+ * Sets the target node id. As with `setSource`, the result's type
  * parameter adds the new id to the old ones. The data-last form omits
  * `self` and returns a function of it.
  *

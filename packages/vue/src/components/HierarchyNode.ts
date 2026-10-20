@@ -21,7 +21,8 @@ export const HierarchyNode = defineComponent(
     const input = useFrameInput(props, basis)
 
     const node = computed(() => ({
-      frame: Frame.make({ ...input.value, id: props.id }),
+      id: props.id,
+      frame: Frame.make(input.value),
       shape: outline.value,
     }))
 

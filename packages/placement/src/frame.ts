@@ -27,19 +27,9 @@ type RawSizing = {
  * inherit sentinel (`Number.POSITIVE_INFINITY`). The sizing fields stay
  * unset and get no default. These are `width`, `height`, `aspectRatio`, and
  * the min/max constraints. The frame derives them from the fields that are
- * set (see `Frame`). The `id` stays `undefined` when omitted.
- *
- * The type parameter `K` is the literal type of `id`, or `undefined` when
- * the frame has none.
+ * set (see `Frame`).
  */
-export interface FrameInput<K extends string | undefined = string | undefined> {
-  /**
-   * An identifier for the frame. Layouts that connect frames to each other,
-   * such as `Hierarchy.apply` (from `placement/hierarchy`), require it and
-   * reference frames by it. Other layouts ignore it. Defaults to
-   * `undefined`.
-   */
-  readonly id?: K
+export interface FrameInput {
   /**
    * Space reserved above the frame, which is its top margin in the
    * container. A non-finite value requests an auto margin. Layout then gives
@@ -154,19 +144,14 @@ export interface FrameInput<K extends string | undefined = string | undefined> {
  *
  * The resolution arithmetic is exact IEEE 754 (see PRECISION.md).
  *
- * The type parameter `K` is the literal type of `id`. A frame without an id
- * is a `Frame<undefined>`. The bare `Frame` type accepts any frame.
+ * A frame has no identity. A layout that connects items, such as
+ * `Hierarchy.apply` (from `placement/hierarchy`), takes its frames keyed by
+ * id.
  *
  * Create a frame with `make`.
  */
-class Frame<K extends string | undefined = string | undefined> extends Pipeable {
+class Frame extends Pipeable {
   readonly [TypeBrand]: TypeBrand = TypeBrand
-
-  /**
-   * The frame's identifier, or `undefined` when it has none. Layouts that
-   * connect frames, such as `Hierarchy.apply`, reference frames by it.
-   */
-  readonly id: K
 
   /**
    * Space reserved above the frame, which is its top margin in the
@@ -225,10 +210,9 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
   readonly [Raw]: RawSizing
   readonly [Sizing]: NormalizedSizing
 
-  constructor(input: FrameInput<K>) {
+  constructor(input: FrameInput) {
     super()
 
-    this.id = input.id as K
     this.offsetTop = input.offsetTop ?? 0
     this.offsetRight = input.offsetRight ?? 0
     this.offsetBottom = input.offsetBottom ?? 0
@@ -337,18 +321,17 @@ class Frame<K extends string | undefined = string | undefined> extends Pipeable 
   }
 
   /**
-   * Returns the raw inputs of the frame, including its `id`. Unset sizing
-   * fields come back as `undefined`, never as their resolved values.
-   * `JSON.stringify` drops the unset fields (and an unset `id`) and writes
-   * infinite values (`align`/`stretch` inherit, auto offsets) as `null`. The `make` factory reads `null` back as the default
-   * of the field. A JSON round trip therefore keeps inheritance but turns
-   * auto offsets into `0`.
+   * Returns the raw inputs of the frame. Unset sizing fields come back as
+   * `undefined`, never as their resolved values. `JSON.stringify` drops the
+   * unset fields and writes infinite values (`align`/`stretch` inherit,
+   * auto offsets) as `null`. The `make` factory reads `null` back as the
+   * default of the field. A JSON round trip therefore keeps inheritance but
+   * turns auto offsets into `0`.
    *
    * @returns The raw input record, of the shape `make` accepts.
    */
-  toJSON(): FrameInput<K> {
+  toJSON(): FrameInput {
     return {
-      id: this.id,
       offsetTop: this.offsetTop,
       offsetRight: this.offsetRight,
       offsetBottom: this.offsetBottom,
@@ -385,12 +368,7 @@ export type { Frame }
  * Frame.setWidth(item, 200).height // 100 — the height keeps deriving
  * ```
  */
-// `NoInfer` keeps a contextual type from choosing the id type. Only the
-// input decides it, so an inline frame without an id stays
-// `Frame<undefined>` even where a `Frame<string>` is expected.
-export const make = <const K extends string | undefined = undefined>(
-  input: FrameInput<K>,
-): Frame<NoInfer<K>> => new Frame(input)
+export const make = (input: FrameInput): Frame => new Frame(input)
 
 /**
  * Checks if a value is a `Frame`. Only values that `make` builds carry the
@@ -402,35 +380,6 @@ export const make = <const K extends string | undefined = undefined>(
 export const isFrame = (value: unknown): value is Frame => {
   return typeof value === 'object' && value !== null && TypeBrand in value
 }
-
-/**
- * Sets the frame's identifier, which changes the frame's type parameter to
- * the new id's literal type. Passing `undefined` removes the id. The id is
- * never a frame, so the arity is fixed. The data-last form omits `self` and
- * returns a function of it.
- *
- * @param self - The frame to update.
- * @param id - The new identifier, or `undefined` to remove it.
- * @returns A new frame with the id replaced.
- * @example
- * ```ts
- * Frame.setId(Frame.make({ width: 100 }), 'start').id // 'start'
- * Frame.make({ id: 'a' }).pipe(Frame.setId(undefined)).id // undefined
- * ```
- */
-export const setId: {
-  <K extends string | undefined, const J extends string | undefined>(
-    self: Frame<K>,
-    id: J,
-  ): Frame<NoInfer<J>>
-  <const J extends string | undefined>(
-    id: J,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<NoInfer<J>>
-} = dual(
-  2,
-  <K extends string | undefined, J extends string | undefined>(self: Frame<K>, id: J): Frame<J> =>
-    new Frame<J>({ ...self.toJSON(), id }),
-)
 
 // Setters rebuild from the raw inputs (toJSON), never from the resolved
 // sizing. Setters with optional trailing arguments dispatch on isFrame. The
@@ -458,37 +407,28 @@ export const setId: {
  * ```
  */
 export const setOffset: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  <K extends string | undefined>(self: Frame<K>, offsetY: number, offsetX: number): Frame<K>
-  <K extends string | undefined>(
-    self: Frame<K>,
-    offsetTop: number,
-    offsetX: number,
-    offsetBottom: number,
-  ): Frame<K>
-  <K extends string | undefined>(
-    self: Frame<K>,
+  (self: Frame, offset: number): Frame
+  (self: Frame, offsetY: number, offsetX: number): Frame
+  (self: Frame, offsetTop: number, offsetX: number, offsetBottom: number): Frame
+  (
+    self: Frame,
     offsetTop: number,
     offsetRight: number,
     offsetBottom: number,
     offsetLeft: number,
-  ): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-  (offsetY: number, offsetX: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-  (
-    offsetTop: number,
-    offsetX: number,
-    offsetBottom: number,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  ): Frame
+  (offset: number): (self: Frame) => Frame
+  (offsetY: number, offsetX: number): (self: Frame) => Frame
+  (offsetTop: number, offsetX: number, offsetBottom: number): (self: Frame) => Frame
   (
     offsetTop: number,
     offsetRight: number,
     offsetBottom: number,
     offsetLeft: number,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  ): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, a: number, b?: number, c?: number, d?: number) => {
+  (self: Frame, a: number, b?: number, c?: number, d?: number) => {
     const [top, right, bottom, left] = normalizeTRBL(a, b, c, d)
     return new Frame({
       ...self.toJSON(),
@@ -511,16 +451,13 @@ export const setOffset: {
  * @returns A new frame with the horizontal offsets replaced.
  */
 export const setOffsetX: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  <K extends string | undefined>(self: Frame<K>, offsetLeft: number, offsetRight: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-  (
-    offsetLeft: number,
-    offsetRight: number,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (self: Frame, offset: number): Frame
+  (self: Frame, offsetLeft: number, offsetRight: number): Frame
+  (offset: number): (self: Frame) => Frame
+  (offsetLeft: number, offsetRight: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, left: number, right?: number) =>
+  (self: Frame, left: number, right?: number) =>
     new Frame({ ...self.toJSON(), offsetLeft: left, offsetRight: right ?? left }),
 )
 
@@ -535,16 +472,13 @@ export const setOffsetX: {
  * @returns A new frame with the vertical offsets replaced.
  */
 export const setOffsetY: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  <K extends string | undefined>(self: Frame<K>, offsetTop: number, offsetBottom: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-  (
-    offsetTop: number,
-    offsetBottom: number,
-  ): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (self: Frame, offset: number): Frame
+  (self: Frame, offsetTop: number, offsetBottom: number): Frame
+  (offset: number): (self: Frame) => Frame
+  (offsetTop: number, offsetBottom: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, top: number, bottom?: number) =>
+  (self: Frame, top: number, bottom?: number) =>
     new Frame({ ...self.toJSON(), offsetTop: top, offsetBottom: bottom ?? top }),
 )
 
@@ -557,13 +491,9 @@ export const setOffsetY: {
  * @returns A new frame with the top offset replaced.
  */
 export const setOffsetTop: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, offset: number) =>
-    new Frame({ ...self.toJSON(), offsetTop: offset }),
-)
+  (self: Frame, offset: number): Frame
+  (offset: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetTop: offset }))
 
 /**
  * Sets the right offset and keeps the other edges. The data-last form omits
@@ -574,13 +504,9 @@ export const setOffsetTop: {
  * @returns A new frame with the right offset replaced.
  */
 export const setOffsetRight: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, offset: number) =>
-    new Frame({ ...self.toJSON(), offsetRight: offset }),
-)
+  (self: Frame, offset: number): Frame
+  (offset: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetRight: offset }))
 
 /**
  * Sets the bottom offset and keeps the other edges. The data-last form omits
@@ -591,13 +517,9 @@ export const setOffsetRight: {
  * @returns A new frame with the bottom offset replaced.
  */
 export const setOffsetBottom: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, offset: number) =>
-    new Frame({ ...self.toJSON(), offsetBottom: offset }),
-)
+  (self: Frame, offset: number): Frame
+  (offset: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetBottom: offset }))
 
 /**
  * Sets the left offset and keeps the other edges. The data-last form omits
@@ -608,13 +530,9 @@ export const setOffsetBottom: {
  * @returns A new frame with the left offset replaced.
  */
 export const setOffsetLeft: {
-  <K extends string | undefined>(self: Frame<K>, offset: number): Frame<K>
-  (offset: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, offset: number) =>
-    new Frame({ ...self.toJSON(), offsetLeft: offset }),
-)
+  (self: Frame, offset: number): Frame
+  (offset: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, offset: number) => new Frame({ ...self.toJSON(), offsetLeft: offset }))
 
 /**
  * Sets the preferred width and height. The width comes first. This is the
@@ -633,11 +551,11 @@ export const setOffsetLeft: {
  * ```
  */
 export const setSize: {
-  <K extends string | undefined>(self: Frame<K>, width: number, height?: number): Frame<K>
-  (width: number, height?: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (self: Frame, width: number, height?: number): Frame
+  (width: number, height?: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, width: number, height?: number) =>
+  (self: Frame, width: number, height?: number) =>
     new Frame({ ...self.toJSON(), width, height: height ?? width }),
 )
 
@@ -657,13 +575,9 @@ export const setSize: {
  * ```
  */
 export const setWidth: {
-  <K extends string | undefined>(self: Frame<K>, width: number): Frame<K>
-  (width: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, width: number) =>
-    new Frame({ ...self.toJSON(), width }),
-)
+  (self: Frame, width: number): Frame
+  (width: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, width: number) => new Frame({ ...self.toJSON(), width }))
 
 /**
  * Sets the preferred height and keeps the other sizing inputs, including an
@@ -676,13 +590,9 @@ export const setWidth: {
  * @returns A new frame with the height replaced.
  */
 export const setHeight: {
-  <K extends string | undefined>(self: Frame<K>, height: number): Frame<K>
-  (height: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, height: number) =>
-    new Frame({ ...self.toJSON(), height }),
-)
+  (self: Frame, height: number): Frame
+  (height: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, height: number) => new Frame({ ...self.toJSON(), height }))
 
 /**
  * Sets the width-to-height ratio. The frame uses it to derive whichever
@@ -699,11 +609,11 @@ export const setHeight: {
  * ```
  */
 export const setAspectRatio: {
-  <K extends string | undefined>(self: Frame<K>, aspectRatio: AspectRatio.AspectRatio): Frame<K>
-  (aspectRatio: AspectRatio.AspectRatio): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (self: Frame, aspectRatio: AspectRatio.AspectRatio): Frame
+  (aspectRatio: AspectRatio.AspectRatio): (self: Frame) => Frame
 } = dual(
   2,
-  <K extends string | undefined>(self: Frame<K>, aspectRatio: AspectRatio.AspectRatio) =>
+  (self: Frame, aspectRatio: AspectRatio.AspectRatio) =>
     new Frame({ ...self.toJSON(), aspectRatio }),
 )
 
@@ -717,11 +627,11 @@ export const setAspectRatio: {
  * @returns A new frame with both minimums set.
  */
 export const setMinSize: {
-  <K extends string | undefined>(self: Frame<K>, minWidth: number, minHeight?: number): Frame<K>
-  (minWidth: number, minHeight?: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (self: Frame, minWidth: number, minHeight?: number): Frame
+  (minWidth: number, minHeight?: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, minWidth: number, minHeight?: number) =>
+  (self: Frame, minWidth: number, minHeight?: number) =>
     new Frame({ ...self.toJSON(), minWidth, minHeight: minHeight ?? minWidth }),
 )
 
@@ -734,13 +644,9 @@ export const setMinSize: {
  * @returns A new frame with the minimum width replaced.
  */
 export const setMinWidth: {
-  <K extends string | undefined>(self: Frame<K>, minWidth: number): Frame<K>
-  (minWidth: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, minWidth: number) =>
-    new Frame({ ...self.toJSON(), minWidth }),
-)
+  (self: Frame, minWidth: number): Frame
+  (minWidth: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, minWidth: number) => new Frame({ ...self.toJSON(), minWidth }))
 
 /**
  * Sets the minimum height, the lower clamp on the resolved height. The
@@ -751,13 +657,9 @@ export const setMinWidth: {
  * @returns A new frame with the minimum height replaced.
  */
 export const setMinHeight: {
-  <K extends string | undefined>(self: Frame<K>, minHeight: number): Frame<K>
-  (minHeight: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, minHeight: number) =>
-    new Frame({ ...self.toJSON(), minHeight }),
-)
+  (self: Frame, minHeight: number): Frame
+  (minHeight: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, minHeight: number) => new Frame({ ...self.toJSON(), minHeight }))
 
 /**
  * Sets the maximum width and height, width first. One value sets both
@@ -769,11 +671,11 @@ export const setMinHeight: {
  * @returns A new frame with both maximums set.
  */
 export const setMaxSize: {
-  <K extends string | undefined>(self: Frame<K>, maxWidth: number, maxHeight?: number): Frame<K>
-  (maxWidth: number, maxHeight?: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
+  (self: Frame, maxWidth: number, maxHeight?: number): Frame
+  (maxWidth: number, maxHeight?: number): (self: Frame) => Frame
 } = dual(
   (args) => isFrame(args[0]),
-  <K extends string | undefined>(self: Frame<K>, maxWidth: number, maxHeight?: number) =>
+  (self: Frame, maxWidth: number, maxHeight?: number) =>
     new Frame({ ...self.toJSON(), maxWidth, maxHeight: maxHeight ?? maxWidth }),
 )
 
@@ -794,13 +696,9 @@ export const setMaxSize: {
  * ```
  */
 export const setMaxWidth: {
-  <K extends string | undefined>(self: Frame<K>, maxWidth: number): Frame<K>
-  (maxWidth: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, maxWidth: number) =>
-    new Frame({ ...self.toJSON(), maxWidth }),
-)
+  (self: Frame, maxWidth: number): Frame
+  (maxWidth: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, maxWidth: number) => new Frame({ ...self.toJSON(), maxWidth }))
 
 /**
  * Sets the maximum height, the upper clamp on the resolved height.
@@ -813,13 +711,9 @@ export const setMaxWidth: {
  * @returns A new frame with the maximum height replaced.
  */
 export const setMaxHeight: {
-  <K extends string | undefined>(self: Frame<K>, maxHeight: number): Frame<K>
-  (maxHeight: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, maxHeight: number) =>
-    new Frame({ ...self.toJSON(), maxHeight }),
-)
+  (self: Frame, maxHeight: number): Frame
+  (maxHeight: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, maxHeight: number) => new Frame({ ...self.toJSON(), maxHeight }))
 
 /**
  * Sets the flex grow factor: the frame's share of positive free space
@@ -832,13 +726,9 @@ export const setMaxHeight: {
  * @returns A new frame with the grow factor replaced.
  */
 export const setGrow: {
-  <K extends string | undefined>(self: Frame<K>, grow: number): Frame<K>
-  (grow: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, grow: number) =>
-    new Frame({ ...self.toJSON(), grow }),
-)
+  (self: Frame, grow: number): Frame
+  (grow: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, grow: number) => new Frame({ ...self.toJSON(), grow }))
 
 /**
  * Sets the flex shrink factor: the frame's share of main-axis overflow, in
@@ -851,13 +741,9 @@ export const setGrow: {
  * @returns A new frame with the shrink factor replaced.
  */
 export const setShrink: {
-  <K extends string | undefined>(self: Frame<K>, shrink: number): Frame<K>
-  (shrink: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, shrink: number) =>
-    new Frame({ ...self.toJSON(), shrink }),
-)
+  (self: Frame, shrink: number): Frame
+  (shrink: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, shrink: number) => new Frame({ ...self.toJSON(), shrink }))
 
 /**
  * Sets the cross-axis placement of the frame, which overrides the
@@ -871,13 +757,9 @@ export const setShrink: {
  * @returns A new frame with the alignment replaced.
  */
 export const setAlign: {
-  <K extends string | undefined>(self: Frame<K>, align: number): Frame<K>
-  (align: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, align: number) =>
-    new Frame({ ...self.toJSON(), align }),
-)
+  (self: Frame, align: number): Frame
+  (align: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, align: number) => new Frame({ ...self.toJSON(), align }))
 
 /**
  * Sets how much of the free cross-axis space the frame absorbs into its
@@ -891,10 +773,6 @@ export const setAlign: {
  * @returns A new frame with the stretch replaced.
  */
 export const setStretch: {
-  <K extends string | undefined>(self: Frame<K>, stretch: number): Frame<K>
-  (stretch: number): <K extends string | undefined>(self: Frame<K>) => Frame<K>
-} = dual(
-  2,
-  <K extends string | undefined>(self: Frame<K>, stretch: number) =>
-    new Frame({ ...self.toJSON(), stretch }),
-)
+  (self: Frame, stretch: number): Frame
+  (stretch: number): (self: Frame) => Frame
+} = dual(2, (self: Frame, stretch: number) => new Frame({ ...self.toJSON(), stretch }))

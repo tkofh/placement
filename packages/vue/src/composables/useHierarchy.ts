@@ -50,11 +50,13 @@ export interface HierarchyPercentBasis {
 const zero = Rect.make()
 
 /**
- * A node: its frame, whose `id` edges reference, and its shape, the
+ * A node: its id, which edges reference, its frame, and its shape, the
  * polygon its ports sit on (see `shapes` in `placement/hierarchy`), or
- * undefined for its rect with sharp corners.
+ * undefined for its rect with sharp corners. A node without an id is left
+ * out of the layout.
  */
 export interface HierarchyNodeInput {
+  readonly id: string | undefined
   readonly frame: Frame
   readonly shape?: Polygon.Polygon | undefined
 }
@@ -115,23 +117,23 @@ function solve(
   spec: Hierarchy.Hierarchy,
 ): Solution {
   const problems: Array<string> = []
-  const frames: Array<Frame<string>> = []
-  const placed: Array<NodeChild> = []
+  const frames: Record<string, Frame> = Object.create(null)
+  const placed: Array<[NodeChild, string]> = []
   const ids = new Set<string>()
   const shapes: Record<string, Polygon.Polygon> = Object.create(null)
 
   for (const child of nodes) {
-    const { frame, shape } = child.input.value
-    if (frame.id === undefined) {
+    const { id, frame, shape } = child.input.value
+    if (id === undefined) {
       problems.push('a node has no id')
-    } else if (ids.has(frame.id)) {
-      problems.push(`nodes share the id "${frame.id}"`)
+    } else if (ids.has(id)) {
+      problems.push(`nodes share the id "${id}"`)
     } else {
-      ids.add(frame.id)
-      frames.push(frame as Frame<string>)
-      placed.push(child)
+      ids.add(id)
+      frames[id] = frame
+      placed.push([child, id])
       if (shape !== undefined) {
-        shapes[frame.id] = shape
+        shapes[id] = shape
       }
     }
   }
@@ -153,7 +155,7 @@ function solve(
 
   return {
     bounds: layout.bounds,
-    nodes: new Map(placed.map((child, index) => [child, layout.nodes[frames[index]!.id]!])),
+    nodes: new Map(placed.map(([child, id]) => [child, layout.nodes[id]!])),
     edges: new Map(routed.map((child, index) => [child, layout.edges[index]!])),
     problems,
   }
@@ -288,7 +290,7 @@ function useOrigin(): ComputedRef<Point.Point> {
 /**
  * Registers a node with the nearest `useHierarchyLayout`.
  *
- * @param node - The node's frame, whose `id` is what edges reference, and
+ * @param node - The node's id, which edges reference, its frame, and
  * its outline, which its ports sit on.
  * @returns The node's solved rect, or an empty rect while it is left out of
  * the layout.

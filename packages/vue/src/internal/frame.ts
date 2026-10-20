@@ -42,7 +42,7 @@ export function useFrameInput(
     readonly width: MaybeRefOrGetter<number>
     readonly height: MaybeRefOrGetter<number>
   },
-): ComputedRef<FrameInput<undefined>> {
+): ComputedRef<FrameInput> {
   // Without an explicit basis, percentages resolve against the parent rect.
   const x = basis?.width ?? 'width'
   const y = basis?.height ?? 'height'

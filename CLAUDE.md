@@ -35,8 +35,8 @@ track of lines. `Frame` is a flex-item spec. `Flexbox` is the container spec,
 and `Flexbox.apply` solves it. `Box` is a positioned-box spec (CSS absolute
 positioning). `Box.apply` solves it against a parent rect, and every
 non-finite input acts as unset. `Hierarchy` is a layered graph layout spec.
-`Hierarchy.apply` solves `Frame`s with ids plus `Edge` specs (which
-reference frame ids and carry `Adornment`s), with optional `Polygon` node
+`Hierarchy.apply` solves a record of `Frame`s keyed by id plus `Edge` specs
+(which reference those ids and carry `Adornment`s), with optional `Polygon` node
 shapes that ports sit on. `internal/hierarchy/layout.ts` places the nodes
 through the phases in `internal/hierarchy/`: acyclic
 (`internal/graph/acyclic.ts`), rank (network simplex), order, position
