@@ -8,6 +8,7 @@ import {
   provide,
   toValue,
 } from 'vue'
+import type { ModelNode } from '../internal/model.ts'
 import { blockOutlines } from './useOutline.ts'
 
 export type RectComponentGetter = () => ComputedRef<number>
@@ -22,6 +23,13 @@ const PARENT_RECT_X: InjectionKey<RectComponentGetter> = Symbol.for('placement/p
 const PARENT_RECT_Y: InjectionKey<RectComponentGetter> = Symbol.for('placement/parent/y')
 const PARENT_RECT_WIDTH: InjectionKey<RectComponentGetter> = Symbol.for('placement/parent/width')
 const PARENT_RECT_HEIGHT: InjectionKey<RectComponentGetter> = Symbol.for('placement/parent/height')
+
+/**
+ * The model node that a component's own node attaches to. A sizing context
+ * that is not a model node provides `null`, which hides any model node
+ * above it (see `internal/model.ts`).
+ */
+export const MODEL_PARENT: InjectionKey<ModelNode | null> = Symbol.for('placement/model/parent')
 
 // The provider creates the computeds eagerly in its own effect scope. If the
 // first consumer created them lazily, its unmount disposes them while later
@@ -40,13 +48,23 @@ function useRectGetters(rect: MaybeRefOrGetter<Rect>): RectGetters {
   }
 }
 
-export function useSizingContextRoot(root: MaybeRefOrGetter<Rect>) {
-  const { x, y, width, height } = useRectGetters(root)
+/**
+ * Provides `rect` as the parent rect of the current component's children.
+ *
+ * @param rect - The parent rect.
+ */
+export function provideParentRect(rect: MaybeRefOrGetter<Rect>): void {
+  const { x, y, width, height } = useRectGetters(rect)
 
   provide(PARENT_RECT_X, x)
   provide(PARENT_RECT_Y, y)
   provide(PARENT_RECT_WIDTH, width)
   provide(PARENT_RECT_HEIGHT, height)
+}
+
+export function useSizingContextRoot(root: MaybeRefOrGetter<Rect>) {
+  provideParentRect(root)
+  provide(MODEL_PARENT, null)
 }
 
 export function useParentX(): ComputedRef<number> {
@@ -86,14 +104,10 @@ export function useParentHeight(): ComputedRef<number> {
 }
 
 export function useParentRectRegistration(rect: MaybeRefOrGetter<Rect>) {
-  const { x, y, width, height } = useRectGetters(rect)
-
   // Children get a box of their own, so their outlines are not this
   // component's parent's.
   blockOutlines()
 
-  provide(PARENT_RECT_X, x)
-  provide(PARENT_RECT_Y, y)
-  provide(PARENT_RECT_WIDTH, width)
-  provide(PARENT_RECT_HEIGHT, height)
+  provideParentRect(rect)
+  provide(MODEL_PARENT, null)
 }

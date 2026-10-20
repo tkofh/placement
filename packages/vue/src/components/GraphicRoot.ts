@@ -1,4 +1,3 @@
-import * as Box from 'placement/box'
 import * as Point from 'placement/point'
 import * as Rect from 'placement/rect'
 import { computed, defineComponent, h, shallowRef } from 'vue'
@@ -11,9 +10,8 @@ import {
   type TransformProps,
   useXYTranslation,
 } from '../composables/useRect.ts'
-import { useSizingContextRoot } from '../composables/useSizingContext.ts'
-import { toAspectRatio } from '../internal/props/aspectRatio.ts'
-import { resolveSize1D } from '../internal/props/size1d.ts'
+import { useModelNode } from '../internal/model.ts'
+import { toSizingInput } from '../internal/modelInputs.ts'
 import { provideShouldRenderGroups } from '../internal/render.ts'
 import { boolProp } from '../internal/utils.ts'
 import { useOrigin } from '../props/origin.ts'
@@ -33,21 +31,10 @@ export const GraphicRoot = defineComponent(
     // The measured <svg> is both the percent basis and the fill target. A
     // dimension that the props leave undetermined falls back to the measured
     // size, constrained (see `placement/box`).
-    const box = computed(() =>
-      Box.make({
-        width: resolveSize1D(props.width, Number.NaN, domRect.value.width),
-        height: resolveSize1D(props.height, Number.NaN, domRect.value.height),
-        aspectRatio: toAspectRatio(props.aspectRatio, Number.NaN),
-        minWidth: resolveSize1D(props.minWidth, Number.NaN, domRect.value.width),
-        minHeight: resolveSize1D(props.minHeight, Number.NaN, domRect.value.height),
-        maxWidth: resolveSize1D(props.maxWidth, Number.NaN, domRect.value.width),
-        maxHeight: resolveSize1D(props.maxHeight, Number.NaN, domRect.value.height),
-      }),
-    )
-
-    const rootRect = computed(() =>
-      Box.apply(box.value, Rect.make(domRect.value.width, domRect.value.height)),
-    )
+    const node = useModelNode('group', () => ({ box: toSizingInput(props) }), {
+      root: () => Rect.make(domRect.value.width, domRect.value.height),
+    })
+    const rootRect = node.output
 
     const origin = useOrigin(() => props.origin, Point.half)
     const translation = useXYTranslation(props, domRect)
@@ -71,8 +58,6 @@ export const GraphicRoot = defineComponent(
 
       return `${viewBoxRect.x} ${viewBoxRect.y} ${viewBoxRect.width} ${viewBoxRect.height}`
     })
-
-    useSizingContextRoot(rootRect)
 
     provideShouldRenderGroups(() => (boolProp(props.debugGroups) ? 2 : 0))
 

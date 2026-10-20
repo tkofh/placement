@@ -1,10 +1,13 @@
 import type { FrameInput } from 'placement/frame'
+import type { LengthInput } from 'placement/length'
 import { type ComputedRef, type MaybeRefOrGetter, computed } from 'vue'
 import { SIZE_PROP_KEYS, type SizeProps } from '../composables/useRect.ts'
 import { computedTRBLOffset } from '../data/offset.ts'
 import { useAspectRatioInput } from '../props/aspectRatio.ts'
 import { type LengthPercentageInput, useLengthPercentage } from '../props/lengthPercentage.ts'
+import { toSizingInput } from './modelInputs.ts'
 import { type AlignSelfInput, resolveAlignSelf } from './props/alignSelf.ts'
+import { toLength } from './props/size1d.ts'
 
 /** The props that every frame-backed item shares: size, margins, and self alignment. */
 export interface FrameItemProps extends SizeProps {
@@ -70,4 +73,23 @@ export function useFrameInput(
     marginLeft: margin.value.left,
     ...resolveAlignSelf(props.alignSelf),
   }))
+}
+
+/**
+ * The shared item props as the frame input of a model item: sizes and
+ * margins as lengths whose percentages the model resolves against the
+ * item's container, and the self alignment.
+ *
+ * @param props - The item props.
+ * @returns The frame input, with its percentages unresolved.
+ */
+export function toFrameInput(props: FrameItemProps): FrameInput<LengthInput> {
+  return {
+    ...toSizingInput(props),
+    marginTop: toLength(props.marginTop, 0),
+    marginRight: toLength(props.marginRight, 0),
+    marginBottom: toLength(props.marginBottom, 0),
+    marginLeft: toLength(props.marginLeft, 0),
+    ...resolveAlignSelf(props.alignSelf),
+  }
 }
